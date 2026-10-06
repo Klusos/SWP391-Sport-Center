@@ -29,10 +29,19 @@ public class CreateMembershipPlanRequest {
     @Positive(message = "Duration must be greater than 0")
     private Integer durationMonths;
 
-    @NotNull(message = "Discount percent is required")
-    @DecimalMin(value = "0.0", message = "Discount cannot be negative")
-    @DecimalMax(value = "100.0", message = "Discount cannot exceed 100")
-    private BigDecimal discountPercent;
+    @NotNull(message = "Course discount is required")
+    @DecimalMin(value = "0.0", message = "Course discount cannot be negative")
+    @DecimalMax(value = "100.0", message = "Course discount cannot exceed 100")
+    private BigDecimal courseDiscountPercent;
 
-    private String benefits;
+    @NotNull(message = "Personal training discount is required")
+    @DecimalMin(value = "0.0", message = "Personal training discount cannot be negative")
+    @DecimalMax(value = "100.0", message = "Personal training discount cannot exceed 100")
+    private BigDecimal personalTrainingDiscountPercent;
+
+    @NotNull(message = "Personal training plan permission is required")
+    private Boolean allowPersonalTrainingPlan;
+
+    @NotNull(message = "One-on-one coaching permission is required")
+    private Boolean allowOneOnOneCoaching;
 }

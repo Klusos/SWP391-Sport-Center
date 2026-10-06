@@ -32,6 +32,9 @@ public class Membership {
     private MembershipPlan plan;
 
     @Column(nullable = false)
+    private Boolean autoRenew;
+
+    @Column(nullable = false)
     private LocalDate startDate;
 
     @Column(nullable = false)

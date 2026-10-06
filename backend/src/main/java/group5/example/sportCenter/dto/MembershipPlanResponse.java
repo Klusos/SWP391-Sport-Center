@@ -16,7 +16,12 @@ public class MembershipPlanResponse {
     private String description;
     private BigDecimal price;
     private Integer durationMonths;
-    private BigDecimal discountPercent;
-    private String benefits;
+
+    private BigDecimal courseDiscountPercent;
+    private BigDecimal personalTrainingDiscountPercent;
+
+    private Boolean allowPersonalTrainingPlan;
+    private Boolean allowOneOnOneCoaching;
+
     private String status;
 }

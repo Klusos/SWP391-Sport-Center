@@ -35,10 +35,16 @@ public class MembershipPlan {
     private Integer durationMonths;
 
     @Column(nullable = false, precision = 5, scale = 2)
-    private BigDecimal discountPercent;
+    private BigDecimal courseDiscountPercent;
 
-    @Column(columnDefinition = "TEXT")
-    private String benefits;
+    @Column(nullable = false, precision = 5, scale = 2)
+    private BigDecimal personalTrainingDiscountPercent;
+
+    @Column(nullable = false)
+    private Boolean allowPersonalTrainingPlan;
+
+    @Column(nullable = false)
+    private Boolean allowOneOnOneCoaching;
 
     @Column(nullable = false, length = 30)
     private String status;

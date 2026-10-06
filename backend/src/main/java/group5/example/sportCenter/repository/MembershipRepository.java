@@ -19,4 +19,7 @@ public interface MembershipRepository extends JpaRepository<Membership, Integer>
 
     // Các gói sắp hết hạn (phục vụ nhắc gia hạn / report)
     List<Membership> findByStatusAndEndDateBetween(String status, LocalDate from, LocalDate to);
+    
+    // Các gói đã qua ngày hết hạn    
+    List<Membership> findByStatusAndEndDateBefore(String status, LocalDate date);
 }
