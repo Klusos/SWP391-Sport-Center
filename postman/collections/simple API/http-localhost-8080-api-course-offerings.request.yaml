@@ -1,0 +1,17 @@
+$kind: http-request
+name: http://localhost:8080/api/course-offerings
+description: ""
+url: http://localhost:8080/api/course-offerings
+method: PUT
+headers:
+  Content-Type: application/json
+body:
+  type: json
+  content: |-
+    {
+        "courseOfferingId": 1,
+        "coachId": 2,
+        "name": "Badminton Beginner - Class A",
+        "capacity": 15
+    }
+order: 1791384048361
