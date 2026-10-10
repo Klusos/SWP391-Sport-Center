@@ -2,6 +2,8 @@ package group5.example.sportCenter.controller;
 
 import java.util.List;
 
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -13,12 +15,15 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
+
 import jakarta.validation.Valid;
+
 import group5.example.sportCenter.dto.ChangePasswordRequest;
 import group5.example.sportCenter.dto.CreateUserRequest;
 import group5.example.sportCenter.dto.UpdateUserRequest;
 import group5.example.sportCenter.dto.UserResponse;
 import group5.example.sportCenter.service.UserService;
+import group5.example.sportCenter.dto.UserProfileResponse;
 
 @RestController
 @RequestMapping("/api/users")
@@ -31,13 +36,15 @@ public class UserController {
     }
 
     @GetMapping
-    public List<UserResponse> getAllUsers() {
-        return userService.getAllUsers();
+    public List<UserResponse> getAllUsers(@AuthenticationPrincipal Jwt jwt) {
+        return userService.getAllUsers(jwt);
     }
 
     @GetMapping("/{id}")
-    public UserResponse getUserById(@PathVariable Integer id) {
-        return userService.getUserById(id);
+    public UserResponse getUserById(
+            @PathVariable Integer id,
+            @AuthenticationPrincipal Jwt jwt) {
+        return userService.getUserById(id, jwt);
     }
 
     @PutMapping("/{id}")
@@ -70,5 +77,12 @@ public class UserController {
         userService.changePassword(id, request);
 
         return "Password changed successfully";
+    }
+
+    @GetMapping("/me")
+    public UserProfileResponse getCurrentUser(
+            @AuthenticationPrincipal Jwt jwt) {
+
+        return userService.getCurrentUser(jwt);
     }
 }
