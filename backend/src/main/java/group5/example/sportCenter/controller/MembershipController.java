@@ -3,6 +3,8 @@ package group5.example.sportCenter.controller;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,51 +31,56 @@ public class MembershipController {
     }
 
     @GetMapping
-    public List<MembershipResponse> getAllMemberships() {
-        return membershipService.getAllMemberships();
+    public List<MembershipResponse> getAllMemberships(@AuthenticationPrincipal Jwt jwt) {
+        return membershipService.getAllMemberships(jwt);
     }
 
     @GetMapping("/{id}")
     public MembershipResponse getMembershipById(
-            @PathVariable Integer id) {
+            @PathVariable Integer id,
+            @AuthenticationPrincipal Jwt jwt) {
 
-        return membershipService.getMembershipById(id);
+        return membershipService.getMembershipById(id, jwt);
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public MembershipResponse createMembership(
-            @Valid @RequestBody CreateMembershipRequest request) {
+            @Valid @RequestBody CreateMembershipRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
 
-        return membershipService.createMembership(request);
+        return membershipService.createMembership(request, jwt);
     }
 
     @GetMapping("/member/{memberId}")
     public List<MembershipResponse> getMembershipsByMemberId(
-            @PathVariable Integer memberId) {
+            @PathVariable Integer memberId,
+            @AuthenticationPrincipal Jwt jwt) {
 
-        return membershipService.getMembershipsByMemberId(memberId);
+        return membershipService.getMembershipsByMemberId(memberId, jwt);
     }
 
     @PatchMapping("/{id}/cancel-renewal")
     public MembershipResponse cancelAutoRenew(
-            @PathVariable Integer id) {
+            @PathVariable Integer id,
+            @AuthenticationPrincipal Jwt jwt) {
 
-        return membershipService.cancelAutoRenew(id);
+        return membershipService.cancelAutoRenew(id, jwt);
     }
 
     @PatchMapping("/{id}/enable-auto-renew")
     public MembershipResponse enableAutoRenew(
-            @PathVariable Integer id) {
+            @PathVariable Integer id,
+            @AuthenticationPrincipal Jwt jwt) {
 
-        return membershipService.enableAutoRenew(id);
+        return membershipService.enableAutoRenew(id, jwt);
     }
 
     @PostMapping("/expire")
-    public String expireMemberships() {
+    public String expireMemberships(@AuthenticationPrincipal Jwt jwt) {
 
         int expiredCount =
-                membershipService.expireMemberships();
+                membershipService.expireMemberships(jwt);
 
         return expiredCount
                 + " membership(s) expired";

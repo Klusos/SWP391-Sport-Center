@@ -1,0 +1,4 @@
+# Local environment files can contain database credentials or JWT secrets.
+.env
+.env.*
+!.env.example

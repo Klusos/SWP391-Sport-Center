@@ -1,0 +1,918 @@
+﻿{
+    "info":  {
+                 "name":  "SportCenter Backend API",
+                 "description":  "Generated from current controllers. Set baseUrl and token variables; no real credentials or tokens are included. Authorization notes in folder and request names reflect current role and ownership rules.",
+                 "schema":  "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+             },
+    "auth":  {
+                 "type":  "bearer",
+                 "bearer":  [
+                                {
+                                    "key":  "token",
+                                    "value":  "{{token}}",
+                                    "type":  "string"
+                                }
+                            ]
+             },
+    "variable":  [
+                     {
+                         "key":  "baseUrl",
+                         "value":  "http://localhost:8080"
+                     },
+                     {
+                         "key":  "token",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "id",
+                         "value":  "1"
+                     },
+                     {
+                         "key":  "memberId",
+                         "value":  "1"
+                     },
+                     {
+                         "key":  "planId",
+                         "value":  "1"
+                     },
+                     {
+                         "key":  "sportId",
+                         "value":  "1"
+                     },
+                     {
+                         "key":  "courseId",
+                         "value":  "1"
+                     },
+                     {
+                         "key":  "offeringId",
+                         "value":  "1"
+                     },
+                     {
+                         "key":  "coachId",
+                         "value":  "1"
+                     }
+                 ],
+    "item":  [
+                 {
+                     "name":  "Authentication",
+                     "item":  [
+                                  {
+                                      "name":  "Login",
+                                      "request":  {
+                                                      "auth":  {
+                                                                   "type":  "noauth"
+                                                               },
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"email\": \"member@example.com\",\n  \"password\": \"\u003cpassword\u003e\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/auth/login"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Users and members",
+                     "item":  [
+                                  {
+                                      "name":  "Get current user (any authenticated role)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/users/me"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "List users (ADMIN all; RECEPTIONIST MEMBER/COACH only)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/users"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Get user by ID (ADMIN all; RECEPTIONIST MEMBER/COACH only)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/users/{{id}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Create user (ADMIN)",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"name\": \"Example User\", \"email\": \"user@example.com\", \"dateOfBirth\": \"2000-05-20\", \"gender\": \"F\", \"phone\": \"0900000000\", \"password\": \"\u003cpassword\u003e\", \"role\": \"MEMBER\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/users"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Update user (ADMIN)",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"name\": \"Example User\", \"email\": \"user@example.com\", \"dateOfBirth\": \"2000-05-20\", \"gender\": \"F\", \"phone\": \"0900000000\", \"role\": \"MEMBER\", \"status\": \"ACTIVE\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/users/{{id}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Delete user (ADMIN)",
+                                      "request":  {
+                                                      "method":  "DELETE",
+                                                      "url":  "{{baseUrl}}/api/users/{{id}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Change password (ADMIN)",
+                                      "request":  {
+                                                      "method":  "PATCH",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"currentPassword\": \"\u003ccurrent-password\u003e\", \"newPassword\": \"\u003cnew-password\u003e\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/users/{{id}}/password"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Register member (ADMIN or RECEPTIONIST)",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"name\": \"Example Member\", \"email\": \"member@example.com\", \"password\": \"\u003cpassword\u003e\", \"dateOfBirth\": \"2000-05-20\", \"phone\": \"0900000000\", \"gender\": \"F\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/members"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "MemberProfile",
+                     "item":  [
+                                  {
+                                      "name":  "Create own profile (MEMBER)",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"height\": 170.5, \"weight\": 65.2, \"goal\": \"Build endurance\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/member-profiles/me"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Get own profile (MEMBER)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/member-profiles/me"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Update own profile (MEMBER)",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"height\": 170.5, \"weight\": 65.2, \"goal\": \"\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/member-profiles/me"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Create profile for member (ADMIN)",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"memberId\": {{memberId}}, \"height\": 170.5, \"weight\": 65.2, \"goal\": \"Build endurance\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/member-profiles"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Get profile by profile ID (ADMIN)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/member-profiles/{{id}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Get profile by member ID (ADMIN)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/member-profiles/member/{{memberId}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Update profile by profile ID (ADMIN)",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"height\": 170.5, \"weight\": 65.2, \"goal\": \"Build endurance\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/member-profiles/{{id}}"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Membership (staff all; MEMBER own only; COACH denied)",
+                     "item":  [
+                                  {
+                                      "name":  "List memberships (ADMIN or RECEPTIONIST)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/memberships"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Get membership by ID (staff any; MEMBER own)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/memberships/{{id}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "List memberships by member ID (staff any; MEMBER own ID)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/memberships/member/{{memberId}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Create membership (staff any MEMBER; MEMBER self)",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"memberId\": {{memberId}}, \"planId\": {{planId}}, \"startDate\": \"2026-10-10\", \"autoRenew\": false\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/memberships"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Cancel auto-renew (staff any; MEMBER own)",
+                                      "request":  {
+                                                      "method":  "PATCH",
+                                                      "url":  "{{baseUrl}}/api/memberships/{{id}}/cancel-renewal"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Enable auto-renew (staff any; MEMBER own)",
+                                      "request":  {
+                                                      "method":  "PATCH",
+                                                      "url":  "{{baseUrl}}/api/memberships/{{id}}/enable-auto-renew"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Expire memberships (ADMIN only)",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "url":  "{{baseUrl}}/api/memberships/expire"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Membership plans (GET authenticated; mutations ADMIN)",
+                     "item":  [
+                                  {
+                                      "name":  "List plans",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/membership-plans"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Get plan",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/membership-plans/{{planId}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Create plan",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"name\": \"Standard\", \"description\": \"Monthly membership\", \"price\": 50, \"durationMonths\": 1, \"courseDiscountPercent\": 0, \"personalTrainingDiscountPercent\": 0, \"allowPersonalTrainingPlan\": false, \"allowOneOnOneCoaching\": false\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/membership-plans"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Update plan",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"name\": \"Standard\", \"description\": \"Monthly membership\", \"price\": 50, \"durationMonths\": 1, \"courseDiscountPercent\": 0, \"personalTrainingDiscountPercent\": 0, \"allowPersonalTrainingPlan\": false, \"allowOneOnOneCoaching\": false, \"status\": \"ACTIVE\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/membership-plans/{{planId}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Delete plan",
+                                      "request":  {
+                                                      "method":  "DELETE",
+                                                      "url":  "{{baseUrl}}/api/membership-plans/{{planId}}"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Sports",
+                     "item":  [
+                                  {
+                                      "name":  "List sports",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/sports"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Get sport",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/sports/{{sportId}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Create sport",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"name\": \"Swimming\", \"description\": \"Pool training\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/sports"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Update sport",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"name\": \"Swimming\", \"description\": \"Pool training\", \"status\": \"ACTIVE\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/sports/{{sportId}}"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Coaches and CoachSport (GET authenticated; mutations ADMIN)",
+                     "item":  [
+                                  {
+                                      "name":  "List coaches",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/coaches"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Get coach",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/coaches/{{coachId}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Create coach",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"name\": \"Example Coach\", \"email\": \"coach@example.com\", \"phone\": \"0900000000\", \"gender\": \"M\", \"password\": \"\u003cpassword\u003e\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/coaches"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Update coach status",
+                                      "request":  {
+                                                      "method":  "PATCH",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"status\": \"ACTIVE\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/coaches/{{coachId}}/status"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Assign sport to coach",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"sportId\": {{sportId}}, \"experienceYears\": 2, \"certification\": \"\u003ccertification\u003e\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/coaches/{{coachId}}/sports"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "List coach sports",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/coaches/{{coachId}}/sports"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Update coach sport",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"experienceYears\": 3, \"certification\": \"\u003ccertification\u003e\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/coaches/{{coachId}}/sports/{{sportId}}"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Courses",
+                     "item":  [
+                                  {
+                                      "name":  "List courses",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/courses"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Get course",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/courses/{{courseId}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "List courses by sport",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/courses/sport/{{sportId}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Create course",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"sportId\": {{sportId}}, \"name\": \"Beginner Swim\", \"description\": \"Basics\", \"targetAgeMin\": 10, \"targetAgeMax\": 18, \"level\": \"Beginner\", \"learningOutcome\": \"Swim safely\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/courses"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Update course",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"name\": \"Beginner Swim\", \"description\": \"Basics\", \"targetAgeMin\": 10, \"targetAgeMax\": 18, \"level\": \"Beginner\", \"learningOutcome\": \"Swim safely\", \"status\": \"ACTIVE\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/courses/{{courseId}}"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Course offerings",
+                     "item":  [
+                                  {
+                                      "name":  "List offerings",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/course-offerings"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Get offering",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/course-offerings/{{offeringId}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "List offerings by course",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/course-offerings/course/{{courseId}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Create offering",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"courseId\": {{courseId}}, \"name\": \"October Swim\", \"price\": 100, \"plannedSessions\": 8, \"sessionDuration\": 60, \"startDate\": \"2026-10-20\", \"endDate\": \"2026-11-20\", \"registrationDeadline\": \"2026-10-18T23:59:00\", \"cancellationDeadline\": \"2026-10-19T23:59:00\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/course-offerings"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Update offering",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"name\": \"October Swim\", \"price\": 100, \"plannedSessions\": 8, \"sessionDuration\": 60, \"startDate\": \"2026-10-20\", \"endDate\": \"2026-11-20\", \"registrationDeadline\": \"2026-10-18T23:59:00\", \"cancellationDeadline\": \"2026-10-19T23:59:00\", \"status\": \"ACTIVE\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/course-offerings/{{offeringId}}"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Classes",
+                     "item":  [
+                                  {
+                                      "name":  "List classes",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/classes"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Get class",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/classes/{{id}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "List classes by offering",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/classes/offering/{{offeringId}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Create class",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"courseOfferingId\": {{offeringId}}, \"coachId\": {{coachId}}, \"name\": \"Morning group\", \"capacity\": 12\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/classes"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Update class",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"coachId\": {{coachId}}, \"name\": \"Morning group\", \"capacity\": 12, \"status\": \"ACTIVE\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/classes/{{id}}"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Facilities",
+                     "item":  [
+                                  {
+                                      "name":  "List facilities",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/facilities"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Get facility",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/facilities/{{id}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "List facilities by sport",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/facilities/sport/{{sportId}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Create facility",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"sportId\": {{sportId}}, \"name\": \"Main pool\", \"type\": \"POOL\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/facilities"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Update facility",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"name\": \"Main pool\", \"type\": \"POOL\", \"status\": \"ACTIVE\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "url":  "{{baseUrl}}/api/facilities/{{id}}"
+                                                  }
+                                  }
+                              ]
+                 }
+             ]
+}

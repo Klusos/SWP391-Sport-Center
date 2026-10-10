@@ -1,7 +1,6 @@
 package group5.example.sportCenter.dto;
 
-import java.time.LocalDateTime;
-
+import java.time.LocalDate;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -21,9 +20,7 @@ public class CreateUserRequest {
     @Size(max = 150)
     private String email;
 
-    private Integer ages;
-
-    private LocalDateTime dateOfBirth;
+    private LocalDate dateOfBirth;
 
     @Size(max = 1)
     private String gender;

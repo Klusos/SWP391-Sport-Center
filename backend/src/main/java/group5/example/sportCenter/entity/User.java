@@ -8,11 +8,14 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Period;
 
 @Entity
 @Table(name = "users")
@@ -30,9 +33,7 @@ public class User {
     @Column(nullable = false, unique = true, length = 150)
     private String email;
 
-    private Integer ages;
-
-    private LocalDateTime dateOfBirth;
+    private LocalDate dateOfBirth;
 
     @Column(length = 1)
     private String gender;
@@ -52,6 +53,17 @@ public class User {
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Transient
+    public Integer getAge() {
+        if (dateOfBirth == null) {
+            return null;
+        }
+
+        return Period.between(
+            dateOfBirth,
+            LocalDate.now()
+        ).getYears();
+    }
     @PrePersist
     void onCreate() {
         this.createdAt = LocalDateTime.now();
