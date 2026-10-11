@@ -19,7 +19,7 @@ Common status codes: 400 for request validation or invalid role, 401 for missing
 
 - **Verified by user** means the user reported a successful Postman result in this conversation.
 - **Not verified** means no Postman result was available during this review; the endpoint may still be implemented.
-- The earlier Maven build attempt failed before Maven started (`Cannot index into a null array`). The current security changes are awaiting build verification.
+- Maven Wrapper has previously failed before Maven starts (`Cannot index into a null array`); verify the latest ClassSession source with a successful build before integration.
 
 ## Authentication
 
@@ -210,9 +210,42 @@ Facility GET endpoints permit all authenticated roles; mutations are ADMIN-only.
 
 Response sample: `{"id":5,"sportId":1,"sportName":"Swimming","name":"Main pool","type":"POOL","status":"ACTIVE"}`.
 
+## ClassSession
+
+`ClassSession` represents one scheduled meeting belonging to a `CourseClass` (`/api/classes`). All GET routes allow ADMIN, RECEPTIONIST, MEMBER, and COACH. POST, PUT, and PATCH are ADMIN-only; no DELETE endpoint is exposed. Status values are `SCHEDULED`, `COMPLETED`, and `CANCELLED` only.
+
+| Method and path | Allowed caller | Request body | Success and response | Test status |
+|---|---|---|---|---|
+| `GET /api/class-sessions` | All authenticated roles | None | 200, `ClassSessionResponse[]` | Not verified |
+| `GET /api/class-sessions/{id}` | All authenticated roles | None | 200, `ClassSessionResponse` | Not verified |
+| `GET /api/class-sessions/class/{classId}` | All authenticated roles | None | 200, `ClassSessionResponse[]` | Not verified |
+| `POST /api/class-sessions` | ADMIN | `CreateClassSessionRequest` | 201, `ClassSessionResponse` | Not verified |
+| `PUT /api/class-sessions/{id}` | ADMIN | `UpdateClassSessionRequest` | 200, `ClassSessionResponse` | Not verified |
+| `PATCH /api/class-sessions/{id}/status` | ADMIN | `UpdateClassSessionStatusRequest` | 200, `ClassSessionResponse` | Not verified |
+
+Create sample (status omitted to use the `SCHEDULED` default; `facilityId` may be null):
+
+```json
+{"classId":3,"facilityId":6,"startTime":"2026-10-12T10:00:00","endTime":"2026-10-12T11:00:00"}
+```
+
+Update body is the same shape and must include `classId`, `startTime`, and `endTime`; `facilityId: null` clears the facility. Status update body: `{"status":"CANCELLED"}`. The response includes `id`, class/facility identifiers and names, start/end times, status, and non-blocking `warnings` (outside CourseOffering date range or the per-CourseClass planned-session threshold). Overlap or invalid state transitions return 409; missing referenced resources return 404; bean validation failures return 400.
+
+Response sample:
+
+```json
+{"id":21,"classId":3,"className":"Morning group","facilityId":6,"facilityName":"Main court","startTime":"2026-10-12T10:00:00","endTime":"2026-10-12T11:00:00","status":"SCHEDULED","warnings":[]}
+```
+
+Facility and Coach overlaps use half-open interval semantics (`existing.startTime < requested.endTime` and `existing.endTime > requested.startTime`), so sessions that only touch at an endpoint do not overlap. Cancelled sessions do not reserve facilities or coaches. Make-up sessions outside CourseOffering dates and counts above `plannedSessions` are saved with warnings; the current code interprets `plannedSessions` per CourseClass for warning purposes only, pending confirmation of the intended counting scope.
+
+Lifecycle transitions: `SCHEDULED` can become `COMPLETED` only when current time is at or after `endTime`, and can become `CANCELLED` only before `startTime`. `COMPLETED` and `CANCELLED` are terminal; repeating the same status is idempotent, but changing to another status returns 409. PUT schedule updates are allowed only for `SCHEDULED` sessions. Invalid status/time request data returns 400. Statuses change only through the API; there is no time-driven auto-transition.
+
+Facility status updates accept `ACTIVE` or `INACTIVE`, case-insensitively, and persist uppercase. Null, blank, or any other value returns 400. Switching from ACTIVE to INACTIVE returns 409 if a `SCHEDULED` ClassSession using the Facility has `endTime` later than the current time, covering sessions in progress and upcoming sessions. A session ending exactly now, an ended session, or a `COMPLETED`/`CANCELLED` session does not block deactivation. No session is deleted, cancelled, or edited by this operation. When a Facility is supplied on ClassSession POST or changed on PUT, its current status must be ACTIVE; missing Facility IDs return 404 and any other status returns 409. On PUT, a future `SCHEDULED` session cannot retain the same Facility if that Facility has become unavailable; choose another ACTIVE Facility or cancel the session. GET continues returning historical sessions and their Facility data regardless of Facility status. `FacilityService` creates facilities as ACTIVE.
+
 ## Modules not found in current controllers
 
-No `ClassSession`, course-registration, payment, or public account-registration endpoint was found. `/api/classes` manages course classes and is not a ClassSession API.
+No course-registration, payment, or public account-registration endpoint was found. `/api/classes` manages CourseClass records; `/api/class-sessions` manages individual meetings.
 
 ## OpenAPI / Swagger
 
@@ -224,4 +257,4 @@ No Swagger/OpenAPI dependency or configuration was found in `pom.xml` or source.
 - The application requires `DB_USERNAME`, `DB_PASSWORD`, and `JWT_SECRET`; configure them in the runtime environment. If the previously tracked SQL Server password was real or shared, rotate it because Git history may retain it.
 - Configure `CORS_ALLOWED_ORIGINS` for deployed frontend origins. Defaults permit only `http://localhost:5173` and `http://localhost:3000`.
 - Build and all role/ownership behavior changed in this review are awaiting verification. Test with ADMIN, RECEPTIONIST, MEMBER, and COACH tokens before merge.
-- No ClassSession, course registration, payment, or public account-registration controller was found. `/api/classes` is the implemented course-class API.
+- No course-registration, payment, or public account-registration controller was found.

@@ -1,8 +1,14 @@
 package group5.example.sportCenter.service;
 
 import java.util.List;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.util.Locale;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import group5.example.sportCenter.dto.CreateFacilityRequest;
 import group5.example.sportCenter.dto.FacilityResponse;
@@ -11,6 +17,7 @@ import group5.example.sportCenter.entity.Facility;
 import group5.example.sportCenter.entity.Sport;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.FacilityRepository;
+import group5.example.sportCenter.repository.ClassSessionRepository;
 import group5.example.sportCenter.repository.SportRepository;
 
 @Service
@@ -18,13 +25,27 @@ public class FacilityService {
 
     private final FacilityRepository facilityRepository;
     private final SportRepository sportRepository;
+    private final ClassSessionRepository classSessionRepository;
+    private final Clock clock;
 
+    @Autowired
     public FacilityService(
             FacilityRepository facilityRepository,
-            SportRepository sportRepository) {
+            SportRepository sportRepository,
+            ClassSessionRepository classSessionRepository) {
+        this(facilityRepository, sportRepository, classSessionRepository, Clock.systemDefaultZone());
+    }
+
+    FacilityService(
+            FacilityRepository facilityRepository,
+            SportRepository sportRepository,
+            ClassSessionRepository classSessionRepository,
+            Clock clock) {
 
         this.facilityRepository = facilityRepository;
         this.sportRepository = sportRepository;
+        this.classSessionRepository = classSessionRepository;
+        this.clock = clock;
     }
 
     public FacilityResponse createFacility(
@@ -88,14 +109,25 @@ public class FacilityService {
             Integer id,
             UpdateFacilityRequest request) {
 
+        String status = normalizeStatus(request.getStatus());
+
         Facility facility = facilityRepository.findById(id)
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "Facility not found with id: " + id));
 
+        boolean deactivating = "ACTIVE".equalsIgnoreCase(facility.getStatus())
+                && "INACTIVE".equals(status);
+        LocalDateTime now = LocalDateTime.now(clock);
+        if (deactivating && classSessionRepository.existsByFacilityIdAndStatusAndEndTimeAfter(
+                facility.getId(), "SCHEDULED", now)) {
+            throw new IllegalArgumentException(
+                    "Facility cannot be set to INACTIVE while an in-progress or upcoming SCHEDULED ClassSession uses it");
+        }
+
         facility.setName(request.getName());
         facility.setType(request.getType());
-        facility.setStatus(request.getStatus());
+        facility.setStatus(status);
 
         return toResponse(
                 facilityRepository.save(facility));
@@ -113,5 +145,14 @@ public class FacilityService {
                 facility.getType(),
                 facility.getStatus()
         );
+    }
+
+    private String normalizeStatus(String status) {
+        String normalized = status == null ? "" : status.trim().toUpperCase(Locale.ROOT);
+        if (!normalized.equals("ACTIVE") && !normalized.equals("INACTIVE")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Facility status must be ACTIVE or INACTIVE");
+        }
+        return normalized;
     }
 }

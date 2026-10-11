@@ -96,3 +96,57 @@ The previously untracked local `.env` is now covered by `.gitignore`; it was not
 | `POST /api/members` | ADMIN, RECEPTIONIST; service assigns MEMBER | Existing behavior retained | Not verified in this change | Not tested |
 
 `UserResponse` and `UserProfileResponse` contain no password hash or credential fields. No schema or check-in API changes were made. The build and all cases above are pending verification.
+
+## ClassSession module (2026-10-10)
+
+| Feature / endpoint | Allowed role | Code | Build | Automated / Postman verification |
+|---|---|---|---|---|
+| ClassSession entity and relations | N/A | Added one `ClassSession` entity mapped to `ClassSession`, with required `classId` to existing `CourseClass`, nullable `facilityId` to existing `Facility`, and `LocalDateTime` fields | Not verified | No database migration run; Postman N/A |
+| `GET /api/class-sessions`, `GET /{id}`, `GET /class/{classId}` | ADMIN, RECEPTIONIST, MEMBER, COACH | Implemented | Not verified | Not verified |
+| `POST /api/class-sessions` | ADMIN | Implemented; defaults status to SCHEDULED; supports historical COMPLETED and CANCELLED only under listed rules | Not verified | Unit tests added; execution pending; Postman not verified |
+| `PUT /api/class-sessions/{id}` | ADMIN | Implemented; updates class, optional facility, start/end; session ID is path-only | Not verified | Unit tests added for excluding current ID and missing class; execution pending; Postman not verified |
+| `PATCH /api/class-sessions/{id}/status` | ADMIN | Implemented; SCHEDULED can be completed after end or cancelled; cancelled cannot be restored; completed cannot transition to another status | Not verified | Transition and boundary tests added; execution pending; Postman not verified |
+
+Overlap validation excludes CANCELLED sessions and uses strict interval overlap, checking both Facility and the Coach attached to CourseClass. Make-up sessions outside CourseOffering dates and a per-CourseClass count above `plannedSessions` are not blocked; response warnings report these conditions. Counting planned sessions per CourseClass is a provisional interpretation because the existing model does not document whether `plannedSessions` counts per class or across an offering. No automatic schedule generation, physical DELETE, schema changes to existing tables, or unrelated modules were added.
+
+Next: get Maven build and unit tests running, then verify GET/POST/PUT/PATCH permissions and lifecycle/overlap rules in Postman against SQL Server.
+
+### Facility availability validation (2026-10-10; prior behavior superseded below)
+
+`FacilityService.createFacility` sets status to `ACTIVE`. The prior unrestricted update behavior described in the original review was replaced by ACTIVE/INACTIVE validation and the future-session guard documented below.
+
+| Behavior | Code | Build | Automated / Postman verification |
+|---|---|---|---|
+| POST with null Facility | Allowed | Not verified | Unit test added, not run; Postman pending |
+| POST with ACTIVE Facility | Allowed; existing Facility/Coach conflict checks continue | Not verified | Unit test added, not run; Postman pending |
+| POST with non-ACTIVE Facility | Rejected with 409 via existing `IllegalArgumentException` handler | Not verified | Unit test added for INACTIVE, not run; Postman pending |
+| POST with missing Facility ID | 404 via `ResourceNotFoundException` | Not verified | Unit test added, not run; Postman pending |
+| PUT assigning another non-ACTIVE Facility | Rejected with 409 | Not verified | Unit test added, not run; Postman pending |
+| PUT retaining the same unavailable Facility on a future SCHEDULED session | Rejected with guidance to choose an ACTIVE Facility or cancel | Not verified | Unit test added, not run; Postman pending |
+| GET a historical session with INACTIVE Facility | Still returned; no mutation or auto-cancellation | Not verified | Unit test added, not run; Postman pending |
+
+Only status `ACTIVE` is treated as available (case-insensitive); no schema or Facility/ClassSession data is changed by this code. Existing overlap checks remain in place. The Postman request examples need no body change; request names now document the ACTIVE Facility requirement. Maven Wrapper was not re-run successfully for this incremental change; latest known result remains the earlier wrapper failure before Maven startup.
+
+## ClassSession lifecycle and Facility status rules (2026-10-11)
+
+| Area | Code status | Build | Automated tests | Postman |
+|---|---|---|---|---|
+| ClassSession transitions | Only SCHEDULED/COMPLETED/CANCELLED accepted and normalized uppercase. SCHEDULED→COMPLETED requires now >= endTime; SCHEDULED→CANCELLED requires now < startTime. Terminal states cannot transition elsewhere. PUT edits are rejected for terminal sessions. | Not verified | Boundary, terminal, and invalid status/range tests added; not run | Not tested |
+| Facility status normalization | Update accepts ACTIVE/INACTIVE case-insensitively and stores uppercase; null, blank, and unknown status return 400 | Not verified | Valid and invalid status tests added; not run | Not tested |
+| Facility deactivation | ACTIVE→INACTIVE checks for SCHEDULED sessions with `startTime > now`; future sessions cause 409 without saving Facility; otherwise saves INACTIVE. No session is changed. | Not verified | With/without future session tests added; not run | Not tested |
+| Existing ClassSession rules | ACTIVE Facility assignment, Facility/Coach overlap checks, make-up warnings, permissions, and GET of historical sessions retained | Not verified | Existing tests retained; not run | Not tested |
+
+The future-session predicate in this snapshot used strict `StartTimeAfter`; it is superseded by the latest `EndTimeAfter` rule below. No automatic status transition or schema change was introduced. ClassSession service tests also cover completion before/at endTime, cancellation before/at/after startTime, status normalization, and terminal-state edits. Maven Wrapper test command failed before Maven startup with `Cannot index into a null array`, and no system `mvn` executable is available; no unit test or build success is claimed.
+
+## Facility deactivation coverage (2026-10-11)
+
+Before this change, the user reported **32/32 Maven tests passing (0 failures, 0 errors)** and confirmed the ClassSession Lifecycle and Facility Status Postman cases passed. Those results apply to the prior implementation only.
+
+Facility deactivation now checks for a `SCHEDULED` ClassSession with `endTime > now` at one service-captured `now`. This blocks both sessions in progress and upcoming sessions, while allowing deactivation when sessions have ended or have `endTime == now`. The repository status predicate also excludes `COMPLETED` and `CANCELLED`. No ClassSession is changed and no schema, lifecycle, authorization, or overlap rule is changed.
+
+| Verification for this change | Status |
+|---|---|
+| Code updated | Yes |
+| Maven unit tests | Not yet verified; must rerun after this change |
+| Build | Not yet verified; must rerun after this change |
+| User Postman verification | Prior lifecycle/status cases were confirmed; this deactivation correction is not yet tested |

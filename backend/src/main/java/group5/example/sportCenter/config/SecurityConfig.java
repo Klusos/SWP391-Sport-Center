@@ -67,6 +67,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/coaches", "/api/coaches/**").authenticated()
                 .requestMatchers("/api/coaches", "/api/coaches/**").hasRole("ADMIN")
 
+                .requestMatchers(HttpMethod.GET, "/api/class-sessions", "/api/class-sessions/**").authenticated()
+                .requestMatchers("/api/class-sessions", "/api/class-sessions/**").hasRole("ADMIN")
+
                 .requestMatchers(HttpMethod.GET,
                         "/api/sports", "/api/sports/**",
                         "/api/courses", "/api/courses/**",
