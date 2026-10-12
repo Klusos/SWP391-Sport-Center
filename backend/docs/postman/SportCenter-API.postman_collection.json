@@ -59,7 +59,11 @@
                          "key":  "facilityId",
                          "value":  "1"
                      }
-                 ],
+                 ,
+{
+    "key": "assessmentId",
+    "value": "1"
+}],
     "item":  [
                  {
                      "name":  "Authentication",
@@ -1036,5 +1040,202 @@
                                   }
                               ]
                  }
-             ]
+             ,
+{
+    "name": "Phase 1 - SkillAssessments and MemberSportLevels",
+    "description": "Use a token for the indicated role. Set assessmentId to the ID returned by POST. Only PENDING assessments may be completed/cancelled.",
+    "item": [
+        {
+            "name": "Assign assessment [ADMIN, RECEPTIONIST]",
+            "request": {
+                "method": "POST",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "url": {
+                    "raw": "{{baseUrl}}/api/skill-assessments",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "skill-assessments"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"memberId\": {{memberId}},\n  \"sportId\": {{sportId}},\n  \"assignedCoachId\": {{coachId}},\n  \"notes\": \"Assess current technique\"\n}",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "name": "All assessments [ADMIN, RECEPTIONIST]",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{baseUrl}}/api/skill-assessments",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "skill-assessments"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "My assignments [COACH]",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{baseUrl}}/api/skill-assessments/my-assignments",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "skill-assessments",
+                        "my-assignments"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "My assessment history [MEMBER]",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{baseUrl}}/api/skill-assessments/me",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "skill-assessments",
+                        "me"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Assessment detail [staff, owning MEMBER, assigned COACH]",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{baseUrl}}/api/skill-assessments/{{assessmentId}}",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "skill-assessments",
+                        "{{assessmentId}}"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Complete assessment [assigned COACH]",
+            "request": {
+                "method": "PATCH",
+                "header": [
+                    {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                    }
+                ],
+                "url": {
+                    "raw": "{{baseUrl}}/api/skill-assessments/{{assessmentId}}/complete",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "skill-assessments",
+                        "{{assessmentId}}",
+                        "complete"
+                    ]
+                },
+                "body": {
+                    "mode": "raw",
+                    "raw": "{\n  \"assessedLevel\": \"intermediate\",\n  \"notes\": \"Verified technique and control\"\n}",
+                    "options": {
+                        "raw": {
+                            "language": "json"
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "name": "Cancel PENDING assessment [ADMIN, RECEPTIONIST]",
+            "request": {
+                "method": "PATCH",
+                "header": [],
+                "url": {
+                    "raw": "{{baseUrl}}/api/skill-assessments/{{assessmentId}}/cancel",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "skill-assessments",
+                        "{{assessmentId}}",
+                        "cancel"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "My current sport levels [MEMBER]",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{baseUrl}}/api/member-sport-levels/me",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "member-sport-levels",
+                        "me"
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Member sport levels [ADMIN, RECEPTIONIST]",
+            "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                    "raw": "{{baseUrl}}/api/member-sport-levels/member/{{memberId}}",
+                    "host": [
+                        "{{baseUrl}}"
+                    ],
+                    "path": [
+                        "api",
+                        "member-sport-levels",
+                        "member",
+                        "{{memberId}}"
+                    ]
+                }
+            }
+        }
+    ]
+}]
 }

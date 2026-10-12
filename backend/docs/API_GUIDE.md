@@ -258,3 +258,83 @@ No Swagger/OpenAPI dependency or configuration was found in `pom.xml` or source.
 - Configure `CORS_ALLOWED_ORIGINS` for deployed frontend origins. Defaults permit only `http://localhost:5173` and `http://localhost:3000`.
 - Build and all role/ownership behavior changed in this review are awaiting verification. Test with ADMIN, RECEPTIONIST, MEMBER, and COACH tokens before merge.
 - No course-registration, payment, or public account-registration controller was found.
+
+
+## Phase 1: Skill assessments and current sport levels (2026-10-12)
+
+All endpoints require a Bearer JWT. The JWT subject identifies the current User; Coach is resolved by `Coach.user.id`. IDs are positive integers. Responses are DTOs containing IDs and timestamps, never User/password entities.
+
+| Method | Path | Permission | Success |
+|---|---|---|---|
+| POST | `/api/skill-assessments` | ADMIN, RECEPTIONIST | 201 PENDING assessment |
+| GET | `/api/skill-assessments` | ADMIN, RECEPTIONIST | 200 all history |
+| GET | `/api/skill-assessments/my-assignments` | COACH | 200 own assignments |
+| GET | `/api/skill-assessments/me` | MEMBER | 200 own history |
+| GET | `/api/skill-assessments/{id}` | Staff, owning MEMBER, assigned COACH | 200 assessment |
+| PATCH | `/api/skill-assessments/{id}/complete` | Assigned COACH only | 200 COMPLETED assessment |
+| PATCH | `/api/skill-assessments/{id}/cancel` | ADMIN, RECEPTIONIST | 200 CANCELLED assessment |
+| GET | `/api/member-sport-levels/me` | MEMBER | 200 own current levels |
+| GET | `/api/member-sport-levels/member/{memberId}` | ADMIN, RECEPTIONIST | 200 specified member's levels |
+
+POST body:
+
+```json
+{"memberId": 1, "sportId": 1, "assignedCoachId": 1, "notes": "Assess current technique"}
+```
+
+Completion body (no coach ID is accepted as an identity source):
+
+```json
+{"assessedLevel": "intermediate", "notes": "Verified technique and control"}
+```
+
+Completion normalizes trimmed level names to BEGINNER, INTERMEDIATE, or ADVANCED. Notes are optional and limited to 1000 characters. Omitted/null completion notes retain the request notes; an empty string clears them. Cancellation has no body. Unknown JSON properties follow the existing application's deserialization policy and never select the completing coach.
+
+Assessment DTO fields: `id`, `memberId`, `sportId`, `assignedCoachId`, `requestedByUserId`, `status`, `assessedLevel`, `notes`, `createdAt`, `assessedAt`, `cancelledAt`. Level DTO fields: `id`, `memberId`, `sportId`, `level`, `verifiedByCoachId`, `verifiedAt`, `updatedAt`. Timestamps use existing `LocalDateTime` conventions (ISO local date/time, no offset). Assessment lists sort newest creation first, with ID as tie-breaker; level lists sort by sport ID. Empty lists return `[]`; an absent level does not imply BEGINNER and no record is synthesized.
+
+Creation requires an ACTIVE MEMBER, ACTIVE Sport, ACTIVE Coach linked to an ACTIVE COACH account, and an existing CoachSport qualification. Only one PENDING assessment is allowed per member/sport. Completion or cancellation can transition only PENDING; terminal records have no edit endpoint. Completion atomically creates or replaces the current level, including a downgrade. Staff can consult inactive members' recorded levels, but creation requires an active member. Current callers must have an active account; coaches must also have an active linked Coach.
+
+Errors: 400 invalid IDs/body/level/notes, 401 absent/invalid JWT identity, 403 wrong role/ownership or inactive caller, 404 missing resource, 409 invalid target state/qualification, duplicate pending, or terminal transition. Status errors follow the existing Spring `ResponseStatusException` convention; clients should use HTTP status rather than assume a particular error-body shape.
+
+### Phase 1 SQL Server migration and concurrency
+
+Run [phase1-member-sport-level-assessment.sql](sql/phase1-member-sport-level-assessment.sql) against the selected database before enabling the feature. It adds only `member_sport_level` and `skill_assessment`, their foreign keys, the member/sport unique constraint, and a SQL Server filtered unique index on pending assessments. It does not alter existing tables or insert default levels. Hibernate `ddl-auto=update` creates entity tables but cannot express the filtered index; the script also handles tables already created by Hibernate. Review default `dbo` and snake_case naming against the deployment. Back up and stop writers; existing duplicate data fails the migration rather than being deleted. No SQL migration was executed during implementation.
+
+All three mutations use a transaction and `PESSIMISTIC_WRITE` on the existing member User as a stable lock anchor. Completion/cancellation first select only the assessment's member ID (not an entity snapshot), then lock member, then assessment; state is read after the member lock. Hibernate's SQL Server dialect implements the lock with SQL Server locking hints. All mutations consistently acquire member before assessment, hold locks until commit/rollback, and serialize different sports for the same member. The lock also covers a missing level row and the duplicate-pending check, so concurrent first inserts and repeated completion cannot overwrite a winner. The filtered unique index provides database enforcement even for external pending inserts. External level writers must follow this lock protocol; there is no general level mutation API.
+
+The latest successful serialized completion sets the current level, without comparing creation dates or preventing downgrades. `assessedAt` is captured after acquiring the lock; transaction order determines the winner even if wall-clock timestamps tie. Persistence errors roll back both writes. Database deadlocks/timeouts can still abort a transaction and require caller retry; the application does not silently retry or translate every database infrastructure failure to 409. H2 integration tests exercise locking/rollback, but SQL Server migration, dialect lock behavior, and concurrent calls still require verification on the deployed SQL Server.
+
+### Postman Phase 1 verification checklist
+
+Use separate tokens for ADMIN, RECEPTIONIST, two MEMBER accounts, and two COACH accounts. Create an ACTIVE Sport and qualified Coach with existing APIs; configure the collection's `memberId`, `sportId`, `coachId`, and `assessmentId` variables. The Phase 1 folder contains all nine endpoints; choose the token for each named permission.
+
+1. Verify staff POST 201, duplicate POST 409; missing IDs 404; inactive/wrong-role member, inactive sport/coach, and missing qualification 409.
+2. Verify member history/levels and coach assignments contain only own records; detail access to another member or coach returns 403; no token returns 401.
+3. Complete with the assigned coach and lowercase level: 200, persisted level/timestamps. Unassigned coach returns 403; invalid level and notes >1000 characters return 400.
+4. Reassess to ADVANCED then BEGINNER; verify one current level and retained assessment history. Missing level returns an empty list before completion.
+5. Cancel PENDING as staff; verify no level mutation. Re-complete/re-cancel either terminal status returns 409. Verify wrong-role POST/PATCH and list access return 403.
+6. Send concurrent duplicate creations, two completions, and cancellation versus completion; exactly one succeeds, and stored assessment/level agree. Verify the filtered index in SQL Server.
+
+These are verification instructions, not recorded Postman results.
+
+
+### Phase 1 migration hardening (2026-10-12)
+
+The migration now sets all seven required filtered-index options: ANSI_NULLS, ANSI_PADDING, ANSI_WARNINGS, ARITHABORT, CONCAT_NULL_YIELDS_NULL, and QUOTED_IDENTIFIER ON; NUMERIC_ROUNDABORT OFF. XACT_ABORT remains ON. These options must also hold for application connections writing the filtered index; running the migration does not change JDBC session configuration. Reference: https://learn.microsoft.com/en-us/sql/t-sql/statements/create-index-transact-sql#required-set-options-for-filtered-indexes.
+
+`SkillAssessment.notes` now uses Hibernate `@Nationalized` with length 1000, mapping to SQL Server `NVARCHAR(1000) NULL`. The migration explicitly upgrades an existing nullable built-in `VARCHAR(1000)` column to that representation; it does not delete notes. Conversion cannot restore characters already lost by previous non-Unicode writes. Other existing notes shapes are rejected for manual review.
+
+Verified mapping contract (default Spring/Hibernate physical naming, schema `dbo`):
+
+| Table | Columns and SQL Server types | Foreign keys |
+|---|---|---|
+| `member_sport_level` | `id INT IDENTITY(1,1)` PK; required `member_id INT`, `sport_id INT`, `level VARCHAR(20)`, `updated_at DATETIME2(6)`; nullable `verified_by_coach_id INT`, `verified_at DATETIME2(6)` | member_id -> users.id; sport_id -> sport.id; verified_by_coach_id -> coach.id |
+| `skill_assessment` | `id INT IDENTITY(1,1)` PK; required `member_id INT`, `sport_id INT`, `assigned_coach_id INT`, `requested_by_user_id INT`, `status VARCHAR(20)`, `created_at DATETIME2(6)`; nullable `assessed_level VARCHAR(20)`, `notes NVARCHAR(1000)`, `assessed_at DATETIME2(6)`, `cancelled_at DATETIME2(6)` | member_id/requested_by_user_id -> users.id; sport_id -> sport.id; assigned_coach_id -> coach.id |
+
+This script targets SQL Server 2016+ catalog metadata. Run it as a standalone batch in `SportCenterDB` after backup and stopping writers. It rejects an outer transaction to avoid rolling back a caller's unrelated work. A transaction-owned application lock serializes migration reruns, and exclusive table locks protect Phase 1 data during validation. Dynamic DDL avoids binding statements to missing or incompatible old columns before preflight. The database-name guard must be deliberately reviewed if deploying to a renamed database; custom physical naming/schema needs a separately reviewed script.
+
+Existing tables must have exactly the mapped columns, built-in types, lengths, datetime precision, nullability, identity definition, and enabled single-id primary keys. Temporal/memory-optimized tables and extra columns fail closed. Existing FK names may differ from the script/Hibernate, but their single-column targets must match and they must be trusted, enabled, and non-cascading. Missing FKs and enum checks are added WITH CHECK, so orphaned references and invalid enum data fail the whole transaction. Existing CHECK definitions are accepted only in the documented canonical enum IN/OR forms; unusual but logically equivalent predicates may require manual review.
+
+Required indexes must be unique, enabled, non-hypothetical, have IGNORE_DUP_KEY OFF, and have exactly member_id then sport_id as key columns. The level index must be unfiltered; the assessment index must filter exactly status = 'PENDING'. Included columns do not change uniqueness and are allowed. Different extra unique indexes are rejected to prevent accidentally forbidding terminal assessment history. Incorrect/disabled/untrusted objects are reported rather than dropped, rebuilt, renamed, or silently accepted. Duplicate member/sport levels or PENDING assessments fail index creation and roll back all changes. Compatible reruns retain existing tables/indexes and skip the completed Unicode upgrade.
+
+No live SQL Server inspection or migration execution was performed. Database permissions/metadata visibility, deployed schema/naming, actual SQL Server CHECK/filter canonicalization, migration/rerun behavior, JDBC SET options, and locking remain SQL Server verification items. Strict fingerprint validation can reject safe alternative definitions; it intentionally requires review rather than weakening constraints automatically.
