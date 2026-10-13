@@ -22,13 +22,16 @@ public class SkillAssessmentService {
     private final SportRepository sports;
     private final CoachRepository coaches;
     private final CoachSportRepository qualifications;
+    private final ConsultationRequestRepository consultationRequests;
     private final AssessmentAccess access;
 
     public SkillAssessmentService(SkillAssessmentRepository assessments, MemberSportLevelRepository levels,
             UserRepository users, SportRepository sports, CoachRepository coaches,
-            CoachSportRepository qualifications, AssessmentAccess access) {
+            CoachSportRepository qualifications, ConsultationRequestRepository consultationRequests,
+            AssessmentAccess access) {
         this.assessments = assessments; this.levels = levels; this.users = users;
-        this.sports = sports; this.coaches = coaches; this.qualifications = qualifications; this.access = access;
+        this.sports = sports; this.coaches = coaches; this.qualifications = qualifications;
+        this.consultationRequests = consultationRequests; this.access = access;
     }
 
     @Transactional
@@ -49,11 +52,24 @@ public class SkillAssessmentService {
             throw error(HttpStatus.CONFLICT, "Assigned coach and COACH account must be ACTIVE");
         if (!qualifications.existsByCoachIdAndSportId(coach.getId(), sport.getId()))
             throw error(HttpStatus.CONFLICT, "Coach is not qualified for this sport");
+        ConsultationRequest consultation = null;
+        if (request.consultationRequestId() != null) {
+            consultation = consultationRequests.findByIdForUpdate(request.consultationRequestId())
+                    .orElseThrow(() -> error(HttpStatus.NOT_FOUND, "ConsultationRequest not found"));
+            if (consultation.getStatus() != ConsultationStatus.IN_PROGRESS
+                    || consultation.getMember() == null
+                    || !member.getId().equals(consultation.getMember().getId())
+                    || !sport.getId().equals(consultation.getSport().getId())) {
+                throw error(HttpStatus.CONFLICT,
+                        "Consultation must be IN_PROGRESS and linked to the same member and sport");
+            }
+        }
         if (assessments.existsByMemberIdAndSportIdAndStatus(member.getId(), sport.getId(), AssessmentStatus.PENDING))
             throw error(HttpStatus.CONFLICT, "A PENDING assessment already exists for this member and sport");
         SkillAssessment assessment = new SkillAssessment();
         assessment.setMember(member); assessment.setSport(sport); assessment.setAssignedCoach(coach);
         assessment.setRequestedByUser(actor); assessment.setStatus(AssessmentStatus.PENDING); assessment.setNotes(request.notes());
+        assessment.setConsultationRequest(consultation);
         try { return response(assessments.saveAndFlush(assessment)); }
         catch (DataIntegrityViolationException e) { throw error(HttpStatus.CONFLICT, "Assessment conflicts with existing data"); }
     }
@@ -133,6 +149,7 @@ public class SkillAssessmentService {
         return new SkillAssessmentResponse(a.getId(), a.getMember().getId(), a.getSport().getId(),
                 a.getAssignedCoach().getId(), a.getRequestedByUser().getId(), a.getStatus().name(),
                 a.getAssessedLevel() == null ? null : a.getAssessedLevel().name(), a.getNotes(),
-                a.getCreatedAt(), a.getAssessedAt(), a.getCancelledAt());
+                a.getCreatedAt(), a.getAssessedAt(), a.getCancelledAt(),
+                a.getConsultationRequest() == null ? null : a.getConsultationRequest().getId());
     }
 }

@@ -219,3 +219,30 @@ Changes are limited to the migration, SkillAssessment notes mapping, Phase 1 Uni
 | Postman | Not executed for this hardening |
 
 Remaining deployment verification: SQL Server 2016+ and adequate DDL/metadata permissions, database guard/default dbo physical naming, actual existing CHECK/filter definitions, migration and rerun behavior, Unicode storage, index enforcement, and JDBC-session SET options. Migration-session SET statements do not configure the connection pool. Parser/H2 success does not establish SQL Server runtime safety. No dependency additions, live database modifications, or Git commit/push/merge/pull/reset operations occurred.
+
+## Phase 1.5 Consultation Requests (2026-10-12)
+
+| Area | Code status | Build | Automated tests | SQL Server / Postman |
+|---|---|---|---|---|
+| ConsultationRequest entity/API | Implemented in source; role checks, ownership, status transitions, pagination/filtering, and locked take operation added | Maven test lifecycle passed (compile + tests) | Integration tests passed as part of 67/67 total | Migration provided but not executed; Postman not tested |
+| Automatic MEMBER creation/linking | Implemented using existing BCrypt-backed `MemberRegistrationService` in the same REQUIRED transaction as linking | Passed Maven test lifecycle | success, duplicate email, and simulated link-write rollback cases passed | Not tested |
+| Existing MEMBER linking | Implemented for selected ACTIVE MEMBER ID; no contact matching | Passed Maven test lifecycle | Valid, repeat same ID, different ID, inactive, wrong-role/nonexistent and wrong-handler cases passed | Not tested |
+| SkillAssessment integration | Nullable consultation relation and optional request field added; standalone constructor/request remains supported | Passed Maven test lifecycle | linked same member/sport/status and standalone paths passed | Not tested |
+| SQL migration | Idempotent SQL Server script added; creates consultation table and nullable assessment FK/index | N/A | Not parsed/executed by SQL Server | Not executed; manual execution only |
+
+### Verified project conventions and business decisions
+
+- Existing `User.email` is required and unique. Guest consultation email remains optional, but `/create-member` returns 400 when it is absent and recommends explicitly linking an existing MEMBER instead.
+- Existing `CreateMemberRequest` requires date of birth and a staff-supplied password; existing `PasswordConfig` supplies BCrypt. `/create-member` therefore requires date of birth and a staff-selected password, reuses `MemberRegistrationService`, and never returns credentials. No default password, activation, or reset workflow was found or invented.
+- MEMBER identity comes only from JWT subject on consultation submission. The DTO has no `memberId` field. Guest records keep `member_id` null.
+- `PESSIMISTIC_WRITE` on the ConsultationRequest row serializes take/state/link operations. The SQL Server locking behavior still needs real-database verification; tests use the isolated H2 MSSQL mode.
+- `server.error.include-message=never`, `server.error.include-exception=false`, and `server.error.include-stacktrace=never` are set to suppress internal default-error details; these configuration-only additions were not covered by a Maven rerun.
+- Statuses are terminal after COMPLETED/CANCELLED. Assessment completion does not change consultation status; consultation cancellation does not mutate assessment or level history.
+- Migration and runtime database were not executed or modified. No Postman result is claimed for Phase 1.5.
+- Default SQL Server JPA mode is now `validate`, preventing a later application startup from auto-creating the new table/column. Run the migration manually first. The test-only Phase 1 H2 profile still uses `create-drop`.
+
+### Test/build report
+
+The Phase 1/Phase 1 migration verification documented above predates these Phase 1.5 changes; the 67-test run below includes the current suite and new Phase 1.5 tests. Offline Maven 3.9.16 test command completed successfully: **67 tests, 0 failures, 0 errors, 0 skipped; BUILD SUCCESS**. Maven compiled 129 main and 5 test source files. This test lifecycle did not package a deployable artifact. New integration tests cover guest/MEMBER submission, lifecycle, role/handler ownership, concurrent take, account create/link rollback, explicit existing-member linking, linked assessment validation, and standalone assessment compatibility. No Postman or SQL Server execution is claimed.
+
+After the successful test run, the request DTO was given a redacted `toString`, and default SQL Server schema/error-response settings were hardened (`ddl-auto=validate`; omit default error message, exception type, and stack trace). The test profile overrides DDL mode with isolated H2 `create-drop`. A rerun was declined at the command-approval step, so these final defensive changes have not been retested; the 67-test result covers the preceding Java/entity/API/lifecycle changes.

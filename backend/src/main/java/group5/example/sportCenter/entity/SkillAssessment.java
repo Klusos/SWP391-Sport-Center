@@ -25,6 +25,9 @@ public class SkillAssessment {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "requestedByUserId", nullable = false)
     private User requestedByUser;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "consultationRequestId")
+    private ConsultationRequest consultationRequest;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20)
     private AssessmentStatus status;
     @Enumerated(EnumType.STRING) @Column(length = 20)

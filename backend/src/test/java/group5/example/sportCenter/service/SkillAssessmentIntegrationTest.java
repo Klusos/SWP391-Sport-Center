@@ -34,6 +34,7 @@ class SkillAssessmentIntegrationTest {
     @Autowired SportRepository sports;
     @Autowired CoachRepository coaches;
     @Autowired CoachSportRepository qualifications;
+    @Autowired ConsultationRequestRepository consultationRequests;
     @Autowired MemberSportLevelRepository levels;
     @MockitoSpyBean SkillAssessmentRepository assessments;
     @Autowired JwtService tokens;
@@ -46,7 +47,8 @@ class SkillAssessmentIntegrationTest {
 
     @BeforeEach
     void setup() {
-        assessments.deleteAll(); levels.deleteAll(); qualifications.deleteAll(); coaches.deleteAll(); sports.deleteAll(); users.deleteAll();
+        assessments.deleteAll(); consultationRequests.deleteAll(); levels.deleteAll();
+        qualifications.deleteAll(); coaches.deleteAll(); sports.deleteAll(); users.deleteAll();
         admin = user("ADMIN"); receptionist = user("RECEPTIONIST"); member = user("MEMBER"); otherMember = user("MEMBER");
         coachUser = user("COACH"); otherCoachUser = user("COACH");
         coach = coach(coachUser); otherCoach = coach(otherCoachUser);

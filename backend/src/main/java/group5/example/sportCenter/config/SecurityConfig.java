@@ -39,6 +39,20 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.OPTIONS, "/api/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
 
+                .requestMatchers(HttpMethod.POST, "/api/consultation-requests").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/consultation-requests/me").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/consultation-requests")
+                    .hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers(HttpMethod.PATCH, "/api/consultation-requests/*/take")
+                    .hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers(HttpMethod.GET, "/api/consultation-requests/*").authenticated()
+                .requestMatchers(HttpMethod.PATCH,
+                        "/api/consultation-requests/*/complete",
+                        "/api/consultation-requests/*/cancel",
+                        "/api/consultation-requests/*/link-member").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/consultation-requests/*/create-member").authenticated()
+                .requestMatchers("/api/consultation-requests", "/api/consultation-requests/**").authenticated()
+
                 .requestMatchers(HttpMethod.GET, "/api/users/me").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/users", "/api/users/*")
                     .hasAnyRole("ADMIN", "RECEPTIONIST")

@@ -276,10 +276,10 @@ All endpoints require a Bearer JWT. The JWT subject identifies the current User;
 | GET | `/api/member-sport-levels/me` | MEMBER | 200 own current levels |
 | GET | `/api/member-sport-levels/member/{memberId}` | ADMIN, RECEPTIONIST | 200 specified member's levels |
 
-POST body:
+POST body (`consultationRequestId` is optional and may be omitted for standalone assessments):
 
 ```json
-{"memberId": 1, "sportId": 1, "assignedCoachId": 1, "notes": "Assess current technique"}
+{"memberId": 1, "sportId": 1, "assignedCoachId": 1, "notes": "Assess current technique", "consultationRequestId": 15}
 ```
 
 Completion body (no coach ID is accepted as an identity source):
@@ -290,7 +290,7 @@ Completion body (no coach ID is accepted as an identity source):
 
 Completion normalizes trimmed level names to BEGINNER, INTERMEDIATE, or ADVANCED. Notes are optional and limited to 1000 characters. Omitted/null completion notes retain the request notes; an empty string clears them. Cancellation has no body. Unknown JSON properties follow the existing application's deserialization policy and never select the completing coach.
 
-Assessment DTO fields: `id`, `memberId`, `sportId`, `assignedCoachId`, `requestedByUserId`, `status`, `assessedLevel`, `notes`, `createdAt`, `assessedAt`, `cancelledAt`. Level DTO fields: `id`, `memberId`, `sportId`, `level`, `verifiedByCoachId`, `verifiedAt`, `updatedAt`. Timestamps use existing `LocalDateTime` conventions (ISO local date/time, no offset). Assessment lists sort newest creation first, with ID as tie-breaker; level lists sort by sport ID. Empty lists return `[]`; an absent level does not imply BEGINNER and no record is synthesized.
+Assessment DTO fields: `id`, `memberId`, `sportId`, `assignedCoachId`, `requestedByUserId`, `status`, `assessedLevel`, `notes`, `createdAt`, `assessedAt`, `cancelledAt`, nullable `consultationRequestId`. Level DTO fields: `id`, `memberId`, `sportId`, `level`, `verifiedByCoachId`, `verifiedAt`, `updatedAt`. Timestamps use existing `LocalDateTime` conventions (ISO local date/time, no offset). Assessment lists sort newest creation first, with ID as tie-breaker; level lists sort by sport ID. Empty lists return `[]`; an absent level does not imply BEGINNER and no record is synthesized.
 
 Creation requires an ACTIVE MEMBER, ACTIVE Sport, ACTIVE Coach linked to an ACTIVE COACH account, and an existing CoachSport qualification. Only one PENDING assessment is allowed per member/sport. Completion or cancellation can transition only PENDING; terminal records have no edit endpoint. Completion atomically creates or replaces the current level, including a downgrade. Staff can consult inactive members' recorded levels, but creation requires an active member. Current callers must have an active account; coaches must also have an active linked Coach.
 
@@ -316,6 +316,58 @@ Use separate tokens for ADMIN, RECEPTIONIST, two MEMBER accounts, and two COACH 
 6. Send concurrent duplicate creations, two completions, and cancellation versus completion; exactly one succeeds, and stored assessment/level agree. Verify the filtered index in SQL Server.
 
 These are verification instructions, not recorded Postman results.
+
+## Phase 1.5: Consultation requests
+
+| Method | Path | Permission | Success |
+|---|---|---|---|
+| POST | `/api/consultation-requests` | Guest or MEMBER | 201 PENDING request; MEMBER is linked from JWT subject |
+| GET | `/api/consultation-requests/me` | MEMBER | 200 own linked requests |
+| GET | `/api/consultation-requests?status=PENDING&page=0&size=20` | ADMIN, RECEPTIONIST | 200 paged queue; status optional |
+| GET | `/api/consultation-requests/{id}` | ADMIN, assigned RECEPTIONIST, linked MEMBER | 200 request |
+| PATCH | `/api/consultation-requests/{id}/take` | ADMIN, RECEPTIONIST | 200; PENDING -> IN_PROGRESS, records handler/time |
+| PATCH | `/api/consultation-requests/{id}/complete` | ADMIN, assigned handler | 200; IN_PROGRESS -> COMPLETED |
+| PATCH | `/api/consultation-requests/{id}/cancel` | ADMIN, assigned handler | 200; IN_PROGRESS -> CANCELLED |
+| POST | `/api/consultation-requests/{id}/create-member` | ADMIN, assigned handler | 200; creates MEMBER and links atomically |
+| PATCH | `/api/consultation-requests/{id}/link-member` | ADMIN, assigned handler | 200; links selected ACTIVE MEMBER |
+
+Guest/MEMBER submission body:
+
+```json
+{"name":"Nguyễn An","phone":"0900000000","email":"an@example.test","sportId":1,"age":25,"experience":"Đã tập cơ bản","note":"Muốn được tư vấn lộ trình"}
+```
+
+`name` and `phone` are required (100/20 characters); `email` is optional (150 characters); `age` is optional (1-120); `sportId` must identify an ACTIVE Sport. `experience` and `note` are optional Vietnamese text. The request has no `memberId` property; a MEMBER is resolved from the validated JWT, while a guest stays unlinked. Authenticated non-MEMBER roles are rejected on this public route.
+
+The queue accepts `page` >= 0 and `size` from 1 to 100. Status values are `PENDING`, `IN_PROGRESS`, `COMPLETED`, and `CANCELLED`. Taking uses a database pessimistic row lock so simultaneous staff requests cannot both claim a PENDING request. Only the assigned handler or ADMIN may complete/cancel/link/create a member; terminal consultation states cannot transition again. Assessment completion does not complete its consultation, and consultation cancellation does not mutate assessment or MemberSportLevel history.
+
+Complete body (resolution note is optional): `{"resolutionNote":"Consultation completed; course registration remains separate"}`. Cancel body requires a reason: `{"reason":"Member cancelled the consultation"}`. Example response:
+
+```json
+{"id":12,"memberId":null,"name":"Nguyễn An","phone":"0900000000","email":"an@example.test","sportId":1,"sportName":"Tennis","age":25,"experience":"Beginner","note":"Consultation request","status":"PENDING","createdAt":"2026-10-12T14:30:00","handledBy":null,"handledAt":null,"resolutionNote":null,"completedAt":null,"cancelledAt":null}
+```
+
+For automatic account creation, the consultation must be IN_PROGRESS, unlinked, and have an email. Request body:
+
+```json
+{"password":"<staff-selected temporary password>","dateOfBirth":"1998-05-01"}
+```
+
+This reuses the existing member-registration BCrypt encoder and required date-of-birth rule; there is no default password or activation/reset workflow. The password is request-only and never returned. Use HTTPS and do not log the request body. If the consultation lacks email, collect it through an approved channel or explicitly select an existing account instead:
+
+```json
+{"memberId":20}
+```
+
+The selected account must exist, be ACTIVE, and have MEMBER role. No automatic email/phone matching is performed. Create-member email uniqueness conflicts return 409; missing/invalid required input returns 400.
+
+Assessment creation can include `consultationRequestId`; when present, the request must be IN_PROGRESS and linked to the same member and sport. Omitting it preserves standalone assessment behavior. Assessment response includes nullable `consultationRequestId`.
+
+### Phase 1.5 migration and verification status
+
+Run [phase1_5-consultation-requests.sql](sql/phase1_5-consultation-requests.sql) manually against the selected SportCenterDB after backup and with writers stopped. It creates `consultation_request`, adds nullable `skill_assessment.consultation_request_id`, foreign keys, enum/age/nonblank checks, and lookup indexes. It is idempotent and does not drop data. The default `spring.jpa.hibernate.ddl-auto=validate` prevents application startup from applying schema changes automatically; startup validates successfully only after the manual migration is applied. The isolated Phase 1 test profile continues to use H2 `create-drop`.
+
+Phase 1.5 source and integration tests passed the offline Maven test lifecycle (67 total tests, zero failures/errors/skips). The SQL Server migration has not been executed, and Phase 1.5 behavior has not been verified through Postman. Postman examples are in the Consultation requests folder; replace sample identifiers and use the appropriate role tokens. The Maven/H2 result does not establish SQL Server migration or locking behavior. HTTP error responses are configured not to include internal messages, exception class names, or stack traces.
 
 
 ### Phase 1 migration hardening (2026-10-12)
