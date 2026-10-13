@@ -19,7 +19,7 @@ Common status codes: 400 for request validation or invalid role, 401 for missing
 
 - **Verified by user** means the user reported a successful Postman result in this conversation.
 - **Not verified** means no Postman result was available during this review; the endpoint may still be implemented.
-- The earlier Maven build attempt failed before Maven started (`Cannot index into a null array`). The current security changes are awaiting build verification.
+- Maven Wrapper has previously failed before Maven starts (`Cannot index into a null array`); verify the latest ClassSession source with a successful build before integration.
 
 ## Authentication
 
@@ -210,9 +210,42 @@ Facility GET endpoints permit all authenticated roles; mutations are ADMIN-only.
 
 Response sample: `{"id":5,"sportId":1,"sportName":"Swimming","name":"Main pool","type":"POOL","status":"ACTIVE"}`.
 
+## ClassSession
+
+`ClassSession` represents one scheduled meeting belonging to a `CourseClass` (`/api/classes`). All GET routes allow ADMIN, RECEPTIONIST, MEMBER, and COACH. POST, PUT, and PATCH are ADMIN-only; no DELETE endpoint is exposed. Status values are `SCHEDULED`, `COMPLETED`, and `CANCELLED` only.
+
+| Method and path | Allowed caller | Request body | Success and response | Test status |
+|---|---|---|---|---|
+| `GET /api/class-sessions` | All authenticated roles | None | 200, `ClassSessionResponse[]` | Not verified |
+| `GET /api/class-sessions/{id}` | All authenticated roles | None | 200, `ClassSessionResponse` | Not verified |
+| `GET /api/class-sessions/class/{classId}` | All authenticated roles | None | 200, `ClassSessionResponse[]` | Not verified |
+| `POST /api/class-sessions` | ADMIN | `CreateClassSessionRequest` | 201, `ClassSessionResponse` | Not verified |
+| `PUT /api/class-sessions/{id}` | ADMIN | `UpdateClassSessionRequest` | 200, `ClassSessionResponse` | Not verified |
+| `PATCH /api/class-sessions/{id}/status` | ADMIN | `UpdateClassSessionStatusRequest` | 200, `ClassSessionResponse` | Not verified |
+
+Create sample (status omitted to use the `SCHEDULED` default; `facilityId` may be null):
+
+```json
+{"classId":3,"facilityId":6,"startTime":"2026-10-12T10:00:00","endTime":"2026-10-12T11:00:00"}
+```
+
+Update body is the same shape and must include `classId`, `startTime`, and `endTime`; `facilityId: null` clears the facility. Status update body: `{"status":"CANCELLED"}`. The response includes `id`, class/facility identifiers and names, start/end times, status, and non-blocking `warnings` (outside CourseOffering date range or the per-CourseClass planned-session threshold). Overlap or invalid state transitions return 409; missing referenced resources return 404; bean validation failures return 400.
+
+Response sample:
+
+```json
+{"id":21,"classId":3,"className":"Morning group","facilityId":6,"facilityName":"Main court","startTime":"2026-10-12T10:00:00","endTime":"2026-10-12T11:00:00","status":"SCHEDULED","warnings":[]}
+```
+
+Facility and Coach overlaps use half-open interval semantics (`existing.startTime < requested.endTime` and `existing.endTime > requested.startTime`), so sessions that only touch at an endpoint do not overlap. Cancelled sessions do not reserve facilities or coaches. Make-up sessions outside CourseOffering dates and counts above `plannedSessions` are saved with warnings; the current code interprets `plannedSessions` per CourseClass for warning purposes only, pending confirmation of the intended counting scope.
+
+Lifecycle transitions: `SCHEDULED` can become `COMPLETED` only when current time is at or after `endTime`, and can become `CANCELLED` only before `startTime`. `COMPLETED` and `CANCELLED` are terminal; repeating the same status is idempotent, but changing to another status returns 409. PUT schedule updates are allowed only for `SCHEDULED` sessions. Invalid status/time request data returns 400. Statuses change only through the API; there is no time-driven auto-transition.
+
+Facility status updates accept `ACTIVE` or `INACTIVE`, case-insensitively, and persist uppercase. Null, blank, or any other value returns 400. Switching from ACTIVE to INACTIVE returns 409 if a `SCHEDULED` ClassSession using the Facility has `endTime` later than the current time, covering sessions in progress and upcoming sessions. A session ending exactly now, an ended session, or a `COMPLETED`/`CANCELLED` session does not block deactivation. No session is deleted, cancelled, or edited by this operation. When a Facility is supplied on ClassSession POST or changed on PUT, its current status must be ACTIVE; missing Facility IDs return 404 and any other status returns 409. On PUT, a future `SCHEDULED` session cannot retain the same Facility if that Facility has become unavailable; choose another ACTIVE Facility or cancel the session. GET continues returning historical sessions and their Facility data regardless of Facility status. `FacilityService` creates facilities as ACTIVE.
+
 ## Modules not found in current controllers
 
-No `ClassSession`, course-registration, payment, or public account-registration endpoint was found. `/api/classes` manages course classes and is not a ClassSession API.
+No course-registration, payment, or public account-registration endpoint was found. `/api/classes` manages CourseClass records; `/api/class-sessions` manages individual meetings.
 
 ## OpenAPI / Swagger
 
@@ -224,4 +257,136 @@ No Swagger/OpenAPI dependency or configuration was found in `pom.xml` or source.
 - The application requires `DB_USERNAME`, `DB_PASSWORD`, and `JWT_SECRET`; configure them in the runtime environment. If the previously tracked SQL Server password was real or shared, rotate it because Git history may retain it.
 - Configure `CORS_ALLOWED_ORIGINS` for deployed frontend origins. Defaults permit only `http://localhost:5173` and `http://localhost:3000`.
 - Build and all role/ownership behavior changed in this review are awaiting verification. Test with ADMIN, RECEPTIONIST, MEMBER, and COACH tokens before merge.
-- No ClassSession, course registration, payment, or public account-registration controller was found. `/api/classes` is the implemented course-class API.
+- No course-registration, payment, or public account-registration controller was found.
+
+
+## Phase 1: Skill assessments and current sport levels (2026-10-12)
+
+All endpoints require a Bearer JWT. The JWT subject identifies the current User; Coach is resolved by `Coach.user.id`. IDs are positive integers. Responses are DTOs containing IDs and timestamps, never User/password entities.
+
+| Method | Path | Permission | Success |
+|---|---|---|---|
+| POST | `/api/skill-assessments` | ADMIN, RECEPTIONIST | 201 PENDING assessment |
+| GET | `/api/skill-assessments` | ADMIN, RECEPTIONIST | 200 all history |
+| GET | `/api/skill-assessments/my-assignments` | COACH | 200 own assignments |
+| GET | `/api/skill-assessments/me` | MEMBER | 200 own history |
+| GET | `/api/skill-assessments/{id}` | Staff, owning MEMBER, assigned COACH | 200 assessment |
+| PATCH | `/api/skill-assessments/{id}/complete` | Assigned COACH only | 200 COMPLETED assessment |
+| PATCH | `/api/skill-assessments/{id}/cancel` | ADMIN, RECEPTIONIST | 200 CANCELLED assessment |
+| GET | `/api/member-sport-levels/me` | MEMBER | 200 own current levels |
+| GET | `/api/member-sport-levels/member/{memberId}` | ADMIN, RECEPTIONIST | 200 specified member's levels |
+
+POST body (`consultationRequestId` is optional and may be omitted for standalone assessments):
+
+```json
+{"memberId": 1, "sportId": 1, "assignedCoachId": 1, "notes": "Assess current technique", "consultationRequestId": 15}
+```
+
+Completion body (no coach ID is accepted as an identity source):
+
+```json
+{"assessedLevel": "intermediate", "notes": "Verified technique and control"}
+```
+
+Completion normalizes trimmed level names to BEGINNER, INTERMEDIATE, or ADVANCED. Notes are optional and limited to 1000 characters. Omitted/null completion notes retain the request notes; an empty string clears them. Cancellation has no body. Unknown JSON properties follow the existing application's deserialization policy and never select the completing coach.
+
+Assessment DTO fields: `id`, `memberId`, `sportId`, `assignedCoachId`, `requestedByUserId`, `status`, `assessedLevel`, `notes`, `createdAt`, `assessedAt`, `cancelledAt`, nullable `consultationRequestId`. Level DTO fields: `id`, `memberId`, `sportId`, `level`, `verifiedByCoachId`, `verifiedAt`, `updatedAt`. Timestamps use existing `LocalDateTime` conventions (ISO local date/time, no offset). Assessment lists sort newest creation first, with ID as tie-breaker; level lists sort by sport ID. Empty lists return `[]`; an absent level does not imply BEGINNER and no record is synthesized.
+
+Creation requires an ACTIVE MEMBER, ACTIVE Sport, ACTIVE Coach linked to an ACTIVE COACH account, and an existing CoachSport qualification. Only one PENDING assessment is allowed per member/sport. Completion or cancellation can transition only PENDING; terminal records have no edit endpoint. Completion atomically creates or replaces the current level, including a downgrade. Staff can consult inactive members' recorded levels, but creation requires an active member. Current callers must have an active account; coaches must also have an active linked Coach.
+
+Errors: 400 invalid IDs/body/level/notes, 401 absent/invalid JWT identity, 403 wrong role/ownership or inactive caller, 404 missing resource, 409 invalid target state/qualification, duplicate pending, or terminal transition. Status errors follow the existing Spring `ResponseStatusException` convention; clients should use HTTP status rather than assume a particular error-body shape.
+
+### Phase 1 SQL Server migration and concurrency
+
+Run [phase1-member-sport-level-assessment.sql](sql/phase1-member-sport-level-assessment.sql) against the selected database before enabling the feature. It adds only `member_sport_level` and `skill_assessment`, their foreign keys, the member/sport unique constraint, and a SQL Server filtered unique index on pending assessments. It does not alter existing tables or insert default levels. Hibernate `ddl-auto=update` creates entity tables but cannot express the filtered index; the script also handles tables already created by Hibernate. Review default `dbo` and snake_case naming against the deployment. Back up and stop writers; existing duplicate data fails the migration rather than being deleted. No SQL migration was executed during implementation.
+
+All three mutations use a transaction and `PESSIMISTIC_WRITE` on the existing member User as a stable lock anchor. Completion/cancellation first select only the assessment's member ID (not an entity snapshot), then lock member, then assessment; state is read after the member lock. Hibernate's SQL Server dialect implements the lock with SQL Server locking hints. All mutations consistently acquire member before assessment, hold locks until commit/rollback, and serialize different sports for the same member. The lock also covers a missing level row and the duplicate-pending check, so concurrent first inserts and repeated completion cannot overwrite a winner. The filtered unique index provides database enforcement even for external pending inserts. External level writers must follow this lock protocol; there is no general level mutation API.
+
+The latest successful serialized completion sets the current level, without comparing creation dates or preventing downgrades. `assessedAt` is captured after acquiring the lock; transaction order determines the winner even if wall-clock timestamps tie. Persistence errors roll back both writes. Database deadlocks/timeouts can still abort a transaction and require caller retry; the application does not silently retry or translate every database infrastructure failure to 409. H2 integration tests exercise locking/rollback, but SQL Server migration, dialect lock behavior, and concurrent calls still require verification on the deployed SQL Server.
+
+### Postman Phase 1 verification checklist
+
+Use separate tokens for ADMIN, RECEPTIONIST, two MEMBER accounts, and two COACH accounts. Create an ACTIVE Sport and qualified Coach with existing APIs; configure the collection's `memberId`, `sportId`, `coachId`, and `assessmentId` variables. The Phase 1 folder contains all nine endpoints; choose the token for each named permission.
+
+1. Verify staff POST 201, duplicate POST 409; missing IDs 404; inactive/wrong-role member, inactive sport/coach, and missing qualification 409.
+2. Verify member history/levels and coach assignments contain only own records; detail access to another member or coach returns 403; no token returns 401.
+3. Complete with the assigned coach and lowercase level: 200, persisted level/timestamps. Unassigned coach returns 403; invalid level and notes >1000 characters return 400.
+4. Reassess to ADVANCED then BEGINNER; verify one current level and retained assessment history. Missing level returns an empty list before completion.
+5. Cancel PENDING as staff; verify no level mutation. Re-complete/re-cancel either terminal status returns 409. Verify wrong-role POST/PATCH and list access return 403.
+6. Send concurrent duplicate creations, two completions, and cancellation versus completion; exactly one succeeds, and stored assessment/level agree. Verify the filtered index in SQL Server.
+
+These are verification instructions, not recorded Postman results.
+
+## Phase 1.5: Consultation requests
+
+| Method | Path | Permission | Success |
+|---|---|---|---|
+| POST | `/api/consultation-requests` | Guest or MEMBER | 201 PENDING request; MEMBER is linked from JWT subject |
+| GET | `/api/consultation-requests/me` | MEMBER | 200 own linked requests |
+| GET | `/api/consultation-requests?status=PENDING&page=0&size=20` | ADMIN, RECEPTIONIST | 200 paged queue; status optional |
+| GET | `/api/consultation-requests/{id}` | ADMIN, assigned RECEPTIONIST, linked MEMBER | 200 request |
+| PATCH | `/api/consultation-requests/{id}/take` | ADMIN, RECEPTIONIST | 200; PENDING -> IN_PROGRESS, records handler/time |
+| PATCH | `/api/consultation-requests/{id}/complete` | ADMIN, assigned handler | 200; IN_PROGRESS -> COMPLETED |
+| PATCH | `/api/consultation-requests/{id}/cancel` | ADMIN, assigned handler | 200; IN_PROGRESS -> CANCELLED |
+| POST | `/api/consultation-requests/{id}/create-member` | ADMIN, assigned handler | 200; creates MEMBER and links atomically |
+| PATCH | `/api/consultation-requests/{id}/link-member` | ADMIN, assigned handler | 200; links selected ACTIVE MEMBER |
+
+Guest/MEMBER submission body:
+
+```json
+{"name":"Nguyễn An","phone":"0900000000","email":"an@example.test","sportId":1,"age":25,"experience":"Đã tập cơ bản","note":"Muốn được tư vấn lộ trình"}
+```
+
+`name` and `phone` are required (100/20 characters); `email` is optional (150 characters); `age` is optional (1-120); `sportId` must identify an ACTIVE Sport. `experience` and `note` are optional Vietnamese text. The request has no `memberId` property; a MEMBER is resolved from the validated JWT, while a guest stays unlinked. Authenticated non-MEMBER roles are rejected on this public route.
+
+The queue accepts `page` >= 0 and `size` from 1 to 100. Status values are `PENDING`, `IN_PROGRESS`, `COMPLETED`, and `CANCELLED`. Taking uses a database pessimistic row lock so simultaneous staff requests cannot both claim a PENDING request. Only the assigned handler or ADMIN may complete/cancel/link/create a member; terminal consultation states cannot transition again. Assessment completion does not complete its consultation, and consultation cancellation does not mutate assessment or MemberSportLevel history.
+
+Complete body (resolution note is optional): `{"resolutionNote":"Consultation completed; course registration remains separate"}`. Cancel body requires a reason: `{"reason":"Member cancelled the consultation"}`. Example response:
+
+```json
+{"id":12,"memberId":null,"name":"Nguyễn An","phone":"0900000000","email":"an@example.test","sportId":1,"sportName":"Tennis","age":25,"experience":"Beginner","note":"Consultation request","status":"PENDING","createdAt":"2026-10-12T14:30:00","handledBy":null,"handledAt":null,"resolutionNote":null,"completedAt":null,"cancelledAt":null}
+```
+
+For automatic account creation, the consultation must be IN_PROGRESS, unlinked, and have an email. Request body:
+
+```json
+{"password":"<staff-selected temporary password>","dateOfBirth":"1998-05-01"}
+```
+
+This reuses the existing member-registration BCrypt encoder and required date-of-birth rule; there is no default password or activation/reset workflow. The password is request-only and never returned. Use HTTPS and do not log the request body. If the consultation lacks email, collect it through an approved channel or explicitly select an existing account instead:
+
+```json
+{"memberId":20}
+```
+
+The selected account must exist, be ACTIVE, and have MEMBER role. No automatic email/phone matching is performed. Create-member email uniqueness conflicts return 409; missing/invalid required input returns 400.
+
+Assessment creation can include `consultationRequestId`; when present, the request must be IN_PROGRESS and linked to the same member and sport. Omitting it preserves standalone assessment behavior. Assessment response includes nullable `consultationRequestId`.
+
+### Phase 1.5 migration and verification status
+
+Run [phase1_5-consultation-requests.sql](sql/phase1_5-consultation-requests.sql) manually against the selected SportCenterDB after backup and with writers stopped. It creates `consultation_request`, adds nullable `skill_assessment.consultation_request_id`, foreign keys, enum/age/nonblank checks, and lookup indexes. It is idempotent and does not drop data. The default `spring.jpa.hibernate.ddl-auto=validate` prevents application startup from applying schema changes automatically; startup validates successfully only after the manual migration is applied. The isolated Phase 1 test profile continues to use H2 `create-drop`.
+
+Phase 1.5 source and integration tests passed the offline Maven test lifecycle (67 total tests, zero failures/errors/skips). The SQL Server migration has not been executed, and Phase 1.5 behavior has not been verified through Postman. Postman examples are in the Consultation requests folder; replace sample identifiers and use the appropriate role tokens. The Maven/H2 result does not establish SQL Server migration or locking behavior. HTTP error responses are configured not to include internal messages, exception class names, or stack traces.
+
+
+### Phase 1 migration hardening (2026-10-12)
+
+The migration now sets all seven required filtered-index options: ANSI_NULLS, ANSI_PADDING, ANSI_WARNINGS, ARITHABORT, CONCAT_NULL_YIELDS_NULL, and QUOTED_IDENTIFIER ON; NUMERIC_ROUNDABORT OFF. XACT_ABORT remains ON. These options must also hold for application connections writing the filtered index; running the migration does not change JDBC session configuration. Reference: https://learn.microsoft.com/en-us/sql/t-sql/statements/create-index-transact-sql#required-set-options-for-filtered-indexes.
+
+`SkillAssessment.notes` now uses Hibernate `@Nationalized` with length 1000, mapping to SQL Server `NVARCHAR(1000) NULL`. The migration explicitly upgrades an existing nullable built-in `VARCHAR(1000)` column to that representation; it does not delete notes. Conversion cannot restore characters already lost by previous non-Unicode writes. Other existing notes shapes are rejected for manual review.
+
+Verified mapping contract (default Spring/Hibernate physical naming, schema `dbo`):
+
+| Table | Columns and SQL Server types | Foreign keys |
+|---|---|---|
+| `member_sport_level` | `id INT IDENTITY(1,1)` PK; required `member_id INT`, `sport_id INT`, `level VARCHAR(20)`, `updated_at DATETIME2(6)`; nullable `verified_by_coach_id INT`, `verified_at DATETIME2(6)` | member_id -> users.id; sport_id -> sport.id; verified_by_coach_id -> coach.id |
+| `skill_assessment` | `id INT IDENTITY(1,1)` PK; required `member_id INT`, `sport_id INT`, `assigned_coach_id INT`, `requested_by_user_id INT`, `status VARCHAR(20)`, `created_at DATETIME2(6)`; nullable `assessed_level VARCHAR(20)`, `notes NVARCHAR(1000)`, `assessed_at DATETIME2(6)`, `cancelled_at DATETIME2(6)` | member_id/requested_by_user_id -> users.id; sport_id -> sport.id; assigned_coach_id -> coach.id |
+
+This script targets SQL Server 2016+ catalog metadata. Run it as a standalone batch in `SportCenterDB` after backup and stopping writers. It rejects an outer transaction to avoid rolling back a caller's unrelated work. A transaction-owned application lock serializes migration reruns, and exclusive table locks protect Phase 1 data during validation. Dynamic DDL avoids binding statements to missing or incompatible old columns before preflight. The database-name guard must be deliberately reviewed if deploying to a renamed database; custom physical naming/schema needs a separately reviewed script.
+
+Existing tables must have exactly the mapped columns, built-in types, lengths, datetime precision, nullability, identity definition, and enabled single-id primary keys. Temporal/memory-optimized tables and extra columns fail closed. Existing FK names may differ from the script/Hibernate, but their single-column targets must match and they must be trusted, enabled, and non-cascading. Missing FKs and enum checks are added WITH CHECK, so orphaned references and invalid enum data fail the whole transaction. Existing CHECK definitions are accepted only in the documented canonical enum IN/OR forms; unusual but logically equivalent predicates may require manual review.
+
+Required indexes must be unique, enabled, non-hypothetical, have IGNORE_DUP_KEY OFF, and have exactly member_id then sport_id as key columns. The level index must be unfiltered; the assessment index must filter exactly status = 'PENDING'. Included columns do not change uniqueness and are allowed. Different extra unique indexes are rejected to prevent accidentally forbidding terminal assessment history. Incorrect/disabled/untrusted objects are reported rather than dropped, rebuilt, renamed, or silently accepted. Duplicate member/sport levels or PENDING assessments fail index creation and roll back all changes. Compatible reruns retain existing tables/indexes and skip the completed Unicode upgrade.
+
+No live SQL Server inspection or migration execution was performed. Database permissions/metadata visibility, deployed schema/naming, actual SQL Server CHECK/filter canonicalization, migration/rerun behavior, JDBC SET options, and locking remain SQL Server verification items. Strict fingerprint validation can reject safe alternative definitions; it intentionally requires review rather than weakening constraints automatically.

@@ -1,7 +1,7 @@
 ﻿{
     "info":  {
                  "name":  "SportCenter Backend API",
-                 "description":  "Generated from current controllers. Set baseUrl and token variables; no real credentials or tokens are included. Authorization notes in folder and request names reflect current role and ownership rules.",
+                 "description":  "Generated from current controllers. Set baseUrl and token variables; no real credentials or tokens are included. Role notes are included in request names.",
                  "schema":  "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
              },
     "auth":  {
@@ -50,6 +50,26 @@
                      {
                          "key":  "coachId",
                          "value":  "1"
+                     },
+                     {
+                         "key":  "classId",
+                         "value":  "1"
+                     },
+                     {
+                         "key":  "facilityId",
+                         "value":  "1"
+                     },
+                     {
+                         "key":  "assessmentId",
+                         "value":  "1"
+                     },
+                     {
+                         "key":  "consultationId",
+                         "value":  "1"
+                     },
+                     {
+                         "key":  "temporaryPassword",
+                         "value":  ""
                      }
                  ],
     "item":  [
@@ -891,7 +911,7 @@
                                                   }
                                   },
                                   {
-                                      "name":  "Update facility",
+                                      "name":  "Update facility (ADMIN; ACTIVE/INACTIVE; blocked while a SCHEDULED session is ongoing or upcoming)",
                                       "request":  {
                                                       "method":  "PUT",
                                                       "header":  [
@@ -910,6 +930,533 @@
                                                                                }
                                                                },
                                                       "url":  "{{baseUrl}}/api/facilities/{{id}}"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "ClassSession",
+                     "item":  [
+                                  {
+                                      "name":  "List ClassSessions (authenticated roles)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/class-sessions"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Get ClassSession (authenticated roles)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/class-sessions/{{id}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "List sessions by CourseClass (authenticated roles)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/class-sessions/class/{{classId}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Create ClassSession (ADMIN; facility must be ACTIVE or null)",
+                                      "request":  {
+                                                      "url":  "{{baseUrl}}/api/class-sessions",
+                                                      "method":  "POST",
+                                                      "body":  {
+                                                                   "raw":  "{\n  \"classId\": {{classId}},\n  \"facilityId\": {{facilityId}},\n  \"startTime\": \"2026-10-12T10:00:00\",\n  \"endTime\": \"2026-10-12T11:00:00\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               },
+                                                                   "mode":  "raw"
+                                                               },
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ]
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Update ClassSession (ADMIN; use ACTIVE facility; inactive future schedule must change/cancel)",
+                                      "request":  {
+                                                      "url":  "{{baseUrl}}/api/class-sessions/{{id}}",
+                                                      "method":  "PUT",
+                                                      "body":  {
+                                                                   "raw":  "{\n  \"classId\": {{classId}},\n  \"facilityId\": {{facilityId}},\n  \"startTime\": \"2026-10-12T10:00:00\",\n  \"endTime\": \"2026-10-12T11:00:00\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               },
+                                                                   "mode":  "raw"
+                                                               },
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ]
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Cancel ClassSession (ADMIN; only before startTime)",
+                                      "request":  {
+                                                      "url":  "{{baseUrl}}/api/class-sessions/{{id}}/status",
+                                                      "method":  "PATCH",
+                                                      "body":  {
+                                                                   "raw":  "{\n  \"status\": \"CANCELLED\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               },
+                                                                   "mode":  "raw"
+                                                               },
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ]
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Complete ClassSession (ADMIN; only at or after endTime)",
+                                      "request":  {
+                                                      "url":  "{{baseUrl}}/api/class-sessions/{{id}}/status",
+                                                      "method":  "PATCH",
+                                                      "body":  {
+                                                                   "raw":  "{\n  \"status\": \"COMPLETED\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               },
+                                                                   "mode":  "raw"
+                                                               },
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ]
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Phase 1 - SkillAssessments and MemberSportLevels",
+                     "description":  "Use a token for the indicated role. Set assessmentId to the ID returned by POST. Only PENDING assessments may be completed/cancelled.",
+                     "item":  [
+                                  {
+                                      "name":  "Assign assessment [ADMIN, RECEPTIONIST]",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/skill-assessments",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "skill-assessments"
+                                                                           ]
+                                                              },
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"memberId\": {{memberId}},\n  \"sportId\": {{sportId}},\n  \"assignedCoachId\": {{coachId}},\n  \"notes\": \"Assess current technique\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               }
+                                                  }
+                                  },
+                                  {
+                                      "name":  "All assessments [ADMIN, RECEPTIONIST]",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/skill-assessments",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "skill-assessments"
+                                                                           ]
+                                                              }
+                                                  }
+                                  },
+                                  {
+                                      "name":  "My assignments [COACH]",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/skill-assessments/my-assignments",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "skill-assessments",
+                                                                               "my-assignments"
+                                                                           ]
+                                                              }
+                                                  }
+                                  },
+                                  {
+                                      "name":  "My assessment history [MEMBER]",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/skill-assessments/me",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "skill-assessments",
+                                                                               "me"
+                                                                           ]
+                                                              }
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Assessment detail [staff, owning MEMBER, assigned COACH]",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/skill-assessments/{{assessmentId}}",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "skill-assessments",
+                                                                               "{{assessmentId}}"
+                                                                           ]
+                                                              }
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Complete assessment [assigned COACH]",
+                                      "request":  {
+                                                      "method":  "PATCH",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/skill-assessments/{{assessmentId}}/complete",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "skill-assessments",
+                                                                               "{{assessmentId}}",
+                                                                               "complete"
+                                                                           ]
+                                                              },
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"assessedLevel\": \"intermediate\",\n  \"notes\": \"Verified technique and control\"\n}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               }
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Cancel PENDING assessment [ADMIN, RECEPTIONIST]",
+                                      "request":  {
+                                                      "method":  "PATCH",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/skill-assessments/{{assessmentId}}/cancel",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "skill-assessments",
+                                                                               "{{assessmentId}}",
+                                                                               "cancel"
+                                                                           ]
+                                                              }
+                                                  }
+                                  },
+                                  {
+                                      "name":  "My current sport levels [MEMBER]",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/member-sport-levels/me",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "member-sport-levels",
+                                                                               "me"
+                                                                           ]
+                                                              }
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Member sport levels [ADMIN, RECEPTIONIST]",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  {
+                                                                  "raw":  "{{baseUrl}}/api/member-sport-levels/member/{{memberId}}",
+                                                                  "host":  [
+                                                                               "{{baseUrl}}"
+                                                                           ],
+                                                                  "path":  [
+                                                                               "api",
+                                                                               "member-sport-levels",
+                                                                               "member",
+                                                                               "{{memberId}}"
+                                                                           ]
+                                                              }
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Consultation requests",
+                     "item":  [
+                                  {
+                                      "name":  "Submit guest consultation (public)",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/consultation-requests",
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\"name\":\"Guest\",\"phone\":\"0900000000\",\"email\":\"guest@example.test\",\"sportId\":{{sportId}},\"age\":25,\"experience\":\"Beginner\",\"note\":\"Consultation request\"}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               },
+                                                      "auth":  {
+                                                                   "type":  "noauth"
+                                                               }
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Submit consultation as MEMBER",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/consultation-requests",
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\"name\":\"Member\",\"phone\":\"0900000000\",\"email\":\"member@example.test\",\"sportId\":{{sportId}},\"age\":25}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               }
+                                                  }
+                                  },
+                                  {
+                                      "name":  "My consultation requests (MEMBER)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/consultation-requests/me"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "List consultation queue (ADMIN, RECEPTIONIST)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/consultation-requests?status=PENDING\u0026page=0\u0026size=20"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Get consultation by ID (handler, ADMIN, linked MEMBER)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/consultation-requests/{{consultationId}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Take consultation (ADMIN, RECEPTIONIST)",
+                                      "request":  {
+                                                      "method":  "PATCH",
+                                                      "header":  [
+
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/consultation-requests/{{consultationId}}/take"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Complete consultation (handler, ADMIN)",
+                                      "request":  {
+                                                      "method":  "PATCH",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/consultation-requests/{{consultationId}}/complete",
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\"resolutionNote\":\"Consultation completed; registration is separate\"}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               }
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Cancel consultation (handler, ADMIN)",
+                                      "request":  {
+                                                      "method":  "PATCH",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/consultation-requests/{{consultationId}}/cancel",
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\"reason\":\"Member cancelled the consultation\"}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               }
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Create and link MEMBER (handler, ADMIN; set password variable locally)",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/consultation-requests/{{consultationId}}/create-member",
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\"password\":\"{{temporaryPassword}}\",\"dateOfBirth\":\"1998-05-01\"}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               }
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Link existing MEMBER (handler, ADMIN)",
+                                      "request":  {
+                                                      "method":  "PATCH",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/consultation-requests/{{consultationId}}/link-member",
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\"memberId\":{{memberId}}}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               }
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Create SkillAssessment linked to consultation (ADMIN, RECEPTIONIST)",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/skill-assessments",
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\"memberId\":{{memberId}},\"sportId\":{{sportId}},\"assignedCoachId\":{{coachId}},\"notes\":\"Consultation assessment\",\"consultationRequestId\":{{consultationId}}}",
+                                                                   "options":  {
+                                                                                   "raw":  {
+                                                                                               "language":  "json"
+                                                                                           }
+                                                                               }
+                                                               }
                                                   }
                                   }
                               ]
