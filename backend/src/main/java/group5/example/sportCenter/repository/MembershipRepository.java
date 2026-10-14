@@ -14,12 +14,15 @@ public interface MembershipRepository extends JpaRepository<Membership, Integer>
     List<Membership> findByStatus(String status);
 
     // Gói đang còn hiệu lực của một member
-    Optional<Membership> findFirstByMemberIdAndStatusAndEndDateGreaterThanEqual(
+    Optional<Membership> findFirstByMemberIdAndStatusAndEndDateGreaterThan(
             Integer memberId, String status, LocalDate today);
+
+    List<Membership> findByMemberIdAndStatusAndStartDateLessThanEqualAndEndDateGreaterThan(
+            Integer memberId, String status, LocalDate registrationDate, LocalDate registrationDateExclusiveEnd);
 
     // Các gói sắp hết hạn (phục vụ nhắc gia hạn / report)
     List<Membership> findByStatusAndEndDateBetween(String status, LocalDate from, LocalDate to);
     
     // Các gói đã qua ngày hết hạn    
-    List<Membership> findByStatusAndEndDateBefore(String status, LocalDate date);
+    List<Membership> findByStatusAndEndDateLessThanEqual(String status, LocalDate date);
 }

@@ -100,6 +100,8 @@ Profile values use height 50-250 cm, weight 10-500 kg, at most two decimal place
 
 Membership ownership is checked in `MembershipService` using the authenticated JWT subject. ADMIN and RECEPTIONIST can act for any MEMBER. MEMBER can create, view, and change auto-renew only for their own Membership. COACH has no Membership access. Membership creation still sets status to `ACTIVE` immediately; no Payment entity or processing service was found, so the endpoint does not verify that payment occurred.
 
+Membership validity uses an exclusive `endDate`: it is date-valid only when `startDate <= today < endDate`. The scheduled expiration job runs daily at midnight in `Asia/Ho_Chi_Minh`; the ADMIN expiration endpoint invokes the same service behavior. Every `ACTIVE` Membership with `today >= endDate` becomes `EXPIRED`, regardless of `autoRenew`. `autoRenew` is currently an intent flag only; it does not extend membership or trigger renewal/payment. Existing CourseRegistration discount and price snapshots are not recalculated when a Membership expires.
+
 | Method and path | Allowed caller | Request body | Success and response | Test status |
 |---|---|---|---|---|
 | `GET /api/memberships` | ADMIN, RECEPTIONIST | None | 200, `MembershipResponse[]` | Not verified after authorization changes |
@@ -175,12 +177,12 @@ GET endpoints permit all authenticated roles; mutations are ADMIN-only.
 | `PUT /api/courses/{id}` | `UpdateCourseRequest` | 200, `CourseResponse` | Not verified |
 | `GET /api/course-offerings` | None | 200, `CourseOfferingResponse[]` | Not verified |
 | `GET /api/course-offerings/{id}` | None | 200, `CourseOfferingResponse` | Not verified |
-| `GET /api/course-offerings/course/{courseId}` | None | 200, `CourseOfferingResponse[]` | Not verified |
+| `GET /api/course-offerings/course/{courseId}` | All authenticated roles | 200, `CourseOfferingResponse[]` | Not verified |
 | `POST /api/course-offerings` | `CreateCourseOfferingRequest` | 201, `CourseOfferingResponse` | Not verified |
 | `PUT /api/course-offerings/{id}` | `UpdateCourseOfferingRequest` | 200, `CourseOfferingResponse` | Not verified |
-| `GET /api/classes` | None | 200, `CourseClassResponse[]` | Not verified |
-| `GET /api/classes/{id}` | None | 200, `CourseClassResponse` | Not verified |
-| `GET /api/classes/offering/{offeringId}` | None | 200, `CourseClassResponse[]` | Not verified |
+| `GET /api/classes` | All authenticated roles | 200, `CourseClassResponse[]` | Not verified |
+| `GET /api/classes/{id}` | All authenticated roles | 200, `CourseClassResponse` | Not verified |
+| `GET /api/classes/offering/{offeringId}` | All authenticated roles | 200, `CourseClassResponse[]` | Not verified |
 | `POST /api/classes` | `CreateClassRequest` | 201, `CourseClassResponse` | Not verified |
 | `PUT /api/classes/{id}` | `UpdateClassRequest` | 200, `CourseClassResponse` | Not verified |
 
@@ -194,7 +196,7 @@ Response samples: `CourseResponse` contains `id`, `sportId`, `sportName`, `name`
 
 Representative course response: `{"id":10,"sportId":3,"sportName":"Swimming","name":"Beginner Swim","description":"Basics","targetAgeMin":10,"targetAgeMax":18,"level":"Beginner","learningOutcome":"Swim safely","status":"ACTIVE"}`.
 
-Offering sample: `{"id":11,"courseId":10,"courseName":"Beginner Swim","sportId":3,"sportName":"Swimming","name":"October Swim","price":100,"plannedSessions":8,"sessionDuration":60,"startDate":"2026-10-20","endDate":"2026-11-20","registrationDeadline":"2026-10-18T23:59:00","cancellationDeadline":"2026-10-19T23:59:00","status":"ACTIVE"}`. Class sample: `{"id":6,"courseOfferingId":11,"courseOfferingName":"October Swim","courseId":10,"courseName":"Beginner Swim","sportId":3,"sportName":"Swimming","coachId":4,"coachName":"Example Coach","name":"Morning group","capacity":12,"status":"ACTIVE"}`.
+Offering sample: `{"id":11,"courseId":10,"courseName":"Beginner Swim","sportId":3,"sportName":"Swimming","name":"October Swim","price":100,"plannedSessions":8,"sessionDuration":60,"startDate":"2026-10-20","endDate":"2026-11-20","registrationDeadline":"2026-10-18T23:59:00","cancellationDeadline":"2026-10-19T23:59:00","status":"OPEN"}`. Class sample: `{"id":6,"courseOfferingId":11,"courseOfferingName":"October Swim","courseId":10,"courseName":"Beginner Swim","sportId":3,"sportName":"Swimming","coachId":4,"coachName":"Example Coach","name":"Morning group","capacity":12,"status":"ACTIVE"}`.
 
 ## Facility
 
@@ -243,9 +245,9 @@ Lifecycle transitions: `SCHEDULED` can become `COMPLETED` only when current time
 
 Facility status updates accept `ACTIVE` or `INACTIVE`, case-insensitively, and persist uppercase. Null, blank, or any other value returns 400. Switching from ACTIVE to INACTIVE returns 409 if a `SCHEDULED` ClassSession using the Facility has `endTime` later than the current time, covering sessions in progress and upcoming sessions. A session ending exactly now, an ended session, or a `COMPLETED`/`CANCELLED` session does not block deactivation. No session is deleted, cancelled, or edited by this operation. When a Facility is supplied on ClassSession POST or changed on PUT, its current status must be ACTIVE; missing Facility IDs return 404 and any other status returns 409. On PUT, a future `SCHEDULED` session cannot retain the same Facility if that Facility has become unavailable; choose another ACTIVE Facility or cancel the session. GET continues returning historical sessions and their Facility data regardless of Facility status. `FacilityService` creates facilities as ACTIVE.
 
-## Modules not found in current controllers
+## Module coverage note
 
-No course-registration, payment, or public account-registration endpoint was found. `/api/classes` manages CourseClass records; `/api/class-sessions` manages individual meetings.
+The Phase 2 CourseClass registration API is documented below. `/api/classes` manages CourseClass records; `/api/class-sessions` manages individual meetings.
 
 ## OpenAPI / Swagger
 
@@ -256,8 +258,8 @@ No Swagger/OpenAPI dependency or configuration was found in `pom.xml` or source.
 - Membership creation currently persists `ACTIVE` without a Payment record or processing step. This existing behavior was preserved; confirm the purchase/payment contract before production use.
 - The application requires `DB_USERNAME`, `DB_PASSWORD`, and `JWT_SECRET`; configure them in the runtime environment. If the previously tracked SQL Server password was real or shared, rotate it because Git history may retain it.
 - Configure `CORS_ALLOWED_ORIGINS` for deployed frontend origins. Defaults permit only `http://localhost:5173` and `http://localhost:3000`.
-- Build and all role/ownership behavior changed in this review are awaiting verification. Test with ADMIN, RECEPTIONIST, MEMBER, and COACH tokens before merge.
-- No course-registration, payment, or public account-registration controller was found.
+- The CourseClass registration revision passed the full isolated-H2 Maven suite and package build; Postman verification remains pending. SQL Server locking and migration behavior still need validation in a disposable database before deployment.
+- CourseClass registration is implemented under `/api/course-registrations`; no Payment/Bill or public account-registration endpoint is exposed.
 
 
 ## Phase 1: Skill assessments and current sport levels (2026-10-12)
@@ -390,3 +392,22 @@ Existing tables must have exactly the mapped columns, built-in types, lengths, d
 Required indexes must be unique, enabled, non-hypothetical, have IGNORE_DUP_KEY OFF, and have exactly member_id then sport_id as key columns. The level index must be unfiltered; the assessment index must filter exactly status = 'PENDING'. Included columns do not change uniqueness and are allowed. Different extra unique indexes are rejected to prevent accidentally forbidding terminal assessment history. Incorrect/disabled/untrusted objects are reported rather than dropped, rebuilt, renamed, or silently accepted. Duplicate member/sport levels or PENDING assessments fail index creation and roll back all changes. Compatible reruns retain existing tables/indexes and skip the completed Unicode upgrade.
 
 No live SQL Server inspection or migration execution was performed. Database permissions/metadata visibility, deployed schema/naming, actual SQL Server CHECK/filter canonicalization, migration/rerun behavior, JDBC SET options, and locking remain SQL Server verification items. Strict fingerprint validation can reject safe alternative definitions; it intentionally requires review rather than weakening constraints automatically.
+
+## Phase 2: CourseClass registration (2026-10-13)
+
+The registration unit is one `CourseClass` selected from the existing hierarchy Course → CourseOffering → CourseClass. Existing browse APIs are `GET /api/course-offerings/course/{courseId}` and `GET /api/classes/offering/{offeringId}`; they expose offerings/classes for selection, so no duplicate discovery endpoints were added.
+
+| Method | Endpoint | Allowed role | Behavior |
+|---|---|---|---|
+| POST | `/api/course-registrations` | MEMBER | Registers the JWT-authenticated member for the selected CourseClass; returns 201 and CONFIRMED registration |
+| GET | `/api/course-registrations/me` | MEMBER | Lists the caller's CONFIRMED registrations, identifying Course, CourseOffering, and CourseClass |
+| GET | `/api/course-registrations/me/class-sessions` | MEMBER | Lists sessions only for CourseClasses in the caller's CONFIRMED registrations |
+| GET | `/api/course-registrations` | ADMIN, RECEPTIONIST | Lists registrations with Course, CourseOffering, and CourseClass identity |
+
+POST body: `{"classId":6}`. Client-supplied member/course/offering identifiers and prices are not part of the request contract; member identity comes from JWT, Course/Offering are derived from the selected CourseClass, and all prices are calculated by the server. Response fields also include the immutable enrollment-time snapshots `originalPrice`, `membershipDiscount` (money amount), and `finalPrice`. Example: `{"id":31,"memberId":4,"courseId":10,"courseName":"Beginner Swim","courseOfferingId":11,"courseOfferingName":"October Swim","classId":6,"className":"Morning group","sportId":3,"requiredLevel":"BEGINNER","status":"CONFIRMED","registeredAt":"2026-10-13T10:30:00","cancelledAt":null,"originalPrice":100.00,"membershipDiscount":10.00,"finalPrice":90.00}`.
+
+Registration requires an ACTIVE MEMBER, ACTIVE CourseClass, OPEN CourseOffering (the existing offering service uses `OPEN` as its registration-accepting status), ACTIVE Course and Sport, and a date on or after `CourseOffering.startDate.minusDays(30)`. It also requires the existing deadline to remain strictly in the future; registration is rejected at the exact deadline. Membership is optional. At registration time, an ACTIVE Membership whose exclusive validity interval contains the registration date (`startDate <= registrationDate < endDate`) contributes the highest eligible `courseDiscountPercent`; discounts do not stack, and one eligible Membership may discount multiple separate CourseRegistrations during its validity period. The monetary discount is rounded to two decimals using HALF_UP, and original price, discount amount, and final price are stored as snapshots. Membership expiry, renewal, Plan discount changes, and Offering price changes do not recalculate existing snapshots. Course age restrictions are enforced; if an age range exists, missing date of birth or an out-of-range age returns 409. A member without a coach-verified sport level may register only for BEGINNER; a verified level must meet or exceed the course requirement. Unsupported course-level values are rejected. Capacity is checked per CourseClass. A member may have only one CONFIRMED registration per CourseOffering, even if the offering contains multiple classes. Duplicate class/another class in the same offering, full capacity, insufficient level, age ineligibility, schedule conflicts, inactive resources, and closed/expired offerings return 409; missing CourseClass returns 404; malformed request returns 400; missing JWT/wrong role returns 401/403.
+
+Registration is transactional. It locks the member row first to serialize that member's offering and schedule checks, then locks the selected CourseClass row before counting seats. The SQL Server migration adds a filtered unique index on CONFIRMED `(member_id, class_id)` as a database guard for duplicate class registration. Schedule checks compare only future/ongoing SCHEDULED sessions in the selected class and the member's already registered classes; intervals that touch only at an endpoint do not conflict. Viewing sessions is scoped to registered classes, not every class in the same Course or Offering.
+
+Cancellation remains omitted because no CourseRegistration cancellation policy has been confirmed. Registration is independent of ConsultationRequest and SkillAssessment; no Payment or Bill operation is performed. The migration at `docs/sql/phase2-course-registrations.sql` is an idempotent manual SQL Server script including the three DECIMAL(12,2) snapshots and has not been executed. Automated tests/build and Postman status are recorded in `docs/IMPLEMENTATION_STATUS.md`.

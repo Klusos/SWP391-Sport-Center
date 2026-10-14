@@ -76,6 +76,12 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/member-sport-levels/member/*").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers("/api/member-sport-levels", "/api/member-sport-levels/**").denyAll()
 
+                .requestMatchers(HttpMethod.POST, "/api/course-registrations").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/course-registrations/me",
+                        "/api/course-registrations/me/class-sessions").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/course-registrations").hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers("/api/course-registrations", "/api/course-registrations/**").denyAll()
+
                 .requestMatchers(HttpMethod.GET, "/api/membership-plans", "/api/membership-plans/**").authenticated()
                 .requestMatchers("/api/membership-plans", "/api/membership-plans/**").hasRole("ADMIN")
 
