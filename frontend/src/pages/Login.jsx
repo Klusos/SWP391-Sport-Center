@@ -13,13 +13,21 @@ export default function Login({ onLoginSuccess }) {
     setLoading(true);
     try {
       const data = await loginApi(email, password);
+      if (!data?.accessToken || typeof data.accessToken !== "string") {
+        setError("The login response did not include an access token. Please contact support.");
+        return;
+      }
       if (data.role !== "RECEPTIONIST" && data.role !== "ADMIN") {
         setError("This account cannot register members.");
         return;
       }
       onLoginSuccess(data);
     } catch (requestError) {
-      setError(requestError.message || "Could not connect to the server.");
+      if (requestError.status === 415) {
+        setError("The server rejected the login content type. This frontend sends application/json; verify the running frontend and backend endpoint versions.");
+      } else {
+        setError(requestError.message || "Could not connect to the server.");
+      }
     } finally {
       setLoading(false);
     }
@@ -65,3 +73,4 @@ export default function Login({ onLoginSuccess }) {
     </div>
   );
 }
+

@@ -107,11 +107,7 @@
 			<artifactId>spring-boot-starter-webmvc-test</artifactId>
 			<scope>test</scope>
 		</dependency>
-			<dependency>
-			<groupId>tools.jackson.core</groupId>
-			<artifactId>jackson-databind</artifactId>
-			<scope>test</scope>
-		</dependency></dependencies>
+	</dependencies>
 
 	<build>
 		<plugins>

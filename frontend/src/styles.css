@@ -232,3 +232,126 @@ body {
   text-align: left;
 }
 
+
+/* ---------- CONSULTATION QUEUE ---------- */
+.nav-button {
+  display: block;
+  width: calc(100% - 24px);
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+}
+
+.nav-button.active {
+  background: var(--blue);
+  font-weight: 600;
+}
+
+.queue-toolbar {
+  display: flex;
+  align-items: end;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.queue-filter {
+  width: 220px;
+  margin: 0;
+}
+
+.queue-refresh,
+.queue-pagination button,
+.queue-take {
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 14px;
+  background: #fff;
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.queue-refresh:disabled,
+.queue-pagination button:disabled,
+.queue-take:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.queue-table-wrap {
+  overflow-x: auto;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.queue-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.queue-table th,
+.queue-table td {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.queue-table th {
+  color: var(--text-sub);
+  font-weight: 600;
+  background: #fbfcfe;
+}
+
+.queue-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #eef2f7;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.status-pending { background: #fff4d6; color: #805b00; }
+.status-in_progress { background: #e7f0ff; color: #164c9c; }
+.status-completed { background: #e7f6ec; color: #146c3b; }
+.status-cancelled { background: #fdecea; color: #b3261e; }
+
+.queue-take {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: #fff;
+}
+
+.queue-state {
+  padding: 32px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--text-sub);
+  text-align: center;
+}
+
+.queue-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+  color: var(--text-sub);
+  font-size: 12px;
+}
+
+.queue-pagination div { display: flex; gap: 8px; }
+
+@media (max-width: 760px) {
+  .main { padding: 24px 18px; }
+  .sidebar { width: 200px; }
+  .queue-pagination { align-items: flex-start; flex-direction: column; gap: 12px; }
+}

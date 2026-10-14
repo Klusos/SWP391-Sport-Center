@@ -1,26 +1,28 @@
 ﻿const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 
 async function request(path, options = {}) {
-  const response = await fetch(`${API_BASE}${path}`, options);
+  const response = await fetch(API_BASE + path, options);
   const text = await response.text();
   let data = {};
   if (text) {
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = {};
-    }
+    try { data = JSON.parse(text); } catch { data = {}; }
   }
   if (!response.ok) {
-    throw new Error(data.message || `Request failed (${response.status})`);
+    const error = new Error(data.message || data.detail || ("Request failed (" + response.status + ")"));
+    error.status = response.status;
+    throw error;
   }
   return data;
+}
+
+function authenticatedHeaders(token) {
+  return { Authorization: "Bearer " + token };
 }
 
 export function loginApi(email, password) {
   return request("/api/auth/login", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
   });
 }
@@ -30,8 +32,24 @@ export function createMemberApi(token, payload) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
+      ...authenticatedHeaders(token),
     },
     body: JSON.stringify(payload),
   });
 }
+
+export function getConsultationRequestsApi(token, { status = "", page = 0, size = 20 } = {}) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  if (status) params.set("status", status);
+  return request("/api/consultation-requests?" + params.toString(), {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function takeConsultationRequestApi(token, requestId) {
+  return request("/api/consultation-requests/" + encodeURIComponent(requestId) + "/take", {
+    method: "PATCH",
+    headers: authenticatedHeaders(token),
+  });
+}
+

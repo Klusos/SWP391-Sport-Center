@@ -11,7 +11,7 @@ const EMPTY_FORM = {
   password: "",
 };
 
-export default function RegisterMember({ token, onLogout }) {
+export default function RegisterMember({ token, role, onLogout, onNavigate }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
@@ -39,15 +39,13 @@ export default function RegisterMember({ token, onLogout }) {
 
   return (
     <div className="layout">
-      <Sidebar onLogout={onLogout} />
+      <Sidebar role={role} activePage="register" onNavigate={onNavigate} onLogout={onLogout} />
       <main className="main">
         <h1>Register a member</h1>
         <p className="subtitle">Create a new SportCenter member account.</p>
-
         <form className="form-card" onSubmit={handleSubmit}>
           {successMsg && <div className="banner success" role="status">{successMsg}</div>}
           {errorMsg && <div className="banner error" role="alert">{errorMsg}</div>}
-
           <div className="grid-2">
             <div className="field">
               <label htmlFor="name">Full name</label>
@@ -78,7 +76,6 @@ export default function RegisterMember({ token, onLogout }) {
               <input id="password" type="password" autoComplete="new-password" minLength={8} value={form.password} onChange={(event) => handleChange("password", event.target.value)} required />
             </div>
           </div>
-
           <div className="form-actions">
             <button className="btn-primary" type="submit" disabled={loading}>
               {loading ? "Registering…" : "Register member"}
