@@ -1,0 +1,226 @@
+:root {
+  --navy: #091f38;
+  --blue: #0a61f2;
+  --blue-dark: #084fc9;
+  --bg: #f6f9fc;
+  --border: #dbe3f0;
+  --text-main: #141f2e;
+  --text-sub: #617085;
+  --text-sidebar-sub: #a6bfd9;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text-main);
+}
+
+/* ---------- LOGIN ---------- */
+.login-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--navy);
+}
+
+.login-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 40px 36px;
+  width: 360px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+.login-card h1 {
+  font-size: 20px;
+  margin: 0 0 4px;
+}
+
+.login-card p {
+  font-size: 13px;
+  color: var(--text-sub);
+  margin: 0 0 24px;
+}
+
+.field {
+  margin-bottom: 16px;
+}
+
+.field label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-sub);
+  margin-bottom: 6px;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  height: 42px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 13px;
+  color: var(--text-main);
+  outline: none;
+  background: #fff;
+}
+
+.field input:focus,
+.field select:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(10, 97, 242, 0.15);
+}
+
+.btn-primary {
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  height: 42px;
+  width: 100%;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  background: var(--blue-dark);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error-text {
+  color: #d92d20;
+  font-size: 12px;
+  margin-top: 10px;
+  min-height: 16px;
+}
+
+/* ---------- APP SHELL ---------- */
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 238px;
+  background: var(--navy);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 28px 0;
+}
+
+.sidebar .brand {
+  padding: 0 28px;
+  margin-bottom: 34px;
+}
+
+.sidebar .brand strong {
+  display: block;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.sidebar .brand span {
+  display: block;
+  color: var(--text-sidebar-sub);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.nav-item {
+  margin: 0 12px 10px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 13px;
+  cursor: default;
+}
+
+.nav-item.active {
+  background: var(--blue);
+  font-weight: 600;
+}
+
+.nav-item.clickable {
+  cursor: pointer;
+}
+
+.nav-footer {
+  margin-top: auto;
+  padding: 0 28px;
+}
+
+.nav-footer .nav-item {
+  margin: 0 0 8px;
+  padding: 0;
+}
+
+.main {
+  flex: 1;
+  padding: 32px 48px;
+}
+
+.main h1 {
+  font-size: 26px;
+  margin: 0 0 4px;
+}
+
+.main .subtitle {
+  font-size: 13px;
+  color: var(--text-sub);
+  margin: 0 0 26px;
+}
+
+.form-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 30px;
+  max-width: 1080px;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px 45px;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 32px;
+}
+
+.form-actions .btn-primary {
+  width: 150px;
+}
+
+.banner {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 18px;
+}
+
+.banner.success {
+  background: #e7f6ec;
+  color: #146c3b;
+}
+
+.banner.error {
+  background: #fdecea;
+  color: #b3261e;
+}
