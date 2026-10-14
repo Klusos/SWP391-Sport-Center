@@ -53,3 +53,20 @@ export function takeConsultationRequestApi(token, requestId) {
   });
 }
 
+export function getPublicSportsApi() {
+  return request("/api/public/sports", {
+    headers: { Accept: "application/json" },
+  });
+}
+
+export function createPublicConsultationRequestApi(payload) {
+  return request("/api/consultation-requests", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+

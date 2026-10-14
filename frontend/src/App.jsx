@@ -1,25 +1,64 @@
-﻿import { useState } from "react";
+import { useState } from "react";
+import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import ConsultationQueue from "./pages/ConsultationQueue";
 import Login from "./pages/Login";
 import RegisterMember from "./pages/RegisterMember";
-import ConsultationQueue from "./pages/ConsultationQueue";
-import "./styles.css";
+import PublicLayout from "./public-site/PublicLayout";
+import Admission from "./public-site/pages/Admission";
+import Coaches from "./public-site/pages/Coaches";
+import Disciplines from "./public-site/pages/Disciplines";
+import Facilities from "./public-site/pages/Facilities";
+import Home from "./public-site/pages/Home";
+import Schedule from "./public-site/pages/Schedule";
+import "./public-site/styles.css";
+
+const STAFF_ROLES = ["ADMIN", "RECEPTIONIST"];
+
+function StaffRoute({ auth }) {
+  const location = useLocation();
+  if (!auth) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (!STAFF_ROLES.includes(auth.role)) return <Navigate to="/" replace />;
+  return <Outlet />;
+}
 
 export default function App() {
   const [auth, setAuth] = useState(null);
-  const [page, setPage] = useState("register");
+  const navigate = useNavigate();
 
-  if (!auth) {
-    return <Login onLoginSuccess={(data) => { setAuth(data); setPage("register"); }} />;
+  function handleLogin(data) {
+    setAuth(data);
+    navigate("/staff/register-member", { replace: true });
   }
 
-  const shared = {
-    token: auth.accessToken,
-    role: auth.role,
-    onLogout: () => { setAuth(null); setPage("register"); },
-    onNavigate: setPage,
+  function handleLogout() {
+    setAuth(null);
+    navigate("/login", { replace: true });
+  }
+
+  const staffProps = {
+    token: auth?.accessToken,
+    role: auth?.role,
+    onLogout: handleLogout,
+    onNavigate: (page) => navigate(page === "consultations" ? "/staff/consultations" : "/staff/register-member"),
   };
 
-  return page === "consultations"
-    ? <ConsultationQueue {...shared} />
-    : <RegisterMember {...shared} />;
+  return (
+    <Routes>
+      <Route element={<PublicLayout />}>
+        <Route path="/" element={<Home />} />
+        <Route path="/bo-mon" element={<Disciplines />} />
+        <Route path="/lich-tap" element={<Schedule />} />
+        <Route path="/huan-luyen-vien" element={<Coaches />} />
+        <Route path="/co-so-vat-chat" element={<Facilities />} />
+        <Route path="/tuyen-sinh" element={<Admission />} />
+      </Route>
+      <Route path="/login" element={auth ? <Navigate to="/staff/register-member" replace /> : <Login onLoginSuccess={handleLogin} />} />
+      <Route element={<StaffRoute auth={auth} />}>
+        <Route path="/staff" element={<Navigate to="/staff/register-member" replace />} />
+        <Route path="/staff/register-member" element={<RegisterMember {...staffProps} />} />
+        <Route path="/staff/consultations" element={<ConsultationQueue {...staffProps} />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
 }
