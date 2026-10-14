@@ -14,10 +14,16 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import group5.example.sportCenter.repository.UserRepository;
+import group5.example.sportCenter.exception.ApiErrorResponseWriter;
+import group5.example.sportCenter.security.ApiSecurityErrorHandler;
+import group5.example.sportCenter.security.CurrentAccountAuthorizationFilter;
 
 @Configuration
 public class SecurityConfig {
@@ -25,7 +31,10 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
-            Converter<Jwt, AbstractAuthenticationToken> jwtAuthenticationConverter
+            Converter<Jwt, AbstractAuthenticationToken> jwtAuthenticationConverter,
+            UserRepository userRepository,
+            ApiErrorResponseWriter apiErrors,
+            ApiSecurityErrorHandler securityErrors
     ) throws Exception {
 
         http
@@ -34,10 +43,15 @@ public class SecurityConfig {
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
+            .exceptionHandling(exceptions -> exceptions
+                .authenticationEntryPoint(securityErrors)
+                .accessDeniedHandler(securityErrors)
+            )
             .authorizeHttpRequests(auth -> auth
                 .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/api/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/public/sports").permitAll()
 
                 .requestMatchers(HttpMethod.POST, "/api/consultation-requests").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/consultation-requests/me").hasRole("MEMBER")
@@ -119,8 +133,14 @@ public class SecurityConfig {
                 .anyRequest().authenticated()
             )
             .oauth2ResourceServer(oauth2 -> oauth2
+                .authenticationEntryPoint(securityErrors)
+                .accessDeniedHandler(securityErrors)
                 .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter))
             );
+
+        http.addFilterAfter(
+                new CurrentAccountAuthorizationFilter(userRepository, apiErrors),
+                BearerTokenAuthenticationFilter.class);
 
         return http.build();
     }

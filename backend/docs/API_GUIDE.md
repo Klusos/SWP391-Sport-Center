@@ -138,6 +138,7 @@ Sport GET endpoints permit all authenticated roles; mutations are ADMIN-only.
 | Method and path | Request body | Success and response | Test status |
 |---|---|---|---|
 | `GET /api/sports` | None | 200, `SportResponse[]` | Not verified |
+| `GET /api/public/sports` | None; no JWT required | 200, active `PublicSportOptionResponse[]` with only `id` and `name` | H2 integration tested |
 | `GET /api/sports/{id}` | None | 200, `SportResponse` | Not verified |
 | `POST /api/sports` | `CreateSportRequest` | 201, `SportResponse` | Not verified |
 | `PUT /api/sports/{id}` | `UpdateSportRequest` | 200, `SportResponse` | Not verified |
@@ -145,6 +146,8 @@ Sport GET endpoints permit all authenticated roles; mutations are ADMIN-only.
 Create body: `{"name":"Swimming","description":"Pool training"}`. Update body also includes `status`.
 
 Response sample: `{"id":3,"name":"Swimming","description":"Pool training","status":"ACTIVE"}`.
+
+The public sport-options response is intentionally limited to `[{"id":3,"name":"Swimming"}]`; inactive Sports are omitted. The existing `/api/sports` routes remain authenticated and administrative fields are not returned by the public route.
 
 ## Coach and CoachSport
 
@@ -187,6 +190,8 @@ GET endpoints permit all authenticated roles; mutations are ADMIN-only.
 | `PUT /api/classes/{id}` | `UpdateClassRequest` | 200, `CourseClassResponse` | Not verified |
 
 Course create body: `sportId`, `name`, `description`, `targetAgeMin`, `targetAgeMax`, `level`, `learningOutcome`; update also has `status` and does not accept `sportId`.
+
+Course `level` is required on create and update and accepts `BEGINNER`, `INTERMEDIATE`, or `ADVANCED` (case-insensitive; surrounding whitespace is trimmed), matching CourseRegistration eligibility. Course and Sport update statuses accept `ACTIVE` or `INACTIVE`; CourseOffering accepts `OPEN` or `CLOSED`; CourseClass accepts `ACTIVE` or `INACTIVE`. Values are normalized to uppercase; unsupported values return 400. Existing records are not rewritten by this validation.
 
 CourseOffering create body: `courseId`, `name`, `price`, `plannedSessions`, `sessionDuration`, `startDate`, `endDate`, `registrationDeadline`, `cancellationDeadline`; update has the same fields plus `status` and no `courseId`.
 

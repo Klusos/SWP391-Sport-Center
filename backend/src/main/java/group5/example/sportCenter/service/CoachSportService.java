@@ -3,6 +3,7 @@ package group5.example.sportCenter.service;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import group5.example.sportCenter.dto.AssignCoachSportRequest;
 import group5.example.sportCenter.dto.CoachSportResponse;
@@ -16,6 +17,7 @@ import group5.example.sportCenter.repository.CoachSportRepository;
 import group5.example.sportCenter.repository.SportRepository;
 
 @Service
+@Transactional(readOnly = true)
 public class CoachSportService {
 
     private final CoachSportRepository coachSportRepository;
@@ -32,6 +34,7 @@ public class CoachSportService {
         this.sportRepository = sportRepository;
     }
 
+    @Transactional
     public CoachSportResponse assignSport(
             Integer coachId,
             AssignCoachSportRequest request) {
@@ -92,6 +95,7 @@ public class CoachSportService {
                 .toList();
     }
 
+    @Transactional
     public CoachSportResponse updateCoachSport(
             Integer coachId,
             Integer sportId,

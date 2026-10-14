@@ -4,6 +4,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Pattern;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -26,7 +27,10 @@ public class CreateCourseRequest {
     @Min(value = 0, message = "Maximum age cannot be negative")
     private Integer targetAgeMax;
 
+    @NotBlank(message = "Course level is required")
     @Size(max = 50)
+    @Pattern(regexp = "(?i)\\s*(BEGINNER|INTERMEDIATE|ADVANCED)\\s*",
+            message = "Course level must be BEGINNER, INTERMEDIATE, or ADVANCED")
     private String level;
 
     private String learningOutcome;

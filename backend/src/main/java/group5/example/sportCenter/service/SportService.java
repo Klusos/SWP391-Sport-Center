@@ -1,10 +1,12 @@
 package group5.example.sportCenter.service;
 
 import java.util.List;
+import java.util.List;
 
 import org.springframework.stereotype.Service;
 
 import group5.example.sportCenter.dto.CreateSportRequest;
+import group5.example.sportCenter.dto.PublicSportOptionResponse;
 import group5.example.sportCenter.dto.SportResponse;
 import group5.example.sportCenter.dto.UpdateSportRequest;
 import group5.example.sportCenter.entity.Sport;
@@ -24,6 +26,12 @@ public class SportService {
         return sportRepository.findAll()
                 .stream()
                 .map(this::toResponse)
+                .toList();
+    }
+
+    public List<PublicSportOptionResponse> getActiveSportOptions() {
+        return sportRepository.findByStatus("ACTIVE").stream()
+                .map(sport -> new PublicSportOptionResponse(sport.getId(), sport.getName()))
                 .toList();
     }
 
@@ -79,7 +87,7 @@ public class SportService {
 
         sport.setName(request.getName());
         sport.setDescription(request.getDescription());
-        sport.setStatus(request.getStatus());
+        sport.setStatus(CatalogValues.status(request.getStatus(), "Sport", List.of("ACTIVE", "INACTIVE")));
 
         Sport updatedSport =
                 sportRepository.save(sport);

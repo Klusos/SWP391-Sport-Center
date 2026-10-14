@@ -1,8 +1,10 @@
 package group5.example.sportCenter.service;
 
 import java.util.List;
+import java.util.List;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import group5.example.sportCenter.dto.CourseResponse;
 import group5.example.sportCenter.dto.CreateCourseRequest;
@@ -14,6 +16,7 @@ import group5.example.sportCenter.repository.CourseRepository;
 import group5.example.sportCenter.repository.SportRepository;
 
 @Service
+@Transactional(readOnly = true)
 public class CourseService {
 
     private final CourseRepository courseRepository;
@@ -27,6 +30,7 @@ public class CourseService {
         this.sportRepository = sportRepository;
     }
 
+    @Transactional
     public CourseResponse createCourse(
             CreateCourseRequest request) {
 
@@ -52,7 +56,7 @@ public class CourseService {
         course.setDescription(request.getDescription());
         course.setTargetAgeMin(request.getTargetAgeMin());
         course.setTargetAgeMax(request.getTargetAgeMax());
-        course.setLevel(request.getLevel());
+        course.setLevel(CatalogValues.courseLevel(request.getLevel()));
         course.setLearningOutcome(request.getLearningOutcome());
         course.setStatus("ACTIVE");
 
@@ -91,6 +95,7 @@ public class CourseService {
                 .toList();
     }
 
+    @Transactional
     public CourseResponse updateCourse(
             Integer id,
             UpdateCourseRequest request) {
@@ -108,9 +113,9 @@ public class CourseService {
         course.setDescription(request.getDescription());
         course.setTargetAgeMin(request.getTargetAgeMin());
         course.setTargetAgeMax(request.getTargetAgeMax());
-        course.setLevel(request.getLevel());
+        course.setLevel(CatalogValues.courseLevel(request.getLevel()));
         course.setLearningOutcome(request.getLearningOutcome());
-        course.setStatus(request.getStatus());
+        course.setStatus(CatalogValues.status(request.getStatus(), "Course", List.of("ACTIVE", "INACTIVE")));
 
         return toResponse(courseRepository.save(course));
     }

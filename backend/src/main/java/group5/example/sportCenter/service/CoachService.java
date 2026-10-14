@@ -14,6 +14,7 @@ import group5.example.sportCenter.repository.CoachRepository;
 import group5.example.sportCenter.repository.UserRepository;
 
 @Service
+@Transactional(readOnly = true)
 public class CoachService {
 
     private final PasswordEncoder passwordEncoder;
@@ -82,6 +83,7 @@ public class CoachService {
         return toResponse(savedCoach);
     }
 
+    @Transactional
     public CoachResponse updateCoachStatus(
             Integer id,
             String status) {

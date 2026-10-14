@@ -1,5 +1,12 @@
 # SportCenter Implementation Status
 
+## Stabilization iteration 3 (2026-10-14)
+
+- Course create/update now require one of the enrollment-compatible levels `BEGINNER`, `INTERMEDIATE`, or `ADVANCED`; input is case-insensitive and trimmed before storage. Course, Sport, CourseOffering, and CourseClass update status values are restricted to the existing states used by the code and normalized to uppercase.
+- `GET /api/public/sports` returns only ACTIVE Sport `id`/`name` options without JWT. The existing `/api/sports` routes remain authenticated; CORS defaults include React/Vite `http://localhost:5173` and CRA `http://localhost:3000` (an explicit `CORS_ALLOWED_ORIGINS` deployment override still applies).
+- Ordinary Maven `clean verify` completed successfully on the H2 profile: **107 tests, 0 failures, 0 errors, 0 skipped**. This includes four new focused H2 integration tests. SQL Server E2E and Postman were not run.
+- Existing database values were not scanned or changed. Course levels that are unsupported remain stored and may cause CourseRegistration to reject registrations; editing such a course now requires choosing a supported level.
+
 This document records source-code status separately from build and Postman verification. Sections dated 2026-10-09 below are historical snapshots; use the latest dated section for current authorization/build status.
 
 ## Status definitions

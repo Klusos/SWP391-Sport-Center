@@ -72,6 +72,7 @@ public class MembershipService {
         return membershipRepository.findByMemberId(memberId).stream().map(this::toResponse).toList();
     }
 
+    @Transactional
     public MembershipResponse createMembership(CreateMembershipRequest request, Jwt callerJwt) {
         User actor = currentActor(callerJwt);
         requireOwnMembershipOrStaff(actor, request.getMemberId());
@@ -107,10 +108,12 @@ public class MembershipService {
         return toResponse(membershipRepository.save(membership));
     }
 
+    @Transactional
     public MembershipResponse cancelAutoRenew(Integer id, Jwt callerJwt) {
         return updateAutoRenew(id, false, callerJwt);
     }
 
+    @Transactional
     public MembershipResponse enableAutoRenew(Integer id, Jwt callerJwt) {
         return updateAutoRenew(id, true, callerJwt);
     }
