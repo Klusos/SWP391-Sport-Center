@@ -211,7 +211,7 @@ export default function MemberList({ token, role, onLogout, onNavigate }) {
                       const memberProfile = profiles.find((item) => item.memberId === member.id);
                       return <tr key={member.id}>
                         <td>#{member.id}</td><td>{member.name}</td><td>{member.email}</td><td>{member.phone || "—"}</td>
-                        <td><span className={"status-pill status-" + String(member.status).toLowerCase()}>{member.status}</span></td>
+                        <td><span className={"status-pill status-" + String(member.status).toLowerCase()}>{member.status === "ACTIVE" ? "Ho\u1ea1t \u0111\u1ed9ng" : "Ng\u1eebng ho\u1ea1t \u0111\u1ed9ng"}</span></td>
                         <td>{memberProfile ? "Có hồ sơ" : "Chưa có hồ sơ"}</td>
                         <td><button type="button" onClick={() => openDetail(member.id)} disabled={detailLoading}>Chi tiết</button></td>
                       </tr>;
@@ -245,7 +245,7 @@ export default function MemberList({ token, role, onLogout, onNavigate }) {
             <div><dt>Điện thoại</dt><dd>{selected.user.phone || "—"}</dd></div>
             <div><dt>Ngày sinh</dt><dd>{selected.user.dateOfBirth || "—"}</dd></div>
             <div><dt>Giới tính</dt><dd>{selected.user.gender || "—"}</dd></div>
-            <div><dt>Trạng thái tài khoản</dt><dd>{selected.user.status}</dd></div>
+            <div><dt>Trạng thái tài khoản</dt><dd><span className={"status-pill status-" + String(selected.user.status).toLowerCase()}>{selected.user.status === "ACTIVE" ? "Ho\u1ea1t \u0111\u1ed9ng" : "Ng\u1eebng ho\u1ea1t \u0111\u1ed9ng"}</span></dd></div>
             <div><dt>Trình độ thể chất</dt><dd>{selected.profile ? `${selected.profile.height} cm · ${selected.profile.weight} kg` : "Chưa có hồ sơ"}</dd></div>
             {selected.profile && <div><dt>Mục tiêu</dt><dd>{selected.profile.goal || "—"}</dd></div>}
           </dl> : <div className="member-edit-grid">

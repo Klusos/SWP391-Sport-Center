@@ -13,6 +13,7 @@ import {
 
 const PAGE_SIZE = 20;
 const STATUSES = ["", "PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"];
+const STATUS_LABELS = { PENDING: "Ch\u1edd ti\u1ebfp nh\u1eadn", IN_PROGRESS: "\u0110ang x\u1eed l\u00fd", COMPLETED: "Ho\u00e0n t\u1ea5t", CANCELLED: "\u0110\u00e3 h\u1ee7y" };
 
 function formatDate(value) {
   if (!value) return "—";
@@ -209,39 +210,39 @@ export default function ConsultationQueue({ token, role, onLogout, onNavigate })
     <div className="layout">
       <Sidebar role={role} activePage="consultations" onNavigate={onNavigate} onLogout={onLogout} />
       <main className="main">
-        <h1>Consultation queue</h1>
-        <p className="subtitle">Review and take customer consultation requests.</p>
+        <h1>{"Y\u00eau c\u1ea7u t\u01b0 v\u1ea5n"}</h1>
+        <p className="subtitle">{"Ti\u1ebfp nh\u1eadn v\u00e0 theo d\u00f5i c\u00e1c y\u00eau c\u1ea7u t\u01b0 v\u1ea5n c\u1ee7a kh\u00e1ch h\u00e0ng."}</p>
         {!allowedRole && <div className="banner error" role="alert">Only Receptionist and Admin accounts can access this queue.</div>}
         {notice && <div className="banner success" role="status">{notice}</div>}
         {error && <div className="banner error" role="alert">{error}</div>}
 
         <div className="queue-toolbar">
           <div className="field queue-filter">
-            <label htmlFor="consultationStatus">Status</label>
+            <label htmlFor="consultationStatus">{"Tr\u1ea1ng th\u00e1i"}</label>
             <select id="consultationStatus" value={status}
               onChange={(event) => { setStatus(event.target.value); setPage(0); setNotice(""); }}
               disabled={!allowedRole}>
-              {STATUSES.map((value) => <option key={value || "ALL"} value={value}>{value || "All statuses"}</option>)}
+              {STATUSES.map((value) => <option key={value || "ALL"} value={value}>{value ? STATUS_LABELS[value] : "T\u1ea5t c\u1ea3 tr\u1ea1ng th\u00e1i"}</option>)}
             </select>
           </div>
           <button className="queue-refresh" type="button" onClick={loadQueue} disabled={loading || !allowedRole}>
-            {loading ? "Loading…" : "Refresh"}
+            {loading ? "\u0110ang t\u1ea3i\u2026" : "L\u00e0m m\u1edbi"}
           </button>
         </div>
 
         {loading ? (
-          <div className="queue-state" role="status">Loading consultation requests…</div>
+          <div className="queue-state" role="status">{"\u0110ang t\u1ea3i danh s\u00e1ch y\u00eau c\u1ea7u t\u01b0 v\u1ea5n\u2026"}</div>
         ) : error && !result ? (
-          <div className="queue-state">The queue is unavailable. Check access or try refreshing.</div>
+          <div className="queue-state">{"Kh\u00f4ng th\u1ec3 t\u1ea3i danh s\u00e1ch. H\u00e3y ki\u1ec3m tra quy\u1ec1n truy c\u1eadp ho\u1eb7c th\u1eed l\u00e0m m\u1edbi."}</div>
         ) : requests.length === 0 ? (
-          <div className="queue-state">No consultation requests found.</div>
+          <div className="queue-state">{"Kh\u00f4ng t\u00ecm th\u1ea5y y\u00eau c\u1ea7u t\u01b0 v\u1ea5n n\u00e0o."}</div>
         ) : (
           <>
             <div className="queue-table-wrap">
               <table className="queue-table">
                 <thead><tr>
-                  <th>Request ID</th><th>Customer</th><th>Phone</th><th>Sport</th>
-                  <th>Status</th><th>Created</th><th>Handler</th><th>Action</th>
+                  <th>{"M\u00e3 y\u00eau c\u1ea7u"}</th><th>{"Kh\u00e1ch h\u00e0ng"}</th><th>{"\u0110i\u1ec7n tho\u1ea1i"}</th><th>{"B\u1ed9 m\u00f4n"}</th>
+                  <th>{"Tr\u1ea1ng th\u00e1i"}</th><th>{"Ng\u00e0y t\u1ea1o"}</th><th>{"Ng\u01b0\u1eddi ti\u1ebfp nh\u1eadn"}</th><th>{"Thao t\u00e1c"}</th>
                 </tr></thead>
                 <tbody>
                   {requests.map((request) => (
@@ -250,7 +251,7 @@ export default function ConsultationQueue({ token, role, onLogout, onNavigate })
                       <td>{request.name}</td>
                       <td>{request.phone}</td>
                       <td>{request.sportName || "—"}</td>
-                      <td><span className={"status-pill status-" + String(request.status).toLowerCase()}>{request.status}</span></td>
+                      <td><span className={"status-pill status-" + String(request.status).toLowerCase()}>{STATUS_LABELS[request.status] || request.status}</span></td>
                       <td>{formatDate(request.createdAt)}</td>
                       <td>{request.handledBy == null ? "—" : "#" + request.handledBy}</td>
                       <td className="queue-actions">
@@ -269,10 +270,10 @@ export default function ConsultationQueue({ token, role, onLogout, onNavigate })
               </table>
             </div>
             <div className="queue-pagination">
-              <span>Page {page + 1} of {Math.max(totalPages, 1)} · {result?.totalElements ?? requests.length} requests</span>
+              <span>{"Trang "}{page + 1}/{Math.max(totalPages, 1)} | {result?.totalElements ?? requests.length}{" y\u00eau c\u1ea7u"}</span>
               <div>
-                <button type="button" onClick={() => setPage((current) => Math.max(0, current - 1))} disabled={page <= 0 || loading}>Previous</button>
-                <button type="button" onClick={() => setPage((current) => current + 1)} disabled={loading || totalPages === 0 || page + 1 >= totalPages}>Next</button>
+                <button type="button" onClick={() => setPage((current) => Math.max(0, current - 1))} disabled={page <= 0 || loading}>{"Tr\u01b0\u1edbc"}</button>
+                <button type="button" onClick={() => setPage((current) => current + 1)} disabled={loading || totalPages === 0 || page + 1 >= totalPages}>Sau</button>
               </div>
             </div>
           </>
@@ -290,7 +291,7 @@ export default function ConsultationQueue({ token, role, onLogout, onNavigate })
               <div><dt>Điện thoại</dt><dd>{detail.phone}</dd></div>
               <div><dt>Email</dt><dd>{detail.email || "—"}</dd></div>
               <div><dt>Bộ môn</dt><dd>{detail.sportName}</dd></div>
-              <div><dt>Trạng thái</dt><dd>{detail.status}</dd></div>
+              <div><dt>Trạng thái</dt><dd><span className={"status-pill status-" + String(detail.status).toLowerCase()}>{STATUS_LABELS[detail.status] || detail.status}</span></dd></div>
               <div><dt>Thành viên liên kết</dt><dd>{detail.memberId ? `#${detail.memberId}` : "Chưa liên kết"}</dd></div>
               <div><dt>Tiếp nhận bởi</dt><dd>{detail.handledBy ? `#${detail.handledBy}` : "—"}</dd></div>
               <div><dt>Kinh nghiệm</dt><dd>{detail.experience || "—"}</dd></div>

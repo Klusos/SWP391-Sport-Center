@@ -269,7 +269,7 @@ export default function StaffManagement({ token, role, onLogout, onNavigate }) {
               <thead><tr><th>ID</th><th>Họ tên</th><th>Email</th><th>Vai trò</th><th>Tài khoản</th><th>Trạng thái Coach</th><th></th></tr></thead>
               <tbody>{filtered.map((item) => <tr key={item.id}>
                 <td>#{item.id}</td><td>{item.name}</td><td>{item.email}</td><td>{item.role}</td>
-                <td>{item.status}</td><td>{item.coach?.status || "—"}</td>
+                <td><span className={"status-pill status-" + String(item.status).toLowerCase()}>{item.status === "ACTIVE" ? "Ho\u1ea1t \u0111\u1ed9ng" : "Ng\u1eebng ho\u1ea1t \u0111\u1ed9ng"}</span></td><td>{item.coach?.status ? <span className={"status-pill status-" + String(item.coach.status).toLowerCase()}>{item.coach.status === "ACTIVE" ? "Ho\u1ea1t \u0111\u1ed9ng" : "Ng\u1eebng ho\u1ea1t \u0111\u1ed9ng"}</span> : "\u2014"}</td>
                 <td><button type="button" onClick={() => openDetail(item)}>Chi tiết</button></td>
               </tr>)}</tbody>
             </table></div>}
@@ -283,8 +283,8 @@ export default function StaffManagement({ token, role, onLogout, onNavigate }) {
           </div>
           {!editing ? <dl className="member-detail-grid">
             <div><dt>Email</dt><dd>{selected.email}</dd></div><div><dt>Điện thoại</dt><dd>{selected.phone || "—"}</dd></div>
-            <div><dt>Ngày sinh</dt><dd>{selected.dateOfBirth || "—"}</dd></div><div><dt>Trạng thái tài khoản</dt><dd>{selected.status}</dd></div>
-            {selected.coach && <div><dt>Trạng thái Coach</dt><dd>{selected.coach.status}</dd></div>}
+            <div><dt>Ngày sinh</dt><dd>{selected.dateOfBirth || "—"}</dd></div><div><dt>Trạng thái tài khoản</dt><dd><span className={"status-pill status-" + String(selected.status).toLowerCase()}>{selected.status === "ACTIVE" ? "Ho\u1ea1t động" : "Ng\u1eebng ho\u1ea1t động"}</span></dd></div>
+            {selected.coach && <div><dt>Trạng thái Coach</dt><dd><span className={"status-pill status-" + String(selected.coach.status).toLowerCase()}>{selected.coach.status === "ACTIVE" ? "Ho\u1ea1t động" : "Ng\u1eebng ho\u1ea1t động"}</span></dd></div>}
           </dl> : <form className="form-card" onSubmit={saveStaff}>
             <label>Họ tên<input required maxLength={100} value={form.name} onChange={(event) => updateForm("name", event.target.value)} /></label>
             <label>Email<input required type="email" maxLength={150} value={form.email} onChange={(event) => updateForm("email", event.target.value)} /></label>
