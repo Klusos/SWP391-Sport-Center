@@ -5,8 +5,10 @@ import Login from "./pages/Login";
 import RegisterMember from "./pages/RegisterMember";
 import MemberList from "./pages/MemberList";
 import StaffManagement from "./pages/StaffManagement";
+import MembershipPlans from "./pages/MembershipPlans";
 import PublicLayout from "./public-site/PublicLayout";
 import Admission from "./public-site/pages/Admission";
+import PublicMembershipPlans from "./public-site/pages/PublicMembershipPlans";
 import Coaches from "./public-site/pages/Coaches";
 import Disciplines from "./public-site/pages/Disciplines";
 import Facilities from "./public-site/pages/Facilities";
@@ -50,7 +52,8 @@ export default function App() {
     onNavigate: (page) => navigate(page === "consultations"
       ? "/staff/consultations"
       : page === "members" ? "/staff/members"
-        : page === "staff" ? "/staff/staff" : "/staff/register-member"),
+        : page === "staff" ? "/staff/staff"
+        : page === "membership-plans" ? "/staff/membership-plans" : "/staff/register-member"),
   };
 
   return (
@@ -63,12 +66,14 @@ export default function App() {
         <Route path="/huan-luyen-vien" element={<Coaches />} />
         <Route path="/co-so-vat-chat" element={<Facilities />} />
         <Route path="/tuyen-sinh" element={<Admission />} />
+        <Route path="/membership-plans" element={<PublicMembershipPlans />} />
       </Route>
       <Route path="/login" element={auth ? <Navigate to="/staff/register-member" replace /> : <Login onLoginSuccess={handleLogin} />} />
       <Route element={<StaffRoute auth={auth} />}>
         <Route path="/staff" element={<Navigate to="/staff/register-member" replace />} />
         <Route path="/staff/register-member" element={<RegisterMember {...staffProps} />} />
         <Route path="/staff/consultations" element={<ConsultationQueue {...staffProps} />} />
+        <Route path="/staff/membership-plans" element={<MembershipPlans {...staffProps} />} />
         <Route path="/staff/members" element={<MemberList {...staffProps} />} />
         <Route element={<AdminRoute auth={auth} />}>
           <Route path="/staff/staff" element={<StaffManagement {...staffProps} />} />

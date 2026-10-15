@@ -8,7 +8,7 @@ This guide was generated from the current Spring MVC controllers, DTOs, Security
 - Except for `POST /api/auth/login`, requests require `Authorization: Bearer {{token}}`.
 - Valid role names are `ADMIN`, `RECEPTIONIST`, `MEMBER`, and `COACH`.
 - `GET /api/users/me` permits any authenticated user. `POST /api/members` permits ADMIN and RECEPTIONIST. MemberProfile `/me` routes permit MEMBER; numeric-ID MemberProfile routes permit ADMIN. User management is ADMIN-only.
-- MembershipPlan GET routes permit all authenticated roles; mutations are ADMIN-only. Membership access follows the ownership rules below.
+- Public MembershipPlan catalog exposes ACTIVE plans only. The administrative plan catalog is ADMIN-only; RECEPTIONIST can read the public active catalog but cannot see inactive plans or mutate plans. Membership access follows the ownership rules below.
 - Sport, Course, CourseOffering, Class, Facility, Coach, and CoachSport GET routes permit all authenticated roles; mutation routes are ADMIN-only.
 - CORS allows only explicit origins configured through `CORS_ALLOWED_ORIGINS` (default local React origins: ports 5173 and 3000). Wildcard origins are rejected.
 - The response fields below follow the DTOs. Error response bodies can vary: `GlobalExceptionHandler` formats resource-not-found and `IllegalArgumentException` errors, while Spring Security, validation, and `ResponseStatusException` may use framework error bodies.
@@ -111,11 +111,13 @@ Membership validity uses an exclusive `endDate`: it is date-valid only when `sta
 | `PATCH /api/memberships/{id}/cancel-renewal` | ADMIN, RECEPTIONIST; MEMBER only for own membership | None | 200, `MembershipResponse` | Not verified after authorization changes |
 | `PATCH /api/memberships/{id}/enable-auto-renew` | ADMIN, RECEPTIONIST; MEMBER only for own membership | None | 200, `MembershipResponse` | Not verified after authorization changes |
 | `POST /api/memberships/expire` | ADMIN | None | 200, text message | Not verified after authorization changes |
-| `GET /api/membership-plans` | All authenticated roles | None | 200, `MembershipPlanResponse[]` | Not verified after authorization changes |
-| `GET /api/membership-plans/{id}` | All authenticated roles | None | 200, `MembershipPlanResponse` | Not verified after authorization changes |
+| `GET /api/public/membership-plans` | GUEST, MEMBER, COACH, RECEPTIONIST, ADMIN | None | 200, active `MembershipPlanResponse[]` | Added in this change |
+| `GET /api/membership-plans` | ADMIN | None | 200, all `MembershipPlanResponse[]`, including inactive | Added in this change |
+| `GET /api/membership-plans/{id}` | ADMIN | None | 200, `MembershipPlanResponse` | Added in this change |
 | `POST /api/membership-plans` | ADMIN | `CreateMembershipPlanRequest` | 201, `MembershipPlanResponse` | Not verified |
 | `PUT /api/membership-plans/{id}` | ADMIN | `UpdateMembershipPlanRequest` | 200, `MembershipPlanResponse` | Not verified |
-| `DELETE /api/membership-plans/{id}` | ADMIN | None | 204, empty body | Not verified |
+| `PATCH /api/membership-plans/{id}/status` | ADMIN | `{"status":"ACTIVE"}` or `{"status":"INACTIVE"}` | 200, `MembershipPlanResponse` | Added in this change |
+| `DELETE /api/membership-plans/{id}` | ADMIN | None | 204, empty body; legacy route now deactivates rather than physically deleting | Added in this change |
 
 Membership creation body:
 
@@ -127,7 +129,7 @@ Membership creation body:
 
 MembershipPlan bodies contain `name`, `description`, `price`, `durationMonths`, `courseDiscountPercent`, `personalTrainingDiscountPercent`, `allowPersonalTrainingPlan`, and `allowOneOnOneCoaching`; update also contains `status`.
 
-`MembershipPlanResponse` adds `id` and `status` to those plan fields.
+Plan creation/update requires a nonblank name (max 100), nonnegative price with at most two decimal places, positive duration in months, and discounts from 0 through 100 with at most two decimal places. Status may only be `ACTIVE` or `INACTIVE`. `MembershipPlanResponse` adds `id` and `status` to the plan fields. ADMIN plans are the only plans returned by the administrative catalog; the public catalog returns active plans only. The legacy DELETE route performs soft deactivation to preserve existing Membership references; use the status PATCH route for explicit activation/deactivation. This change does not create or alter Membership records or implement purchase/payment behavior.
 
 Sample: `{"id":2,"name":"Standard","description":"Monthly membership","price":50,"durationMonths":1,"courseDiscountPercent":0,"personalTrainingDiscountPercent":0,"allowPersonalTrainingPlan":false,"allowOneOnOneCoaching":false,"status":"ACTIVE"}`.
 

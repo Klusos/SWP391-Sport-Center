@@ -243,3 +243,38 @@ export function createPublicConsultationRequestApi(payload) {
   });
 }
 
+
+
+export function getPublicMembershipPlansApi() {
+  return request("/api/public/membership-plans", {
+    headers: { Accept: "application/json" },
+  });
+}
+
+export function getMembershipPlansApi(token) {
+  return request("/api/membership-plans", { headers: authenticatedHeaders(token) });
+}
+
+export function createMembershipPlanApi(token, payload) {
+  return request("/api/membership-plans", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateMembershipPlanApi(token, planId, payload) {
+  return request("/api/membership-plans/" + encodeURIComponent(planId), {
+    method: "PUT",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateMembershipPlanStatusApi(token, planId, status) {
+  return request("/api/membership-plans/" + encodeURIComponent(planId) + "/status", {
+    method: "PATCH",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+}

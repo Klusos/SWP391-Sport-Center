@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import group5.example.sportCenter.dto.UpdateMembershipPlanRequest;
 import group5.example.sportCenter.dto.CreateMembershipPlanRequest;
 import group5.example.sportCenter.dto.MembershipPlanResponse;
+import group5.example.sportCenter.dto.UpdateMembershipPlanStatusRequest;
 import group5.example.sportCenter.service.MembershipPlanService;
 import jakarta.validation.Valid;
 
@@ -55,6 +57,13 @@ public class MembershipPlanController {
             @Valid @RequestBody UpdateMembershipPlanRequest request) {
 
         return membershipPlanService.updatePlan(id, request);
+    }
+
+    @PatchMapping("/{id}/status")
+    public MembershipPlanResponse updateStatus(
+            @PathVariable Integer id,
+            @Valid @RequestBody UpdateMembershipPlanStatusRequest request) {
+        return membershipPlanService.updateStatus(id, request.getStatus());
     }
 
     @DeleteMapping("/{id}")

@@ -1,8 +1,10 @@
 package group5.example.sportCenter.service;
 
 import java.util.List;
+import java.util.Locale;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import group5.example.sportCenter.dto.UpdateMembershipPlanRequest;
 import group5.example.sportCenter.dto.CreateMembershipPlanRequest;
@@ -21,6 +23,7 @@ public class MembershipPlanService {
         this.membershipPlanRepository = membershipPlanRepository;
     }
 
+    @Transactional(readOnly = true)
     public List<MembershipPlanResponse> getAllPlans() {
         return membershipPlanRepository.findAll()
                 .stream()
@@ -28,6 +31,15 @@ public class MembershipPlanService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<MembershipPlanResponse> getActivePlans() {
+        return membershipPlanRepository.findByStatus("ACTIVE")
+                .stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
     public MembershipPlanResponse getPlanById(Integer id) {
 
         MembershipPlan plan = membershipPlanRepository.findById(id)
@@ -38,6 +50,7 @@ public class MembershipPlanService {
         return toResponse(plan);
     }
 
+    @Transactional
     public MembershipPlanResponse createPlan(
             CreateMembershipPlanRequest request) {
 
@@ -68,6 +81,7 @@ public class MembershipPlanService {
         return toResponse(savedPlan);
     }
 
+    @Transactional
     public MembershipPlanResponse updatePlan(
             Integer id,
             UpdateMembershipPlanRequest request) {
@@ -94,7 +108,7 @@ public class MembershipPlanService {
         plan.setAllowOneOnOneCoaching(
                 request.getAllowOneOnOneCoaching());
 
-        plan.setStatus(request.getStatus());
+        plan.setStatus(normalizeStatus(request.getStatus()));
 
         MembershipPlan updatedPlan =
                 membershipPlanRepository.save(plan);
@@ -102,6 +116,20 @@ public class MembershipPlanService {
         return toResponse(updatedPlan);
     }
 
+    @Transactional
+    public MembershipPlanResponse updateStatus(Integer id, String requestedStatus) {
+        MembershipPlan plan = membershipPlanRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Membership plan not found with id: " + id));
+        plan.setStatus(normalizeStatus(requestedStatus));
+        return toResponse(membershipPlanRepository.save(plan));
+    }
+
+    /**
+     * Keeps the legacy DELETE API compatible while preserving plan rows referenced
+     * by memberships. DELETE now performs the same soft deactivation as status=INACTIVE.
+     */
+    @Transactional
     public void deletePlan(Integer id) {
 
         MembershipPlan plan = membershipPlanRepository.findById(id)
@@ -109,7 +137,16 @@ public class MembershipPlanService {
                         new ResourceNotFoundException(
                                 "Membership plan not found with id: " + id));
 
-        membershipPlanRepository.delete(plan);
+        plan.setStatus("INACTIVE");
+        membershipPlanRepository.save(plan);
+    }
+
+    private String normalizeStatus(String status) {
+        String normalized = status == null ? "" : status.trim().toUpperCase(Locale.ROOT);
+        if (!normalized.equals("ACTIVE") && !normalized.equals("INACTIVE")) {
+            throw new IllegalArgumentException("Status must be ACTIVE or INACTIVE");
+        }
+        return normalized;
     }
 
     private MembershipPlanResponse toResponse(MembershipPlan plan) {

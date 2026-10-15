@@ -15,6 +15,12 @@
             Members
           </button>
         )}
+        {canAccessConsultations && (
+          <button className={"nav-item clickable nav-button " + (activePage === "membership-plans" ? "active" : "")}
+            type="button" onClick={() => onNavigate("membership-plans")}>
+            Membership plans
+          </button>
+        )}
         {role === "ADMIN" && (
           <button className={"nav-item clickable nav-button " + (activePage === "staff" ? "active" : "")}
             type="button" onClick={() => onNavigate("staff")}>

@@ -1,4 +1,5 @@
 export const navLinks = [
+  { to: '/membership-plans', label: 'Membership Plans' },
   { to: '/', label: 'Trang chủ' },
   { to: '/bo-mon', label: 'Bộ môn' },
   { to: '/huan-luyen-vien', label: 'Huấn luyện viên' },
