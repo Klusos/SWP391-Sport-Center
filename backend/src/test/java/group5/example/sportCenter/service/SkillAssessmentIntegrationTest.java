@@ -233,6 +233,19 @@ class SkillAssessmentIntegrationTest {
         mvc.perform(get("/api/member-sport-levels/me").header("Authorization", bearer(member)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].level").value("INTERMEDIATE"));
     }
+
+    @Test void receptionistCannotCompleteAssessmentAndCoachWorkflowRemainsPending() throws Exception {
+        SkillAssessmentResponse pending = service.create(request(), jwt(receptionist));
+        mvc.perform(patch("/api/skill-assessments/" + pending.id() + "/complete")
+                .header("Authorization", bearer(receptionist)).contentType("application/json")
+                .content("{\"assessedLevel\":\"INTERMEDIATE\",\"notes\":\"Receptionist-entered screening result\"}"))
+                .andExpect(status().isForbidden());
+        assertEquals("PENDING", service.get(pending.id(), jwt(admin)).status());
+        assertEquals(0, levels.count());
+        assertEquals("BEGINNER", complete(pending.id(), "BEGINNER").assessedLevel());
+        assertEquals(coach.getId(), levels.findByMemberIdAndSportId(member.getId(), sport.getId())
+                .orElseThrow().getVerifiedByCoach().getId());
+    }
     @Test void invalidIdentityAndInactiveCallerRejected() {
         Jwt malformed = Jwt.withTokenValue("test").header("alg", "none").subject("not-an-id").build();
         assertError(401, () -> service.all(malformed));

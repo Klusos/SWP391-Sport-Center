@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { disciplines, coachesHome } from '../data/content.js'
+import { coachesHome } from '../data/content.js'
 
 export default function Home() {
   return (
@@ -16,7 +16,7 @@ export default function Home() {
               </p>
               <div className="d-flex flex-wrap gap-3 my-4">
                 <Link to="/bo-mon" className="btn btn-cyan">KHÁM PHÁ NGAY</Link>
-                <Link to="/lich-tap" className="btn btn-ghost">XEM LỊCH TẬP</Link>
+                <Link to="/bo-mon" className="btn btn-ghost">XEM CÁC BỘ MÔN</Link>
               </div>
               <p className="hero-stats">20+ BỘ MÔN <span>35+ HLV</span> <span>10K+ HỘI VIÊN</span></p>
             </div>
@@ -72,20 +72,7 @@ export default function Home() {
           <p className="label-blue">CÁC BỘ MÔN</p>
           <h2 className="h-xl">Chọn môn thể thao phù hợp với bạn</h2>
           <p className="muted">Tập luyện theo sở thích, mục tiêu và cấp độ của riêng bạn.</p>
-          <div className="row g-4 mt-2">
-            {disciplines.map((d) => (
-              <div className="col-md-6 col-lg-4" key={d.code}>
-                <article className="sport-card">
-                  <span className="sport-badge" style={{ background: d.color }}>{d.code}</span>
-                  <div>
-                    <h5>{d.title}</h5>
-                    <Link to="/bo-mon" className="link-arrow">Xem lớp học <i className="bi bi-arrow-right" /></Link>
-                    <p className="muted small mb-0">Từ 3 buổi / tuần</p>
-                  </div>
-                </article>
-              </div>
-            ))}
-          </div>
+          <Link to="/bo-mon" className="btn btn-cyan mt-3">XEM BỘ MÔN VÀ KHÓA HỌC</Link>
         </div>
       </section>
 

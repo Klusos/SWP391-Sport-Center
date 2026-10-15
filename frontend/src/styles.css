@@ -350,6 +350,66 @@ body {
 
 .queue-pagination div { display: flex; gap: 8px; }
 
+.queue-actions { display: flex; gap: 8px; }
+.queue-actions button,
+.consultation-detail button {
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #fff;
+  color: var(--text-main);
+  cursor: pointer;
+}
+.consultation-detail {
+  margin-top: 24px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+}
+.consultation-detail-heading { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.consultation-detail-heading h2 { margin: 0 0 16px; }
+.consultation-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+.consultation-detail-grid div { min-width: 0; }
+.consultation-detail-grid dt { color: var(--text-sub); font-size: 12px; }
+.consultation-detail-grid dd { margin: 4px 0 0; overflow-wrap: anywhere; }
+.consultation-complete-form,
+.consultation-assessment-form,
+.consultation-member-link-form { display: grid; gap: 10px; margin-top: 22px; max-width: 720px; }
+.consultation-complete-form textarea,
+.consultation-assessment-form textarea,
+.consultation-assessment-form select,
+.consultation-member-link-form select,
+.consultation-member-link-form input { width: 100%; min-height: 40px; border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; }
+.consultation-complete-form textarea,
+.consultation-assessment-form textarea { min-height: 84px; resize: vertical; }
+.consultation-complete-form button,
+.consultation-assessment-form button,
+.consultation-member-link-form button { justify-self: start; min-height: 38px; border: 1px solid var(--blue); border-radius: 8px; padding: 0 14px; background: var(--blue); color: #fff; cursor: pointer; }
+.consultation-member-link-form p { margin: 0; color: var(--text-sub); font-size: 13px; }
+.consultation-member-link-form h3,
+.consultation-member-link-form h4 { margin: 4px 0; }
+.consultation-member-link-form form { display: grid; gap: 10px; margin-top: 12px; }
+.assessment-entry { display: grid; gap: 10px; margin-top: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; }
+
+.member-list-toolbar { display: grid; grid-template-columns: minmax(260px, 1fr) auto; gap: 8px 14px; align-items: end; margin-bottom: 18px; }
+.member-list-toolbar label { grid-column: 1 / -1; color: var(--text-sub); font-size: 12px; }
+.member-list-toolbar input { min-height: 42px; border: 1px solid var(--border); border-radius: 8px; padding: 0 12px; }
+.member-list-toolbar button,
+.member-detail-heading button { min-height: 38px; border: 1px solid var(--border); border-radius: 8px; padding: 0 14px; background: #fff; cursor: pointer; }
+.member-detail { margin-top: 24px; }
+.member-detail-heading { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.member-detail-heading h2 { margin: 0 0 16px; }
+.member-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+.member-detail-grid dt { color: var(--text-sub); font-size: 12px; }
+.member-detail-grid dd { margin: 4px 0 0; overflow-wrap: anywhere; }
+
+@media (max-width: 600px) {
+  .member-list-toolbar { grid-template-columns: 1fr; }
+  .member-list-toolbar label { grid-column: auto; }
+}
+
 @media (max-width: 760px) {
   .main { padding: 24px 18px; }
   .sidebar { width: 200px; }

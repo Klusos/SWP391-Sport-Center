@@ -2,6 +2,7 @@ package group5.example.sportCenter.service;
 
 import group5.example.sportCenter.dto.CreateMemberRequest;
 import group5.example.sportCenter.dto.MemberResponse;
+import group5.example.sportCenter.dto.UpdateMemberRequest;
 import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.repository.UserRepository;
 
@@ -62,5 +63,50 @@ public class MemberRegistrationService {
             savedUser.getRole(),
             savedUser.getStatus()
         );
+    }
+
+    @Transactional
+    public MemberResponse updateMember(Integer id, UpdateMemberRequest request) {
+        User member = userRepository.findById(id)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Member not found"));
+        requireMember(member);
+
+        String email = request.getEmail().trim();
+        if (!member.getEmail().equalsIgnoreCase(email)
+                && userRepository.existsByEmailAndIdNot(email, id)) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.CONFLICT, "Email already exists");
+        }
+
+        member.setName(request.getName().trim());
+        member.setEmail(email);
+        member.setDateOfBirth(request.getDateOfBirth());
+        member.setGender(request.getGender());
+        member.setPhone(request.getPhone());
+        return response(userRepository.save(member));
+    }
+
+    @Transactional
+    public MemberResponse deactivateMember(Integer id) {
+        User member = userRepository.findById(id)
+                .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Member not found"));
+        requireMember(member);
+        member.setStatus("INACTIVE");
+        return response(userRepository.save(member));
+    }
+
+    private void requireMember(User user) {
+        if (!"MEMBER".equalsIgnoreCase(user.getRole())) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.NOT_FOUND, "Member not found");
+        }
+    }
+
+    private MemberResponse response(User user) {
+        return new MemberResponse(user.getId(), user.getName(), user.getEmail(),
+                user.getDateOfBirth(), user.getPhone(), user.getGender(),
+                user.getRole(), user.getStatus());
     }
 }

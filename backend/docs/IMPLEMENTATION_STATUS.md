@@ -1,5 +1,13 @@
 # SportCenter Implementation Status
 
+## Consultation workflow and public course discovery (2026-10-15)
+
+- Consultation lifecycle remains `PENDING → IN_PROGRESS → COMPLETED` or `CANCELLED`. `PATCH /api/consultation-requests/{id}/complete` is independent of SkillAssessment, enrollment, and payment; the H2 integration test confirms completion creates no assessment or MemberSportLevel.
+- Public discovery now has `GET /api/public/sports`, `GET /api/public/sports/{sportId}/courses`, and `GET /api/public/courses/{id}`. These anonymous GETs return only active catalogue records; existing administrative catalogue endpoints remain authenticated and mutations ADMIN-only.
+- Temporary assessment policy: RECEPTIONIST may complete a PENDING assessment assigned to an ACTIVE qualified Coach. Existing `verifiedByCoachId` records that assigned Coach; the schema has no separate performing-user column. Revisit this temporary attribution when Coach-led assessment is restored.
+- H2 coverage was added for active/inactive public course visibility, completion without assessment, and Receptionist assessment completion. Cached Maven 3.9.16 ordinary `mvn test` completed: **113 tests, 0 failures, 0 errors, 0 skipped; BUILD SUCCESS**. The new tests ran in isolated H2 contexts. Postman and live SQL Server verification have not been performed for these changes.
+- Frontend production build and ESLint for all changed frontend files passed. Vite GET route-fallback checks returned 200 for `/`, `/bo-mon`, `/bo-mon/3`, `/khoa-hoc/7`, `/login`, and `/staff/consultations`; no headless browser was available, so React rendering and real API interactions were not browser-verified.
+
 ## Stabilization iteration 3 (2026-10-14)
 
 - Course create/update now require one of the enrollment-compatible levels `BEGINNER`, `INTERMEDIATE`, or `ADVANCED`; input is case-insensitive and trimmed before storage. Course, Sport, CourseOffering, and CourseClass update status values are restricted to the existing states used by the code and normalized to uppercase.

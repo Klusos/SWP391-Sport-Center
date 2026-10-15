@@ -9,7 +9,18 @@
       </div>
       <nav aria-label="Staff navigation">
         <div className="nav-item">Overview</div>
-        <div className="nav-item">Members</div>
+        {canAccessConsultations && (
+          <button className={"nav-item clickable nav-button " + (activePage === "members" ? "active" : "")}
+            type="button" onClick={() => onNavigate("members")}>
+            Members
+          </button>
+        )}
+        {role === "ADMIN" && (
+          <button className={"nav-item clickable nav-button " + (activePage === "staff" ? "active" : "")}
+            type="button" onClick={() => onNavigate("staff")}>
+            Staff management
+          </button>
+        )}
         <button className={"nav-item clickable nav-button " + (activePage === "register" ? "active" : "")}
           type="button" onClick={() => onNavigate("register")}>
           Register member

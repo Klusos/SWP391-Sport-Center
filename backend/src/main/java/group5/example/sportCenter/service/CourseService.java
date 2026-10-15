@@ -93,6 +93,26 @@ public class CourseService {
                 .toList();
     }
 
+    public List<CourseResponse> getPublicCoursesBySport(Integer sportId) {
+        Sport sport = sportRepository.findById(sportId)
+                .orElseThrow(() -> new ResourceNotFoundException("Sport not found with id: " + sportId));
+        if (!"ACTIVE".equalsIgnoreCase(sport.getStatus())) {
+            throw new ResourceNotFoundException("Sport not found with id: " + sportId);
+        }
+        return courseRepository.findBySportIdAndStatus(sportId, "ACTIVE")
+                .stream().map(this::toResponse).toList();
+    }
+
+    public CourseResponse getPublicCourseById(Integer id) {
+        Course course = courseRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Course not found with id: " + id));
+        if (!"ACTIVE".equalsIgnoreCase(course.getStatus())
+                || !"ACTIVE".equalsIgnoreCase(course.getSport().getStatus())) {
+            throw new ResourceNotFoundException("Course not found with id: " + id);
+        }
+        return toResponse(course);
+    }
+
     @Transactional
     public CourseResponse updateCourse(
             Integer id,

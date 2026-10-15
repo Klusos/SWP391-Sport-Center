@@ -38,6 +38,87 @@ export function createMemberApi(token, payload) {
   });
 }
 
+export function updateMemberApi(token, memberId, payload) {
+  return request("/api/members/" + encodeURIComponent(memberId), {
+    method: "PUT",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deactivateMemberApi(token, memberId) {
+  return request("/api/members/" + encodeURIComponent(memberId) + "/deactivate", {
+    method: "PATCH",
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function createStaffCoachApi(token, payload) {
+  return request("/api/staff/coaches", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createStaffReceptionistApi(token, payload) {
+  return request("/api/staff/receptionists", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateStaffApi(token, userId, payload) {
+  return request("/api/staff/" + encodeURIComponent(userId), {
+    method: "PUT",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateStaffStatusApi(token, userId, status) {
+  return request("/api/staff/" + encodeURIComponent(userId) + "/status", {
+    method: "PATCH",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+}
+
+export function getCurrentUserApi(token) {
+  return request("/api/users/me", { headers: authenticatedHeaders(token) });
+}
+
+export function getUsersApi(token) {
+  return request("/api/users", { headers: authenticatedHeaders(token) });
+}
+
+export function getUserApi(token, userId) {
+  return request("/api/users/" + encodeURIComponent(userId), {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function getMemberProfilesApi(token) {
+  return request("/api/member-profiles", { headers: authenticatedHeaders(token) });
+}
+
+export function createMemberProfileApi(token, payload) {
+  return request("/api/member-profiles", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateMemberProfileApi(token, profileId, payload) {
+  return request("/api/member-profiles/" + encodeURIComponent(profileId), {
+    method: "PUT",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getConsultationRequestsApi(token, { status = "", page = 0, size = 20 } = {}) {
   const params = new URLSearchParams({ page: String(page), size: String(size) });
   if (status) params.set("status", status);
@@ -53,9 +134,101 @@ export function takeConsultationRequestApi(token, requestId) {
   });
 }
 
+export function getConsultationRequestApi(token, requestId) {
+  return request("/api/consultation-requests/" + encodeURIComponent(requestId), {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function linkConsultationMemberApi(token, requestId, memberId) {
+  return request("/api/consultation-requests/" + encodeURIComponent(requestId) + "/link-member", {
+    method: "PATCH",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ memberId }),
+  });
+}
+
+export function createConsultationMemberApi(token, requestId, payload) {
+  return request("/api/consultation-requests/" + encodeURIComponent(requestId) + "/create-member", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function completeConsultationRequestApi(token, requestId, resolutionNote) {
+  return request("/api/consultation-requests/" + encodeURIComponent(requestId) + "/complete", {
+    method: "PATCH",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ resolutionNote: resolutionNote || null }),
+  });
+}
+
 export function getPublicSportsApi() {
   return request("/api/public/sports", {
     headers: { Accept: "application/json" },
+  });
+}
+
+export function getPublicCoursesBySportApi(sportId) {
+  return request("/api/public/sports/" + encodeURIComponent(sportId) + "/courses", {
+    headers: { Accept: "application/json" },
+  });
+}
+
+export function getPublicCourseApi(courseId) {
+  return request("/api/public/courses/" + encodeURIComponent(courseId), {
+    headers: { Accept: "application/json" },
+  });
+}
+
+export function getCoachesApi(token) {
+  return request("/api/coaches", { headers: authenticatedHeaders(token) });
+}
+
+export function getSportsApi(token) {
+  return request("/api/sports", { headers: authenticatedHeaders(token) });
+}
+
+export function getCoachSportsApi(token, coachId) {
+  return request("/api/coaches/" + encodeURIComponent(coachId) + "/sports", {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function assignCoachSportApi(token, coachId, payload) {
+  return request("/api/coaches/" + encodeURIComponent(coachId) + "/sports", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateCoachSportApi(token, coachId, sportId, payload) {
+  return request("/api/coaches/" + encodeURIComponent(coachId) + "/sports/" + encodeURIComponent(sportId), {
+    method: "PUT",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createSkillAssessmentApi(token, payload) {
+  return request("/api/skill-assessments", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getSkillAssessmentsApi(token) {
+  return request("/api/skill-assessments", { headers: authenticatedHeaders(token) });
+}
+
+export function completeSkillAssessmentApi(token, assessmentId, payload) {
+  return request("/api/skill-assessments/" + encodeURIComponent(assessmentId) + "/complete", {
+    method: "PATCH",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
 }
 

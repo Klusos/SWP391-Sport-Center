@@ -21,7 +21,6 @@ export default function Footer() {
           <div className="col-6 col-md-4">
             <h6>KHÁM PHÁ</h6>
             <p><Link to="/bo-mon">Bộ môn</Link></p>
-            <p><Link to="/lich-tap">Lịch tập</Link></p>
             <p><Link to="/huan-luyen-vien">Huấn luyện viên</Link></p>
           </div>
           <div className="col-6 col-md-4">

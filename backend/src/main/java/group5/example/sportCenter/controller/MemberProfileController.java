@@ -10,6 +10,7 @@ import group5.example.sportCenter.dto.CreateMemberProfileRequest;
 import group5.example.sportCenter.dto.MemberProfileRequest;
 import group5.example.sportCenter.dto.MemberProfileResponse;
 import group5.example.sportCenter.dto.UpdateMemberProfileRequest;
+import java.util.List;
 import group5.example.sportCenter.service.MemberProfileService;
 import jakarta.validation.Valid;
 
@@ -39,6 +40,11 @@ public class MemberProfileController {
             @AuthenticationPrincipal Jwt jwt) {
 
         return memberProfileService.getMyProfile(jwt);
+    }
+
+    @GetMapping
+    public List<MemberProfileResponse> getAllProfiles() {
+        return memberProfileService.getAllProfiles();
     }
 
     @PutMapping("/me")

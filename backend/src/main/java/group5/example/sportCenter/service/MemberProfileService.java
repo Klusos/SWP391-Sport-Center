@@ -16,6 +16,8 @@ import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.MemberProfileRepository;
 import group5.example.sportCenter.repository.UserRepository;
 
+import java.util.List;
+
 @Service
 @Transactional(readOnly = true)
 public class MemberProfileService {
@@ -199,6 +201,12 @@ public class MemberProfileService {
                                                 + memberId));
 
         return toResponse(profile);
+    }
+
+    public List<MemberProfileResponse> getAllProfiles() {
+        return memberProfileRepository.findAll().stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     @Transactional

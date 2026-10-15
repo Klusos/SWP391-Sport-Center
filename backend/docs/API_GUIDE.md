@@ -139,6 +139,8 @@ Sport GET endpoints permit all authenticated roles; mutations are ADMIN-only.
 |---|---|---|---|
 | `GET /api/sports` | None | 200, `SportResponse[]` | Not verified |
 | `GET /api/public/sports` | None; no JWT required | 200, active `PublicSportOptionResponse[]` with only `id` and `name` | H2 integration tested |
+| `GET /api/public/sports/{sportId}/courses` | None; no JWT required | 200, active `CourseResponse[]` for an active sport | Added; H2 integration tested |
+| `GET /api/public/courses/{id}` | None; no JWT required | 200, active `CourseResponse`; inactive course/sport is hidden as 404 | Added; H2 integration tested |
 | `GET /api/sports/{id}` | None | 200, `SportResponse` | Not verified |
 | `POST /api/sports` | `CreateSportRequest` | 201, `SportResponse` | Not verified |
 | `PUT /api/sports/{id}` | `UpdateSportRequest` | 200, `SportResponse` | Not verified |
@@ -278,7 +280,7 @@ All endpoints require a Bearer JWT. The JWT subject identifies the current User;
 | GET | `/api/skill-assessments/my-assignments` | COACH | 200 own assignments |
 | GET | `/api/skill-assessments/me` | MEMBER | 200 own history |
 | GET | `/api/skill-assessments/{id}` | Staff, owning MEMBER, assigned COACH | 200 assessment |
-| PATCH | `/api/skill-assessments/{id}/complete` | Assigned COACH only | 200 COMPLETED assessment |
+| PATCH | `/api/skill-assessments/{id}/complete` | Assigned COACH or temporarily RECEPTIONIST | 200 COMPLETED assessment |
 | PATCH | `/api/skill-assessments/{id}/cancel` | ADMIN, RECEPTIONIST | 200 CANCELLED assessment |
 | GET | `/api/member-sport-levels/me` | MEMBER | 200 own current levels |
 | GET | `/api/member-sport-levels/member/{memberId}` | ADMIN, RECEPTIONIST | 200 specified member's levels |
@@ -299,7 +301,7 @@ Completion normalizes trimmed level names to BEGINNER, INTERMEDIATE, or ADVANCED
 
 Assessment DTO fields: `id`, `memberId`, `sportId`, `assignedCoachId`, `requestedByUserId`, `status`, `assessedLevel`, `notes`, `createdAt`, `assessedAt`, `cancelledAt`, nullable `consultationRequestId`. Level DTO fields: `id`, `memberId`, `sportId`, `level`, `verifiedByCoachId`, `verifiedAt`, `updatedAt`. Timestamps use existing `LocalDateTime` conventions (ISO local date/time, no offset). Assessment lists sort newest creation first, with ID as tie-breaker; level lists sort by sport ID. Empty lists return `[]`; an absent level does not imply BEGINNER and no record is synthesized.
 
-Creation requires an ACTIVE MEMBER, ACTIVE Sport, ACTIVE Coach linked to an ACTIVE COACH account, and an existing CoachSport qualification. Only one PENDING assessment is allowed per member/sport. Completion or cancellation can transition only PENDING; terminal records have no edit endpoint. Completion atomically creates or replaces the current level, including a downgrade. Staff can consult inactive members' recorded levels, but creation requires an active member. Current callers must have an active account; coaches must also have an active linked Coach.
+Creation requires an ACTIVE MEMBER, ACTIVE Sport, ACTIVE Coach linked to an ACTIVE COACH account, and an existing CoachSport qualification. Only one PENDING assessment is allowed per member/sport. Completion or cancellation can transition only PENDING; terminal records have no edit endpoint. Completion atomically creates or replaces the current level, including a downgrade. Staff can consult inactive members' recorded levels, but creation requires an active member. Current callers must have an active account; coaches must also have an active linked Coach. Temporary policy: an authenticated RECEPTIONIST may enter a result for an assessment assigned to an ACTIVE qualified Coach; `MemberSportLevel.verifiedByCoachId` continues to record that assigned Coach because the current schema has no separate assessor field. This is a delegated temporary workflow and should be revised when Coach-led assessment is restored.
 
 Errors: 400 invalid IDs/body/level/notes, 401 absent/invalid JWT identity, 403 wrong role/ownership or inactive caller, 404 missing resource, 409 invalid target state/qualification, duplicate pending, or terminal transition. Status errors follow the existing Spring `ResponseStatusException` convention; clients should use HTTP status rather than assume a particular error-body shape.
 

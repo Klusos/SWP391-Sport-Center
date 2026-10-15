@@ -1,5 +1,6 @@
 ﻿import { useState } from "react";
 import { loginApi } from "../api";
+import { Link } from "react-router-dom";
 
 export default function Login({ onLoginSuccess }) {
   const [email, setEmail] = useState("");
@@ -37,6 +38,7 @@ export default function Login({ onLoginSuccess }) {
     <div className="login-screen">
       <form className="login-card" onSubmit={handleSubmit}>
         <h1>Sign in</h1>
+        <p><Link to="/">← Quay về trang chủ</Link></p>
         <p>For SportCenter staff</p>
 
         <div className="field">

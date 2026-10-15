@@ -4,6 +4,8 @@ import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -62,6 +64,7 @@ class ApiStabilizationIntegrationTest {
     private MockMvc mvc;
     private User admin;
     private User member;
+    private User receptionist;
     private Sport sport;
 
     @BeforeEach
@@ -69,6 +72,7 @@ class ApiStabilizationIntegrationTest {
         mvc = MockMvcBuilders.webAppContextSetup(context).addFilters(security).build();
         admin = user("ADMIN");
         member = user("MEMBER");
+        receptionist = user("RECEPTIONIST");
         sport = sport("Consistency Test Sport " + UUID.randomUUID());
     }
 
@@ -136,6 +140,10 @@ class ApiStabilizationIntegrationTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].sportName").value(sport.getName()));
         mvc.perform(get("/api/member-profiles/{id}", profile.getId()).header("Authorization", adminToken))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.memberName").value(member.getName()));
+        mvc.perform(get("/api/member-profiles").header("Authorization", adminToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[?(@.memberId == " + member.getId() + ")]").exists());
+        mvc.perform(get("/api/member-profiles").header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[?(@.memberId == " + member.getId() + ")]").exists());
         mvc.perform(get("/api/member-profiles/me").header("Authorization", bearer(member)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.goal").value("Build stamina"));
         mvc.perform(get("/api/courses").header("Authorization", adminToken))
@@ -146,6 +154,90 @@ class ApiStabilizationIntegrationTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.coachName").value(coachUser.getName()));
         mvc.perform(get("/api/facilities/{id}", facility.getId()).header("Authorization", adminToken))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.sportName").value(sport.getName()));
+    }
+
+    @Test
+    void receptionistCanReadProfilesButCannotCreateOrEditThem() throws Exception {
+        MemberProfile profile = new MemberProfile();
+        profile.setMember(member);
+        profile.setHeight(new BigDecimal("170.00"));
+        profile.setWeight(new BigDecimal("65.00"));
+        profile.setGoal("Read-only profile");
+        profile = profiles.saveAndFlush(profile);
+
+        String token = bearer(receptionist);
+        mvc.perform(get("/api/member-profiles").header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.memberId == " + member.getId() + " && @.goal == 'Read-only profile')]").exists());
+
+        mvc.perform(get("/api/member-profiles/{id}", profile.getId()).header("Authorization", token))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/member-profiles/member/{memberId}", member.getId()).header("Authorization", token))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/member-profiles").header("Authorization", token)
+                        .contentType("application/json").content("{}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(put("/api/member-profiles/{id}", profile.getId()).header("Authorization", token)
+                        .contentType("application/json")
+                        .content("{\"height\":171,\"weight\":66,\"goal\":\"Changed\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void adminCanManageMemberFieldsAndDeactivateWithoutDeletingHistory() throws Exception {
+        MemberProfile profile = new MemberProfile();
+        profile.setMember(member);
+        profile.setHeight(new BigDecimal("170.00"));
+        profile.setWeight(new BigDecimal("65.00"));
+        profile.setGoal("Initial goal");
+        profile = profiles.saveAndFlush(profile);
+
+        String adminToken = bearer(admin);
+        String receptionistToken = bearer(receptionist);
+        String accountBody = "{\"name\":\"Updated member\",\"email\":\"" + member.getEmail()
+                + "\",\"dateOfBirth\":\"2000-01-01\",\"gender\":\"F\",\"phone\":\"1234567890\"}";
+
+        mvc.perform(put("/api/members/{id}", member.getId()).header("Authorization", receptionistToken)
+                        .contentType("application/json").content(accountBody))
+                .andExpect(status().isForbidden());
+        mvc.perform(patch("/api/members/{id}/deactivate", member.getId()).header("Authorization", receptionistToken))
+                .andExpect(status().isForbidden());
+        mvc.perform(put("/api/member-profiles/{id}", profile.getId()).header("Authorization", receptionistToken)
+                        .contentType("application/json")
+                        .content("{\"height\":171,\"weight\":66,\"goal\":\"Changed\"}"))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(put("/api/members/{id}", member.getId()).header("Authorization", adminToken)
+                        .contentType("application/json").content(accountBody))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.name").value("Updated member"))
+                .andExpect(jsonPath("$.role").value("MEMBER"));
+        mvc.perform(put("/api/member-profiles/{id}", profile.getId()).header("Authorization", adminToken)
+                        .contentType("application/json")
+                        .content("{\"height\":171,\"weight\":66,\"goal\":\"Updated goal\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.goal").value("Updated goal"));
+        mvc.perform(delete("/api/users/{id}", member.getId()).header("Authorization", adminToken))
+                .andExpect(status().isConflict());
+        mvc.perform(patch("/api/members/{id}/deactivate", member.getId()).header("Authorization", adminToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("INACTIVE"));
+
+        User persisted = users.findById(member.getId()).orElseThrow();
+        org.junit.jupiter.api.Assertions.assertEquals("MEMBER", persisted.getRole());
+        org.junit.jupiter.api.Assertions.assertEquals("INACTIVE", persisted.getStatus());
+        org.junit.jupiter.api.Assertions.assertTrue(profiles.existsById(profile.getId()));
+    }
+
+    @Test
+    void adminAndReceptionistCanCreateMemberThroughExistingRegistrationFlow() throws Exception {
+        String json = "{\"name\":\"New member\",\"email\":\"" + UUID.randomUUID()
+                + "@example.test\",\"password\":\"SafeTestPassword123\",\"dateOfBirth\":\"2000-01-01\"}";
+        mvc.perform(post("/api/members").header("Authorization", bearer(admin))
+                        .contentType("application/json").content(json))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.role").value("MEMBER"))
+                .andExpect(jsonPath("$.status").value("ACTIVE"));
+        mvc.perform(post("/api/members").header("Authorization", bearer(receptionist))
+                        .contentType("application/json").content("{\"name\":\"Another member\",\"email\":\""
+                                + UUID.randomUUID() + "@example.test\",\"password\":\"SafeTestPassword123\",\"dateOfBirth\":\"2000-01-01\"}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.role").value("MEMBER"));
     }
 
     @Test

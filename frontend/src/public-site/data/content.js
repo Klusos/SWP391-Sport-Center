@@ -1,7 +1,6 @@
 export const navLinks = [
   { to: '/', label: 'Trang chủ' },
   { to: '/bo-mon', label: 'Bộ môn' },
-  { to: '/lich-tap', label: 'Lịch tập' },
   { to: '/huan-luyen-vien', label: 'Huấn luyện viên' },
   { to: '/co-so-vat-chat', label: 'Cơ sở vật chất' },
   { to: '/tuyen-sinh', label: 'Tuyển sinh' },

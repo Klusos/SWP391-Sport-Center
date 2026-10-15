@@ -95,6 +95,36 @@ class CourseCatalogAndPublicSportIntegrationTest {
         mvc.perform(get("/api/sports")).andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void publicCourseFlowShowsOnlyActiveCoursesForAnActiveSport() throws Exception {
+        Course active = course("ACTIVE", activeSport);
+        Course inactive = course("INACTIVE", activeSport);
+        Sport inactiveSport = sport("INACTIVE", "Inactive " + UUID.randomUUID().toString().substring(0, 8));
+        Course hiddenSportCourse = course("ACTIVE", inactiveSport);
+
+        mvc.perform(get("/api/public/sports/{id}/courses", activeSport.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == " + active.getId() + ")]").exists())
+                .andExpect(jsonPath("$[?(@.id == " + inactive.getId() + ")]").isEmpty());
+        mvc.perform(get("/api/public/courses/{id}", active.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(active.getId()));
+        mvc.perform(get("/api/public/courses/{id}", inactive.getId()))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/public/sports/{id}/courses", inactiveSport.getId()))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/public/courses/{id}", hiddenSportCourse.getId()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void publicCourseRoutesDoNotExposeAdminMutationRoutes() throws Exception {
+        mvc.perform(get("/api/public/sports/{id}/courses", activeSport.getId()))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/courses"))
+                .andExpect(status().isUnauthorized());
+    }
+
     private Sport sport(String status, String name) {
         Sport sport = new Sport();
         sport.setName(name);
@@ -108,6 +138,15 @@ class CourseCatalogAndPublicSportIntegrationTest {
         request.setName("Course " + UUID.randomUUID().toString().substring(0, 8));
         request.setLevel(level);
         return request;
+    }
+
+    private Course course(String status, Sport sport) {
+        Course course = new Course();
+        course.setSport(sport);
+        course.setName("Course " + UUID.randomUUID().toString().substring(0, 8));
+        course.setLevel("BEGINNER");
+        course.setStatus(status);
+        return courses.saveAndFlush(course);
     }
 
     private UpdateCourseRequest updateRequest(String level, String status) {

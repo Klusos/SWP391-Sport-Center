@@ -52,6 +52,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.OPTIONS, "/api/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/public/sports").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/public/sports/*/courses", "/api/public/courses/*").permitAll()
 
                 .requestMatchers(HttpMethod.POST, "/api/consultation-requests").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/consultation-requests/me").hasRole("MEMBER")
@@ -72,10 +73,15 @@ public class SecurityConfig {
                     .hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers("/api/users", "/api/users/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/members").hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers(HttpMethod.PUT, "/api/members/*").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PATCH, "/api/members/*/deactivate").hasRole("ADMIN")
+                .requestMatchers("/api/staff", "/api/staff/**").hasRole("ADMIN")
 
                 .requestMatchers(HttpMethod.POST, "/api/member-profiles/me").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/member-profiles/me").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.PUT, "/api/member-profiles/me").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/member-profiles")
+                    .hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers("/api/member-profiles", "/api/member-profiles/**").hasRole("ADMIN")
 
                 .requestMatchers(HttpMethod.POST, "/api/skill-assessments").hasAnyRole("ADMIN", "RECEPTIONIST")
