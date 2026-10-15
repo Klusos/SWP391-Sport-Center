@@ -1,5 +1,12 @@
 # SportCenter Implementation Status
 
+## SQL schema synchronization review (2026-10-15)
+
+- Static inspection confirmed none of the three existing scripts defined `dbo.class_session`. They are incremental migrations, not a core database bootstrap; twelve of the sixteen JPA entity tables are not created by those scripts. The approved original core-schema source is not in this repository.
+- Added `docs/sql/phase0-class-sessions.sql`. It creates the table from the current JPA mapping when absent and validates an existing table's columns, types, nullability, identity, primary key, and foreign keys without dropping or rebuilding objects. It expects the established `dbo.[class]` and `dbo.facility` tables. No JPA entity or application behavior changed.
+- `docs/sql/README.md` documents prerequisites and an ordered setup sequence. The all-from-empty database process remains incomplete until the original core schema bootstrap is recovered.
+- Verification was static only (`git diff --check` and source/mapping comparison). No SQL script was executed; no SQL Server was accessed. H2 tests were not run because this is a SQL Server DDL/schema-bootstrap change and H2 cannot validate SQL Server catalog behavior or Hibernate SQL Server type compatibility.
+
 ## Consultation workflow and public course discovery (2026-10-15)
 
 - Consultation lifecycle remains `PENDING → IN_PROGRESS → COMPLETED` or `CANCELLED`. `PATCH /api/consultation-requests/{id}/complete` is independent of SkillAssessment, enrollment, and payment; the H2 integration test confirms completion creates no assessment or MemberSportLevel.
