@@ -1,5 +1,4 @@
 export const navLinks = [
-  { to: '/membership-plans', label: 'Membership Plans' },
   { to: '/', label: 'Trang chủ' },
   { to: '/bo-mon', label: 'Bộ môn' },
   { to: '/huan-luyen-vien', label: 'Huấn luyện viên' },
@@ -51,41 +50,6 @@ export const coachSpotlight = [
     stats: [['50+', 'Học viên'], ['30+', 'Khóa học'], ['3+', 'Giải thưởng']],
     achievements: ['Chứng chỉ huấn luyện quốc tế', 'Hơn 5 năm kinh nghiệm', 'Đào tạo nhiều học viên xuất sắc'],
   })),
-]
-
-export const plans = [
-  {
-    tag: 'STANDARD',
-    title: 'Gói Membership',
-    desc: 'Đăng ký Gói Membership ngay hôm nay để nhận ưu đãi giảm 30% học phí tất cả các môn thể thao!',
-    perks: [
-      'Giảm ngay 10% học phí áp dụng cho toàn bộ các khóa học thể thao.',
-      'Tự do sử dụng toàn bộ hệ thống phòng tập và cơ sở vật chất chuẩn 5 sao trên toàn hệ thống.',
-      'Được ưu tiên hỗ trợ tại lễ tân',
-    ],
-  },
-  {
-    tag: 'PREMIUM',
-    title: 'Gói Premium',
-    desc: 'Là giải pháp tập luyện toàn diện, mang đến trải nghiệm thể thao không giới hạn cùng những quyền ưu tiên',
-    perks: [
-      'Giảm ngay 15% học phí cho tất cả các môn thể thao (Gym, Yoga, Bơi lội, Tennis, Cầu lông...).',
-      'Tự do sử dụng toàn bộ hệ thống phòng tập và cơ sở vật chất chuẩn 5 sao trên toàn hệ thống.',
-      'Được đặt 03 buổi huấn luyện 1-1 chuyên sâu và thiết kế lộ trình tập luyện riêng biệt.',
-      'Được coach giao bài tập riêng và được ưu tiên hỗ trợ tại lễ tân',
-    ],
-  },
-  {
-    tag: 'PLATINUM',
-    title: 'Gói Platinum',
-    desc: 'Là giải pháp tập luyện toàn diện, mang đến trải nghiệm thể thao không giới hạn cùng những đặc quyền ưu tiên',
-    perks: [
-      'Giảm ngay 20% học phí cho tất cả các môn thể thao (Gym, Yoga, Bơi lội, Tennis, Cầu lông...).',
-      'Tự do sử dụng toàn bộ hệ thống phòng tập và cơ sở vật chất chuẩn 5 sao trên toàn hệ thống.',
-      'Giảm giá 10% khi đặt các buổi huấn luyện 1-1 chuyên sâu',
-      'Được coach giao bài tập riêng và được ưu tiên hỗ trợ tại lễ tân',
-    ],
-  },
 ]
 
 export const timeline = [
