@@ -1,5 +1,27 @@
 # SportCenter Implementation Status
 
+## SQL schema synchronization review (2026-10-15)
+
+- Static inspection confirmed none of the three existing scripts defined `dbo.class_session`. They are incremental migrations, not a core database bootstrap; twelve of the sixteen JPA entity tables are not created by those scripts. The approved original core-schema source is not in this repository.
+- Added `docs/sql/phase0-class-sessions.sql`. It creates the table from the current JPA mapping when absent and validates an existing table's columns, types, nullability, identity, primary key, and foreign keys without dropping or rebuilding objects. It expects the established `dbo.[class]` and `dbo.facility` tables. No JPA entity or application behavior changed.
+- `docs/sql/README.md` documents prerequisites and an ordered setup sequence. The all-from-empty database process remains incomplete until the original core schema bootstrap is recovered.
+- Verification was static only (`git diff --check` and source/mapping comparison). No SQL script was executed; no SQL Server was accessed. H2 tests were not run because this is a SQL Server DDL/schema-bootstrap change and H2 cannot validate SQL Server catalog behavior or Hibernate SQL Server type compatibility.
+
+## Consultation workflow and public course discovery (2026-10-15)
+
+- Consultation lifecycle remains `PENDING → IN_PROGRESS → COMPLETED` or `CANCELLED`. `PATCH /api/consultation-requests/{id}/complete` is independent of SkillAssessment, enrollment, and payment; the H2 integration test confirms completion creates no assessment or MemberSportLevel.
+- Public discovery now has `GET /api/public/sports`, `GET /api/public/sports/{sportId}/courses`, and `GET /api/public/courses/{id}`. These anonymous GETs return only active catalogue records; existing administrative catalogue endpoints remain authenticated and mutations ADMIN-only.
+- Temporary assessment policy: RECEPTIONIST may complete a PENDING assessment assigned to an ACTIVE qualified Coach. Existing `verifiedByCoachId` records that assigned Coach; the schema has no separate performing-user column. Revisit this temporary attribution when Coach-led assessment is restored.
+- H2 coverage was added for active/inactive public course visibility, completion without assessment, and Receptionist assessment completion. Cached Maven 3.9.16 ordinary `mvn test` completed: **113 tests, 0 failures, 0 errors, 0 skipped; BUILD SUCCESS**. The new tests ran in isolated H2 contexts. Postman and live SQL Server verification have not been performed for these changes.
+- Frontend production build and ESLint for all changed frontend files passed. Vite GET route-fallback checks returned 200 for `/`, `/bo-mon`, `/bo-mon/3`, `/khoa-hoc/7`, `/login`, and `/staff/consultations`; no headless browser was available, so React rendering and real API interactions were not browser-verified.
+
+## Stabilization iteration 3 (2026-10-14)
+
+- Course create/update now require one of the enrollment-compatible levels `BEGINNER`, `INTERMEDIATE`, or `ADVANCED`; input is case-insensitive and trimmed before storage. Course, Sport, CourseOffering, and CourseClass update status values are restricted to the existing states used by the code and normalized to uppercase.
+- `GET /api/public/sports` returns only ACTIVE Sport `id`/`name` options without JWT. The existing `/api/sports` routes remain authenticated; CORS defaults include React/Vite `http://localhost:5173` and CRA `http://localhost:3000` (an explicit `CORS_ALLOWED_ORIGINS` deployment override still applies).
+- Ordinary Maven `clean verify` completed successfully on the H2 profile: **107 tests, 0 failures, 0 errors, 0 skipped**. This includes four new focused H2 integration tests. SQL Server E2E and Postman were not run.
+- Existing database values were not scanned or changed. Course levels that are unsupported remain stored and may cause CourseRegistration to reject registrations; editing such a course now requires choosing a supported level.
+
 This document records source-code status separately from build and Postman verification. Sections dated 2026-10-09 below are historical snapshots; use the latest dated section for current authorization/build status.
 
 ## Status definitions
@@ -246,3 +268,40 @@ Remaining deployment verification: SQL Server 2016+ and adequate DDL/metadata pe
 The Phase 1/Phase 1 migration verification documented above predates these Phase 1.5 changes; the 67-test run below includes the current suite and new Phase 1.5 tests. Offline Maven 3.9.16 test command completed successfully: **67 tests, 0 failures, 0 errors, 0 skipped; BUILD SUCCESS**. Maven compiled 129 main and 5 test source files. This test lifecycle did not package a deployable artifact. New integration tests cover guest/MEMBER submission, lifecycle, role/handler ownership, concurrent take, account create/link rollback, explicit existing-member linking, linked assessment validation, and standalone assessment compatibility. No Postman or SQL Server execution is claimed.
 
 After the successful test run, the request DTO was given a redacted `toString`, and default SQL Server schema/error-response settings were hardened (`ddl-auto=validate`; omit default error message, exception type, and stack trace). The test profile overrides DDL mode with isolated H2 `create-drop`. A rerun was declined at the command-approval step, so these final defensive changes have not been retested; the 67-test result covers the preceding Java/entity/API/lifecycle changes.
+
+## Phase 2: CourseClass Registration (2026-10-13, revised)
+
+| Area | Code | Build and automated tests | Postman |
+|---|---|---|---|
+| MEMBER self-registration, own registration/session reads | Implemented against selected CourseClass; JWT supplies member identity, hierarchy supplies Course and Offering | Full suite passed: 90 tests, 0 failures/errors/skips; latest verification below | Not tested |
+| ADMIN/RECEPTIONIST registration list | Implemented; GET-only role restriction retained | Full suite passed: 85 tests, 0 failures/errors/skips | Not tested |
+| Capacity and concurrency | Per-Class capacity count protected by CourseClass pessimistic lock; member row lock serializes same-member checks; migration adds filtered unique member/class guard | H2 concurrent-last-seat and duplicate attempts passed in full suite | Not tested |
+| SQL Server migration | Idempotent, non-destructive Class-based migration at `docs/sql/phase2-course-registrations.sql`; includes price snapshots; not executed | Static review only; no SQL Server/parser execution claimed | Not applicable |
+| Cancellation | Omitted pending confirmed cancellation policy | Not applicable | Not applicable |
+
+The final registration unit is one CourseClass, not an entire Course or an individual ClassSession. Existing discovery routes are `GET /api/course-offerings/course/{courseId}` and `GET /api/classes/offering/{offeringId}`. CourseOffering must be `OPEN`, which is the state used by the existing offering creation workflow. The deadline is exclusive: registration is rejected at and after `registrationDeadline`. No cancellation, Payment, or Bill behavior was added. The migration was not run; no SQL Server was contacted. The integration suite asserts the datasource is isolated `jdbc:h2:mem:phase1` and not SportCenterDB.
+
+### Current Phase 2 verification
+
+- Previous baseline before the membership-discount enhancements: full Maven suite had **85 tests**.
+- Test profile datasource is `jdbc:h2:mem:phase1;MODE=MSSQLServer;...`; the CourseRegistration integration test asserts the live test connection uses that in-memory URL and does not contain `SportCenterDB`. No production/development SQL Server was contacted.
+- Package build (`package -DskipTests`): **BUILD SUCCESS, exit code 0**; executable JAR created in `target/`.
+- `mvnw.cmd` remains unusable in this PowerShell environment (`Cannot index into a null array`), so the cached Maven 3.9.16 executable was used. A first test run exposed a test-fixture issue: a one-nanosecond deadline offset was truncated by database timestamp precision. The fixture now uses a one-second offset; no production rule was changed to resolve it.
+- CourseClass tests cover selection/hierarchy response, sessions scoped to the enrolled class, exclusive deadline boundary (reject exactly at deadline), active/inactive eligibility, age and verified level checks, capacity/full class, duplicate and same-offering rejection, concurrent last-seat and duplicate attempts, schedule overlap versus touching endpoints, JWT identity/role boundaries, and persistence rollback.
+- The integration test verifies concurrency behavior only under H2 MSSQLServer compatibility mode. SQL Server locking/filter-index enforcement and the migration still require validation against a disposable SQL Server database before deployment. Migration was not run. Postman verification is pending.
+- `git diff --check` completed without whitespace errors; Git reported only existing LF-to-CRLF normalization warnings for two modified text files.
+
+### Phase 2 registration window and membership price snapshots (2026-10-13)
+
+- Registration opens on `CourseOffering.startDate.minusDays(30)`; registration before that date returns 409. The existing registration deadline remains exclusive: requests at or after the deadline return 409. Both comparisons use one captured application-clock instant in `Asia/Ho_Chi_Minh`, matching the project's existing scheduler timezone; no global timezone setting changed.
+- Membership discount is optional and uses only Membership rows with `ACTIVE` status and `startDate <= registrationDate < endDate`. `EXPIRED` rows are not reactivated. If multiple eligible rows exist, the highest valid `courseDiscountPercent` is used without stacking; one valid Membership may discount multiple separate registrations. `autoRenew` is an intent flag only and does not bypass expiration or perform a renewal.
+- Registration stores `originalPrice`, monetary `membershipDiscount`, and `finalPrice` as `DECIMAL(12,2)` snapshots. The server calculates the amount using BigDecimal and HALF_UP rounding, rejects an invalid negative Offering price, and keeps `finalPrice` non-negative. Membership/plan/offering changes do not recalculate stored snapshots, and the request body remains `{"classId":...}` only.
+- Membership validity uses exclusive `endDate`: it is date-valid only when `startDate <= today < endDate`. All ACTIVE rows with `endDate <= today` now transition to EXPIRED, regardless of `autoRenew`. `autoRenew` remains an intent flag only and does not extend dates, create replacement memberships, or charge payment; renewal is pending a payment-backed workflow. The scheduled job and manual ADMIN endpoint share this service behavior. Existing CourseRegistration discounts and stored price snapshots are unchanged by expiration.
+- `docs/sql/phase2-course-registrations.sql` now creates and strictly validates all three non-null DECIMAL(12,2) snapshot columns. It remains a manual migration and was not executed. Existing incompatible tables fail preflight; the script does not automatically rebuild or backfill them.
+- Full isolated H2 test suite passed after the expiration and migration-validation changes: **92 tests, 0 failures, 0 errors, 0 skipped; exit code 0**. Counts: ClassSession 27, ConsultationRequest 19, CourseRegistration 19, Facility 7, SkillAssessment 19, application context 1. CourseRegistration coverage includes the 30-day boundary, deadline, membership validity boundaries, highest discount/no stacking, zero/100/fractional percentages, HALF_UP rounding, unchanged snapshots after plan/price/membership changes, request price tampering, expiration independent of autoRenew, idempotent expiration, authorization, no discount after expiry, and preserved price snapshots.
+- Test database was the isolated `jdbc:h2:mem:phase1;MODE=MSSQLServer` profile; the integration test asserts the connected URL is in-memory H2 and not `SportCenterDB`. No SQL Server connection or migration was performed.
+- The Phase 2 migration now validates same-named supporting indexes against their exact non-unique, unfiltered, enabled, non-hypothetical key structure, including ASC/DESC order and no included columns. An incompatible same-named index fails with a clear error and transaction rollback; it is never dropped or rebuilt. This remains a static source change only, and the migration is still unexecuted.
+- Test database was the existing `jdbc:h2:mem:phase1;MODE=MSSQLServer` profile; the integration test checks that the connected JDBC URL is in-memory H2 and does not contain `SportCenterDB`. No SQL Server connection or migration was performed.
+- Offline Maven 3.9.16 `package -DskipTests`: **exit code 0**. Maven Wrapper remains unusable in this PowerShell environment (`Cannot index into a null array`), so the cached Maven executable was used. Postman tests were not run or claimed.
+- Final verification on this update: cached Maven 3.9.16 `test` and `package` both completed with **BUILD SUCCESS**; each ran 92 tests with 0 failures, 0 errors, 0 skipped. The SQL Server migration remains unexecuted.
+- Remaining deployment checks: verify the updated migration and Hibernate mapping on a disposable SQL Server database, especially DECIMAL precision/scale, lowercase snake_case physical naming and filtered-index/session behavior. SportCenterDB migration remains pending.

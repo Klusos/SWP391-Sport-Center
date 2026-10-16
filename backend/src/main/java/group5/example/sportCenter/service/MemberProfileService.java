@@ -1,6 +1,7 @@
 package group5.example.sportCenter.service;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.server.ResponseStatusException;
@@ -15,7 +16,10 @@ import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.MemberProfileRepository;
 import group5.example.sportCenter.repository.UserRepository;
 
+import java.util.List;
+
 @Service
+@Transactional(readOnly = true)
 public class MemberProfileService {
 
     private final MemberProfileRepository memberProfileRepository;
@@ -29,6 +33,7 @@ public class MemberProfileService {
         this.userRepository = userRepository;
     }
 
+    @Transactional
     public MemberProfileResponse createProfile(
             CreateMemberProfileRequest request) {
 
@@ -62,6 +67,7 @@ public class MemberProfileService {
         return toResponse(savedProfile);
     }
 
+    @Transactional
     public MemberProfileResponse createMyProfile(
             Jwt jwt,
             MemberProfileRequest request) {
@@ -124,6 +130,7 @@ public class MemberProfileService {
         return toResponse(profile);
     }
 
+    @Transactional
     public MemberProfileResponse updateMyProfile(
             Jwt jwt,
             MemberProfileRequest request) {
@@ -196,6 +203,13 @@ public class MemberProfileService {
         return toResponse(profile);
     }
 
+    public List<MemberProfileResponse> getAllProfiles() {
+        return memberProfileRepository.findAll().stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
+    @Transactional
     public MemberProfileResponse updateProfile(
             Integer id,
             UpdateMemberProfileRequest request) {

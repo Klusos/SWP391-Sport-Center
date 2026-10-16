@@ -16,8 +16,13 @@ public interface UserRepository extends JpaRepository<User, Integer> {
     @Query("select u from User u where u.id = :id")
     Optional<User> findByIdForAssessmentUpdate(@Param("id") Integer id);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.id = :id")
+    Optional<User> findByIdForBookingUpdate(@Param("id") Integer id);
+
     Optional<User> findByEmail(String email);
     boolean existsByEmail(String email);
+    boolean existsByEmailAndIdNot(String email, Integer id);
     List<User> findByRole(String role);
     List<User> findByStatus(String status);
 }

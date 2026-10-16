@@ -8,7 +8,7 @@ This guide was generated from the current Spring MVC controllers, DTOs, Security
 - Except for `POST /api/auth/login`, requests require `Authorization: Bearer {{token}}`.
 - Valid role names are `ADMIN`, `RECEPTIONIST`, `MEMBER`, and `COACH`.
 - `GET /api/users/me` permits any authenticated user. `POST /api/members` permits ADMIN and RECEPTIONIST. MemberProfile `/me` routes permit MEMBER; numeric-ID MemberProfile routes permit ADMIN. User management is ADMIN-only.
-- MembershipPlan GET routes permit all authenticated roles; mutations are ADMIN-only. Membership access follows the ownership rules below.
+- Public MembershipPlan catalog exposes ACTIVE plans only. The administrative plan catalog is ADMIN-only; RECEPTIONIST can read the public active catalog but cannot see inactive plans or mutate plans. Membership access follows the ownership rules below.
 - Sport, Course, CourseOffering, Class, Facility, Coach, and CoachSport GET routes permit all authenticated roles; mutation routes are ADMIN-only.
 - CORS allows only explicit origins configured through `CORS_ALLOWED_ORIGINS` (default local React origins: ports 5173 and 3000). Wildcard origins are rejected.
 - The response fields below follow the DTOs. Error response bodies can vary: `GlobalExceptionHandler` formats resource-not-found and `IllegalArgumentException` errors, while Spring Security, validation, and `ResponseStatusException` may use framework error bodies.
@@ -19,7 +19,7 @@ Common status codes: 400 for request validation or invalid role, 401 for missing
 
 - **Verified by user** means the user reported a successful Postman result in this conversation.
 - **Not verified** means no Postman result was available during this review; the endpoint may still be implemented.
-- Maven Wrapper has previously failed before Maven starts (`Cannot index into a null array`); verify the latest ClassSession source with a successful build before integration.
+- The ordinary H2 `mvn clean verify` currently passes 139 tests. SQL Server E2E and Postman verification were not run for PT booking.
 
 ## Authentication
 
@@ -100,6 +100,8 @@ Profile values use height 50-250 cm, weight 10-500 kg, at most two decimal place
 
 Membership ownership is checked in `MembershipService` using the authenticated JWT subject. ADMIN and RECEPTIONIST can act for any MEMBER. MEMBER can create, view, and change auto-renew only for their own Membership. COACH has no Membership access. Membership creation still sets status to `ACTIVE` immediately; no Payment entity or processing service was found, so the endpoint does not verify that payment occurred.
 
+Membership validity uses an exclusive `endDate`: it is date-valid only when `startDate <= today < endDate`. The scheduled expiration job runs daily at midnight in `Asia/Ho_Chi_Minh`; the ADMIN expiration endpoint invokes the same service behavior. Every `ACTIVE` Membership with `today >= endDate` becomes `EXPIRED`, regardless of `autoRenew`. `autoRenew` is currently an intent flag only; it does not extend membership or trigger renewal/payment. Existing CourseRegistration discount and price snapshots are not recalculated when a Membership expires.
+
 | Method and path | Allowed caller | Request body | Success and response | Test status |
 |---|---|---|---|---|
 | `GET /api/memberships` | ADMIN, RECEPTIONIST | None | 200, `MembershipResponse[]` | Not verified after authorization changes |
@@ -109,11 +111,13 @@ Membership ownership is checked in `MembershipService` using the authenticated J
 | `PATCH /api/memberships/{id}/cancel-renewal` | ADMIN, RECEPTIONIST; MEMBER only for own membership | None | 200, `MembershipResponse` | Not verified after authorization changes |
 | `PATCH /api/memberships/{id}/enable-auto-renew` | ADMIN, RECEPTIONIST; MEMBER only for own membership | None | 200, `MembershipResponse` | Not verified after authorization changes |
 | `POST /api/memberships/expire` | ADMIN | None | 200, text message | Not verified after authorization changes |
-| `GET /api/membership-plans` | All authenticated roles | None | 200, `MembershipPlanResponse[]` | Not verified after authorization changes |
-| `GET /api/membership-plans/{id}` | All authenticated roles | None | 200, `MembershipPlanResponse` | Not verified after authorization changes |
+| `GET /api/public/membership-plans` | GUEST, MEMBER, COACH, RECEPTIONIST, ADMIN | None | 200, active `MembershipPlanResponse[]` | Added in this change |
+| `GET /api/membership-plans` | ADMIN | None | 200, all `MembershipPlanResponse[]`, including inactive | Added in this change |
+| `GET /api/membership-plans/{id}` | ADMIN | None | 200, `MembershipPlanResponse` | Added in this change |
 | `POST /api/membership-plans` | ADMIN | `CreateMembershipPlanRequest` | 201, `MembershipPlanResponse` | Not verified |
 | `PUT /api/membership-plans/{id}` | ADMIN | `UpdateMembershipPlanRequest` | 200, `MembershipPlanResponse` | Not verified |
-| `DELETE /api/membership-plans/{id}` | ADMIN | None | 204, empty body | Not verified |
+| `PATCH /api/membership-plans/{id}/status` | ADMIN | `{"status":"ACTIVE"}` or `{"status":"INACTIVE"}` | 200, `MembershipPlanResponse` | Added in this change |
+| `DELETE /api/membership-plans/{id}` | ADMIN | None | 204, empty body; legacy route now deactivates rather than physically deleting | Added in this change |
 
 Membership creation body:
 
@@ -125,7 +129,7 @@ Membership creation body:
 
 MembershipPlan bodies contain `name`, `description`, `price`, `durationMonths`, `courseDiscountPercent`, `personalTrainingDiscountPercent`, `allowPersonalTrainingPlan`, and `allowOneOnOneCoaching`; update also contains `status`.
 
-`MembershipPlanResponse` adds `id` and `status` to those plan fields.
+Plan creation/update requires a nonblank name (max 100), nonnegative price with at most two decimal places, positive duration in months, and discounts from 0 through 100 with at most two decimal places. Status may only be `ACTIVE` or `INACTIVE`. `MembershipPlanResponse` adds `id` and `status` to the plan fields. ADMIN plans are the only plans returned by the administrative catalog; the public catalog returns active plans only. The legacy DELETE route performs soft deactivation to preserve existing Membership references; use the status PATCH route for explicit activation/deactivation. This change does not create or alter Membership records or implement purchase/payment behavior.
 
 Sample: `{"id":2,"name":"Standard","description":"Monthly membership","price":50,"durationMonths":1,"courseDiscountPercent":0,"personalTrainingDiscountPercent":0,"allowPersonalTrainingPlan":false,"allowOneOnOneCoaching":false,"status":"ACTIVE"}`.
 
@@ -136,6 +140,9 @@ Sport GET endpoints permit all authenticated roles; mutations are ADMIN-only.
 | Method and path | Request body | Success and response | Test status |
 |---|---|---|---|
 | `GET /api/sports` | None | 200, `SportResponse[]` | Not verified |
+| `GET /api/public/sports` | None; no JWT required | 200, active `PublicSportOptionResponse[]` with only `id` and `name` | H2 integration tested |
+| `GET /api/public/sports/{sportId}/courses` | None; no JWT required | 200, active `CourseResponse[]` for an active sport | Added; H2 integration tested |
+| `GET /api/public/courses/{id}` | None; no JWT required | 200, active `CourseResponse`; inactive course/sport is hidden as 404 | Added; H2 integration tested |
 | `GET /api/sports/{id}` | None | 200, `SportResponse` | Not verified |
 | `POST /api/sports` | `CreateSportRequest` | 201, `SportResponse` | Not verified |
 | `PUT /api/sports/{id}` | `UpdateSportRequest` | 200, `SportResponse` | Not verified |
@@ -143,6 +150,8 @@ Sport GET endpoints permit all authenticated roles; mutations are ADMIN-only.
 Create body: `{"name":"Swimming","description":"Pool training"}`. Update body also includes `status`.
 
 Response sample: `{"id":3,"name":"Swimming","description":"Pool training","status":"ACTIVE"}`.
+
+The public sport-options response is intentionally limited to `[{"id":3,"name":"Swimming"}]`; inactive Sports are omitted. The existing `/api/sports` routes remain authenticated and administrative fields are not returned by the public route.
 
 ## Coach and CoachSport
 
@@ -175,16 +184,18 @@ GET endpoints permit all authenticated roles; mutations are ADMIN-only.
 | `PUT /api/courses/{id}` | `UpdateCourseRequest` | 200, `CourseResponse` | Not verified |
 | `GET /api/course-offerings` | None | 200, `CourseOfferingResponse[]` | Not verified |
 | `GET /api/course-offerings/{id}` | None | 200, `CourseOfferingResponse` | Not verified |
-| `GET /api/course-offerings/course/{courseId}` | None | 200, `CourseOfferingResponse[]` | Not verified |
+| `GET /api/course-offerings/course/{courseId}` | All authenticated roles | 200, `CourseOfferingResponse[]` | Not verified |
 | `POST /api/course-offerings` | `CreateCourseOfferingRequest` | 201, `CourseOfferingResponse` | Not verified |
 | `PUT /api/course-offerings/{id}` | `UpdateCourseOfferingRequest` | 200, `CourseOfferingResponse` | Not verified |
-| `GET /api/classes` | None | 200, `CourseClassResponse[]` | Not verified |
-| `GET /api/classes/{id}` | None | 200, `CourseClassResponse` | Not verified |
-| `GET /api/classes/offering/{offeringId}` | None | 200, `CourseClassResponse[]` | Not verified |
+| `GET /api/classes` | All authenticated roles | 200, `CourseClassResponse[]` | Not verified |
+| `GET /api/classes/{id}` | All authenticated roles | 200, `CourseClassResponse` | Not verified |
+| `GET /api/classes/offering/{offeringId}` | All authenticated roles | 200, `CourseClassResponse[]` | Not verified |
 | `POST /api/classes` | `CreateClassRequest` | 201, `CourseClassResponse` | Not verified |
 | `PUT /api/classes/{id}` | `UpdateClassRequest` | 200, `CourseClassResponse` | Not verified |
 
 Course create body: `sportId`, `name`, `description`, `targetAgeMin`, `targetAgeMax`, `level`, `learningOutcome`; update also has `status` and does not accept `sportId`.
+
+Course `level` is required on create and update and accepts `BEGINNER`, `INTERMEDIATE`, or `ADVANCED` (case-insensitive; surrounding whitespace is trimmed), matching CourseRegistration eligibility. Course and Sport update statuses accept `ACTIVE` or `INACTIVE`; CourseOffering accepts `OPEN` or `CLOSED`; CourseClass accepts `ACTIVE` or `INACTIVE`. Values are normalized to uppercase; unsupported values return 400. Existing records are not rewritten by this validation.
 
 CourseOffering create body: `courseId`, `name`, `price`, `plannedSessions`, `sessionDuration`, `startDate`, `endDate`, `registrationDeadline`, `cancellationDeadline`; update has the same fields plus `status` and no `courseId`.
 
@@ -194,7 +205,7 @@ Response samples: `CourseResponse` contains `id`, `sportId`, `sportName`, `name`
 
 Representative course response: `{"id":10,"sportId":3,"sportName":"Swimming","name":"Beginner Swim","description":"Basics","targetAgeMin":10,"targetAgeMax":18,"level":"Beginner","learningOutcome":"Swim safely","status":"ACTIVE"}`.
 
-Offering sample: `{"id":11,"courseId":10,"courseName":"Beginner Swim","sportId":3,"sportName":"Swimming","name":"October Swim","price":100,"plannedSessions":8,"sessionDuration":60,"startDate":"2026-10-20","endDate":"2026-11-20","registrationDeadline":"2026-10-18T23:59:00","cancellationDeadline":"2026-10-19T23:59:00","status":"ACTIVE"}`. Class sample: `{"id":6,"courseOfferingId":11,"courseOfferingName":"October Swim","courseId":10,"courseName":"Beginner Swim","sportId":3,"sportName":"Swimming","coachId":4,"coachName":"Example Coach","name":"Morning group","capacity":12,"status":"ACTIVE"}`.
+Offering sample: `{"id":11,"courseId":10,"courseName":"Beginner Swim","sportId":3,"sportName":"Swimming","name":"October Swim","price":100,"plannedSessions":8,"sessionDuration":60,"startDate":"2026-10-20","endDate":"2026-11-20","registrationDeadline":"2026-10-18T23:59:00","cancellationDeadline":"2026-10-19T23:59:00","status":"OPEN"}`. Class sample: `{"id":6,"courseOfferingId":11,"courseOfferingName":"October Swim","courseId":10,"courseName":"Beginner Swim","sportId":3,"sportName":"Swimming","coachId":4,"coachName":"Example Coach","name":"Morning group","capacity":12,"status":"ACTIVE"}`.
 
 ## Facility
 
@@ -243,9 +254,9 @@ Lifecycle transitions: `SCHEDULED` can become `COMPLETED` only when current time
 
 Facility status updates accept `ACTIVE` or `INACTIVE`, case-insensitively, and persist uppercase. Null, blank, or any other value returns 400. Switching from ACTIVE to INACTIVE returns 409 if a `SCHEDULED` ClassSession using the Facility has `endTime` later than the current time, covering sessions in progress and upcoming sessions. A session ending exactly now, an ended session, or a `COMPLETED`/`CANCELLED` session does not block deactivation. No session is deleted, cancelled, or edited by this operation. When a Facility is supplied on ClassSession POST or changed on PUT, its current status must be ACTIVE; missing Facility IDs return 404 and any other status returns 409. On PUT, a future `SCHEDULED` session cannot retain the same Facility if that Facility has become unavailable; choose another ACTIVE Facility or cancel the session. GET continues returning historical sessions and their Facility data regardless of Facility status. `FacilityService` creates facilities as ACTIVE.
 
-## Modules not found in current controllers
+## Module coverage note
 
-No course-registration, payment, or public account-registration endpoint was found. `/api/classes` manages CourseClass records; `/api/class-sessions` manages individual meetings.
+The Phase 2 CourseClass registration API is documented below. `/api/classes` manages CourseClass records; `/api/class-sessions` manages individual meetings.
 
 ## OpenAPI / Swagger
 
@@ -256,8 +267,8 @@ No Swagger/OpenAPI dependency or configuration was found in `pom.xml` or source.
 - Membership creation currently persists `ACTIVE` without a Payment record or processing step. This existing behavior was preserved; confirm the purchase/payment contract before production use.
 - The application requires `DB_USERNAME`, `DB_PASSWORD`, and `JWT_SECRET`; configure them in the runtime environment. If the previously tracked SQL Server password was real or shared, rotate it because Git history may retain it.
 - Configure `CORS_ALLOWED_ORIGINS` for deployed frontend origins. Defaults permit only `http://localhost:5173` and `http://localhost:3000`.
-- Build and all role/ownership behavior changed in this review are awaiting verification. Test with ADMIN, RECEPTIONIST, MEMBER, and COACH tokens before merge.
-- No course-registration, payment, or public account-registration controller was found.
+- The CourseClass registration revision passed the full isolated-H2 Maven suite and package build; Postman verification remains pending. SQL Server locking and migration behavior still need validation in a disposable database before deployment.
+- CourseClass registration is implemented under `/api/course-registrations`; no Payment/Bill or public account-registration endpoint is exposed.
 
 
 ## Phase 1: Skill assessments and current sport levels (2026-10-12)
@@ -271,7 +282,7 @@ All endpoints require a Bearer JWT. The JWT subject identifies the current User;
 | GET | `/api/skill-assessments/my-assignments` | COACH | 200 own assignments |
 | GET | `/api/skill-assessments/me` | MEMBER | 200 own history |
 | GET | `/api/skill-assessments/{id}` | Staff, owning MEMBER, assigned COACH | 200 assessment |
-| PATCH | `/api/skill-assessments/{id}/complete` | Assigned COACH only | 200 COMPLETED assessment |
+| PATCH | `/api/skill-assessments/{id}/complete` | Assigned COACH or temporarily RECEPTIONIST | 200 COMPLETED assessment |
 | PATCH | `/api/skill-assessments/{id}/cancel` | ADMIN, RECEPTIONIST | 200 CANCELLED assessment |
 | GET | `/api/member-sport-levels/me` | MEMBER | 200 own current levels |
 | GET | `/api/member-sport-levels/member/{memberId}` | ADMIN, RECEPTIONIST | 200 specified member's levels |
@@ -292,7 +303,7 @@ Completion normalizes trimmed level names to BEGINNER, INTERMEDIATE, or ADVANCED
 
 Assessment DTO fields: `id`, `memberId`, `sportId`, `assignedCoachId`, `requestedByUserId`, `status`, `assessedLevel`, `notes`, `createdAt`, `assessedAt`, `cancelledAt`, nullable `consultationRequestId`. Level DTO fields: `id`, `memberId`, `sportId`, `level`, `verifiedByCoachId`, `verifiedAt`, `updatedAt`. Timestamps use existing `LocalDateTime` conventions (ISO local date/time, no offset). Assessment lists sort newest creation first, with ID as tie-breaker; level lists sort by sport ID. Empty lists return `[]`; an absent level does not imply BEGINNER and no record is synthesized.
 
-Creation requires an ACTIVE MEMBER, ACTIVE Sport, ACTIVE Coach linked to an ACTIVE COACH account, and an existing CoachSport qualification. Only one PENDING assessment is allowed per member/sport. Completion or cancellation can transition only PENDING; terminal records have no edit endpoint. Completion atomically creates or replaces the current level, including a downgrade. Staff can consult inactive members' recorded levels, but creation requires an active member. Current callers must have an active account; coaches must also have an active linked Coach.
+Creation requires an ACTIVE MEMBER, ACTIVE Sport, ACTIVE Coach linked to an ACTIVE COACH account, and an existing CoachSport qualification. Only one PENDING assessment is allowed per member/sport. Completion or cancellation can transition only PENDING; terminal records have no edit endpoint. Completion atomically creates or replaces the current level, including a downgrade. Staff can consult inactive members' recorded levels, but creation requires an active member. Current callers must have an active account; coaches must also have an active linked Coach. Temporary policy: an authenticated RECEPTIONIST may enter a result for an assessment assigned to an ACTIVE qualified Coach; `MemberSportLevel.verifiedByCoachId` continues to record that assigned Coach because the current schema has no separate assessor field. This is a delegated temporary workflow and should be revised when Coach-led assessment is restored.
 
 Errors: 400 invalid IDs/body/level/notes, 401 absent/invalid JWT identity, 403 wrong role/ownership or inactive caller, 404 missing resource, 409 invalid target state/qualification, duplicate pending, or terminal transition. Status errors follow the existing Spring `ResponseStatusException` convention; clients should use HTTP status rather than assume a particular error-body shape.
 
@@ -390,3 +401,38 @@ Existing tables must have exactly the mapped columns, built-in types, lengths, d
 Required indexes must be unique, enabled, non-hypothetical, have IGNORE_DUP_KEY OFF, and have exactly member_id then sport_id as key columns. The level index must be unfiltered; the assessment index must filter exactly status = 'PENDING'. Included columns do not change uniqueness and are allowed. Different extra unique indexes are rejected to prevent accidentally forbidding terminal assessment history. Incorrect/disabled/untrusted objects are reported rather than dropped, rebuilt, renamed, or silently accepted. Duplicate member/sport levels or PENDING assessments fail index creation and roll back all changes. Compatible reruns retain existing tables/indexes and skip the completed Unicode upgrade.
 
 No live SQL Server inspection or migration execution was performed. Database permissions/metadata visibility, deployed schema/naming, actual SQL Server CHECK/filter canonicalization, migration/rerun behavior, JDBC SET options, and locking remain SQL Server verification items. Strict fingerprint validation can reject safe alternative definitions; it intentionally requires review rather than weakening constraints automatically.
+
+## Phase 2: CourseClass registration (2026-10-13)
+
+The registration unit is one `CourseClass` selected from the existing hierarchy Course → CourseOffering → CourseClass. Existing browse APIs are `GET /api/course-offerings/course/{courseId}` and `GET /api/classes/offering/{offeringId}`; they expose offerings/classes for selection, so no duplicate discovery endpoints were added.
+
+| Method | Endpoint | Allowed role | Behavior |
+|---|---|---|---|
+| POST | `/api/course-registrations` | MEMBER | Registers the JWT-authenticated member for the selected CourseClass; returns 201 and CONFIRMED registration |
+| GET | `/api/course-registrations/me` | MEMBER | Lists the caller's CONFIRMED registrations, identifying Course, CourseOffering, and CourseClass |
+| GET | `/api/course-registrations/me/class-sessions` | MEMBER | Lists sessions only for CourseClasses in the caller's CONFIRMED registrations |
+| GET | `/api/course-registrations` | ADMIN, RECEPTIONIST | Lists registrations with Course, CourseOffering, and CourseClass identity |
+
+POST body: `{"classId":6}`. Client-supplied member/course/offering identifiers and prices are not part of the request contract; member identity comes from JWT, Course/Offering are derived from the selected CourseClass, and all prices are calculated by the server. Response fields also include the immutable enrollment-time snapshots `originalPrice`, `membershipDiscount` (money amount), and `finalPrice`. Example: `{"id":31,"memberId":4,"courseId":10,"courseName":"Beginner Swim","courseOfferingId":11,"courseOfferingName":"October Swim","classId":6,"className":"Morning group","sportId":3,"requiredLevel":"BEGINNER","status":"CONFIRMED","registeredAt":"2026-10-13T10:30:00","cancelledAt":null,"originalPrice":100.00,"membershipDiscount":10.00,"finalPrice":90.00}`.
+
+Registration requires an ACTIVE MEMBER, ACTIVE CourseClass, OPEN CourseOffering (the existing offering service uses `OPEN` as its registration-accepting status), ACTIVE Course and Sport, and a date on or after `CourseOffering.startDate.minusDays(30)`. It also requires the existing deadline to remain strictly in the future; registration is rejected at the exact deadline. Membership is optional. At registration time, an ACTIVE Membership whose exclusive validity interval contains the registration date (`startDate <= registrationDate < endDate`) contributes the highest eligible `courseDiscountPercent`; discounts do not stack, and one eligible Membership may discount multiple separate CourseRegistrations during its validity period. The monetary discount is rounded to two decimals using HALF_UP, and original price, discount amount, and final price are stored as snapshots. Membership expiry, renewal, Plan discount changes, and Offering price changes do not recalculate existing snapshots. Course age restrictions are enforced; if an age range exists, missing date of birth or an out-of-range age returns 409. A member without a coach-verified sport level may register only for BEGINNER; a verified level must meet or exceed the course requirement. Unsupported course-level values are rejected. Capacity is checked per CourseClass. A member may have only one CONFIRMED registration per CourseOffering, even if the offering contains multiple classes. Duplicate class/another class in the same offering, full capacity, insufficient level, age ineligibility, schedule conflicts, inactive resources, and closed/expired offerings return 409; missing CourseClass returns 404; malformed request returns 400; missing JWT/wrong role returns 401/403.
+
+Registration is transactional. It locks the member row first to serialize that member's offering and schedule checks, then locks the selected CourseClass row before counting seats. The SQL Server migration adds a filtered unique index on CONFIRMED `(member_id, class_id)` as a database guard for duplicate class registration. Schedule checks compare only future/ongoing SCHEDULED sessions in the selected class and the member's already registered classes; intervals that touch only at an endpoint do not conflict. Viewing sessions is scoped to registered classes, not every class in the same Course or Offering.
+
+Cancellation remains omitted because no CourseRegistration cancellation policy has been confirmed. Registration is independent of ConsultationRequest and SkillAssessment; no Payment or Bill operation is performed. The migration at `docs/sql/phase2-course-registrations.sql` is an idempotent manual SQL Server script including the three DECIMAL(12,2) snapshots and has not been executed. Automated tests/build and Postman status are recorded in `docs/IMPLEMENTATION_STATUS.md`.
+
+
+# Personal Training (PT 1-on-1)
+
+PT bookings are individual 90-minute sessions priced at 500,000 VND. The default is `app.pt.session-base-price=500000`; set `APP_PT_SESSION_BASE_PRICE` in the environment to override it. A MEMBER with an ACTIVE membership valid on the requested session date (`startDate <= date < endDate`) may book when the membership plan has `allowOneOnOneCoaching=true`. The plan's `personalTrainingDiscountPercent` is applied to the PT price. `MembershipPlan.price` is unrelated.
+
+All endpoints require authentication. MEMBER-only endpoints derive the member ID from the JWT subject. COACH assignments derive the coach from the authenticated account. Eligible coach lookup requires a proposed sport and exact start time; it returns active qualified coaches with no PT or non-cancelled group-class overlap at that time. Center operating hours and booking increments are not modeled, so clients may submit any future start time that meets the fixed 90-minute duration and conflict checks.
+
+- `GET /api/pt-bookings/eligible-coaches?sportId={id}&startTime=2026-10-20T10:00:00` - MEMBER; quote and coaches available for the requested slot.
+- `POST /api/pt-bookings` - MEMBER; JSON `{ "coachId": 12, "sportId": 3, "startTime": "2026-10-20T10:00:00" }`; returns 201 and a `PENDING_PAYMENT` booking with server-calculated `endTime`, prices, 90-minute duration, member, coach, sport, and `paymentExpiresAt` (15 minutes after creation).
+- `GET /api/pt-bookings/me` - MEMBER's own history.
+- `GET /api/pt-bookings/assigned` - authenticated COACH's bookings.
+
+`PENDING_PAYMENT` reserves the interval for 15 minutes. A scheduled worker transitions due bookings to terminal `EXPIRED`; overlap checks also ignore pending rows whose `paymentExpiresAt` has passed, so a delayed worker does not hold the slot. `EXPIRED` and `CANCELLED` bookings do not block new bookings. Expiry and payment confirmation must lock the same booking row and recheck status/deadline in the transaction. Flow 3 may transition a booking from `PENDING_PAYMENT` to `CONFIRMED` only after verified payment and only before `paymentExpiresAt`; booking creation is not proof of payment. A late successful payment must leave the booking `EXPIRED`; Flow 3 must record/route the payment exception without confirming the booking. The refund or other remedy for late payment is intentionally unspecified. Payment amounts should reconcile to stored `originalPrice`, `discount`, and `finalPrice`. No cancellation endpoint is exposed.
+
+SQL Server setup: after the core schema and `class_session` table, review and manually run `docs/sql/phase2-personal-training-bookings.sql` in `SportCenterDB`. The migration is not executed by the application and Hibernate remains `ddl-auto=validate`.

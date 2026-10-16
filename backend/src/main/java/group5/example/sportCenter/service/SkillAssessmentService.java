@@ -63,6 +63,11 @@ public class SkillAssessmentService {
                 throw error(HttpStatus.CONFLICT,
                         "Consultation must be IN_PROGRESS and linked to the same member and sport");
             }
+            if ("RECEPTIONIST".equalsIgnoreCase(actor.getRole())
+                    && (consultation.getHandledBy() == null
+                    || !actor.getId().equals(consultation.getHandledBy().getId()))) {
+                throw error(HttpStatus.FORBIDDEN, "Only the assigned receptionist can create an assessment from this consultation");
+            }
         }
         if (assessments.existsByMemberIdAndSportIdAndStatus(member.getId(), sport.getId(), AssessmentStatus.PENDING))
             throw error(HttpStatus.CONFLICT, "A PENDING assessment already exists for this member and sport");
@@ -101,13 +106,17 @@ public class SkillAssessmentService {
 
     @Transactional
     public SkillAssessmentResponse complete(Integer id, CompleteSkillAssessmentRequest request, Jwt jwt) {
-        Coach coach = access.coach(access.actor(jwt));
+        User actor = access.actor(jwt);
+        Coach coach = access.coach(actor);
         SportLevel level;
         try { level = SportLevel.valueOf(request.assessedLevel().trim().toUpperCase(Locale.ROOT)); }
         catch (RuntimeException e) { throw error(HttpStatus.BAD_REQUEST, "assessedLevel must be BEGINNER, INTERMEDIATE, or ADVANCED"); }
         validateNotes(request.notes());
         SkillAssessment assessment = locked(id);
-        if (!coach.getId().equals(assessment.getAssignedCoach().getId())) throw error(HttpStatus.FORBIDDEN, "Only the assigned coach can complete this assessment");
+        Coach verifyingCoach = assessment.getAssignedCoach();
+        if (!coach.getId().equals(verifyingCoach.getId())) {
+            throw error(HttpStatus.FORBIDDEN, "Only the assigned coach can complete this assessment");
+        }
         pending(assessment);
         LocalDateTime now = LocalDateTime.now();
         assessment.setStatus(AssessmentStatus.COMPLETED); assessment.setAssessedLevel(level); assessment.setAssessedAt(now);
@@ -116,7 +125,7 @@ public class SkillAssessmentService {
         MemberSportLevel current = levels.findByMemberIdAndSportId(assessment.getMember().getId(), assessment.getSport().getId())
                 .orElseGet(MemberSportLevel::new);
         current.setMember(assessment.getMember()); current.setSport(assessment.getSport()); current.setLevel(level);
-        current.setVerifiedByCoach(coach); current.setVerifiedAt(now); current.setUpdatedAt(now);
+        current.setVerifiedByCoach(verifyingCoach); current.setVerifiedAt(now); current.setUpdatedAt(now);
         // Both writes belong to this transaction. Never catch a failure and commit partial state.
         levels.saveAndFlush(current);
         return response(assessments.saveAndFlush(assessment));

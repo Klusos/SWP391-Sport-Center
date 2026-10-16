@@ -14,10 +14,16 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import group5.example.sportCenter.repository.UserRepository;
+import group5.example.sportCenter.exception.ApiErrorResponseWriter;
+import group5.example.sportCenter.security.ApiSecurityErrorHandler;
+import group5.example.sportCenter.security.CurrentAccountAuthorizationFilter;
 
 @Configuration
 public class SecurityConfig {
@@ -25,7 +31,10 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
-            Converter<Jwt, AbstractAuthenticationToken> jwtAuthenticationConverter
+            Converter<Jwt, AbstractAuthenticationToken> jwtAuthenticationConverter,
+            UserRepository userRepository,
+            ApiErrorResponseWriter apiErrors,
+            ApiSecurityErrorHandler securityErrors
     ) throws Exception {
 
         http
@@ -34,10 +43,17 @@ public class SecurityConfig {
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
+            .exceptionHandling(exceptions -> exceptions
+                .authenticationEntryPoint(securityErrors)
+                .accessDeniedHandler(securityErrors)
+            )
             .authorizeHttpRequests(auth -> auth
                 .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/api/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/public/sports").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/public/sports/*/courses", "/api/public/courses/*").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/public/membership-plans").permitAll()
 
                 .requestMatchers(HttpMethod.POST, "/api/consultation-requests").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/consultation-requests/me").hasRole("MEMBER")
@@ -58,10 +74,15 @@ public class SecurityConfig {
                     .hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers("/api/users", "/api/users/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/members").hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers(HttpMethod.PUT, "/api/members/*").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PATCH, "/api/members/*/deactivate").hasRole("ADMIN")
+                .requestMatchers("/api/staff", "/api/staff/**").hasRole("ADMIN")
 
                 .requestMatchers(HttpMethod.POST, "/api/member-profiles/me").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/member-profiles/me").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.PUT, "/api/member-profiles/me").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/member-profiles")
+                    .hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers("/api/member-profiles", "/api/member-profiles/**").hasRole("ADMIN")
 
                 .requestMatchers(HttpMethod.POST, "/api/skill-assessments").hasAnyRole("ADMIN", "RECEPTIONIST")
@@ -76,7 +97,18 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/member-sport-levels/member/*").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers("/api/member-sport-levels", "/api/member-sport-levels/**").denyAll()
 
-                .requestMatchers(HttpMethod.GET, "/api/membership-plans", "/api/membership-plans/**").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/course-registrations").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/course-registrations/me",
+                        "/api/course-registrations/me/class-sessions").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/course-registrations").hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers("/api/course-registrations", "/api/course-registrations/**").denyAll()
+
+                .requestMatchers(HttpMethod.GET, "/api/pt-bookings/eligible-coaches", "/api/pt-bookings/me").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.POST, "/api/pt-bookings").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/pt-bookings/assigned").hasRole("COACH")
+                .requestMatchers("/api/pt-bookings", "/api/pt-bookings/**").denyAll()
+
+                .requestMatchers(HttpMethod.GET, "/api/membership-plans", "/api/membership-plans/**").hasRole("ADMIN")
                 .requestMatchers("/api/membership-plans", "/api/membership-plans/**").hasRole("ADMIN")
 
                 .requestMatchers(HttpMethod.POST, "/api/memberships/expire").hasRole("ADMIN")
@@ -113,8 +145,14 @@ public class SecurityConfig {
                 .anyRequest().authenticated()
             )
             .oauth2ResourceServer(oauth2 -> oauth2
+                .authenticationEntryPoint(securityErrors)
+                .accessDeniedHandler(securityErrors)
                 .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter))
             );
+
+        http.addFilterAfter(
+                new CurrentAccountAuthorizationFilter(userRepository, apiErrors),
+                BearerTokenAuthenticationFilter.class);
 
         return http.build();
     }

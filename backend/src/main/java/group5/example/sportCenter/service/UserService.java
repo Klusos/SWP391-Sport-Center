@@ -120,6 +120,11 @@ public class UserService {
                         new ResourceNotFoundException(
                                 "User not found with id: " + id));
 
+        if ("MEMBER".equalsIgnoreCase(user.getRole()) && !"MEMBER".equals(role)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Changing a MEMBER account to a staff or ADMIN role is not supported");
+        }
+
         if (!user.getEmail().equals(request.getEmail())
                 && userRepository.existsByEmail(request.getEmail())) {
 
@@ -163,6 +168,11 @@ public class UserService {
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "User not found with id: " + id));
+
+        if ("MEMBER".equalsIgnoreCase(user.getRole())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "MEMBER accounts are retained for business history; deactivate the account instead");
+        }
 
         userRepository.delete(user);
     }

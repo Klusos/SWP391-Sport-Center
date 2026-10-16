@@ -161,6 +161,8 @@ class ConsultationRequestIntegrationTest {
         assertEquals("COMPLETED", completed.status());
         assertEquals("Consultation completed; course registration remains separate", completed.resolutionNote());
         assertNotNull(completed.completedAt());
+        assertEquals(0, assessments.count(), "Completing the consultation conversation must not require or create an assessment");
+        assertEquals(0, levels.count(), "Consultation completion must not create a member sport level");
     }
 
     @Test

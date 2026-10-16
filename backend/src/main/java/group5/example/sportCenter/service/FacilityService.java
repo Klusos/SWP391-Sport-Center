@@ -8,6 +8,7 @@ import java.util.Locale;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import group5.example.sportCenter.dto.CreateFacilityRequest;
@@ -21,6 +22,7 @@ import group5.example.sportCenter.repository.ClassSessionRepository;
 import group5.example.sportCenter.repository.SportRepository;
 
 @Service
+@Transactional(readOnly = true)
 public class FacilityService {
 
     private final FacilityRepository facilityRepository;
@@ -48,6 +50,7 @@ public class FacilityService {
         this.clock = clock;
     }
 
+    @Transactional
     public FacilityResponse createFacility(
             CreateFacilityRequest request) {
 
@@ -105,6 +108,7 @@ public class FacilityService {
                 .toList();
     }
 
+    @Transactional
     public FacilityResponse updateFacility(
             Integer id,
             UpdateFacilityRequest request) {

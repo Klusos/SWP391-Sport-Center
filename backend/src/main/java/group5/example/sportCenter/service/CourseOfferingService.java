@@ -3,8 +3,8 @@ package group5.example.sportCenter.service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import group5.example.sportCenter.dto.CourseOfferingResponse;
 import group5.example.sportCenter.dto.CreateCourseOfferingRequest;
@@ -16,6 +16,7 @@ import group5.example.sportCenter.repository.CourseOfferingRepository;
 import group5.example.sportCenter.repository.CourseRepository;
 
 @Service
+@Transactional(readOnly = true)
 public class CourseOfferingService {
 
     private final CourseOfferingRepository courseOfferingRepository;
@@ -29,6 +30,7 @@ public class CourseOfferingService {
         this.courseRepository = courseRepository;
     }
 
+    @Transactional
     public CourseOfferingResponse createOffering(
             CreateCourseOfferingRequest request) {
 
@@ -105,6 +107,7 @@ public class CourseOfferingService {
                 .toList();
     }
 
+    @Transactional
     public CourseOfferingResponse updateOffering(
             Integer id,
             UpdateCourseOfferingRequest request) {
@@ -134,7 +137,7 @@ public class CourseOfferingService {
                 request.getRegistrationDeadline());
         offering.setCancellationDeadline(
                 request.getCancellationDeadline());
-        offering.setStatus(request.getStatus());
+        offering.setStatus(CatalogValues.status(request.getStatus(), "CourseOffering", List.of("OPEN", "CLOSED")));
 
         return toResponse(
                 courseOfferingRepository.save(offering));

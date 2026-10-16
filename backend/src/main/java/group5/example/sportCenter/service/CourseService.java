@@ -1,8 +1,8 @@
 package group5.example.sportCenter.service;
 
 import java.util.List;
-
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import group5.example.sportCenter.dto.CourseResponse;
 import group5.example.sportCenter.dto.CreateCourseRequest;
@@ -14,6 +14,7 @@ import group5.example.sportCenter.repository.CourseRepository;
 import group5.example.sportCenter.repository.SportRepository;
 
 @Service
+@Transactional(readOnly = true)
 public class CourseService {
 
     private final CourseRepository courseRepository;
@@ -27,6 +28,7 @@ public class CourseService {
         this.sportRepository = sportRepository;
     }
 
+    @Transactional
     public CourseResponse createCourse(
             CreateCourseRequest request) {
 
@@ -52,7 +54,7 @@ public class CourseService {
         course.setDescription(request.getDescription());
         course.setTargetAgeMin(request.getTargetAgeMin());
         course.setTargetAgeMax(request.getTargetAgeMax());
-        course.setLevel(request.getLevel());
+        course.setLevel(CatalogValues.courseLevel(request.getLevel()));
         course.setLearningOutcome(request.getLearningOutcome());
         course.setStatus("ACTIVE");
 
@@ -91,6 +93,27 @@ public class CourseService {
                 .toList();
     }
 
+    public List<CourseResponse> getPublicCoursesBySport(Integer sportId) {
+        Sport sport = sportRepository.findById(sportId)
+                .orElseThrow(() -> new ResourceNotFoundException("Sport not found with id: " + sportId));
+        if (!"ACTIVE".equalsIgnoreCase(sport.getStatus())) {
+            throw new ResourceNotFoundException("Sport not found with id: " + sportId);
+        }
+        return courseRepository.findBySportIdAndStatus(sportId, "ACTIVE")
+                .stream().map(this::toResponse).toList();
+    }
+
+    public CourseResponse getPublicCourseById(Integer id) {
+        Course course = courseRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Course not found with id: " + id));
+        if (!"ACTIVE".equalsIgnoreCase(course.getStatus())
+                || !"ACTIVE".equalsIgnoreCase(course.getSport().getStatus())) {
+            throw new ResourceNotFoundException("Course not found with id: " + id);
+        }
+        return toResponse(course);
+    }
+
+    @Transactional
     public CourseResponse updateCourse(
             Integer id,
             UpdateCourseRequest request) {
@@ -108,9 +131,9 @@ public class CourseService {
         course.setDescription(request.getDescription());
         course.setTargetAgeMin(request.getTargetAgeMin());
         course.setTargetAgeMax(request.getTargetAgeMax());
-        course.setLevel(request.getLevel());
+        course.setLevel(CatalogValues.courseLevel(request.getLevel()));
         course.setLearningOutcome(request.getLearningOutcome());
-        course.setStatus(request.getStatus());
+        course.setStatus(CatalogValues.status(request.getStatus(), "Course", List.of("ACTIVE", "INACTIVE")));
 
         return toResponse(courseRepository.save(course));
     }

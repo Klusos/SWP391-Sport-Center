@@ -1,8 +1,8 @@
 package group5.example.sportCenter.service;
 
 import java.util.List;
-
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import group5.example.sportCenter.dto.CourseClassResponse;
 import group5.example.sportCenter.dto.CreateClassRequest;
@@ -17,6 +17,7 @@ import group5.example.sportCenter.repository.CourseClassRepository;
 import group5.example.sportCenter.repository.CourseOfferingRepository;
 
 @Service
+@Transactional(readOnly = true)
 public class CourseClassService {
 
     private final CourseClassRepository courseClassRepository;
@@ -36,6 +37,7 @@ public class CourseClassService {
         this.coachSportRepository = coachSportRepository;
     }
 
+    @Transactional
     public CourseClassResponse createClass(
             CreateClassRequest request) {
 
@@ -128,6 +130,7 @@ public class CourseClassService {
                 .toList();
     }
 
+        @Transactional
         public CourseClassResponse updateClass(
             Integer id,
             UpdateClassRequest request) {
@@ -169,7 +172,7 @@ public class CourseClassService {
         courseClass.setCoach(coach);
         courseClass.setName(request.getName());
         courseClass.setCapacity(request.getCapacity());
-        courseClass.setStatus(request.getStatus());
+        courseClass.setStatus(CatalogValues.status(request.getStatus(), "CourseClass", List.of("ACTIVE", "INACTIVE")));
 
         return toResponse(
                 courseClassRepository.save(courseClass));

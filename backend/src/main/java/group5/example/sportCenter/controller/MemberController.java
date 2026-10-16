@@ -2,6 +2,7 @@ package group5.example.sportCenter.controller;
 
 import group5.example.sportCenter.dto.CreateMemberRequest;
 import group5.example.sportCenter.dto.MemberResponse;
+import group5.example.sportCenter.dto.UpdateMemberRequest;
 import group5.example.sportCenter.service.MemberRegistrationService;
 
 import jakarta.validation.Valid;
@@ -28,5 +29,17 @@ public class MemberController {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .body(response);
+    }
+
+    @PutMapping("/{id}")
+    public MemberResponse updateMember(
+            @PathVariable Integer id,
+            @Valid @RequestBody UpdateMemberRequest request) {
+        return memberRegistrationService.updateMember(id, request);
+    }
+
+    @PatchMapping("/{id}/deactivate")
+    public MemberResponse deactivateMember(@PathVariable Integer id) {
+        return memberRegistrationService.deactivateMember(id);
     }
 }
