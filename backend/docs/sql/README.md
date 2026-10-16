@@ -9,11 +9,14 @@ For a fresh laptop database, use this order:
 3. Run `phase1-member-sport-level-assessment.sql`; it requires `dbo.users`, `dbo.sport`, and `dbo.coach`.
 4. Run `phase1_5-consultation-requests.sql`; it requires Phase 1's `dbo.skill_assessment` as well as `dbo.users` and `dbo.sport`.
 5. Run `phase2-course-registrations.sql`; it requires `dbo.users` and `dbo.[class]`.
-6. Start the application after all required schema scripts complete; `spring.jpa.hibernate.ddl-auto=validate` will then verify mappings.
+6. Run the read-only `phase2-personal-training-bookings-preflight.sql` and review column metadata, all CHECK constraints, foreign keys, and indexes. Then run `phase2-personal-training-bookings.sql`; it requires `dbo.users`, `dbo.coach`, `dbo.sport`, and `dbo.class_session`.
+7. Start the application after all required schema scripts complete; `spring.jpa.hibernate.ddl-auto=validate` will then verify mappings.
 
 Run each SQL file as its own standalone batch while writers are stopped, after a backup, in `SportCenterDB` (or review the database-name guard for an explicitly renamed deployment). None of these scripts was executed as part of the repository change. A matching ClassSession table with incompatible metadata fails closed; the script never drops, rebuilds, or silently accepts it.
 
-The three pre-existing migrations create `member_sport_level`, `skill_assessment`, `consultation_request`, and `course_registration`. They do not create the original core tables listed above. Therefore this repository alone still cannot provision a truly empty SportCenter database; the approved core schema source must be recovered and included or supplied by the deployment owner.
+The PT preflight is read-only. If an older PT table has pending rows without `payment_expires_at`, the migration stops by default. After reviewing those rows and confirming that their timezone-less `created_at` values represent Asia/Ho_Chi_Minh wall time, an operator may explicitly set `@ConfirmLegacyPendingDeadlineBackfill` to `1` in the migration. The script then assigns `created_at + 15 minutes` only to pending rows whose deadline is null, and stops if a timestamp is null or cannot fit the added 15 minutes. Do not set the flag if the timestamp basis is uncertain; resolve those rows manually using a reviewed data plan first. Unexpected status-related CHECK constraints also stop the migration for manual inspection.
+
+The incremental migrations create `member_sport_level`, `skill_assessment`, `consultation_request`, `course_registration`, and `personal_training_booking`. They do not create the original core tables listed above. Therefore this repository alone still cannot provision a truly empty SportCenter database; the approved core schema source must be recovered and included or supplied by the deployment owner.
 
 ## Local development/demo seed
 

@@ -25,6 +25,12 @@ public class GlobalExceptionHandler {
 
     private static final String INTERNAL_ERROR = "An unexpected error occurred";
 
+    @ExceptionHandler(PtPricingConfigurationException.class)
+    public ResponseEntity<ApiErrorResponse> handlePtPricingConfiguration(PtPricingConfigurationException exception) {
+        return response(HttpStatus.SERVICE_UNAVAILABLE, safeMessage(exception.getReason(),
+                "PT session pricing is not configured; contact the center administrator"));
+    }
+
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiErrorResponse> handleResourceNotFound(ResourceNotFoundException exception) {
         return response(HttpStatus.NOT_FOUND, exception.getMessage());

@@ -6,6 +6,8 @@ import RegisterMember from "./pages/RegisterMember";
 import MemberList from "./pages/MemberList";
 import StaffManagement from "./pages/StaffManagement";
 import MembershipPlans from "./pages/MembershipPlans";
+import PtBooking from "./pages/PtBooking";
+import CoachPtSessions from "./pages/CoachPtSessions";
 import PublicLayout from "./public-site/PublicLayout";
 import Admission from "./public-site/pages/Admission";
 import Coaches from "./public-site/pages/Coaches";
@@ -20,8 +22,28 @@ const STAFF_ROLES = ["ADMIN", "RECEPTIONIST"];
 function StaffRoute({ auth }) {
   const location = useLocation();
   if (!auth) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
-  if (!STAFF_ROLES.includes(auth.role)) return <Navigate to="/" replace />;
+  if (!STAFF_ROLES.includes(auth.role)) return <Navigate to={auth.role === "COACH" ? "/coach/pt-sessions" : "/member/pt-booking"} replace />;
   return <Outlet />;
+}
+
+function MemberRoute({ auth }) {
+  const location = useLocation();
+  if (!auth) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (auth.role !== "MEMBER") return <Navigate to={auth.role === "COACH" ? "/coach/pt-sessions" : "/staff/register-member"} replace />;
+  return <Outlet />;
+}
+
+function CoachRoute({ auth }) {
+  const location = useLocation();
+  if (!auth) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (auth.role !== "COACH") return <Navigate to={auth.role === "MEMBER" ? "/member/pt-booking" : "/staff/register-member"} replace />;
+  return <Outlet />;
+}
+
+function homeForRole(role) {
+  if (role === "MEMBER") return "/member/pt-booking";
+  if (role === "COACH") return "/coach/pt-sessions";
+  return "/staff/register-member";
 }
 
 function AdminRoute({ auth }) {
@@ -36,7 +58,7 @@ export default function App() {
 
   function handleLogin(data) {
     setAuth(data);
-    navigate("/staff/register-member", { replace: true });
+    navigate(homeForRole(data.role), { replace: true });
   }
 
   function handleLogout() {
@@ -67,7 +89,7 @@ export default function App() {
         <Route path="/tuyen-sinh" element={<Admission />} />
         <Route path="/membership-plans" element={<Navigate to="/tuyen-sinh" replace />} />
       </Route>
-      <Route path="/login" element={auth ? <Navigate to="/staff/register-member" replace /> : <Login onLoginSuccess={handleLogin} />} />
+      <Route path="/login" element={auth ? <Navigate to={homeForRole(auth.role)} replace /> : <Login onLoginSuccess={handleLogin} />} />
       <Route element={<StaffRoute auth={auth} />}>
         <Route path="/staff" element={<Navigate to="/staff/register-member" replace />} />
         <Route path="/staff/register-member" element={<RegisterMember {...staffProps} />} />
@@ -77,6 +99,12 @@ export default function App() {
         <Route element={<AdminRoute auth={auth} />}>
           <Route path="/staff/staff" element={<StaffManagement {...staffProps} />} />
         </Route>
+      </Route>
+      <Route element={<MemberRoute auth={auth} />}>
+        <Route path="/member/pt-booking" element={<PtBooking token={auth?.accessToken} onLogout={handleLogout} />} />
+      </Route>
+      <Route element={<CoachRoute auth={auth} />}>
+        <Route path="/coach/pt-sessions" element={<CoachPtSessions token={auth?.accessToken} onLogout={handleLogout} />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

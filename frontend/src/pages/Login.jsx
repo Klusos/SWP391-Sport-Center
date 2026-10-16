@@ -18,8 +18,8 @@ export default function Login({ onLoginSuccess }) {
         setError("The login response did not include an access token. Please contact support.");
         return;
       }
-      if (data.role !== "RECEPTIONIST" && data.role !== "ADMIN") {
-        setError("This account cannot register members.");
+      if (!["ADMIN", "RECEPTIONIST", "MEMBER", "COACH"].includes(data.role)) {
+        setError("This account does not have a supported application role.");
         return;
       }
       onLoginSuccess(data);
@@ -39,7 +39,7 @@ export default function Login({ onLoginSuccess }) {
       <form className="login-card" onSubmit={handleSubmit}>
         <h1>Sign in</h1>
         <p><Link to="/">← Quay về trang chủ</Link></p>
-        <p>For SportCenter staff</p>
+        <p>For SportCenter members and staff</p>
 
         <div className="field">
           <label htmlFor="loginEmail">Email</label>

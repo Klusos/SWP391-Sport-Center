@@ -170,6 +170,29 @@ export function getPublicSportsApi() {
   });
 }
 
+export function getPtEligibleCoachesApi(token, sportId, startTime) {
+  const params = new URLSearchParams({ sportId: String(sportId), startTime });
+  return request("/api/pt-bookings/eligible-coaches?" + params.toString(), {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function createPtBookingApi(token, payload) {
+  return request("/api/pt-bookings", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getMyPtBookingsApi(token) {
+  return request("/api/pt-bookings/me", { headers: authenticatedHeaders(token) });
+}
+
+export function getAssignedPtBookingsApi(token) {
+  return request("/api/pt-bookings/assigned", { headers: authenticatedHeaders(token) });
+}
+
 export function getPublicCoursesBySportApi(sportId) {
   return request("/api/public/sports/" + encodeURIComponent(sportId) + "/courses", {
     headers: { Accept: "application/json" },

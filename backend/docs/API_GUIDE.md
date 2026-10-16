@@ -19,7 +19,7 @@ Common status codes: 400 for request validation or invalid role, 401 for missing
 
 - **Verified by user** means the user reported a successful Postman result in this conversation.
 - **Not verified** means no Postman result was available during this review; the endpoint may still be implemented.
-- Maven Wrapper has previously failed before Maven starts (`Cannot index into a null array`); verify the latest ClassSession source with a successful build before integration.
+- The ordinary H2 `mvn clean verify` currently passes 139 tests. SQL Server E2E and Postman verification were not run for PT booking.
 
 ## Authentication
 
@@ -420,3 +420,19 @@ Registration requires an ACTIVE MEMBER, ACTIVE CourseClass, OPEN CourseOffering 
 Registration is transactional. It locks the member row first to serialize that member's offering and schedule checks, then locks the selected CourseClass row before counting seats. The SQL Server migration adds a filtered unique index on CONFIRMED `(member_id, class_id)` as a database guard for duplicate class registration. Schedule checks compare only future/ongoing SCHEDULED sessions in the selected class and the member's already registered classes; intervals that touch only at an endpoint do not conflict. Viewing sessions is scoped to registered classes, not every class in the same Course or Offering.
 
 Cancellation remains omitted because no CourseRegistration cancellation policy has been confirmed. Registration is independent of ConsultationRequest and SkillAssessment; no Payment or Bill operation is performed. The migration at `docs/sql/phase2-course-registrations.sql` is an idempotent manual SQL Server script including the three DECIMAL(12,2) snapshots and has not been executed. Automated tests/build and Postman status are recorded in `docs/IMPLEMENTATION_STATUS.md`.
+
+
+# Personal Training (PT 1-on-1)
+
+PT bookings are individual 90-minute sessions priced at 500,000 VND. The default is `app.pt.session-base-price=500000`; set `APP_PT_SESSION_BASE_PRICE` in the environment to override it. A MEMBER with an ACTIVE membership valid on the requested session date (`startDate <= date < endDate`) may book when the membership plan has `allowOneOnOneCoaching=true`. The plan's `personalTrainingDiscountPercent` is applied to the PT price. `MembershipPlan.price` is unrelated.
+
+All endpoints require authentication. MEMBER-only endpoints derive the member ID from the JWT subject. COACH assignments derive the coach from the authenticated account. Eligible coach lookup requires a proposed sport and exact start time; it returns active qualified coaches with no PT or non-cancelled group-class overlap at that time. Center operating hours and booking increments are not modeled, so clients may submit any future start time that meets the fixed 90-minute duration and conflict checks.
+
+- `GET /api/pt-bookings/eligible-coaches?sportId={id}&startTime=2026-10-20T10:00:00` - MEMBER; quote and coaches available for the requested slot.
+- `POST /api/pt-bookings` - MEMBER; JSON `{ "coachId": 12, "sportId": 3, "startTime": "2026-10-20T10:00:00" }`; returns 201 and a `PENDING_PAYMENT` booking with server-calculated `endTime`, prices, 90-minute duration, member, coach, sport, and `paymentExpiresAt` (15 minutes after creation).
+- `GET /api/pt-bookings/me` - MEMBER's own history.
+- `GET /api/pt-bookings/assigned` - authenticated COACH's bookings.
+
+`PENDING_PAYMENT` reserves the interval for 15 minutes. A scheduled worker transitions due bookings to terminal `EXPIRED`; overlap checks also ignore pending rows whose `paymentExpiresAt` has passed, so a delayed worker does not hold the slot. `EXPIRED` and `CANCELLED` bookings do not block new bookings. Expiry and payment confirmation must lock the same booking row and recheck status/deadline in the transaction. Flow 3 may transition a booking from `PENDING_PAYMENT` to `CONFIRMED` only after verified payment and only before `paymentExpiresAt`; booking creation is not proof of payment. A late successful payment must leave the booking `EXPIRED`; Flow 3 must record/route the payment exception without confirming the booking. The refund or other remedy for late payment is intentionally unspecified. Payment amounts should reconcile to stored `originalPrice`, `discount`, and `finalPrice`. No cancellation endpoint is exposed.
+
+SQL Server setup: after the core schema and `class_session` table, review and manually run `docs/sql/phase2-personal-training-bookings.sql` in `SportCenterDB`. The migration is not executed by the application and Hibernate remains `ddl-auto=validate`.

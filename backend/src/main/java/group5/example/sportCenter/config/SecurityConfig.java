@@ -103,6 +103,11 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/course-registrations").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers("/api/course-registrations", "/api/course-registrations/**").denyAll()
 
+                .requestMatchers(HttpMethod.GET, "/api/pt-bookings/eligible-coaches", "/api/pt-bookings/me").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.POST, "/api/pt-bookings").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/pt-bookings/assigned").hasRole("COACH")
+                .requestMatchers("/api/pt-bookings", "/api/pt-bookings/**").denyAll()
+
                 .requestMatchers(HttpMethod.GET, "/api/membership-plans", "/api/membership-plans/**").hasRole("ADMIN")
                 .requestMatchers("/api/membership-plans", "/api/membership-plans/**").hasRole("ADMIN")
 
