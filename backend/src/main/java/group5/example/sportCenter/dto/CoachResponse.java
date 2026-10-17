@@ -14,4 +14,6 @@ public class CoachResponse {
     private String userName;
     private String email;
     private String status;
+    private String imageUrl;
+    private String bio;
 }

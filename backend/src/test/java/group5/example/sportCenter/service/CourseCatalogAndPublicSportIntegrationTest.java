@@ -21,7 +21,9 @@ import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.server.ResponseStatusException;
 
 import group5.example.sportCenter.dto.CreateCourseRequest;
+import group5.example.sportCenter.dto.CreateSportRequest;
 import group5.example.sportCenter.dto.UpdateCourseRequest;
+import group5.example.sportCenter.dto.UpdateSportRequest;
 import group5.example.sportCenter.entity.Course;
 import group5.example.sportCenter.entity.Sport;
 import group5.example.sportCenter.repository.CourseRepository;
@@ -31,6 +33,7 @@ import group5.example.sportCenter.repository.SportRepository;
 @ActiveProfiles("phase1")
 class CourseCatalogAndPublicSportIntegrationTest {
     @Autowired private CourseService coursesService;
+    @Autowired private SportService sportService;
     @Autowired private CourseRepository courses;
     @Autowired private SportRepository sports;
     @Autowired private WebApplicationContext context;
@@ -88,6 +91,29 @@ class CourseCatalogAndPublicSportIntegrationTest {
                 .andExpect(jsonPath("$[?(@.name == '" + inactiveName + "')]").isEmpty())
                 .andExpect(jsonPath("$[?(@.id == " + activeSport.getId() + ")].status").doesNotExist())
                 .andExpect(jsonPath("$[?(@.id == " + activeSport.getId() + ")].description").doesNotExist());
+    }
+
+    @Test
+    void vietnameseSportTextSurvivesCreateReadUpdateAndPublicJsonResponse() throws Exception {
+        CreateSportRequest create = new CreateSportRequest();
+        create.setName("C\u1edd Vua " + UUID.randomUUID().toString().substring(0, 6));
+        create.setDescription("R\u00e8n luy\u1ec7n t\u01b0 duy, chi\u1ebfn thu\u1eadt v\u00e0 kh\u1ea3 n\u0103ng t\u1eadp trung.");
+        var created = sportService.createSport(create);
+
+        String updatedName = "C\u1edd Vua Tr\u1ebb " + UUID.randomUUID().toString().substring(0, 6);
+        String updatedDescription = "Ph\u00f9 h\u1ee3p v\u1edbi ng\u01b0\u1eddi m\u1edbi b\u1eaft \u0111\u1ea7u; ch\u00fa tr\u1ecdng n\u1ec1n t\u1ea3ng v\u00e0 th\u1ef1c h\u00e0nh.";
+        UpdateSportRequest update = new UpdateSportRequest();
+        update.setName(updatedName);
+        update.setDescription(updatedDescription);
+        update.setStatus("ACTIVE");
+        sportService.updateSport(created.getId(), update);
+
+        Sport stored = sports.findById(created.getId()).orElseThrow();
+        assertEquals(updatedName, stored.getName());
+        assertEquals(updatedDescription, stored.getDescription());
+        mvc.perform(get("/api/public/sports"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == " + created.getId() + ")].name").value(updatedName));
     }
 
     @Test

@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.Nationalized;
 
 @Entity
 @Table(name = "Course")
@@ -20,10 +21,12 @@ public class Course {
     @JoinColumn(name = "sportId", nullable = false)
     private Sport sport;
 
+    @Nationalized
     @Column(nullable = false, length = 255)
     private String name;
 
-    @Column(columnDefinition = "TEXT")
+    @Nationalized
+    @Column(columnDefinition = "nvarchar(max)")
     private String description;
 
     private Integer targetAgeMin;
@@ -33,7 +36,8 @@ public class Course {
     @Column(length = 50)
     private String level;
 
-    @Column(columnDefinition = "TEXT")
+    @Nationalized
+    @Column(columnDefinition = "nvarchar(max)")
     private String learningOutcome;
 
     @Column(nullable = false, length = 50)

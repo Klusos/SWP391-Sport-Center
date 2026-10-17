@@ -5,9 +5,13 @@ import Login from "./pages/Login";
 import RegisterMember from "./pages/RegisterMember";
 import MemberList from "./pages/MemberList";
 import StaffManagement from "./pages/StaffManagement";
+import SportManagement from "./pages/SportManagement";
+import FacilityManagement from "./pages/FacilityManagement";
 import MembershipPlans from "./pages/MembershipPlans";
 import PtBooking from "./pages/PtBooking";
 import CoachPtSessions from "./pages/CoachPtSessions";
+import CoachSkillAssessments from "./pages/CoachSkillAssessments";
+import MemberLevelsAssessments from "./pages/MemberLevelsAssessments";
 import PublicLayout from "./public-site/PublicLayout";
 import Admission from "./public-site/pages/Admission";
 import Coaches from "./public-site/pages/Coaches";
@@ -55,15 +59,19 @@ function AdminRoute({ auth }) {
 export default function App() {
   const [auth, setAuth] = useState(null);
   const navigate = useNavigate();
+  const location = useLocation();
 
   function handleLogin(data) {
     setAuth(data);
-    navigate(homeForRole(data.role), { replace: true });
+    const returnTo = location.state?.from;
+    const memberCourseReturn = data.role === "MEMBER" && typeof returnTo === "string"
+      && /^\/khoa-hoc\/[1-9]\d*$/.test(returnTo);
+    navigate(memberCourseReturn ? returnTo : homeForRole(data.role), { replace: true });
   }
 
-  function handleLogout() {
+  function handleLogout(returnTo) {
     setAuth(null);
-    navigate("/login", { replace: true });
+    navigate("/login", { replace: true, state: returnTo ? { from: returnTo } : undefined });
   }
 
   const staffProps = {
@@ -74,7 +82,21 @@ export default function App() {
       ? "/staff/consultations"
       : page === "members" ? "/staff/members"
         : page === "staff" ? "/staff/staff"
+        : page === "sports" ? "/staff/sports"
+        : page === "facilities" ? "/staff/facilities"
         : page === "membership-plans" ? "/staff/membership-plans" : "/staff/register-member"),
+  };
+  const coachProps = {
+    token: auth?.accessToken,
+    role: auth?.role,
+    onLogout: handleLogout,
+    onNavigate: (page) => navigate(page === "coach-assessments" ? "/coach/skill-assessments" : "/coach/pt-sessions"),
+  };
+  const memberProps = {
+    token: auth?.accessToken,
+    role: auth?.role,
+    onLogout: handleLogout,
+    onNavigate: (page) => navigate(page === "member-levels" ? "/member/levels-assessments" : "/member/pt-booking"),
   };
 
   return (
@@ -83,7 +105,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/bo-mon" element={<Disciplines />} />
         <Route path="/bo-mon/:sportId" element={<Disciplines />} />
-        <Route path="/khoa-hoc/:courseId" element={<CourseDetail />} />
+        <Route path="/khoa-hoc/:courseId" element={<CourseDetail auth={auth} onLogout={handleLogout} />} />
         <Route path="/huan-luyen-vien" element={<Coaches />} />
         <Route path="/co-so-vat-chat" element={<Facilities />} />
         <Route path="/tuyen-sinh" element={<Admission />} />
@@ -98,13 +120,17 @@ export default function App() {
         <Route path="/staff/members" element={<MemberList {...staffProps} />} />
         <Route element={<AdminRoute auth={auth} />}>
           <Route path="/staff/staff" element={<StaffManagement {...staffProps} />} />
+          <Route path="/staff/sports" element={<SportManagement {...staffProps} />} />
+          <Route path="/staff/facilities" element={<FacilityManagement {...staffProps} />} />
         </Route>
       </Route>
       <Route element={<MemberRoute auth={auth} />}>
         <Route path="/member/pt-booking" element={<PtBooking token={auth?.accessToken} onLogout={handleLogout} />} />
+        <Route path="/member/levels-assessments" element={<MemberLevelsAssessments {...memberProps} />} />
       </Route>
       <Route element={<CoachRoute auth={auth} />}>
-        <Route path="/coach/pt-sessions" element={<CoachPtSessions token={auth?.accessToken} onLogout={handleLogout} />} />
+        <Route path="/coach/pt-sessions" element={<CoachPtSessions {...coachProps} />} />
+        <Route path="/coach/skill-assessments" element={<CoachSkillAssessments {...coachProps} />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

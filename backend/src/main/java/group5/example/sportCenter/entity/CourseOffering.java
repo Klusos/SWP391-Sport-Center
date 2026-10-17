@@ -8,6 +8,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.Nationalized;
 
 @Entity
 @Table(name = "CourseOffering")
@@ -24,6 +25,7 @@ public class CourseOffering {
     @JoinColumn(name = "courseId", nullable = false)
     private Course course;
 
+    @Nationalized
     @Column(nullable = false, length = 150)
     private String name;
 

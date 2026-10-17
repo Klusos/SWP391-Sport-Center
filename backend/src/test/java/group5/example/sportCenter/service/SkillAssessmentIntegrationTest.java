@@ -130,6 +130,42 @@ class SkillAssessmentIntegrationTest {
         assertEquals(1, levelService.forMember(member.getId(), jwt(receptionist)).size());
         assertError(403, () -> levelService.forMember(member.getId(), jwt(otherMember)));
     }
+    @Test void assignedCoachReadsOnlyAssessmentScopedMemberSportLevel() throws Exception {
+        Integer id = assign().id();
+        mvc.perform(get("/api/skill-assessments/" + id + "/member-level").header("Authorization", bearer(coachUser)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.assessmentId").value(id))
+                .andExpect(jsonPath("$.memberId").value(member.getId())).andExpect(jsonPath("$.sportId").value(sport.getId()))
+                .andExpect(jsonPath("$.level").value("BEGINNER")).andExpect(jsonPath("$.defaultLevel").value(true))
+                .andExpect(jsonPath("$.verifiedByCoachId").doesNotExist());
+        assertEquals(0, levels.count(), "Reading the default level must not create a MemberSportLevel row");
+
+        Sport unrelatedSport = new Sport(); unrelatedSport.setName("Swimming"); unrelatedSport.setStatus("ACTIVE");
+        unrelatedSport = sports.saveAndFlush(unrelatedSport);
+        MemberSportLevel unrelated = new MemberSportLevel(); unrelated.setMember(member); unrelated.setSport(unrelatedSport);
+        unrelated.setLevel(SportLevel.ADVANCED); unrelated.setUpdatedAt(java.time.LocalDateTime.now());
+        levels.saveAndFlush(unrelated);
+        mvc.perform(get("/api/skill-assessments/" + id + "/member-level").header("Authorization", bearer(coachUser)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.sportId").value(sport.getId()))
+                .andExpect(jsonPath("$.level").value("BEGINNER")).andExpect(jsonPath("$.defaultLevel").value(true));
+        MemberSportLevel relevant = new MemberSportLevel(); relevant.setMember(member); relevant.setSport(sport);
+        relevant.setLevel(SportLevel.ADVANCED); relevant.setVerifiedByCoach(coach);
+        relevant.setVerifiedAt(java.time.LocalDateTime.now()); relevant.setUpdatedAt(java.time.LocalDateTime.now());
+        levels.saveAndFlush(relevant);
+        mvc.perform(get("/api/skill-assessments/" + id + "/member-level").header("Authorization", bearer(coachUser)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.level").value("ADVANCED"))
+                .andExpect(jsonPath("$.defaultLevel").value(false)).andExpect(jsonPath("$.verifiedByCoachId").value(coach.getId()));
+        mvc.perform(get("/api/skill-assessments/" + id + "/member-level").header("Authorization", bearer(otherCoachUser)))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/skill-assessments/" + Integer.MAX_VALUE + "/member-level").header("Authorization", bearer(coachUser)))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/member-sport-levels/member/" + member.getId()).header("Authorization", bearer(coachUser)))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/member-sport-levels/member/" + member.getId()).header("Authorization", bearer(admin)))
+                .andExpect(status().isOk());
+        mvc.perform(get("/api/member-sport-levels/member/" + member.getId()).header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk());
+    }
+
     @Test void invalidLevelAndNotesAre400WithoutMutation() {
         Integer id = assign().id();
         for (String invalid : new String[] {null, "", "  ", "EXPERT"}) assertError(400, () -> complete(id, invalid));
@@ -194,6 +230,14 @@ class SkillAssessmentIntegrationTest {
 
     @Test void httpRoleMatrixUsesRealJwtAndOwnershipChecks() throws Exception {
         Integer id = assign().id();
+        mvc.perform(get("/api/skill-assessments/me").header("Authorization", bearer(member)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(id));
+        mvc.perform(get("/api/skill-assessments/me").header("Authorization", bearer(otherMember)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+        mvc.perform(get("/api/member-sport-levels/me").header("Authorization", bearer(member)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+        assertEquals(0, levels.count(), "Member read APIs must not create default level records");
         for (User u : List.of(admin, receptionist, member, coachUser)) {
             boolean staff = u == admin || u == receptionist;
             mvc.perform(get("/api/skill-assessments").header("Authorization", bearer(u))).andExpect(status().is(staff ? 200 : 403));

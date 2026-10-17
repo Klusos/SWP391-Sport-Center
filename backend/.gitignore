@@ -2,3 +2,6 @@
 .env
 .env.*
 !.env.example
+
+# Locally uploaded Sport, Coach, and Facility images.
+/uploads/

@@ -59,6 +59,7 @@ public class StaffManagementService {
         account.setPhone(request.getPhone());
         account.setGender(request.getGender());
         account.setPassword(request.getPassword());
+        account.setBio(request.getBio());
         CoachResponse coach = coachService.createCoach(account);
 
         java.util.HashSet<Integer> sportIds = new java.util.HashSet<>();

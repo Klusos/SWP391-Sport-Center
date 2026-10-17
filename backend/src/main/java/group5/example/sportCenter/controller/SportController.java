@@ -9,16 +9,21 @@ import group5.example.sportCenter.dto.CreateSportRequest;
 import group5.example.sportCenter.dto.SportResponse;
 import group5.example.sportCenter.dto.UpdateSportRequest;
 import group5.example.sportCenter.service.SportService;
+import group5.example.sportCenter.service.EntityImageService;
 import jakarta.validation.Valid;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequestMapping("/api/sports")
 public class SportController {
 
     private final SportService sportService;
+    private final EntityImageService imageService;
 
-    public SportController(SportService sportService) {
+    public SportController(SportService sportService, EntityImageService imageService) {
         this.sportService = sportService;
+        this.imageService = imageService;
     }
 
     @GetMapping
@@ -47,5 +52,11 @@ public class SportController {
             @Valid @RequestBody UpdateSportRequest request) {
 
         return sportService.updateSport(id, request);
+    }
+
+    @PutMapping(value = "/{id}/image", consumes = "multipart/form-data")
+    public SportResponse replaceImage(@PathVariable Integer id, @RequestParam("file") MultipartFile file) {
+        imageService.replaceSportImage(id, file);
+        return sportService.getSportById(id);
     }
 }

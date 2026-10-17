@@ -143,15 +143,18 @@ Sport GET endpoints permit all authenticated roles; mutations are ADMIN-only.
 | `GET /api/public/sports` | None; no JWT required | 200, active `PublicSportOptionResponse[]` with only `id` and `name` | H2 integration tested |
 | `GET /api/public/sports/{sportId}/courses` | None; no JWT required | 200, active `CourseResponse[]` for an active sport | Added; H2 integration tested |
 | `GET /api/public/courses/{id}` | None; no JWT required | 200, active `CourseResponse`; inactive course/sport is hidden as 404 | Added; H2 integration tested |
+| `GET /api/public/coaches` | None; no JWT required | 200, active `PublicCoachResponse[]` (`id`, `name`, `imageUrl`) | Added for public catalog |
+| `GET /api/public/facilities` | None; no JWT required | 200, active facilities of active sports, `PublicFacilityResponse[]` | Added for public catalog |
 | `GET /api/sports/{id}` | None | 200, `SportResponse` | Not verified |
 | `POST /api/sports` | `CreateSportRequest` | 201, `SportResponse` | Not verified |
 | `PUT /api/sports/{id}` | `UpdateSportRequest` | 200, `SportResponse` | Not verified |
+| `PUT /api/sports/{id}/image` | Multipart form field `file` | ADMIN; 200, updated `SportResponse` with `imageUrl` | H2 integration tested |
 
 Create body: `{"name":"Swimming","description":"Pool training"}`. Update body also includes `status`.
 
-Response sample: `{"id":3,"name":"Swimming","description":"Pool training","status":"ACTIVE"}`.
+Response sample: `{"id":3,"name":"Swimming","description":"Pool training","status":"ACTIVE","imageUrl":null}`.
 
-The public sport-options response is intentionally limited to `[{"id":3,"name":"Swimming"}]`; inactive Sports are omitted. The existing `/api/sports` routes remain authenticated and administrative fields are not returned by the public route.
+The public sport-options response is intentionally limited to `[{"id":3,"name":"Swimming","imageUrl":null}]`; inactive Sports are omitted. `imageUrl` is null until an ADMIN uploads an image. The existing `/api/sports` routes remain authenticated.
 
 ## Coach and CoachSport
 
@@ -166,10 +169,19 @@ Coach and CoachSport GET endpoints permit all authenticated roles; mutations are
 | `POST /api/coaches/{coachId}/sports` | `AssignCoachSportRequest` | 201, `CoachSportResponse` | Not verified |
 | `GET /api/coaches/{coachId}/sports` | None | 200, `CoachSportResponse[]` | Not verified |
 | `PUT /api/coaches/{coachId}/sports/{sportId}` | `UpdateCoachSportRequest` | 200, `CoachSportResponse` | Not verified |
+| `PUT /api/coaches/{id}/profile` | `UpdateCoachProfileRequest` (`bio`, nullable, max 1000) | ADMIN; 200, updated `CoachResponse` | H2 integration tested |
 
 Create coach body has `name`, `email`, `phone`, `gender`, `password`. Assign sport body has `sportId`, `experienceYears`, `certification`; update has `experienceYears` and `certification`.
 
-Response samples: `CoachResponse` is `{"id":4,"userId":12,"userName":"Example Coach","email":"coach@example.com","status":"ACTIVE"}`. `CoachSportResponse` is `{"id":2,"coachId":4,"coachName":"Example Coach","sportId":3,"sportName":"Swimming","experienceYears":2,"certification":"<certification>"}`.
+Response samples: `CoachResponse` is `{"id":4,"userId":12,"userName":"Example Coach","email":"coach@example.com","status":"ACTIVE","imageUrl":null,"bio":null}`. `CoachSportResponse` is `{"id":2,"coachId":4,"coachName":"Example Coach","sportId":3,"sportName":"Swimming","experienceYears":2,"certification":"<certification>"}`.
+
+`PUT /api/coaches/{id}/image` accepts multipart form field `file`, is ADMIN-only, and returns the updated `CoachResponse`. Public coach catalog responses omit account email and other account fields.
+
+`POST /api/staff/coaches` optionally accepts `bio` (maximum 1000 characters) in addition to the existing account and specialization fields. Its `CoachResponse.id` identifies the Coach for the subsequent image upload. `GET /api/public/coaches` returns only public profile fields: `id`, `name`, `imageUrl`, nullable `bio`, and `sports[]` containing `sportId`, `sportName`, `experienceYears`, and nullable `certification`. Only ACTIVE Coach records with ACTIVE linked User accounts are included. Assignments for inactive Sports are omitted. A Coach without assignments returns an empty `sports` array; missing bio, image, or certification remains null. No account email, phone, or credential data is exposed.
+
+Example public response: `[{"id":4,"name":"Example Coach","imageUrl":"/api/public/images/coach-photo.webp","bio":"Swimming instructor.","sports":[{"sportId":3,"sportName":"Swimming","experienceYears":2,"certification":"Regional certificate"}]}]`.
+
+The Coach biography mapping requires manual migration `docs/sql/phase3a-coach-bio.sql`, after `phase3-entity-image-urls.sql` and before starting with `ddl-auto=validate`. It adds `dbo.coach.bio NVARCHAR(1000) NULL` and has not been executed.
 
 ## Course, CourseOffering, and Class
 
@@ -218,8 +230,17 @@ Facility GET endpoints permit all authenticated roles; mutations are ADMIN-only.
 | `GET /api/facilities/sport/{sportId}` | None | 200, `FacilityResponse[]` | Not verified |
 | `POST /api/facilities` | `CreateFacilityRequest` (`sportId`, `name`, `type`) | 201, `FacilityResponse` | Not verified |
 | `PUT /api/facilities/{id}` | `UpdateFacilityRequest` (`name`, `type`, `status`) | 200, `FacilityResponse` | Not verified |
+| `PUT /api/facilities/{id}/image` | Multipart form field `file` | ADMIN; 200, updated `FacilityResponse` with `imageUrl` | H2 integration tested |
 
-Response sample: `{"id":5,"sportId":1,"sportName":"Swimming","name":"Main pool","type":"POOL","status":"ACTIVE"}`.
+Response sample: `{"id":5,"sportId":1,"sportName":"Swimming","name":"Main pool","type":"POOL","status":"ACTIVE","imageUrl":null}`.
+
+## Local entity images
+
+`PUT /api/sports/{id}/image`, `PUT /api/coaches/{id}/image`, and `PUT /api/facilities/{id}/image` require ADMIN and a multipart file field named `file`. Files are limited to 5 MB and detected from image bytes; accepted formats are JPEG, PNG, and WebP. Responses include the stored relative `imageUrl`, for example `/api/public/images/550e8400-e29b-41d4-a716-446655440000.png`. `GET /api/public/images/{filename}` is public and read-only. Public catalog endpoints include active Sport, Coach, and Facility images without returning private Coach account fields.
+
+By default files are stored outside packaged resources in `backend/uploads` when Spring Boot is started with `backend` as its working directory. Override using `IMAGE_STORAGE_DIRECTORY`; `IMAGE_MAX_FILE_SIZE` can change the service limit, while the servlet multipart ceiling remains 5 MB per file. On replacement, the new file is written first; a database rollback removes that new file. The old file is removed only after commit. Cleanup is best-effort, so an unavailable filesystem may leave an orphan file; no database record is left pointing to an upload that failed before commit. Existing uploaded files are not removed by normal entity updates.
+
+The SQL Server migration `docs/sql/phase3-entity-image-urls.sql` adds nullable `image_url NVARCHAR(500)` columns. It is manual; the project owner reports it has already been applied successfully to the local SQL Server. On a fresh database, run it after the existing migrations and before starting with `ddl-auto=validate`.
 
 ## ClassSession
 

@@ -1,120 +1,69 @@
-import { useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import PageHero from '../components/PageHero.jsx'
 import Img from '../components/Img.jsx'
-import { coachSpotlight } from '../data/content.js'
-
-const topStats = [
-  ['bi-people-fill', '15+', 'HLV chuyên nghiệp'],
-  ['bi-award-fill', '200', 'Huy chương quốc tế'],
-  ['bi-people-fill', '12', 'Bộ môn đào tạo'],
-  ['bi-star-fill', '10+', 'Năm kinh nghiệm'],
-]
-
+import { getPublicCoachesApi } from '../../api.js'
 export default function Coaches() {
-  const [active, setActive] = useState(0)
-  const stripRef = useRef(null)
-  const coach = coachSpotlight[active]
-
-  const scroll = (dir) => stripRef.current?.scrollBy({ left: dir * 300, behavior: 'smooth' })
-
-  return (
-    <>
-      <PageHero
-       title="ĐỘI NGŨ HLV"
-       subtitle="Những huấn luyện viên tận tâm, giàu kinh nghiệm, đồng hành cùng bạn trên con đường chinh phục thể thao"
-       image="/images/coaches-hero.png"
-      />
-      <section className="container-xl stat-row">
-        <div className="row g-4">
-          {topStats.map(([icon, num, label]) => (
-            <div className="col-6 col-lg-3" key={label}>
-              <div className="d-flex align-items-center gap-3">
-                <i className={`bi ${icon} stat-icon`} />
-                <div>
-                  <div className="stat-num">{num}</div>
-                  <div className="stat-label">{label}</div>
-                </div>
-              </div>
-            </div>
-          ))}
+  const [coaches, setCoaches] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [sportFilter, setSportFilter] = useState('all')
+  const [expanded, setExpanded] = useState(() => new Set())
+  useEffect(() => {
+    let active = true
+    getPublicCoachesApi().then((rows) => { if (active) setCoaches(Array.isArray(rows) ? rows : []) })
+      .catch((err) => { if (active) setError(err.message || 'Không tải được danh sách huấn luyện viên.') })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
+  const sports = [...new Map(coaches.flatMap((coach) => coach.sports || []).map((sport) => [sport.sportId, sport.sportName])).entries()]
+  const visibleCoaches = sportFilter === 'all' ? coaches : coaches.filter((coach) => coach.sports?.some((sport) => String(sport.sportId) === sportFilter))
+  const sportCount = new Set(coaches.flatMap((coach) => coach.sports || []).map((sport) => sport.sportId)).size
+  const toggleBio = (id) => setExpanded((previous) => {
+    const next = new Set(previous)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+  return <>
+    <PageHero title="ĐỘI NGŨ HLV" subtitle="Gặp gỡ đội ngũ huấn luyện viên của Sport Center." image="/images/coaches-hero.png" />
+    <section className="section"><div className="container-xl">
+      <div className="coach-intro">
+        <div><p className="label-blue">HUẤN LUYỆN VIÊN</p><h2 className="h-xl">Đồng hành cùng bạn</h2>
+          <p className="muted">Đội ngũ huấn luyện viên hỗ trợ bạn xây dựng thói quen vận động phù hợp với mục tiêu và nhịp sống riêng.</p>
+          <p className="muted">Chúng tôi đề cao nền tảng kỹ thuật, sự kiên trì và lộ trình tập luyện có thể điều chỉnh theo từng người.</p>
         </div>
-      </section>
-
-      {/* SPOTLIGHT */}
-      <section className="container-xl pt-5">
-        <div className="d-flex justify-content-between align-items-end flex-wrap gap-3">
-          <div>
-            <span className="pill-badge sm">SPOTLIGHT</span>
-            <h2 className="h-xl text-uppercase mt-2 mb-0">Huấn luyện viên <span className="text-brand">ngôi sao</span></h2>
-          </div>
-          <div className="text-end">
-            <div className="big-num">{coachSpotlight.length}+</div>
-            <div className="big-num-label">CHUYÊN GIA</div>
-          </div>
-        </div>
-
-        <div className="carousel-strip mt-4">
-          <button className="arrow-btn" aria-label="Trước" onClick={() => scroll(-1)}><i className="bi bi-chevron-left" /></button>
-          <div className="thumbs" ref={stripRef}>
-            {coachSpotlight.map((c, i) => (
-              <button
-                key={c.id}
-                className={`thumb ${i === active ? 'is-active' : ''}`}
-                onClick={() => setActive(i)}
-                aria-label={`Xem ${c.name}`}
-                aria-pressed={i === active}
-              >
-                <Img src={c.img} alt={c.name} label={c.name.split(' ')[0]} />
-              </button>
-            ))}
-          </div>
-          <button className="arrow-btn" aria-label="Sau" onClick={() => scroll(1)}><i className="bi bi-chevron-right" /></button>
-        </div>
-
-        {/* CHI TIẾT HLV */}
-        <div className="row g-5 mt-3 mb-5">
-          <div className="col-lg-5">
-            <div className="coach-photo">
-              <Img src={coach.img} alt={coach.name} label={coach.name} />
-              <div className="coach-photo-info">
-                <h3>{coach.name.toUpperCase()}</h3>
-                <p>{coach.role.toUpperCase()}</p>
-                <div className="skill-tags">
-                  {coach.skills.map((s) => <span key={s}>{s}</span>)}
-                </div>
-              </div>
+        {!loading && !error && <div className="coach-stats" aria-label="Thống kê huấn luyện viên">
+          <div><strong>{coaches.length}</strong><span>Huấn luyện viên đang hoạt động</span></div>
+          {sportCount > 0 && <div><strong>{sportCount}</strong><span>Bộ môn được hướng dẫn</span></div>}
+        </div>}
+      </div>
+      {!loading && !error && coaches.length > 0 && <div className="coach-filter">
+        <label htmlFor="coach-sport-filter">Lọc theo bộ môn</label>
+        <select id="coach-sport-filter" value={sportFilter} onChange={(event) => setSportFilter(event.target.value)}>
+          <option value="all">Tất cả bộ môn</option>
+          {sports.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+        </select>
+      </div>}
+      {error && <p className="banner error" role="alert">{error}</p>}
+      {loading ? <p role="status">Đang tải huấn luyện viên…</p> : coaches.length === 0 ? <p>Hiện chưa có huấn luyện viên đang hoạt động.</p>
+        : visibleCoaches.length === 0 ? <p>Không có huấn luyện viên nào thuộc bộ môn đã chọn.</p> : <div className="row g-4 mt-2">{visibleCoaches.map((coach) => <div className="col-sm-6 col-lg-4" key={coach.id}>
+          <article className="coach-catalog-card">
+            <Img src={coach.imageUrl} alt={coach.name} label={coach.name} className="coach-catalog-image" />
+            <div className="coach-catalog-copy">
+              <h3>{coach.name}</h3>
+              {coach.bio?.trim() && <div className="coach-bio-wrap"><p className={expanded.has(coach.id) ? 'coach-catalog-bio expanded' : 'coach-catalog-bio'}>{coach.bio}</p>{coach.bio.length > 170 && <button type="button" className="coach-expand" aria-expanded={expanded.has(coach.id)} onClick={() => toggleBio(coach.id)}>{expanded.has(coach.id) ? 'Thu gọn' : 'Đọc thêm'}</button>}</div>}
+              {Array.isArray(coach.sports) && coach.sports.length > 0 && <ul className="coach-catalog-sports">
+                {coach.sports.map((sport) => <li key={sport.sportId}>
+                  <strong>{sport.sportName}</strong>
+                  {Number.isInteger(sport.experienceYears) && <span>{sport.experienceYears} năm kinh nghiệm</span>}
+                  {sport.certification?.trim() && <span><b>Chứng nhận:</b> {sport.certification}</span>}
+                </li>)}
+              </ul>}
             </div>
-          </div>
-          <div className="col-lg-7">
-            <div className="sport-title">{coach.sport.toUpperCase()}</div>
-            <div className="bio-box">
-              {coach.bio.map((p, i) => <p key={i}>{p}</p>)}
-            </div>
-            <div className="coach-stats">
-              {coach.stats.map(([n, l]) => (
-                <div key={l}>
-                  <div className="cs-num">{n}</div>
-                  <div className="cs-label">{l.toUpperCase()}</div>
-                </div>
-              ))}
-            </div>
-            <ol className="achievements">
-              {coach.achievements.map((a, i) => (
-                <li key={a}><b>{String(i + 1).padStart(2, '0')}</b> {a}</li>
-              ))}
-            </ol>
-          </div>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="container-xl text-center join-coach">
-        <h2>BẠN LÀ HUẤN LUYỆN VIÊN</h2>
-        <h2 className="text-brand big">CHUYÊN NGHIỆP</h2>
-        <p>Gia nhập đội ngũ Sport Center để cùng xây dựng nền tảng thể thao vững chắc cho thế hệ vận động tương lai. Môi trường làm việc quốc tế, cơ sở vật chất hàng đầu</p>
-        <Link to="/tuyen-sinh" className="btn btn-brand btn-lg">ĐĂNG KÍ NGAY</Link>
-      </section>
-    </>
-  )
+          </article>
+        </div>)}</div>}
+    </div></section>
+    <section className="coach-cta"><div className="container-xl"><div><p className="label-cyan">BẮT ĐẦU HÀNH TRÌNH</p><h2>Bạn muốn tìm lộ trình phù hợp?</h2><p>Gửi yêu cầu tư vấn để đội ngũ trung tâm trao đổi về mục tiêu tập luyện của bạn.</p></div><Link to="/tuyen-sinh" className="btn btn-cyan">ĐĂNG KÝ TƯ VẤN</Link></div></section>
+  </>
 }

@@ -22,6 +22,8 @@ public class CreateStaffCoachRequest {
     private String gender;
     @NotBlank @Size(min = 6)
     private String password;
+    @Size(max = 1000)
+    private String bio;
     @NotEmpty
     private List<@Valid Specialization> specializations;
 

@@ -1,4 +1,5 @@
-﻿const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+const API_BASE = API_BASE_URL.replace(/\/$/, "");
 
 async function request(path, options = {}) {
   const response = await fetch(API_BASE + path, options);
@@ -103,6 +104,24 @@ export function getMemberProfilesApi(token) {
   return request("/api/member-profiles", { headers: authenticatedHeaders(token) });
 }
 
+export function getMemberSportLevelsApi(token, memberId) {
+  return request("/api/member-sport-levels/member/" + encodeURIComponent(memberId), {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function getMyMemberSportLevelsApi(token) {
+  return request("/api/member-sport-levels/me", { headers: authenticatedHeaders(token) });
+}
+
+export function getMySkillAssessmentsApi(token) {
+  return request("/api/skill-assessments/me", { headers: authenticatedHeaders(token) });
+}
+
+export function getMyConsultationRequestsApi(token) {
+  return request("/api/consultation-requests/me", { headers: authenticatedHeaders(token) });
+}
+
 export function createMemberProfileApi(token, payload) {
   return request("/api/member-profiles", {
     method: "POST",
@@ -205,12 +224,56 @@ export function getPublicCourseApi(courseId) {
   });
 }
 
+export function getCourseOfferingsByCourseApi(token, courseId) {
+  return request("/api/course-offerings/course/" + encodeURIComponent(courseId), {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function getClassesByOfferingApi(token, offeringId) {
+  return request("/api/classes/offering/" + encodeURIComponent(offeringId), {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function createCourseRegistrationApi(token, classId) {
+  return request("/api/course-registrations", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ classId }),
+  });
+}
+
+export function createMemberConsultationRequestApi(token, payload) {
+  return request("/api/consultation-requests", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getCoachesApi(token) {
   return request("/api/coaches", { headers: authenticatedHeaders(token) });
 }
 
 export function getSportsApi(token) {
   return request("/api/sports", { headers: authenticatedHeaders(token) });
+}
+
+export function createSportApi(token, payload) {
+  return request("/api/sports", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateSportApi(token, sportId, payload) {
+  return request("/api/sports/" + encodeURIComponent(sportId), {
+    method: "PUT",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }
 
 export function getCoachSportsApi(token, coachId) {
@@ -245,6 +308,16 @@ export function createSkillAssessmentApi(token, payload) {
 
 export function getSkillAssessmentsApi(token) {
   return request("/api/skill-assessments", { headers: authenticatedHeaders(token) });
+}
+
+export function getMySkillAssessmentAssignmentsApi(token) {
+  return request("/api/skill-assessments/my-assignments", { headers: authenticatedHeaders(token) });
+}
+
+export function getAssessmentMemberLevelApi(token, assessmentId) {
+  return request("/api/skill-assessments/" + encodeURIComponent(assessmentId) + "/member-level", {
+    headers: authenticatedHeaders(token),
+  });
 }
 
 export function completeSkillAssessmentApi(token, assessmentId, payload) {
@@ -299,5 +372,59 @@ export function updateMembershipPlanStatusApi(token, planId, status) {
     method: "PATCH",
     headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
+  });
+}
+
+export function resolveImageUrl(imageUrl) {
+  if (!imageUrl || typeof imageUrl !== "string") return "";
+  try {
+    return new URL(imageUrl, API_BASE_URL.endsWith("/") ? API_BASE_URL : API_BASE_URL + "/").toString();
+  } catch {
+    return "";
+  }
+}
+
+export function getPublicCoachesApi() {
+  return request("/api/public/coaches", { headers: { Accept: "application/json" } });
+}
+
+export function createFacilityApi(token, payload) {
+  return request("/api/facilities", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateFacilityApi(token, facilityId, payload) {
+  return request("/api/facilities/" + encodeURIComponent(facilityId), {
+    method: "PUT",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+export function getFacilitiesApi(token) {
+  return request("/api/facilities", { headers: authenticatedHeaders(token) });
+}
+
+async function uploadImage(path, token, file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return request(path, { method: "PUT", headers: authenticatedHeaders(token), body: formData });
+}
+
+export function uploadSportImageApi(token, id, file) {
+  return uploadImage("/api/sports/" + encodeURIComponent(id) + "/image", token, file);
+}
+
+export function uploadCoachImageApi(token, id, file) {
+  return uploadImage("/api/coaches/" + encodeURIComponent(id) + "/image", token, file);
+}
+
+export function updateCoachProfileApi(token, id, payload) {
+  return request("/api/coaches/" + encodeURIComponent(id) + "/profile", {
+    method: "PUT",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
 }

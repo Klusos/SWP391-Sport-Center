@@ -11,9 +11,13 @@ import group5.example.sportCenter.dto.CoachSportResponse;
 import group5.example.sportCenter.dto.CreateCoachRequest;
 import group5.example.sportCenter.dto.UpdateCoachSportRequest;
 import group5.example.sportCenter.dto.UpdateCoachStatusRequest;
+import group5.example.sportCenter.dto.UpdateCoachProfileRequest;
 import group5.example.sportCenter.service.CoachService;
 import group5.example.sportCenter.service.CoachSportService;
+import group5.example.sportCenter.service.EntityImageService;
 import jakarta.validation.Valid;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequestMapping("/api/coaches")
@@ -21,13 +25,16 @@ public class CoachController {
     
     private final CoachService coachService;
     private final CoachSportService coachSportService;
+    private final EntityImageService imageService;
     
     public CoachController(
             CoachService coachService,
-            CoachSportService coachSportService) {
+            CoachSportService coachSportService,
+            EntityImageService imageService) {
 
         this.coachService = coachService;
         this.coachSportService = coachSportService;
+        this.imageService = imageService;
     }
 
     @GetMapping
@@ -60,6 +67,13 @@ public class CoachController {
                 request.getStatus());
     }
 
+    @PutMapping("/{id}/profile")
+    public CoachResponse updateProfile(
+            @PathVariable Integer id,
+            @Valid @RequestBody UpdateCoachProfileRequest request) {
+        return coachService.updateProfile(id, request);
+    }
+
     @PostMapping("/{coachId}/sports")
     @ResponseStatus(HttpStatus.CREATED)
     public CoachSportResponse assignSport(
@@ -88,5 +102,11 @@ public class CoachController {
                 coachId,
                 sportId,
                 request);
+    }
+
+    @PutMapping(value = "/{id}/image", consumes = "multipart/form-data")
+    public CoachResponse replaceImage(@PathVariable Integer id, @RequestParam("file") MultipartFile file) {
+        imageService.replaceCoachImage(id, file);
+        return coachService.getCoachById(id);
     }
 }
