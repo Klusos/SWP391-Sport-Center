@@ -1,4 +1,42 @@
 export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
+  if (role === "MEMBER") {
+    return (
+      <aside className="sidebar">
+        <div className="brand"><strong>SPORTS CENTER</strong><span>Thành viên</span></div>
+        <nav aria-label="Member navigation">
+          <button className={"nav-item clickable nav-button " + (activePage === "member-levels" ? "active" : "")}
+            aria-current={activePage === "member-levels" ? "page" : undefined} type="button" onClick={() => onNavigate("member-levels")}>
+            Trình độ &amp; đánh giá
+          </button>
+          <button className={"nav-item clickable nav-button " + (activePage === "member-pt-booking" ? "active" : "")}
+            aria-current={activePage === "member-pt-booking" ? "page" : undefined} type="button" onClick={() => onNavigate("member-pt-booking")}>
+            Đặt buổi huấn luyện
+          </button>
+        </nav>
+        <div className="nav-footer"><button className="nav-item clickable logout-button" type="button" onClick={onLogout}>Đăng xuất</button></div>
+      </aside>
+    );
+  }
+
+  if (role === "COACH") {
+    return (
+      <aside className="sidebar">
+        <div className="brand"><strong>SPORTS CENTER</strong><span>Huấn luyện viên</span></div>
+        <nav aria-label="Coach navigation">
+          <button className={"nav-item clickable nav-button " + (activePage === "coach-pt-sessions" ? "active" : "")}
+            aria-current={activePage === "coach-pt-sessions" ? "page" : undefined} type="button" onClick={() => onNavigate("coach-pt-sessions")}>
+            Buổi huấn luyện cá nhân
+          </button>
+          <button className={"nav-item clickable nav-button " + (activePage === "coach-assessments" ? "active" : "")}
+            aria-current={activePage === "coach-assessments" ? "page" : undefined} type="button" onClick={() => onNavigate("coach-assessments")}>
+            Đánh giá kỹ năng
+          </button>
+        </nav>
+        <div className="nav-footer"><button className="nav-item clickable logout-button" type="button" onClick={onLogout}>Đăng xuất</button></div>
+      </aside>
+    );
+  }
+
   const canAccessConsultations = role === "RECEPTIONIST" || role === "ADMIN";
 
   return (

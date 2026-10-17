@@ -87,6 +87,24 @@ public class SkillAssessmentService {
         Coach coach = access.coach(access.actor(jwt));
         return assessments.findByAssignedCoachIdOrderByCreatedAtDescIdDesc(coach.getId()).stream().map(this::response).toList();
     }
+    public AssessmentMemberLevelResponse memberLevel(Integer assessmentId, Jwt jwt) {
+        User actor = access.actor(jwt);
+        Coach coach = access.coach(actor);
+        SkillAssessment assessment = assessments.findById(assessmentId)
+                .orElseThrow(() -> error(HttpStatus.NOT_FOUND, "Assessment not found"));
+        if (!coach.getId().equals(assessment.getAssignedCoach().getId())) {
+            throw error(HttpStatus.FORBIDDEN, "Assessment assigned to another coach");
+        }
+        Integer memberId = assessment.getMember().getId();
+        Integer sportId = assessment.getSport().getId();
+        return levels.findByMemberIdAndSportId(memberId, sportId)
+                .map(level -> new AssessmentMemberLevelResponse(assessmentId, memberId, sportId,
+                        level.getLevel().name(), false,
+                        level.getVerifiedByCoach() == null ? null : level.getVerifiedByCoach().getId(),
+                        level.getVerifiedAt(), level.getUpdatedAt()))
+                .orElseGet(() -> new AssessmentMemberLevelResponse(assessmentId, memberId, sportId,
+                        SportLevel.BEGINNER.name(), true, null, null, null));
+    }
     public List<SkillAssessmentResponse> mine(Jwt jwt) {
         User member = access.actor(jwt); access.requireMember(member);
         return assessments.findByMemberIdOrderByCreatedAtDescIdDesc(member.getId()).stream().map(this::response).toList();

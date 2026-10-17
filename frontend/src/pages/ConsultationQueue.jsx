@@ -5,8 +5,15 @@ import {
   createConsultationMemberApi,
   getConsultationRequestApi,
   getConsultationRequestsApi,
+  getCoachSportsApi,
+  getCoachesApi,
   getCurrentUserApi,
+  getMemberSportLevelsApi,
+  getSkillAssessmentsApi,
+  getSportsApi,
   getUsersApi,
+  createSkillAssessmentApi,
+  getUserApi,
   linkConsultationMemberApi,
   takeConsultationRequestApi,
 } from "../api";
@@ -43,7 +50,25 @@ export default function ConsultationQueue({ token, role, onLogout, onNavigate })
   const [memberDateOfBirth, setMemberDateOfBirth] = useState("");
   const [memberPassword, setMemberPassword] = useState("");
   const [creatingMember, setCreatingMember] = useState(false);
+  const [memberIdentity, setMemberIdentity] = useState(null);
+  const [memberLevels, setMemberLevels] = useState([]);
+  const [memberInfoLoading, setMemberInfoLoading] = useState(false);
+  const [memberInfoError, setMemberInfoError] = useState("");
+  const [consultationAssessments, setConsultationAssessments] = useState([]);
+  const [assessmentLookupLoading, setAssessmentLookupLoading] = useState(false);
+  const [assessmentLookupError, setAssessmentLookupError] = useState("");
+  const [assessmentFormOpen, setAssessmentFormOpen] = useState(false);
+  const [eligibleCoaches, setEligibleCoaches] = useState([]);
+  const [loadingEligibleCoaches, setLoadingEligibleCoaches] = useState(false);
+  const [eligibleCoachError, setEligibleCoachError] = useState("");
+  const [selectedCoachId, setSelectedCoachId] = useState("");
+  const [assessmentNotes, setAssessmentNotes] = useState("");
+  const [assigningAssessment, setAssigningAssessment] = useState(false);
+  const [assessmentError, setAssessmentError] = useState("");
+  const [assessmentNotice, setAssessmentNotice] = useState("");
   const allowedRole = role === "RECEPTIONIST" || role === "ADMIN";
+  const canManageAssessment = Boolean(detail?.status === "IN_PROGRESS" && detail.memberId
+    && (role === "ADMIN" || (role === "RECEPTIONIST" && detail.handledBy === actorId)));
 
   const loadQueue = useCallback(async () => {
     setLoading(true);
@@ -72,9 +97,66 @@ export default function ConsultationQueue({ token, role, onLogout, onNavigate })
     getCurrentUserApi(token).then((user) => setActorId(user.id)).catch(() => setActorId(null));
   }, [token, allowedRole]);
 
+  useEffect(() => {
+    let active = true;
+    if (!detail?.memberId) {
+      return () => { active = false; };
+    }
+
+    Promise.resolve().then(async () => {
+      if (!active) return;
+      setMemberInfoLoading(true);
+      setMemberInfoError("");
+      const [identityResult, levelsResult] = await Promise.allSettled([
+        getUserApi(token, detail.memberId),
+        getMemberSportLevelsApi(token, detail.memberId),
+      ]);
+      if (!active) return;
+      if (identityResult.status === "fulfilled") setMemberIdentity(identityResult.value);
+      else {
+        setMemberIdentity(null);
+        setMemberInfoError(identityResult.reason?.message || "Không tải được thông tin tài khoản thành viên.");
+      }
+      if (levelsResult.status === "fulfilled") setMemberLevels(Array.isArray(levelsResult.value) ? levelsResult.value : []);
+      else {
+        setMemberLevels([]);
+        setMemberInfoError((current) => [current, levelsResult.reason?.message || "Không tải được trình độ theo bộ môn."].filter(Boolean).join(" "));
+      }
+      setMemberInfoLoading(false);
+
+      if (canManageAssessment) {
+        setAssessmentLookupLoading(true);
+        setAssessmentLookupError("");
+        try {
+          const rows = await getSkillAssessmentsApi(token);
+          if (active) setConsultationAssessments((Array.isArray(rows) ? rows : []).filter(
+            (assessment) => Number(assessment.consultationRequestId) === Number(detail.id),
+          ));
+        } catch (lookupError) {
+          if (active) {
+            setConsultationAssessments([]);
+            setAssessmentLookupError(lookupError.message || "Không kiểm tra được đánh giá đã phân công.");
+          }
+        } finally {
+          if (active) setAssessmentLookupLoading(false);
+        }
+      } else {
+        setConsultationAssessments([]);
+      }
+    });
+
+    return () => { active = false; };
+  }, [token, detail?.id, detail?.memberId, detail?.status, detail?.sportId, detail?.handledBy, canManageAssessment]);
+
   async function handleOpenDetail(requestId) {
     setDetail(null);
     setDetailError("");
+    setAssessmentFormOpen(false);
+    setEligibleCoaches([]);
+    setSelectedCoachId("");
+    setAssessmentNotes("");
+    setAssessmentError("");
+    setAssessmentNotice("");
     setDetailLoading(true);
     try {
       const request = await getConsultationRequestApi(token, requestId);
@@ -176,6 +258,85 @@ export default function ConsultationQueue({ token, role, onLogout, onNavigate })
           : requestError.message || "Không thể hoàn tất yêu cầu.");
     } finally {
       setCompletingId(null);
+    }
+  }
+
+  async function openAssessmentAssignment() {
+    if (!canManageAssessment || memberIdentity?.status !== "ACTIVE" || assessmentFormOpen
+        || assessmentLookupLoading || assessmentLookupError || consultationAssessments.length > 0) return;
+    setAssessmentFormOpen(true);
+    setLoadingEligibleCoaches(true);
+    setEligibleCoachError("");
+    setEligibleCoaches([]);
+    setSelectedCoachId("");
+    setAssessmentError("");
+    setAssessmentNotice("");
+    try {
+      const [coaches, users, sports] = await Promise.all([getCoachesApi(token), getUsersApi(token), getSportsApi(token)]);
+      const consultationSport = (Array.isArray(sports) ? sports : []).find(
+        (sport) => Number(sport.id) === Number(detail.sportId),
+      );
+      if (!consultationSport || consultationSport.status !== "ACTIVE") {
+        setEligibleCoachError("Bộ môn của consultation hiện không ACTIVE; backend sẽ không nhận assessment mới.");
+        return;
+      }
+      const activeUserIds = new Set((Array.isArray(users) ? users : [])
+        .filter((user) => user.role === "COACH" && user.status === "ACTIVE")
+        .map((user) => Number(user.id)));
+      const activeCoaches = (Array.isArray(coaches) ? coaches : []).filter(
+        (coach) => coach.status === "ACTIVE" && activeUserIds.has(Number(coach.userId)),
+      );
+      const coachQualifications = await Promise.all(activeCoaches.map(async (coach) => ({
+        coach,
+        sports: await getCoachSportsApi(token, coach.id),
+      })));
+      const qualified = coachQualifications
+        .filter(({ sports }) => Array.isArray(sports) && sports.some(
+          (qualification) => Number(qualification.sportId) === Number(detail.sportId),
+        ))
+        .map(({ coach }) => coach)
+        .sort((left, right) => String(left.userName || "").localeCompare(String(right.userName || ""), "vi"));
+      setEligibleCoaches(qualified);
+    } catch (requestError) {
+      setEligibleCoachError(requestError.status === 403
+        ? "Tài khoản không có quyền tải danh sách Coach và chuyên môn."
+        : requestError.message || "Không tải được danh sách Coach đủ điều kiện.");
+    } finally {
+      setLoadingEligibleCoaches(false);
+    }
+  }
+
+  async function handleAssignAssessment(event) {
+    event.preventDefault();
+    if (!canManageAssessment || memberIdentity?.status !== "ACTIVE" || !selectedCoachId
+        || assigningAssessment || consultationAssessments.length > 0) return;
+    if (assessmentNotes.length > 1000) {
+      setAssessmentError("Ghi chú không được vượt quá 1000 ký tự.");
+      return;
+    }
+    setAssigningAssessment(true);
+    setAssessmentError("");
+    setAssessmentNotice("");
+    try {
+      const created = await createSkillAssessmentApi(token, {
+        memberId: Number(detail.memberId),
+        sportId: Number(detail.sportId),
+        assignedCoachId: Number(selectedCoachId),
+        consultationRequestId: Number(detail.id),
+        notes: assessmentNotes.trim() || null,
+      });
+      setConsultationAssessments((current) => [...current, created]);
+      setAssessmentFormOpen(false);
+      setAssessmentNotes("");
+      setAssessmentNotice("Đã phân công Coach đánh giá. Trình độ xác nhận chỉ được cập nhật khi Coach hoàn tất đánh giá.");
+    } catch (requestError) {
+      setAssessmentError(requestError.status === 409
+        ? "Không thể phân công: consultation hoặc assessment đã thay đổi, hoặc đã có assessment đang chờ. Hãy tải lại chi tiết."
+        : requestError.status === 403
+          ? "Chỉ người tiếp nhận consultation hoặc ADMIN mới được phân công assessment này."
+          : requestError.message || "Không thể phân công đánh giá.");
+    } finally {
+      setAssigningAssessment(false);
     }
   }
 
@@ -297,6 +458,73 @@ export default function ConsultationQueue({ token, role, onLogout, onNavigate })
               <div><dt>Kinh nghiệm</dt><dd>{detail.experience || "—"}</dd></div>
               <div><dt>Ghi chú khách hàng</dt><dd>{detail.note || "—"}</dd></div>
             </dl>
+            {detail.memberId && <section className="consultation-linked-member" aria-labelledby="linked-member-title">
+              <h3 id="linked-member-title">Thông tin thành viên liên kết</h3>
+              <p><strong>Mã thành viên:</strong> #{detail.memberId}</p>
+              {memberInfoLoading ? <p role="status">Đang tải thông tin thành viên và trình độ…</p> : <>
+                {memberIdentity && <p><strong>Tài khoản:</strong> {memberIdentity.name || "(chưa có tên)"} · {memberIdentity.status || "Chưa rõ trạng thái"}</p>}
+                {memberInfoError && <p className="banner error" role="alert">{memberInfoError}</p>}
+                {(() => {
+                  const level = memberLevels.find((item) => Number(item.sportId) === Number(detail.sportId));
+                  if (!level) return <p><strong>Trình độ {detail.sportName}:</strong> Beginner (mặc định; chưa có mức đã xác minh cho bộ môn này).</p>;
+                  return <div className="consultation-level-result">
+                    <p><strong>Trình độ {detail.sportName}:</strong> {level.level}
+                      {level.verifiedByCoachId != null
+                        ? " · Đã xác minh bởi Coach #" + level.verifiedByCoachId
+                        : " · Chưa có thông tin xác minh Coach"}</p>
+                    {level.verifiedAt && <p><strong>Thời điểm xác minh:</strong> {formatDate(level.verifiedAt)}</p>}
+                  </div>;
+                })()}
+              </>}
+            </section>}
+
+            {canManageAssessment && <section className="consultation-assessment-section" aria-labelledby="assessment-assignment-title">
+              <h3 id="assessment-assignment-title">Đánh giá trình độ</h3>
+              <p>Coach đánh giá và hoàn tất assessment mới xác định trình độ đã xác minh. Hoàn tất cuộc tư vấn không tự xác nhận trình độ và việc phân công không thay đổi MemberSportLevel.</p>
+              {assessmentNotice && <p className="banner success" role="status">{assessmentNotice}</p>}
+              {assessmentLookupLoading ? <p role="status">Đang kiểm tra assessment đã liên kết…</p>
+                : assessmentLookupError ? <p className="banner error" role="alert">{assessmentLookupError} Để tránh phân công trùng, thao tác đang bị khóa.</p>
+                  : consultationAssessments.length > 0 ? <div className="consultation-assessment-existing">
+                    <p>Đã có {consultationAssessments.length} assessment gắn với consultation này:</p>
+                    {consultationAssessments.map((assessment) => <p key={assessment.id}>
+                      Assessment #{assessment.id} · {assessment.status} · Coach #{assessment.assignedCoachId}
+                      {assessment.assessedLevel ? ` · ${assessment.assessedLevel}` : ""}
+                    </p>)}
+                  </div>
+                    : memberInfoLoading ? <p role="status">Đang xác minh trạng thái tài khoản MEMBER…</p>
+                      : memberIdentity?.status !== "ACTIVE" ? <p className="banner error" role="alert">Chỉ MEMBER có tài khoản ACTIVE mới đủ điều kiện được phân công đánh giá.</p>
+                        : !assessmentFormOpen ? <button type="button" onClick={openAssessmentAssignment}
+                          disabled={loadingEligibleCoaches || !canManageAssessment}>
+                          Phân công đánh giá
+                        </button>
+                          : <form className="consultation-assessment-form" onSubmit={handleAssignAssessment}>
+                            <p>Yêu cầu #{detail.id} · Member #{detail.memberId} · {detail.sportName}</p>
+                            {loadingEligibleCoaches ? <p role="status">Đang tải Coach ACTIVE có chuyên môn phù hợp…</p>
+                              : eligibleCoachError ? <p className="banner error" role="alert">{eligibleCoachError}</p>
+                                : eligibleCoaches.length === 0 ? <p>Không tìm thấy Coach ACTIVE được phân công cho bộ môn này.</p>
+                                  : <>
+                                    <label htmlFor="assessmentCoach">Coach phụ trách</label>
+                                    <select id="assessmentCoach" required value={selectedCoachId}
+                                      onChange={(event) => setSelectedCoachId(event.target.value)} disabled={assigningAssessment}>
+                                      <option value="">Chọn Coach</option>
+                                      {eligibleCoaches.map((coach) => <option key={coach.id} value={coach.id}>
+                                        Coach #{coach.id} · {coach.userName || "(chưa có tên)"}
+                                      </option>)}
+                                    </select>
+                                    <label htmlFor="assessmentNotes">Ghi chú cho Coach (không bắt buộc)</label>
+                                    <textarea id="assessmentNotes" maxLength={1000} value={assessmentNotes}
+                                      onChange={(event) => setAssessmentNotes(event.target.value)} disabled={assigningAssessment} />
+                                    {assessmentError && <p className="banner error" role="alert">{assessmentError}</p>}
+                                    <div className="assessment-assignment-actions">
+                                      <button type="submit" disabled={assigningAssessment || !selectedCoachId}>
+                                        {assigningAssessment ? "Đang phân công…" : "Xác nhận phân công"}
+                                      </button>
+                                      <button type="button" onClick={() => { setAssessmentFormOpen(false); setAssessmentError(""); }} disabled={assigningAssessment}>Đóng</button>
+                                    </div>
+                                  </>}
+                            {eligibleCoachError && assessmentError && <p className="banner error" role="alert">{assessmentError}</p>}
+                          </form>}
+            </section>}
             {detail.status === "IN_PROGRESS" && (role === "ADMIN" || (role === "RECEPTIONIST" && detail.handledBy === actorId)) && !detail.memberId && (
               <div className="consultation-member-link-form">
                 <h3>Liên kết tài khoản thành viên</h3>

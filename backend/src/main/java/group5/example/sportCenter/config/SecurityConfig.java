@@ -90,6 +90,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/skill-assessments").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.GET, "/api/skill-assessments/my-assignments").hasRole("COACH")
                 .requestMatchers(HttpMethod.GET, "/api/skill-assessments/me").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/skill-assessments/*/member-level").hasRole("COACH")
                 .requestMatchers(HttpMethod.GET, "/api/skill-assessments/*").hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER", "COACH")
                 .requestMatchers(HttpMethod.PATCH, "/api/skill-assessments/*/complete").hasRole("COACH")
                 .requestMatchers(HttpMethod.PATCH, "/api/skill-assessments/*/cancel").hasAnyRole("ADMIN", "RECEPTIONIST")

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { createPtBookingApi, getMyPtBookingsApi, getPublicSportsApi, getPtEligibleCoachesApi } from "../api";
 import "./PtBooking.css";
 
@@ -32,7 +33,7 @@ export default function PtBooking({ token, onLogout }) {
   }
   if (loading) return <main className="pt-page"><p>Loading PT booking...</p></main>;
   return <main className="pt-page">
-    <header className="pt-header"><div><p className="pt-eyebrow">SPORTCENTER / MEMBER</p><h1>Book a 1-on-1 PT session</h1><p>Each session lasts 90 minutes. New bookings remain pending payment.</p></div><button onClick={onLogout}>Sign out</button></header>
+    <header className="pt-header"><div><p className="pt-eyebrow">SPORTCENTER / MEMBER</p><h1>Book a 1-on-1 PT session</h1><p>Each session lasts 90 minutes. New bookings remain pending payment.</p><Link to="/member/levels-assessments">Trình độ &amp; lịch sử đánh giá</Link></div><button onClick={onLogout}>Sign out</button></header>
     {error && <p className="pt-alert pt-error" role="alert">{error}</p>}{notice && <p className="pt-alert pt-success" role="status">{notice}</p>}
     <section className="pt-card"><h2>Choose a sport and start time</h2><form className="pt-form" onSubmit={findCoaches}>
       <label>Sport<select required value={sportId} onChange={(e) => setSportId(e.target.value)}><option value="">Select a sport</option>{sports.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>

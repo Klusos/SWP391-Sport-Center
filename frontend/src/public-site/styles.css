@@ -133,6 +133,28 @@ h1, h2, h3, h4, h5, h6 { font-weight: 800; letter-spacing: -0.01em; }
 .consult-form .form-control::placeholder { color: var(--navy); opacity: 1; }
 .consult-form .btn { align-self: center; margin-top: 6px; }
 .consult-ok { background: #fff; color: var(--navy); font-size: .75rem; font-weight: 600; padding: 6px; margin: 0; }
+.course-registration-panel { margin-top: 28px; padding: clamp(18px, 3vw, 30px); border: 1px solid rgba(13, 48, 77, .14); border-radius: 14px; background: #fff; box-shadow: 0 12px 34px rgba(15, 50, 77, .08); }
+.course-registration-panel h2 { color: var(--navy); margin-bottom: 10px; }
+.course-registration-form, .course-member-consult-form { display: grid; gap: 14px; margin-top: 18px; }
+.course-class-option { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start; padding: 14px; border: 1px solid rgba(13, 48, 77, .16); border-radius: 10px; cursor: pointer; }
+.course-class-option input { margin-top: 5px; accent-color: var(--cyan); }
+.course-class-option span { display: grid; gap: 5px; }
+.course-class-option small { color: #61758a; overflow-wrap: anywhere; }
+.course-registration-panel button:disabled { opacity: .6; cursor: not-allowed; }
+.course-registration-success, .course-level-help { margin-top: 18px; padding: 16px; border-radius: 10px; background: #eff8f4; color: #184e39; }
+.course-registration-success p, .course-level-help p { margin: 7px 0 0; overflow-wrap: anywhere; }
+.course-level-help { background: #fff8e7; color: #684c13; }
+.course-level-help button { margin-top: 12px; }
+.course-member-consult-form { padding: clamp(16px, 2.5vw, 24px); border-radius: 12px; background: #f3f7fa; }
+.course-member-consult-form > div:first-child p { margin: 6px 0; }
+.course-member-consult-form label { display: grid; gap: 6px; color: var(--navy); font-weight: 600; }
+.course-member-consult-form input, .course-member-consult-form textarea { width: 100%; min-height: 42px; padding: 9px 11px; border: 1px solid #cbd7e1; border-radius: 8px; background: #fff; color: #19334b; }
+.course-member-consult-form textarea { min-height: 82px; resize: vertical; }
+.course-consult-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+@media (max-width: 600px) {
+  .course-class-option { padding: 11px; }
+  .course-consult-actions .btn { width: 100%; }
+}
 @media (max-width: 991.98px) {
   .site-footer { grid-template-columns: 1fr; }
   .footer-left { padding: 28px; }

@@ -22,6 +22,10 @@ public class SkillAssessmentController {
     public List<SkillAssessmentResponse> all(@AuthenticationPrincipal Jwt jwt) { return service.all(jwt); }
     @GetMapping("/my-assignments")
     public List<SkillAssessmentResponse> myAssignments(@AuthenticationPrincipal Jwt jwt) { return service.myAssignments(jwt); }
+    @GetMapping("/{id}/member-level")
+    public AssessmentMemberLevelResponse memberLevel(@PathVariable Integer id, @AuthenticationPrincipal Jwt jwt) {
+        return service.memberLevel(id, jwt);
+    }
     @GetMapping("/me")
     public List<SkillAssessmentResponse> mine(@AuthenticationPrincipal Jwt jwt) { return service.mine(jwt); }
     @GetMapping("/{id}")

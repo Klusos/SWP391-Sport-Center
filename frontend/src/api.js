@@ -104,6 +104,24 @@ export function getMemberProfilesApi(token) {
   return request("/api/member-profiles", { headers: authenticatedHeaders(token) });
 }
 
+export function getMemberSportLevelsApi(token, memberId) {
+  return request("/api/member-sport-levels/member/" + encodeURIComponent(memberId), {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function getMyMemberSportLevelsApi(token) {
+  return request("/api/member-sport-levels/me", { headers: authenticatedHeaders(token) });
+}
+
+export function getMySkillAssessmentsApi(token) {
+  return request("/api/skill-assessments/me", { headers: authenticatedHeaders(token) });
+}
+
+export function getMyConsultationRequestsApi(token) {
+  return request("/api/consultation-requests/me", { headers: authenticatedHeaders(token) });
+}
+
 export function createMemberProfileApi(token, payload) {
   return request("/api/member-profiles", {
     method: "POST",
@@ -206,6 +224,34 @@ export function getPublicCourseApi(courseId) {
   });
 }
 
+export function getCourseOfferingsByCourseApi(token, courseId) {
+  return request("/api/course-offerings/course/" + encodeURIComponent(courseId), {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function getClassesByOfferingApi(token, offeringId) {
+  return request("/api/classes/offering/" + encodeURIComponent(offeringId), {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function createCourseRegistrationApi(token, classId) {
+  return request("/api/course-registrations", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ classId }),
+  });
+}
+
+export function createMemberConsultationRequestApi(token, payload) {
+  return request("/api/consultation-requests", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getCoachesApi(token) {
   return request("/api/coaches", { headers: authenticatedHeaders(token) });
 }
@@ -262,6 +308,16 @@ export function createSkillAssessmentApi(token, payload) {
 
 export function getSkillAssessmentsApi(token) {
   return request("/api/skill-assessments", { headers: authenticatedHeaders(token) });
+}
+
+export function getMySkillAssessmentAssignmentsApi(token) {
+  return request("/api/skill-assessments/my-assignments", { headers: authenticatedHeaders(token) });
+}
+
+export function getAssessmentMemberLevelApi(token, assessmentId) {
+  return request("/api/skill-assessments/" + encodeURIComponent(assessmentId) + "/member-level", {
+    headers: authenticatedHeaders(token),
+  });
 }
 
 export function completeSkillAssessmentApi(token, assessmentId, payload) {
