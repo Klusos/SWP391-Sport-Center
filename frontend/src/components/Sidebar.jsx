@@ -34,11 +34,13 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
           </button>
         )}
         {role === "ADMIN" && (
-          <button className={"nav-item clickable nav-button " + (activePage === "images" ? "active" : "")}
-            aria-current={activePage === "images" ? "page" : undefined} type="button" onClick={() => onNavigate("images")}>
-            Quản lý hình ảnh
+          <button className={"nav-item clickable nav-button " + (activePage === "facilities" ? "active" : "")}
+            aria-current={activePage === "facilities" ? "page" : undefined} type="button" onClick={() => onNavigate("facilities")}>
+            {"Qu\u1ea3n l\u00fd c\u01a1 s\u1edf v\u1eadt ch\u1ea5t"}
           </button>
-        )}        <button className={"nav-item clickable nav-button " + (activePage === "register" ? "active" : "")}
+        )}
+
+        <button className={"nav-item clickable nav-button " + (activePage === "register" ? "active" : "")}
           aria-current={activePage === "register" ? "page" : undefined} type="button" onClick={() => onNavigate("register")}>
           Đăng ký thành viên
         </button>
@@ -51,7 +53,7 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
         <div className="nav-item">Điểm danh</div>
         <div className="nav-item">Lớp học</div>
         <div className="nav-item">Thanh toán</div>
-        <div className="nav-item">Hỗ trợ</div>
+        <div className="nav-item">{"H\u1ed7 tr\u1ee3"}</div>
       </nav>
       <div className="nav-footer">
         <div className="nav-item">Cài đặt</div>

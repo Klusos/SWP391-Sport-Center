@@ -2,6 +2,56 @@
 
 These files are incremental schema migrations, not a complete database bootstrap. The repository does not contain the original core-schema creation script. Obtain and apply the approved core schema separately before running these migrations; at minimum it must provide the JPA-mapped core tables, including `dbo.users`, `dbo.sport`, `dbo.coach`, `dbo.coach_sport`, `dbo.course`, `dbo.course_offering`, `dbo.[class]`, `dbo.facility`, `dbo.member_profile`, `dbo.membership`, and `dbo.membership_plan`, with their established columns and keys. Do not use Hibernate `create`/`update` as a substitute; the application is configured for schema validation.
 
+For a read-only review of text storage types and likely Vietnamese mojibake markers, use `phase3b1-vietnamese-unicode-diagnostic.sql`. It reports metadata and aggregate match counts, not stored personal text. It cannot prove a value is corrupted or recover characters already lost through a non-Unicode column.
+
+## Phase 3B.2 Vietnamese Unicode conversion
+
+The reviewed migration is `phase3b2-vietnamese-unicode.sql`. A successful read-only preflight on the target `SportCenterDB` confirmed the 14 columns and the sole candidate index on `dbo.sport.name`: a `UQ` unique, nonclustered, constraint-backed key on that column alone. The migration rechecks the constraint shape, enabled state, persisted index options, storage filegroup and dependencies. It reads the actual constraint name from SQL Server metadata and never assumes it. Before altering `sport.name`, it checks for Unicode uniqueness collisions; within the same transaction it drops only that verified constraint, converts the column, and recreates the same constraint name and supported options. Any DDL or verification failure rolls the transaction back, including restoring the original column and constraint. It preserves `Chinese_PRC_CI_AS`, column lengths and nullability, and stops on any unexpected schema/dependency or unsupported index metadata.
+
+Execution order: apply the approved core schema and required feature migrations through `phase3a-coach-bio.sql` (see the fresh-database order below), then take and verify a full database backup. Run `phase3b2-vietnamese-unicode-preflight.sql` again immediately before migration and retain all result sets. Inspect trigger and SQL module definitions for dynamic or uncatalogued references. Restore the backup to a separate test database and rehearse this exact migration there. After stopping application writers, run `phase3b2-vietnamese-unicode.sql` as one standalone SSMS batch selected against `SportCenterDB`. It has a database guard, transaction, error rollback, application lock, exact metadata/dependency checks, and rerun handling for original or already-converted columns. The unique constraint must be named dynamically from metadata and recreated under that same name; do not substitute a hardcoded name. The script preserves the reviewed index options and filegroup, rejecting partitioned/compressed indexes and newer unsupported options. Large `TEXT` fields convert directly to `NVARCHAR(MAX)`. Do not execute the migration from application startup.
+
+The reported `C? Vua` value has already lost its original character bytes (`0x3F`); converting the column to NVARCHAR will preserve the question mark and cannot reconstruct `ờ`. Correct that particular value only through an explicitly reviewed manual data correction after the schema conversion. Do not perform a bulk rewrite based on guessed values.
+
+After execution on the approved target, run these read-only checks and start the backend with `spring.jpa.hibernate.ddl-auto=validate`. Keep that setting enabled. Recover using the verified pre-migration backup or the database owner's point-in-time restore procedure. Do not reverse-convert to `VARCHAR` after Unicode values have been written; that can irreversibly lose characters.
+
+```sql
+-- Column metadata: NVARCHAR(n) max_length is reported in bytes; MAX is -1.
+SELECT s.name AS schema_name, t.name AS table_name, c.name AS column_name,
+       ty.name AS data_type, c.max_length AS max_length_bytes,
+       c.is_nullable, c.collation_name
+FROM sys.schemas AS s
+JOIN sys.tables AS t ON t.schema_id = s.schema_id
+JOIN sys.columns AS c ON c.object_id = t.object_id
+JOIN sys.types AS ty ON ty.user_type_id = c.user_type_id
+WHERE s.name = N'dbo'
+  AND ((t.name = N'users' AND c.name = N'name')
+    OR (t.name = N'sport' AND c.name IN (N'name', N'description'))
+    OR (t.name = N'coach_sport' AND c.name = N'certification')
+    OR (t.name = N'member_profile' AND c.name = N'goal')
+    OR (t.name = N'course' AND c.name IN (N'name', N'description', N'learning_outcome'))
+    OR (t.name = N'class' AND c.name = N'name')
+    OR (t.name = N'course_offering' AND c.name = N'name')
+    OR (t.name = N'facility' AND c.name IN (N'name', N'type'))
+    OR (t.name = N'membership_plan' AND c.name IN (N'name', N'description')))
+ORDER BY t.name, c.name;
+
+-- The actual constraint name is read from metadata; no name is assumed.
+SELECT kc.name AS constraint_name, i.name AS backing_index_name,
+       i.type_desc, i.is_unique, i.is_disabled, i.has_filter,
+       ic.key_ordinal, c.name AS key_column, ic.is_descending_key,
+       ic.is_included_column
+FROM sys.key_constraints AS kc
+JOIN sys.tables AS t ON t.object_id = kc.parent_object_id
+JOIN sys.schemas AS s ON s.schema_id = t.schema_id
+JOIN sys.indexes AS i ON i.object_id = kc.parent_object_id AND i.index_id = kc.unique_index_id
+JOIN sys.index_columns AS ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+JOIN sys.columns AS c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+WHERE s.name = N'dbo' AND t.name = N'sport' AND kc.type = N'UQ'
+ORDER BY ic.key_ordinal, ic.index_column_id;
+```
+
+Expect all 14 columns to be `nvarchar`, with byte lengths twice their declared character limits (or `-1` for `nvarchar(max)`), original nullability, and `Chinese_PRC_CI_AS`; the `sport.name` unique nonclustered single-key constraint must remain present and enabled.
+
 For a fresh laptop database, use this order:
 
 1. Apply the approved existing core-schema source (not present in this repository).
@@ -12,7 +62,8 @@ For a fresh laptop database, use this order:
 6. Run the read-only `phase2-personal-training-bookings-preflight.sql` and review column metadata, all CHECK constraints, foreign keys, and indexes. Then run `phase2-personal-training-bookings.sql`; it requires `dbo.users`, `dbo.coach`, `dbo.sport`, and `dbo.class_session`.
 7. Run `phase3-entity-image-urls.sql`; it requires `dbo.sport`, `dbo.coach`, and `dbo.facility` and adds nullable `image_url NVARCHAR(500)` columns only when absent. It validates existing columns and does not alter incompatible ones.
 8. Run `phase3a-coach-bio.sql` after the image migration and before starting with `ddl-auto=validate`; it adds nullable `dbo.coach.bio NVARCHAR(1000)` and validates existing metadata.
-9. Start the application after all required schema scripts complete; `spring.jpa.hibernate.ddl-auto=validate` will then verify mappings.
+9. After a verified backup and restored-database rehearsal, run `phase3b2-vietnamese-unicode-preflight.sql`, review its output and module/trigger dependencies, stop application writers, and run `phase3b2-vietnamese-unicode.sql` as a standalone batch. Confirm the metadata and unique constraint using the read-only checks above.
+10. Start the application after all required schema scripts complete; `spring.jpa.hibernate.ddl-auto=validate` will then verify mappings.
 
 Run each SQL file as its own standalone batch while writers are stopped, after a backup, in `SportCenterDB` (or review the database-name guard for an explicitly renamed deployment). None of these scripts was executed as part of the repository change. A matching ClassSession table with incompatible metadata fails closed; the script never drops, rebuilds, or silently accepts it.
 

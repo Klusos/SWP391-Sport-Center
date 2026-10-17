@@ -21,9 +21,11 @@ public class Facility {
     @JoinColumn(name = "sportId", nullable = false)
     private Sport sport;
 
+    @Nationalized
     @Column(nullable = false, length = 100)
     private String name;
 
+    @Nationalized
     @Column(nullable = false, length = 50)
     private String type;
 

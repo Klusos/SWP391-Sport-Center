@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.Nationalized;
 
 @Entity
 @Table(
@@ -34,6 +35,7 @@ public class CoachSport {
     @Column(nullable = false)
     private Integer experienceYears;
 
+    @Nationalized
     @Column(length = 255)
     private String certification;
 }

@@ -17,6 +17,7 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.Nationalized;
 
 @Entity
 @Table(name = "MemberProfile")
@@ -36,7 +37,8 @@ public class MemberProfile {
     @Column(precision = 5, scale = 2)
     private BigDecimal weight;
 
-    @Column(columnDefinition = "TEXT")
+    @Nationalized
+    @Column(columnDefinition = "nvarchar(max)")
     private String goal;
 
     @Column(nullable = false)

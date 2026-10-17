@@ -332,10 +332,21 @@ export function getPublicCoachesApi() {
   return request("/api/public/coaches", { headers: { Accept: "application/json" } });
 }
 
-export function getPublicFacilitiesApi() {
-  return request("/api/public/facilities", { headers: { Accept: "application/json" } });
+export function createFacilityApi(token, payload) {
+  return request("/api/facilities", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }
 
+export function updateFacilityApi(token, facilityId, payload) {
+  return request("/api/facilities/" + encodeURIComponent(facilityId), {
+    method: "PUT",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
 export function getFacilitiesApi(token) {
   return request("/api/facilities", { headers: authenticatedHeaders(token) });
 }
@@ -360,8 +371,4 @@ export function updateCoachProfileApi(token, id, payload) {
     headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-}
-
-export function uploadFacilityImageApi(token, id, file) {
-  return uploadImage("/api/facilities/" + encodeURIComponent(id) + "/image", token, file);
 }

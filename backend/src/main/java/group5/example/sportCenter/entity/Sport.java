@@ -17,10 +17,12 @@ public class Sport {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
+    @Nationalized
     @Column(nullable = false, unique = true, length = 100)
     private String name;
 
-    @Column(columnDefinition = "TEXT")
+    @Nationalized
+    @Column(columnDefinition = "nvarchar(max)")
     private String description;
 
     @Column(nullable = false, length = 30)
