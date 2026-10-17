@@ -1,7 +1,22 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { coachesHome } from '../data/content.js'
+import Img from '../components/Img.jsx'
+import { getPublicCoachesApi, getPublicFacilitiesApi, getPublicSportsApi } from '../../api.js'
 
 export default function Home() {
+  const [coaches, setCoaches] = useState([])
+  const [facilities, setFacilities] = useState([])
+  const [sports, setSports] = useState([])
+  useEffect(() => {
+    let active = true
+    Promise.allSettled([getPublicCoachesApi(), getPublicFacilitiesApi(), getPublicSportsApi()]).then(([coachResult, facilityResult, sportResult]) => {
+      if (!active) return
+      if (coachResult.status === 'fulfilled') setCoaches(Array.isArray(coachResult.value) ? coachResult.value.slice(0, 3) : [])
+      if (facilityResult.status === 'fulfilled') setFacilities(Array.isArray(facilityResult.value) ? facilityResult.value.slice(0, 3) : [])
+      if (sportResult.status === 'fulfilled') setSports(Array.isArray(sportResult.value) ? sportResult.value.slice(0, 3) : [])
+    })
+    return () => { active = false }
+  }, [])
   return (
     <>
       {/* HERO */}
@@ -18,7 +33,6 @@ export default function Home() {
                 <Link to="/bo-mon" className="btn btn-cyan">KHÁM PHÁ NGAY</Link>
                 <Link to="/bo-mon" className="btn btn-ghost">XEM CÁC BỘ MÔN</Link>
               </div>
-              <p className="hero-stats">20+ BỘ MÔN <span>35+ HLV</span> <span>10K+ HỘI VIÊN</span></p>
             </div>
             <div className="col-lg-5 d-none d-lg-block">
               <div className="hero-art" aria-hidden="true">
@@ -73,56 +87,39 @@ export default function Home() {
           <h2 className="h-xl">Chọn môn thể thao phù hợp với bạn</h2>
           <p className="muted">Tập luyện theo sở thích, mục tiêu và cấp độ của riêng bạn.</p>
           <Link to="/bo-mon" className="btn btn-cyan mt-3">XEM BỘ MÔN VÀ KHÓA HỌC</Link>
+          {sports.length > 0 && <div className="row g-3 mt-3" aria-label="Một số bộ môn đang hoạt động">
+            {sports.map((sport) => <div className="col-sm-6 col-lg-4" key={sport.id}>
+              <Link to={'/bo-mon/' + sport.id} className="sport-card sport-catalog-card d-block h-100 text-decoration-none">
+                <Img src={sport.imageUrl} alt={sport.name} label={sport.name} className="home-catalog-image" />
+                <div className="sport-catalog-copy"><h5 className="mt-0">{sport.name}</h5><span className="link-arrow">Xem khóa học</span></div>
+              </Link>
+            </div>)}
+          </div>}
         </div>
       </section>
 
       {/* CƠ SỞ VẬT CHẤT */}
-      <section className="section">
-        <div className="container-xl">
-          <p className="label-blue">CƠ SỞ VẬT CHẤT</p>
-          <h2 className="h-xl">Không gian truyền cảm hứng vận động</h2>
-          <div className="row g-4 mt-2">
-            {[
-              ['G', 'PHÒNG GYM', 'Thiết bị sức mạnh & cardio', false],
-              ['S', 'HỒ BƠI', 'Khu bơi tiêu chuẩn, sạch sẽ', true],
-              ['Y', 'STUDIO', 'Yoga, dance & group class', false],
-            ].map(([l, t, d, dark]) => (
-              <div className="col-md-4" key={t}>
-                <Link to="/co-so-vat-chat" className={`space-card ${dark ? 'is-dark' : ''}`}>
-                  <div className="space-top"><span className="space-letter">{l}</span></div>
-                  <div className="space-body">
-                    <h6>{t}</h6>
-                    <p>{d}</p>
-                  </div>
-                </Link>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
+      <section className="section"><div className="container-xl">
+        <p className="label-blue">CƠ SỞ VẬT CHẤT</p><h2 className="h-xl">Không gian truyền cảm hứng vận động</h2>
+        <div className="row g-4 mt-2">{facilities.map((facility) => <div className="col-md-4" key={facility.id}>
+          <Link to="/co-so-vat-chat" className="space-card">
+            <Img src={facility.imageUrl} alt={facility.name} label={facility.name} className="home-catalog-image" />
+            <div className="space-body"><h6>{facility.name}</h6><p>{[facility.type, facility.sportName].filter(Boolean).join(' · ')}</p></div>
+          </Link>
+        </div>)}</div>
+        <Link to="/co-so-vat-chat" className="link-arrow mt-3 d-inline-block">Xem tất cả cơ sở</Link>
+      </div></section>
       {/* ĐỘI NGŨ HLV */}
-      <section className="section coaches-dark">
-        <div className="container-xl">
-          <p className="label-cyan">ĐỘI NGŨ HUẤN LUYỆN VIÊN</p>
-          <h2 className="h-xl text-white">Được hướng dẫn bởi những người hiểu bạn</h2>
-          <div className="row g-4 mt-3">
-            {coachesHome.map((c) => (
-              <div className="col-md-4" key={c.name}>
-                <div className="d-flex gap-3 align-items-center">
-                  <span className="coach-avatar" style={{ background: c.color }}>{c.initials}</span>
-                  <div>
-                    <h6 className="text-white fw-bold text-uppercase mb-1">{c.name}</h6>
-                    <p className="coach-role mb-1">{c.role}</p>
-                    <p className="coach-desc mb-0">{c.desc}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
+      <section className="section coaches-dark"><div className="container-xl">
+        <p className="label-cyan">ĐỘI NGŨ HUẤN LUYỆN VIÊN</p><h2 className="h-xl text-white">Được hướng dẫn bởi đội ngũ Sport Center</h2>
+        <div className="row g-4 mt-3">{coaches.map((coach) => <div className="col-md-4" key={coach.id}>
+          <div className="d-flex gap-3 align-items-center">
+            <Img src={coach.imageUrl} alt={coach.name} label={coach.name} className="coach-avatar-image" />
+            <h6 className="text-white fw-bold text-uppercase mb-0">{coach.name}</h6>
           </div>
-        </div>
-      </section>
-
+        </div>)}</div>
+        <Link to="/huan-luyen-vien" className="btn btn-cyan mt-4">XEM ĐỘI NGŨ</Link>
+      </div></section>
       {/* CTA */}
       <section className="cta-band">
         <div className="container-xl">

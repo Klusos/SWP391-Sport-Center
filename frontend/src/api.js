@@ -1,4 +1,5 @@
-﻿const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+const API_BASE = API_BASE_URL.replace(/\/$/, "");
 
 async function request(path, options = {}) {
   const response = await fetch(API_BASE + path, options);
@@ -213,6 +214,22 @@ export function getSportsApi(token) {
   return request("/api/sports", { headers: authenticatedHeaders(token) });
 }
 
+export function createSportApi(token, payload) {
+  return request("/api/sports", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateSportApi(token, sportId, payload) {
+  return request("/api/sports/" + encodeURIComponent(sportId), {
+    method: "PUT",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getCoachSportsApi(token, coachId) {
   return request("/api/coaches/" + encodeURIComponent(coachId) + "/sports", {
     headers: authenticatedHeaders(token),
@@ -300,4 +317,51 @@ export function updateMembershipPlanStatusApi(token, planId, status) {
     headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
   });
+}
+
+export function resolveImageUrl(imageUrl) {
+  if (!imageUrl || typeof imageUrl !== "string") return "";
+  try {
+    return new URL(imageUrl, API_BASE_URL.endsWith("/") ? API_BASE_URL : API_BASE_URL + "/").toString();
+  } catch {
+    return "";
+  }
+}
+
+export function getPublicCoachesApi() {
+  return request("/api/public/coaches", { headers: { Accept: "application/json" } });
+}
+
+export function getPublicFacilitiesApi() {
+  return request("/api/public/facilities", { headers: { Accept: "application/json" } });
+}
+
+export function getFacilitiesApi(token) {
+  return request("/api/facilities", { headers: authenticatedHeaders(token) });
+}
+
+async function uploadImage(path, token, file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return request(path, { method: "PUT", headers: authenticatedHeaders(token), body: formData });
+}
+
+export function uploadSportImageApi(token, id, file) {
+  return uploadImage("/api/sports/" + encodeURIComponent(id) + "/image", token, file);
+}
+
+export function uploadCoachImageApi(token, id, file) {
+  return uploadImage("/api/coaches/" + encodeURIComponent(id) + "/image", token, file);
+}
+
+export function updateCoachProfileApi(token, id, payload) {
+  return request("/api/coaches/" + encodeURIComponent(id) + "/profile", {
+    method: "PUT",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function uploadFacilityImageApi(token, id, file) {
+  return uploadImage("/api/facilities/" + encodeURIComponent(id) + "/image", token, file);
 }

@@ -29,7 +29,7 @@ public class SportService {
 
     public List<PublicSportOptionResponse> getActiveSportOptions() {
         return sportRepository.findByStatus("ACTIVE").stream()
-                .map(sport -> new PublicSportOptionResponse(sport.getId(), sport.getName()))
+                .map(sport -> new PublicSportOptionResponse(sport.getId(), sport.getName(), sport.getImageUrl()))
                 .toList();
     }
 
@@ -99,7 +99,8 @@ public class SportService {
                 sport.getId(),
                 sport.getName(),
                 sport.getDescription(),
-                sport.getStatus()
+                sport.getStatus(),
+                sport.getImageUrl()
         );
     }
 }

@@ -13,6 +13,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import group5.example.sportCenter.dto.CreateFacilityRequest;
 import group5.example.sportCenter.dto.FacilityResponse;
+import group5.example.sportCenter.dto.PublicFacilityResponse;
 import group5.example.sportCenter.dto.UpdateFacilityRequest;
 import group5.example.sportCenter.entity.Facility;
 import group5.example.sportCenter.entity.Sport;
@@ -84,6 +85,13 @@ public class FacilityService {
                 .toList();
     }
 
+    public List<PublicFacilityResponse> getPublicActiveFacilities() {
+        return facilityRepository.findByStatusAndSportStatus("ACTIVE", "ACTIVE").stream()
+                .map(facility -> new PublicFacilityResponse(facility.getId(), facility.getSport().getId(),
+                        facility.getSport().getName(), facility.getName(), facility.getType(), facility.getImageUrl()))
+                .toList();
+    }
+
     public FacilityResponse getFacilityById(Integer id) {
 
         Facility facility = facilityRepository.findById(id)
@@ -147,7 +155,8 @@ public class FacilityService {
 
                 facility.getName(),
                 facility.getType(),
-                facility.getStatus()
+                facility.getStatus(),
+                facility.getImageUrl()
         );
     }
 

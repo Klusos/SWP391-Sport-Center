@@ -9,16 +9,21 @@ import group5.example.sportCenter.dto.CreateFacilityRequest;
 import group5.example.sportCenter.dto.FacilityResponse;
 import group5.example.sportCenter.dto.UpdateFacilityRequest;
 import group5.example.sportCenter.service.FacilityService;
+import group5.example.sportCenter.service.EntityImageService;
 import jakarta.validation.Valid;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequestMapping("/api/facilities")
 public class FacilityController {
 
     private final FacilityService facilityService;
+    private final EntityImageService imageService;
 
-    public FacilityController(FacilityService facilityService) {
+    public FacilityController(FacilityService facilityService, EntityImageService imageService) {
         this.facilityService = facilityService;
+        this.imageService = imageService;
     }
 
     @PostMapping
@@ -56,5 +61,11 @@ public class FacilityController {
 
         return facilityService
                 .updateFacility(id, request);
+    }
+
+    @PutMapping(value = "/{id}/image", consumes = "multipart/form-data")
+    public FacilityResponse replaceImage(@PathVariable Integer id, @RequestParam("file") MultipartFile file) {
+        imageService.replaceFacilityImage(id, file);
+        return facilityService.getFacilityById(id);
     }
 }

@@ -5,6 +5,8 @@ import Login from "./pages/Login";
 import RegisterMember from "./pages/RegisterMember";
 import MemberList from "./pages/MemberList";
 import StaffManagement from "./pages/StaffManagement";
+import ImageManagement from "./pages/ImageManagement";
+import SportManagement from "./pages/SportManagement";
 import MembershipPlans from "./pages/MembershipPlans";
 import PtBooking from "./pages/PtBooking";
 import CoachPtSessions from "./pages/CoachPtSessions";
@@ -74,6 +76,8 @@ export default function App() {
       ? "/staff/consultations"
       : page === "members" ? "/staff/members"
         : page === "staff" ? "/staff/staff"
+        : page === "images" ? "/staff/images"
+        : page === "sports" ? "/staff/sports"
         : page === "membership-plans" ? "/staff/membership-plans" : "/staff/register-member"),
   };
 
@@ -98,6 +102,8 @@ export default function App() {
         <Route path="/staff/members" element={<MemberList {...staffProps} />} />
         <Route element={<AdminRoute auth={auth} />}>
           <Route path="/staff/staff" element={<StaffManagement {...staffProps} />} />
+          <Route path="/staff/images" element={<ImageManagement {...staffProps} />} />
+          <Route path="/staff/sports" element={<SportManagement {...staffProps} />} />
         </Route>
       </Route>
       <Route element={<MemberRoute auth={auth} />}>

@@ -28,4 +28,7 @@ public class CreateCoachRequest {
     @NotBlank(message = "Initial password is required")
     @Size(min = 6, message = "Password must contain at least 6 characters")
     private String password;
+
+    @Size(max = 1000, message = "Biography cannot exceed 1000 characters")
+    private String bio;
 }

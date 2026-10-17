@@ -1,4 +1,4 @@
-﻿export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
+export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
   const canAccessConsultations = role === "RECEPTIONIST" || role === "ADMIN";
 
   return (
@@ -27,7 +27,18 @@
             Quản lý nhân sự
           </button>
         )}
-        <button className={"nav-item clickable nav-button " + (activePage === "register" ? "active" : "")}
+        {role === "ADMIN" && (
+          <button className={"nav-item clickable nav-button " + (activePage === "sports" ? "active" : "")}
+            aria-current={activePage === "sports" ? "page" : undefined} type="button" onClick={() => onNavigate("sports")}>
+            {"Qu\u1ea3n l\u00fd b\u1ed9 m\u00f4n"}
+          </button>
+        )}
+        {role === "ADMIN" && (
+          <button className={"nav-item clickable nav-button " + (activePage === "images" ? "active" : "")}
+            aria-current={activePage === "images" ? "page" : undefined} type="button" onClick={() => onNavigate("images")}>
+            Quản lý hình ảnh
+          </button>
+        )}        <button className={"nav-item clickable nav-button " + (activePage === "register" ? "active" : "")}
           aria-current={activePage === "register" ? "page" : undefined} type="button" onClick={() => onNavigate("register")}>
           Đăng ký thành viên
         </button>

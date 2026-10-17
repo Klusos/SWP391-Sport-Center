@@ -17,4 +17,5 @@ public class FacilityResponse {
     private String name;
     private String type;
     private String status;
+    private String imageUrl;
 }

@@ -9,11 +9,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import group5.example.sportCenter.dto.CoachResponse;
+import group5.example.sportCenter.dto.PublicCoachResponse;
+import group5.example.sportCenter.dto.UpdateCoachProfileRequest;
 import group5.example.sportCenter.dto.CreateCoachRequest;
 import group5.example.sportCenter.entity.Coach;
 import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.CoachRepository;
+import group5.example.sportCenter.repository.CoachSportRepository;
 import group5.example.sportCenter.repository.UserRepository;
 
 @Service
@@ -22,14 +25,17 @@ public class CoachService {
 
     private final PasswordEncoder passwordEncoder;
     private final CoachRepository coachRepository;
+    private final CoachSportRepository coachSportRepository;
     private final UserRepository userRepository;
 
     public CoachService(
             CoachRepository coachRepository,
+            CoachSportRepository coachSportRepository,
             UserRepository userRepository,
             PasswordEncoder passwordEncoder) {
 
         this.coachRepository = coachRepository;
+        this.coachSportRepository = coachSportRepository;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
     }
@@ -39,6 +45,26 @@ public class CoachService {
         return coachRepository.findAll()
                 .stream()
                 .map(this::toResponse)
+                .toList();
+    }
+
+    public List<PublicCoachResponse> getPublicActiveCoaches() {
+        var coaches = coachRepository.findByStatusAndUserStatus("ACTIVE", "ACTIVE");
+        if (coaches.isEmpty()) {
+            return List.of();
+        }
+        var coachIds = coaches.stream().map(Coach::getId).toList();
+        var assignments = coachSportRepository.findByCoachIdInAndSportStatus(coachIds, "ACTIVE");
+        var sportsByCoach = assignments.stream().collect(java.util.stream.Collectors.groupingBy(
+                assignment -> assignment.getCoach().getId(),
+                java.util.stream.Collectors.mapping(assignment -> new PublicCoachResponse.PublicCoachSport(
+                        assignment.getSport().getId(), assignment.getSport().getName(),
+                        assignment.getExperienceYears(), assignment.getCertification()),
+                        java.util.stream.Collectors.toList())));
+        return coaches.stream()
+                .map(coach -> new PublicCoachResponse(coach.getId(), coach.getUser().getName(),
+                        coach.getImageUrl(), coach.getBio(),
+                        sportsByCoach.getOrDefault(coach.getId(), List.of())))
                 .toList();
     }
 
@@ -80,10 +106,25 @@ public class CoachService {
 
         coach.setUser(savedUser);
         coach.setStatus("ACTIVE");
+        coach.setBio(normalizeBio(request.getBio()));
 
         Coach savedCoach = coachRepository.save(coach);
 
         return toResponse(savedCoach);
+    }
+
+    @Transactional
+    public CoachResponse updateProfile(Integer id, UpdateCoachProfileRequest request) {
+        Coach coach = coachRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Coach not found with id: " + id));
+        coach.setBio(normalizeBio(request.getBio()));
+        return toResponse(coachRepository.save(coach));
+    }
+
+    private String normalizeBio(String bio) {
+        if (bio == null) return null;
+        String normalized = bio.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 
     @Transactional
@@ -115,7 +156,9 @@ public class CoachService {
                 coach.getUser().getId(),
                 coach.getUser().getName(),
                 coach.getUser().getEmail(),
-                coach.getStatus()
+                coach.getStatus(),
+                coach.getImageUrl(),
+                coach.getBio()
         );
     }
 }

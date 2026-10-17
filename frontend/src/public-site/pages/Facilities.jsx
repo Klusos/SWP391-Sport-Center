@@ -1,8 +1,19 @@
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import Img from '../components/Img.jsx'
-import { timeline, coreValues, facilities } from '../data/content.js'
+import { timeline, coreValues } from '../data/content.js'
+import { getPublicFacilitiesApi } from '../../api.js'
 
 export default function Facilities() {
+  const [facilities, setFacilities] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let active = true
+    getPublicFacilitiesApi().then((rows) => { if (active) setFacilities(Array.isArray(rows) ? rows : []) })
+      .catch((err) => { if (active) setError(err.message || 'Không tải được cơ sở vật chất.') })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
   return (
     <>
       {/* Lịch sử */}
@@ -63,24 +74,22 @@ export default function Facilities() {
       </section>
 
       <section className="section">
-        <div className="container-xl">
-          <h2 className="h-xl mb-5">Mỗi khu vực, một trải nghiệm</h2>
-          <div className="d-flex flex-column gap-4">
-            {facilities.map((f, i) => (
-              <article className={`facility-row ${i % 2 ? 'reverse' : ''}`} key={f.title}>
-                <div className="facility-img">
-                  <Img src={f.img} alt={f.title} label={f.title} />
-                </div>
-                <div className="facility-info">
-                  <h3>{f.title}</h3>
-                  <p>{f.text}</p>
-                  <Link to="/tuyen-sinh" className="link-arrow">Khám phá <i className="bi bi-arrow-right" /></Link>
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
+  <div className="container-xl">
+    <h2 className="h-xl mb-5">Mỗi khu vực, một trải nghiệm</h2>
+    {error && <p className="banner error" role="alert">{error}</p>}
+    {loading ? <p role="status">Đang tải cơ sở vật chất…</p> : facilities.length === 0 ? <p>Hiện chưa có cơ sở vật chất đang hoạt động.</p> : (
+      <div className="d-flex flex-column gap-4">
+        {facilities.map((facility, index) => (
+          <article className={'facility-row ' + (index % 2 ? 'reverse' : '')} key={facility.id}>
+            <div className="facility-img"><Img src={facility.imageUrl} alt={facility.name} label={facility.name} /></div>
+            <div className="facility-info"><h3>{facility.name}</h3>
+              <p>{[facility.type, facility.sportName].filter(Boolean).join(' · ')}</p></div>
+          </article>
+        ))}
+      </div>
+    )}
+  </div>
+</section>
     </>
   )
 }

@@ -54,6 +54,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/public/sports").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/public/sports/*/courses", "/api/public/courses/*").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/public/membership-plans").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/public/coaches", "/api/public/facilities", "/api/public/images/*").permitAll()
 
                 .requestMatchers(HttpMethod.POST, "/api/consultation-requests").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/consultation-requests/me").hasRole("MEMBER")

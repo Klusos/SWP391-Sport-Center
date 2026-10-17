@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.Nationalized;
 
 @Entity
 @Table(name = "Sport")
@@ -24,4 +25,8 @@ public class Sport {
 
     @Column(nullable = false, length = 30)
     private String status;
+
+    @Nationalized
+    @Column(name = "image_url", length = 500)
+    private String imageUrl;
 }

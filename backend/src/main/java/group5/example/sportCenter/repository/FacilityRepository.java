@@ -15,4 +15,6 @@ public interface FacilityRepository
     List<Facility> findBySportIdAndStatus(
             Integer sportId,
             String status);
+
+    List<Facility> findByStatusAndSportStatus(String status, String sportStatus);
 }
