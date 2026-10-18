@@ -212,6 +212,9 @@ export function getAssignedPtBookingsApi(token) {
   return request("/api/pt-bookings/assigned", { headers: authenticatedHeaders(token) });
 }
 
+export function getStaffAttendanceSessionsApi(token) {
+  return request("/api/attendance/sessions", { headers: authenticatedHeaders(token) });
+}
 export function getCoachAttendanceSessionsApi(token) {
   return request("/api/attendance/coach/sessions", { headers: authenticatedHeaders(token) });
 }
