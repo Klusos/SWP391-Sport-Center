@@ -39,12 +39,19 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiErrorResponse> handleBusinessConflict(IllegalArgumentException exception) {
-        return response(HttpStatus.CONFLICT, safeMessage(exception.getMessage(), "The request conflicts with current business rules"));
+        return response(HttpStatus.CONFLICT,
+                safeMessage(exception.getMessage(), "The request conflicts with current business rules"));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
-    public ResponseEntity<ApiErrorResponse> handleDataConflict(DataIntegrityViolationException exception) {
-        return response(HttpStatus.CONFLICT, "The request conflicts with existing data");
+    public ResponseEntity<ApiErrorResponse> handleDataConflict(
+            DataIntegrityViolationException exception) {
+
+        exception.printStackTrace(); // Chỉ dùng để debug tạm thời
+
+        return response(
+                HttpStatus.CONFLICT,
+                "The request conflicts with existing data");
     }
 
     @ExceptionHandler(ResponseStatusException.class)
