@@ -1,9 +1,12 @@
 package group5.example.sportCenter.repository;
 
 import java.util.List;
+import java.util.Optional;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import group5.example.sportCenter.entity.CourseRegistration;
@@ -15,8 +18,13 @@ public interface CourseRegistrationRepository extends JpaRepository<CourseRegist
     List<CourseRegistration> findByCourseClassIdAndStatus(Integer classId, CourseRegistrationStatus status);
 
     @EntityGraph(attributePaths = "member")
-    java.util.Optional<CourseRegistration> findByMemberIdAndCourseClassIdAndStatus(
+    Optional<CourseRegistration> findByMemberIdAndCourseClassIdAndStatus(
             Integer memberId, Integer classId, CourseRegistrationStatus status);
+
+    /** Serializes concurrent payments for the same registration (Flow 3). */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select registration from CourseRegistration registration where registration.id = :id")
+    Optional<CourseRegistration> findByIdForPaymentUpdate(@Param("id") Integer id);
 
     boolean existsByMemberIdAndCourseClassIdAndStatus(
             Integer memberId, Integer classId, CourseRegistrationStatus status);

@@ -75,7 +75,12 @@ public class MembershipService {
     @Transactional
     public MembershipResponse createMembership(CreateMembershipRequest request, Jwt callerJwt) {
         User actor = currentActor(callerJwt);
-        requireOwnMembershipOrStaff(actor, request.getMemberId());
+        // MEMBER phải mua qua POST /api/payments (purpose MEMBERSHIP); endpoint này chỉ để staff gán thủ công.
+        String actorRole = actor.getRole().toUpperCase(Locale.ROOT);
+        if (!actorRole.equals("ADMIN") && !actorRole.equals("RECEPTIONIST")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Members must purchase a membership through /api/payments");
+        }
 
         User member = userRepository.findById(request.getMemberId())
                 .orElseThrow(() -> new ResourceNotFoundException(
@@ -102,10 +107,39 @@ public class MembershipService {
         membership.setStartDate(request.getStartDate());
         membership.setEndDate(endDate);
         membership.setAutoRenew(request.getAutoRenew());
-        // Preserve the existing purchase state transition. Payment handling is not implemented here.
         membership.setStatus("ACTIVE");
 
         return toResponse(membershipRepository.save(membership));
+    }
+
+    /**
+     * Gọi từ PaymentService khi thanh toán MEMBERSHIP thành công (chạy trong transaction của payment).
+     * Chưa có gói còn hiệu lực -> kích hoạt từ hôm nay. Đang có gói -> gia hạn bằng một gói mới
+     * bắt đầu đúng ngày gói hiện tại kết thúc (endDate là mốc loại trừ), không sửa gói cũ.
+     */
+    @Transactional
+    public Membership activateOrRenewFromPayment(Integer memberId, Integer planId, boolean autoRenew) {
+        // Khoá dòng user để hai lần gia hạn song song không cùng tính từ một endDate.
+        User member = userRepository.findByIdForBookingUpdate(memberId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + memberId));
+        MembershipPlan plan = membershipPlanRepository.findById(planId)
+                .orElseThrow(() -> new ResourceNotFoundException("Membership plan not found with id: " + planId));
+
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        LocalDate startDate = membershipRepository
+                .findByMemberIdAndStatusAndEndDateGreaterThan(memberId, "ACTIVE", today).stream()
+                .map(Membership::getEndDate)
+                .max(LocalDate::compareTo)
+                .orElse(today);
+
+        Membership membership = new Membership();
+        membership.setMember(member);
+        membership.setPlan(plan);
+        membership.setStartDate(startDate);
+        membership.setEndDate(startDate.plusMonths(plan.getDurationMonths()));
+        membership.setAutoRenew(autoRenew);
+        membership.setStatus("ACTIVE");
+        return membershipRepository.save(membership);
     }
 
     @Transactional

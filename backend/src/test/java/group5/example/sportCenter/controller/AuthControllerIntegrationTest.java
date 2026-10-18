@@ -29,7 +29,8 @@ import group5.example.sportCenter.repository.UserRepository;
         "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "spring.jpa.show-sql=false",
-        "app.jwt.secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+        "app.jwt.secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "app.payment.callback-secret=auth-test-payment-callback-secret"
 })
 @Transactional
 class AuthControllerIntegrationTest {

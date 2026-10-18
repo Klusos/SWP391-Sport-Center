@@ -121,11 +121,21 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/pt-bookings/assigned").hasRole("COACH")
                 .requestMatchers("/api/pt-bookings", "/api/pt-bookings/**").denyAll()
 
+                .requestMatchers(HttpMethod.GET, "/api/payments/online/callback").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/payments").hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
+                .requestMatchers(HttpMethod.PATCH, "/api/payments/*/counter").hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers(HttpMethod.PATCH, "/api/payments/*/cancel").hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/payments/me").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/payments/member/*").hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers("/api/payments", "/api/payments/**").denyAll()
+                .requestMatchers(HttpMethod.GET, "/api/reports/**").hasRole("ADMIN")
+                .requestMatchers("/api/reports", "/api/reports/**").denyAll()
+
                 .requestMatchers(HttpMethod.GET, "/api/membership-plans", "/api/membership-plans/**").hasRole("ADMIN")
                 .requestMatchers("/api/membership-plans", "/api/membership-plans/**").hasRole("ADMIN")
 
                 .requestMatchers(HttpMethod.POST, "/api/memberships/expire").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.POST, "/api/memberships").hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
+                .requestMatchers(HttpMethod.POST, "/api/memberships").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.GET, "/api/memberships").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.GET, "/api/memberships/member/*", "/api/memberships/*")
                     .hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
