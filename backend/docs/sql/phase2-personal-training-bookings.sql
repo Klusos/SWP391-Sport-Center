@@ -234,7 +234,7 @@ BEGIN TRY
             OR NOT EXISTS (SELECT 1 FROM sys.index_columns k JOIN sys.columns c ON c.object_id = k.object_id AND c.column_id = k.column_id
                            WHERE k.object_id = i.object_id AND k.index_id = i.index_id AND k.key_ordinal = 4 AND c.name = N'status')
             OR EXISTS (SELECT 1 FROM sys.index_columns k WHERE k.object_id = i.object_id AND k.index_id = i.index_id
-                       AND k.key_ordinal > 0 AND k.is_descending_key = 1))
+                       AND k.key_ordinal > 0 AND k.is_descending_key = 1)))
         THROW 50410, 'Existing PT coach-time index has the wrong definition or is disabled.', 1;
     IF EXISTS (
         SELECT 1 FROM sys.indexes i WHERE i.object_id = OBJECT_ID(N'dbo.personal_training_booking')
@@ -251,7 +251,7 @@ BEGIN TRY
             OR NOT EXISTS (SELECT 1 FROM sys.index_columns k JOIN sys.columns c ON c.object_id = k.object_id AND c.column_id = k.column_id
                            WHERE k.object_id = i.object_id AND k.index_id = i.index_id AND k.key_ordinal = 4 AND c.name = N'status')
             OR EXISTS (SELECT 1 FROM sys.index_columns k WHERE k.object_id = i.object_id AND k.index_id = i.index_id
-                       AND k.key_ordinal > 0 AND k.is_descending_key = 1))
+                       AND k.key_ordinal > 0 AND k.is_descending_key = 1)))
         THROW 50411, 'Existing PT member-time index has the wrong definition or is disabled.', 1;
 
     IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.personal_training_booking')

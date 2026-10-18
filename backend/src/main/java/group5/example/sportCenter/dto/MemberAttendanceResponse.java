@@ -18,5 +18,7 @@ public record MemberAttendanceResponse(
         Integer markedById,
         LocalDateTime markedAt,
         String note,
-        boolean validForStatistics) {
+        boolean validForStatistics,
+        Integer sportId,
+        String sportName) {
 }

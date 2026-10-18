@@ -1,0 +1,4 @@
+.staff-attendance-filters { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(180px, .45fr); gap: 12px; margin-bottom: 14px; }
+.staff-attendance-filters label { display: grid; gap: 6px; color: var(--text-sub); font-size: 13px; }
+.staff-attendance-filters input, .staff-attendance-filters select { min-height: 40px; border: 1px solid #bdccda; border-radius: 8px; padding: 8px 10px; background: #fff; color: var(--text-main); }
+@media (max-width: 620px) { .staff-attendance-filters { grid-template-columns: 1fr; } }

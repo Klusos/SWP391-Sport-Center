@@ -237,11 +237,12 @@ public class AttendanceService {
         var courseClass = session.getCourseClass();
         var offering = courseClass.getCourseOffering();
         var course = offering.getCourse();
+        var sport = course.getSport();
         return new MemberAttendanceResponse(attendance.getId(), session.getId(), courseClass.getId(),
                 courseClass.getName(), session.getStartTime(), session.getEndTime(), session.getStatus(), offering.getId(),
                 offering.getName(), course.getId(), course.getName(), attendance.getStatus().name(),
                 attendance.getMarkedBy() == null ? null : attendance.getMarkedBy().getId(), attendance.getMarkedAt(),
-                attendance.getNote(), !isCancelled(session));
+                attendance.getNote(), !isCancelled(session), sport.getId(), sport.getName());
     }
 
     private AttendanceHistoryResponse historyResponse(AttendanceHistory history) {

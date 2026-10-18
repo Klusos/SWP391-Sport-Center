@@ -281,6 +281,11 @@ Attendance is recorded per ClassSession and confirmed CourseRegistration. An unm
 | `PUT /api/attendance/sessions/{sessionId}/members/{memberId}` | Assigned COACH, ADMIN, RECEPTIONIST | `MarkAttendanceRequest` | Creates the initial mark or corrects an existing status. |
 | `GET /api/attendance/{attendanceId}/history` | Assigned COACH, ADMIN, RECEPTIONIST, owning MEMBER | None | Returns immutable initial-mark and correction events. |
 | `GET /api/attendance/me` | MEMBER | None | Returns only the authenticated Member's attendance history. |
+Member attendance response fields include `attendanceId`, `classSessionId`, `courseClassId`, `courseClassName`, `startTime`, `endTime`, `sessionStatus`, `courseOfferingId`, `courseOfferingName`, `courseId`, `courseName`, `status`, `markedById`, `markedAt`, `note`, `validForStatistics`, `sportId`, and `sportName`. Sport identity is derived from the existing ClassSession → CourseClass → CourseOffering → Course → Sport relationship. No Sport fields are accepted from the client.
+
+```json
+{"attendanceId":15,"classSessionId":21,"courseClassId":3,"courseClassName":"Morning group","startTime":"2026-10-12T10:00:00","endTime":"2026-10-12T11:00:00","sessionStatus":"SCHEDULED","courseOfferingId":8,"courseOfferingName":"October offering","courseId":5,"courseName":"Swimming basics","status":"PRESENT","markedById":7,"markedAt":"2026-10-12T10:03:00","note":null,"validForStatistics":true,"sportId":2,"sportName":"Swimming"}
+```
 
 Mark request example:
 
