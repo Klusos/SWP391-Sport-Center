@@ -65,7 +65,8 @@ For a fresh laptop database, use this order:
 9. Run `phase3-entity-image-urls.sql`; it requires `dbo.sport`, `dbo.coach`, and `dbo.facility` and adds nullable `image_url NVARCHAR(500)` columns only when absent. It validates existing columns and does not alter incompatible ones.
 10. Run `phase3a-coach-bio.sql` after the image migration and before starting with `ddl-auto=validate`; it adds nullable `dbo.coach.bio NVARCHAR(1000)` and validates existing metadata.
 11. After a verified backup and restored-database rehearsal, run `phase3b2-vietnamese-unicode-preflight.sql`, review its output and module/trigger dependencies, stop application writers, and run `phase3b2-vietnamese-unicode.sql` as a standalone batch. Confirm the metadata and unique constraint using the read-only checks above.
-12. Start the application after all required schema scripts complete; `spring.jpa.hibernate.ddl-auto=validate` will then verify mappings.
+12. Run `phase6-1a-notifications.sql` after the core schema (it requires `dbo.users` with an `INT` primary key). It creates or validates `dbo.notification`, adds/validates its owner FK and defaults, and adds the user-created and filtered unread indexes. It is transactional and idempotent, rejects incompatible existing notification structures, and must be run manually; it has not been executed.
+13. Start the application after all required schema scripts complete; `spring.jpa.hibernate.ddl-auto=validate` will then verify mappings.
 
 Run each SQL file as its own standalone batch while writers are stopped, after a backup, in `SportCenterDB` (or review the database-name guard for an explicitly renamed deployment). None of these scripts was executed as part of the repository change. A matching ClassSession table with incompatible metadata fails closed; the script never drops, rebuilds, or silently accepts it.
 

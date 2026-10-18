@@ -131,6 +131,11 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/reports/**").hasRole("ADMIN")
                 .requestMatchers("/api/reports", "/api/reports/**").denyAll()
 
+                .requestMatchers(HttpMethod.POST, "/api/admin/notifications/broadcast").hasRole("ADMIN")
+                .requestMatchers("/api/admin/notifications", "/api/admin/notifications/**").denyAll()
+                .requestMatchers("/api/notifications", "/api/notifications/**")
+                    .hasAnyRole("ADMIN", "RECEPTIONIST", "COACH", "MEMBER")
+
                 .requestMatchers(HttpMethod.GET, "/api/membership-plans", "/api/membership-plans/**").hasRole("ADMIN")
                 .requestMatchers("/api/membership-plans", "/api/membership-plans/**").hasRole("ADMIN")
 

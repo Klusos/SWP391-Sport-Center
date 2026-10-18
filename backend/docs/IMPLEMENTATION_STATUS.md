@@ -321,4 +321,17 @@ The final registration unit is one CourseClass, not an entire Course or an indiv
 - Test database was the existing `jdbc:h2:mem:phase1;MODE=MSSQLServer` profile; the integration test checks that the connected JDBC URL is in-memory H2 and does not contain `SportCenterDB`. No SQL Server connection or migration was performed.
 - Offline Maven 3.9.16 `package -DskipTests`: **exit code 0**. Maven Wrapper remains unusable in this PowerShell environment (`Cannot index into a null array`), so the cached Maven executable was used. Postman tests were not run or claimed.
 - Final verification on this update: cached Maven 3.9.16 `test` and `package` both completed with **BUILD SUCCESS**; each ran 92 tests with 0 failures, 0 errors, 0 skipped. The SQL Server migration remains unexecuted.
+
+### Phase 6.1A Notification Core Backend
+
+- Added owner-scoped notification listing, unread count, mark-one-read, and mark-all-read APIs for ADMIN, RECEPTIONIST, COACH, and MEMBER. Ownership is resolved from the JWT subject and active User record. Another user's or unknown notification ID returns 404. No notification-send endpoint is exposed; `NotificationService.createForUser` is the internal event-integration seam.
+- Listing is paginated (default page 0, size 20; maximum size 100) and newest-first. Mark-one and mark-all are idempotent; mark-all uses a bulk database update restricted to the authenticated owner. DTOs expose only `id`, `title`, `message`, `isRead`, and `createdAt`.
+- Manual migration: `docs/sql/phase6-1a-notifications.sql`. It creates or validates `dbo.notification`, uses an `INT` FK to `dbo.users`, a false default for `is_read`, `DATETIME2(6)`, a user/newest index, and a filtered unread index. Existing incompatible table metadata fails closed. The migration has not been executed and needs SQL Server review plus Hibernate `ddl-auto=validate` after manual application.
+- Phase 6.1A focused tests: **8 passed**. The full isolated H2 suite after the core implementation: **191 passed, 0 failures, 0 errors, 0 skipped**. No SQL Server connection or migration execution was performed.
 - Remaining deployment checks: verify the updated migration and Hibernate mapping on a disposable SQL Server database, especially DECIMAL precision/scale, lowercase snake_case physical naming and filtered-index/session behavior. SportCenterDB migration remains pending.
+
+### Phase 6.1B ADMIN Broadcast Notifications
+
+- Added `POST /api/admin/notifications/broadcast`, restricted to ADMIN, to create one unread personal notification for every ACTIVE account with one of the four supported roles, including the initiating ADMIN. Request validation limits title to 150 characters and message to 5,000 characters; recipients, sender, read state, and timestamp are never selected from request fields.
+- Recipient IDs are selected in one query and written in JDBC batches under the service transaction. A persistence failure rolls back all rows. The response count is derived from successful insert results. Each request is a separate broadcast; network retries can create duplicates because the schema intentionally has no broadcast ID/idempotency key. Status changes concurrent with the selected-recipient query may affect who receives that broadcast.
+- No database migration or schema change is required. Verification: focused Notification core and broadcast tests **13 passed, 0 failures, 0 errors, 0 skipped**; full isolated H2 suite **196 passed, 0 failures, 0 errors, 0 skipped**. No SQL Server connection or migration execution was performed.
