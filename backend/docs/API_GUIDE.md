@@ -269,6 +269,53 @@ Response sample:
 {"id":21,"classId":3,"className":"Morning group","facilityId":6,"facilityName":"Main court","startTime":"2026-10-12T10:00:00","endTime":"2026-10-12T11:00:00","status":"SCHEDULED","warnings":[]}
 ```
 
+## Class attendance (Phase 4B.1)
+
+Attendance is recorded per ClassSession and confirmed CourseRegistration. An unmarked Member is represented in the roster as `NOT_MARKED`; it is not a persisted status. Attendance statuses are `PRESENT`, `ABSENT`, and `EXCUSED`. Membership is not checked. The assigned Coach is resolved through ClassSession → CourseClass → Coach; actor IDs are always taken from the authenticated JWT.
+
+| Method and path | Allowed caller | Request body | Behavior |
+|---|---|---|---|
+| `GET /api/attendance/coach/sessions` | COACH | None | Lists only ClassSessions for the authenticated Coach's assigned CourseClasses. Each session includes `sportId` and `sportName` derived from its Course. |
+| `GET /api/attendance/sessions` | ADMIN, RECEPTIONIST | None | Lists sessions for staff attendance operations, using the same response fields as Coach discovery, including `sportId` and `sportName`. |
+| `GET /api/attendance/sessions/{sessionId}/roster` | Assigned COACH, ADMIN, RECEPTIONIST | None | Returns session context and confirmed registrants with current status or `NOT_MARKED`; each row includes nullable `attendanceId`. |
+| `PUT /api/attendance/sessions/{sessionId}/members/{memberId}` | Assigned COACH, ADMIN, RECEPTIONIST | `MarkAttendanceRequest` | Creates the initial mark or corrects an existing status. |
+| `GET /api/attendance/{attendanceId}/history` | Assigned COACH, ADMIN, RECEPTIONIST, owning MEMBER | None | Returns immutable initial-mark and correction events. |
+| `GET /api/attendance/me` | MEMBER | None | Returns only the authenticated Member's attendance history. |
+
+Mark request example:
+
+```json
+{"status":"PRESENT","note":"Arrived before warm-up","reason":null}
+```
+
+Roster members with and without a mark are represented as:
+
+```json
+{"classSessionId":21,"courseClassId":3,"courseClassName":"Morning group","startTime":"2026-10-12T10:00:00","endTime":"2026-10-12T11:00:00","sessionStatus":"SCHEDULED","markingAllowed":true,"members":[{"memberId":42,"attendanceId":15,"memberName":"Nguyen An","attendanceStatus":"PRESENT","markedById":7,"markedAt":"2026-10-12T10:03:00","note":null},{"memberId":43,"attendanceId":null,"memberName":"Tran Binh","attendanceStatus":"NOT_MARKED","markedById":null,"markedAt":null,"note":null}]}
+```
+
+`attendanceId` is the persisted Attendance primary key when a mark exists and `null` for `NOT_MARKED` rows. Roster reads do not create Attendance records. Clients can use a non-null ID with `GET /api/attendance/{attendanceId}/history` subject to the same object-level authorization.
+
+Coach and staff session discovery share this response shape. Sport identity is derived through ClassSession → CourseClass → CourseOffering → Course → Sport; the session list order remains start time ascending, then session ID ascending.
+
+```json
+{"classSessionId":21,"courseClassId":3,"courseClassName":"Morning group","courseOfferingId":8,"courseOfferingName":"October offering","courseId":5,"courseName":"Swimming basics","sportId":2,"sportName":"Swimming","assignedCoachId":7,"startTime":"2026-10-12T10:00:00","endTime":"2026-10-12T11:00:00","sessionStatus":"SCHEDULED"}
+```
+
+Successful mark/correction response example:
+
+```json
+{"id":15,"classSessionId":21,"courseClassId":3,"courseClassName":"Morning group","startTime":"2026-10-12T10:00:00","endTime":"2026-10-12T11:00:00","sessionStatus":"SCHEDULED","memberId":42,"memberName":"Nguyen An","status":"PRESENT","markedById":7,"markedAt":"2026-10-12T10:03:00","note":null,"validForStatistics":true}
+```
+
+For a status correction, `reason` is required and nonblank. An initial mark creates a history row with `oldStatus: null`; each actual correction records both statuses, actor, timestamp, and reason. Repeating the same status is idempotent: the existing response is returned unchanged and no new history event is added. `markedBy` and `markedAt` on Attendance describe the latest actual mark/change; AttendanceHistory preserves the full sequence. Notes are optional and limited to 500 characters. Clients cannot supply actor IDs or timestamps.
+
+Marking is allowed at or after the scheduled start time, including after the session is COMPLETED. A CANCELLED session returns 409 and cannot be marked or corrected. Other validation conflicts (before start or missing CONFIRMED registration) return 409; missing resources return 404; malformed/invalid request fields return 400; missing authentication returns 401 and unauthorized role/object access returns 403. A CANCELLED session's existing attendance and history remain readable by authorized callers; Member responses include the session status and set `validForStatistics` to false. Attendance operations do not change session or registration status, create ABSENT records automatically, or create Center CheckIn records.
+
+## Attendance SQL migration
+
+`docs/sql/phase4b1-class-attendance.sql` creates the Attendance and AttendanceHistory tables. Apply it manually after the approved core schema, the ClassSession migration, and the CourseRegistration migration, and before starting the backend with `spring.jpa.hibernate.ddl-auto=validate`. The migration was not executed or tested against SQL Server as part of this implementation; review and back up the intended database before manual execution.
+
 Facility and Coach overlaps use half-open interval semantics (`existing.startTime < requested.endTime` and `existing.endTime > requested.startTime`), so sessions that only touch at an endpoint do not overlap. Cancelled sessions do not reserve facilities or coaches. Make-up sessions outside CourseOffering dates and counts above `plannedSessions` are saved with warnings; the current code interprets `plannedSessions` per CourseClass for warning purposes only, pending confirmation of the intended counting scope.
 
 Lifecycle transitions: `SCHEDULED` can become `COMPLETED` only when current time is at or after `endTime`, and can become `CANCELLED` only before `startTime`. `COMPLETED` and `CANCELLED` are terminal; repeating the same status is idempotent, but changing to another status returns 409. PUT schedule updates are allowed only for `SCHEDULED` sessions. Invalid status/time request data returns 400. Statuses change only through the API; there is no time-driven auto-transition.

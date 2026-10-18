@@ -11,6 +11,7 @@ import MembershipPlans from "./pages/MembershipPlans";
 import PtBooking from "./pages/PtBooking";
 import CoachPtSessions from "./pages/CoachPtSessions";
 import CoachSkillAssessments from "./pages/CoachSkillAssessments";
+import CoachAttendance from "./pages/CoachAttendance";
 import MemberLevelsAssessments from "./pages/MemberLevelsAssessments";
 import PublicLayout from "./public-site/PublicLayout";
 import Admission from "./public-site/pages/Admission";
@@ -90,7 +91,8 @@ export default function App() {
     token: auth?.accessToken,
     role: auth?.role,
     onLogout: handleLogout,
-    onNavigate: (page) => navigate(page === "coach-assessments" ? "/coach/skill-assessments" : "/coach/pt-sessions"),
+    onNavigate: (page) => navigate(page === "coach-assessments" ? "/coach/skill-assessments"
+      : page === "coach-attendance" ? "/coach/attendance" : "/coach/pt-sessions"),
   };
   const memberProps = {
     token: auth?.accessToken,
@@ -131,6 +133,7 @@ export default function App() {
       <Route element={<CoachRoute auth={auth} />}>
         <Route path="/coach/pt-sessions" element={<CoachPtSessions {...coachProps} />} />
         <Route path="/coach/skill-assessments" element={<CoachSkillAssessments {...coachProps} />} />
+        <Route path="/coach/attendance" element={<CoachAttendance {...coachProps} />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

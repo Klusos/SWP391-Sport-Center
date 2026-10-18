@@ -212,6 +212,30 @@ export function getAssignedPtBookingsApi(token) {
   return request("/api/pt-bookings/assigned", { headers: authenticatedHeaders(token) });
 }
 
+export function getCoachAttendanceSessionsApi(token) {
+  return request("/api/attendance/coach/sessions", { headers: authenticatedHeaders(token) });
+}
+
+export function getAttendanceRosterApi(token, sessionId) {
+  return request("/api/attendance/sessions/" + encodeURIComponent(sessionId) + "/roster", {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function markAttendanceApi(token, sessionId, memberId, payload) {
+  return request("/api/attendance/sessions/" + encodeURIComponent(sessionId) + "/members/" + encodeURIComponent(memberId), {
+    method: "PUT",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getAttendanceHistoryApi(token, attendanceId) {
+  return request("/api/attendance/" + encodeURIComponent(attendanceId) + "/history", {
+    headers: authenticatedHeaders(token),
+  });
+}
+
 export function getPublicCoursesBySportApi(sportId) {
   return request("/api/public/sports/" + encodeURIComponent(sportId) + "/courses", {
     headers: { Accept: "application/json" },

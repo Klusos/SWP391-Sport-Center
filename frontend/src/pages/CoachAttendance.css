@@ -1,0 +1,140 @@
+.coach-attendance-main .coach-attendance-page {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 36px 24px 64px;
+}
+
+.coach-attendance-header,
+.coach-attendance-section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.coach-attendance-header { margin-bottom: 22px; }
+.coach-attendance-header h1 { margin: 4px 0 8px; color: #123b63; }
+.coach-attendance-header p:last-child,
+.coach-attendance-section-heading p { color: var(--text-sub); margin: 4px 0 0; }
+.coach-attendance-refresh,
+.coach-attendance-save,
+.coach-attendance-history-button {
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 13px;
+  background: #fff;
+  color: var(--text-main);
+  font-weight: 650;
+  cursor: pointer;
+}
+.coach-attendance-refresh:hover,
+.coach-attendance-history-button:hover { background: #f1f6fb; }
+.coach-attendance-save { color: #fff; border-color: #0878bd; background: #0878bd; }
+.coach-attendance-save:hover { background: #075d93; }
+.coach-attendance-refresh:disabled,
+.coach-attendance-save:disabled,
+.coach-attendance-history-button:disabled { opacity: .55; cursor: not-allowed; }
+.coach-attendance-panel {
+  margin: 18px 0;
+  padding: clamp(16px, 2.4vw, 24px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 24px #123b630a;
+}
+.coach-attendance-section-heading { align-items: center; margin-bottom: 14px; }
+.coach-attendance-section-heading h2 { margin: 0; color: #123b63; font-size: 21px; }
+.coach-attendance-section-heading > span { color: var(--text-sub); font-size: 13px; white-space: nowrap; }
+.coach-attendance-sessions { display: grid; gap: 9px; }
+.coach-attendance-session {
+  display: grid;
+  grid-template-columns: minmax(170px, 1.3fr) minmax(180px, 1fr) auto minmax(145px, .8fr);
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 13px 15px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text-main);
+  text-align: left;
+  cursor: pointer;
+}
+.coach-attendance-session:hover,
+.coach-attendance-session.is-selected { border-color: #1681c3; background: #f5faff; }
+.coach-attendance-session:disabled { cursor: not-allowed; opacity: .65; }
+.coach-attendance-session-title,
+.coach-attendance-session-time { display: grid; gap: 4px; min-width: 0; }
+.coach-attendance-session-title span,
+.coach-attendance-session-time span,
+.coach-attendance-availability { color: var(--text-sub); font-size: 13px; }
+.coach-attendance-session-title strong,
+.coach-attendance-session-title span { overflow-wrap: anywhere; }
+.coach-attendance-badge {
+  display: inline-flex;
+  width: fit-content;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #edf3f8;
+  color: #29415b;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.coach-attendance-badge.status-cancelled,
+.coach-attendance-badge.attendance-absent { background: #f8d7da; color: #842029; }
+.coach-attendance-badge.status-completed,
+.coach-attendance-badge.attendance-present { background: #d1e7dd; color: #0f5132; }
+.coach-attendance-badge.attendance-excused { background: #fff3cd; color: #795900; }
+.coach-attendance-session-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 14px; color: var(--text-sub); font-size: 13px; }
+.coach-attendance-table-wrap { overflow-x: auto; }
+.coach-attendance-table { width: 100%; border-collapse: collapse; }
+.coach-attendance-table th,
+.coach-attendance-table td { padding: 12px 10px; border-bottom: 1px solid #e7edf4; text-align: left; vertical-align: top; }
+.coach-attendance-table th { color: #53657a; font-size: 12px; white-space: nowrap; }
+.coach-attendance-table td { min-width: 120px; }
+.coach-attendance-table td:first-child { min-width: 150px; }
+.coach-attendance-table td:last-child { min-width: 145px; }
+.coach-attendance-table td strong,
+.coach-attendance-table td small { display: block; }
+.coach-attendance-table td small { margin-top: 5px; color: var(--text-sub); }
+.coach-attendance-table select,
+.coach-attendance-table textarea,
+.coach-attendance-reason input {
+  width: 100%;
+  min-height: 38px;
+  margin-top: 8px;
+  border: 1px solid #bdccda;
+  border-radius: 7px;
+  padding: 7px 9px;
+  color: var(--text-main);
+  background: #fff;
+}
+.coach-attendance-table textarea { min-height: 62px; resize: vertical; }
+.coach-attendance-select-label { display: block; margin-top: 8px; color: var(--text-sub); font-size: 11px; }
+.coach-attendance-reason { display: block; margin-top: 8px; font-size: 12px; }
+.coach-attendance-reason b { color: #a33131; }
+.coach-attendance-history-button { display: block; margin-top: 7px; min-height: 34px; }
+.coach-attendance-history-unavailable { max-width: 160px; }
+.coach-attendance-row-error { color: #842029 !important; }
+.coach-attendance-alert,
+.coach-attendance-empty { padding: 12px 14px; border-radius: 9px; }
+.coach-attendance-alert.is-error { color: #842029; background: #f8d7da; }
+.coach-attendance-alert.is-success { color: #0f5132; background: #d1e7dd; }
+.coach-attendance-alert.is-warning { color: #795900; background: #fff3cd; }
+.coach-attendance-empty { color: var(--text-sub); background: #f4f8fb; }
+.coach-attendance-footnote { margin: 12px 0 0; color: var(--text-sub); font-size: 12px; }
+.coach-attendance-history-list { display: grid; gap: 10px; padding-left: 22px; }
+.coach-attendance-history-list li { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; }
+.coach-attendance-history-list span { display: block; margin-top: 5px; color: var(--text-sub); font-size: 13px; }
+.coach-attendance-history-list p { margin: 6px 0 0; }
+@media (max-width: 900px) {
+  .coach-attendance-session { grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr); }
+}
+@media (max-width: 760px) {
+  .coach-attendance-main .coach-attendance-page { padding: 24px 14px 48px; }
+  .coach-attendance-header { align-items: flex-start; }
+  .coach-attendance-session { grid-template-columns: 1fr; }
+  .coach-attendance-table { min-width: 900px; }
+}

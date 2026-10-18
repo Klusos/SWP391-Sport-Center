@@ -31,6 +31,10 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
             aria-current={activePage === "coach-assessments" ? "page" : undefined} type="button" onClick={() => onNavigate("coach-assessments")}>
             Đánh giá kỹ năng
           </button>
+          <button className={"nav-item clickable nav-button " + (activePage === "coach-attendance" ? "active" : "")}
+            aria-current={activePage === "coach-attendance" ? "page" : undefined} type="button" onClick={() => onNavigate("coach-attendance")}>
+            {"\u0110i\u1ec3m danh"}
+          </button>
         </nav>
         <div className="nav-footer"><button className="nav-item clickable logout-button" type="button" onClick={onLogout}>Đăng xuất</button></div>
       </aside>
