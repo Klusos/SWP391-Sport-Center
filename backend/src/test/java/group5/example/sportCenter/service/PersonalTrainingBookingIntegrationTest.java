@@ -20,6 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.web.FilterChainProxy;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.test.context.ActiveProfiles;
@@ -68,6 +69,7 @@ class PersonalTrainingBookingIntegrationTest {
     @Autowired PersonalTrainingBookingService service;
     @Autowired PtBookingExpirationService expirationService;
     @Autowired UserRepository users;
+    @Autowired JdbcTemplate jdbc;
     @Autowired NotificationRepository notifications;
     @Autowired SportRepository sports;
     @Autowired CoachRepository coaches;
@@ -95,6 +97,7 @@ class PersonalTrainingBookingIntegrationTest {
     @BeforeEach
     void setUp() {
         mvc = MockMvcBuilders.webAppContextSetup(context).addFilters(security).build();
+        jdbc.update("delete from audit_log");
         notifications.deleteAllInBatch();
         bookings.deleteAll();
         classSessions.deleteAll();

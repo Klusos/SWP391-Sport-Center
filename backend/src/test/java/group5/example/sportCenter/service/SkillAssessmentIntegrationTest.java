@@ -12,6 +12,7 @@ import java.util.function.Supplier;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.web.FilterChainProxy;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.test.context.ActiveProfiles;
@@ -31,6 +32,7 @@ class SkillAssessmentIntegrationTest {
     @Autowired SkillAssessmentService service;
     @Autowired MemberSportLevelService levelService;
     @Autowired UserRepository users;
+    @Autowired JdbcTemplate jdbc;
     @Autowired NotificationRepository notifications;
     @Autowired SportRepository sports;
     @Autowired CoachRepository coaches;
@@ -48,6 +50,7 @@ class SkillAssessmentIntegrationTest {
 
     @BeforeEach
     void setup() {
+        jdbc.update("delete from audit_log");
         notifications.deleteAllInBatch();
         assessments.deleteAll(); consultationRequests.deleteAll(); levels.deleteAll();
         qualifications.deleteAll(); coaches.deleteAll(); sports.deleteAll(); users.deleteAll();

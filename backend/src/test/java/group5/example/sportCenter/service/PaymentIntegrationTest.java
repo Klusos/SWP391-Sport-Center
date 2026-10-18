@@ -24,6 +24,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.web.FilterChainProxy;
 import org.springframework.test.context.ActiveProfiles;
@@ -76,6 +77,7 @@ class PaymentIntegrationTest {
     @Autowired PaymentRepository payments;
     @Autowired NotificationRepository notifications;
     @Autowired UserRepository users;
+    @Autowired JdbcTemplate jdbc;
     @Autowired SportRepository sports;
     @Autowired CoachRepository coaches;
     @Autowired CoachSportRepository coachSports;
@@ -398,6 +400,7 @@ class PaymentIntegrationTest {
      * created them: other test classes may leave rows (e.g. member sport levels) that reference theirs.
      */
     private void cleanDatabase() {
+        jdbc.update("delete from audit_log");
         notifications.deleteAllInBatch();
         payments.deleteAll();
         bookings.deleteAll();

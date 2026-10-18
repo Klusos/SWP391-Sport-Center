@@ -62,6 +62,7 @@ import group5.example.sportCenter.entity.Sport;
 import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.repository.AttendanceHistoryRepository;
 import group5.example.sportCenter.repository.AttendanceRepository;
+import group5.example.sportCenter.repository.AuditLogRepository;
 import group5.example.sportCenter.repository.ClassSessionRepository;
 import group5.example.sportCenter.repository.CoachRepository;
 import group5.example.sportCenter.repository.CourseClassRepository;
@@ -103,6 +104,7 @@ class AttendanceIntegrationTest {
     @Autowired ClassSessionRepository sessions;
     @Autowired CourseRegistrationRepository registrations;
     @Autowired AttendanceRepository attendance;
+    @Autowired AuditLogRepository auditLogs;
     @Autowired AttendanceHistoryRepository histories;
     @MockitoSpyBean AttendanceHistoryRepository historySpy;
 
@@ -225,6 +227,8 @@ class AttendanceIntegrationTest {
 
         markAsAdmin(startedSession, member, "PRESENT");
         Attendance record = attendance.findByClassSessionIdAndMemberId(startedSession.getId(), member.getId()).orElseThrow();
+        assertEquals(1, auditCount(record.getId(), "MARK"));
+        assertEquals(0, auditCount(record.getId(), "CORRECT"));
         mvc.perform(get("/api/attendance/me").header("Authorization", bearer(member)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].attendanceId").value(record.getId()))
                 .andExpect(jsonPath("$[0].sportId").value(coachClass.getCourseOffering().getCourse().getSport().getId()))
@@ -305,6 +309,8 @@ class AttendanceIntegrationTest {
         assertEquals(AttendanceStatus.PRESENT, events.get(1).getOldStatus());
         assertEquals(AttendanceStatus.ABSENT, events.get(1).getNewStatus());
         assertEquals("Roster correction", events.get(1).getReason());
+        assertEquals(1, auditCount(record.getId(), "MARK"));
+        assertEquals(1, auditCount(record.getId(), "CORRECT"));
         Attendance updated = attendance.findById(record.getId()).orElseThrow();
         assertEquals(receptionist.getId(), updated.getMarkedBy().getId());
     }
@@ -476,5 +482,12 @@ class AttendanceIntegrationTest {
 
     private String bearer(User user) {
         return "Bearer " + jwtService.generateToken(user);
+    }
+
+    private long auditCount(Integer attendanceId, String action) {
+        return auditLogs.count((root, query, cb) -> cb.and(
+                cb.equal(root.get("entityType"), "ATTENDANCE"),
+                cb.equal(root.get("entityId"), attendanceId.toString()),
+                cb.equal(root.get("action"), action)));
     }
 }

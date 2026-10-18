@@ -41,6 +41,7 @@ public class ConsultationRequestService {
     private final MemberRegistrationService memberRegistration;
     private final AssessmentAccess access;
     private final ApplicationEventPublisher events;
+    private final AuditLogService auditLogs;
 
     public ConsultationRequestService(
             ConsultationRequestRepository consultations,
@@ -48,13 +49,15 @@ public class ConsultationRequestService {
             SportRepository sports,
             MemberRegistrationService memberRegistration,
             AssessmentAccess access,
-            ApplicationEventPublisher events) {
+            ApplicationEventPublisher events,
+            AuditLogService auditLogs) {
         this.consultations = consultations;
         this.users = users;
         this.sports = sports;
         this.memberRegistration = memberRegistration;
         this.access = access;
         this.events = events;
+        this.auditLogs = auditLogs;
     }
 
     @Transactional
@@ -139,7 +142,9 @@ public class ConsultationRequestService {
         consultation.setStatus(ConsultationStatus.IN_PROGRESS);
         consultation.setHandledBy(actor);
         consultation.setHandledAt(LocalDateTime.now());
-        return response(consultations.saveAndFlush(consultation));
+        ConsultationRequest taken = consultations.saveAndFlush(consultation);
+        auditLogs.record("TAKE", "CONSULTATION_REQUEST", taken.getId(), "Consultation request moved to IN_PROGRESS.");
+        return response(taken);
     }
 
     @Transactional
@@ -153,6 +158,7 @@ public class ConsultationRequestService {
         consultation.setResolutionNote(trimToNull(request.resolutionNote()));
         consultation.setCompletedAt(LocalDateTime.now());
         ConsultationRequest completed = consultations.saveAndFlush(consultation);
+        auditLogs.record("COMPLETE", "CONSULTATION_REQUEST", completed.getId(), "Consultation request completed.");
         if (completed.getMember() != null) {
             events.publishEvent(new NotificationBusinessEvents.ConsultationCompleted(
                     completed.getId(), completed.getMember().getId()));
@@ -171,6 +177,7 @@ public class ConsultationRequestService {
         consultation.setResolutionNote(request.reason().trim());
         consultation.setCancelledAt(LocalDateTime.now());
         ConsultationRequest cancelled = consultations.saveAndFlush(consultation);
+        auditLogs.record("CANCEL", "CONSULTATION_REQUEST", cancelled.getId(), "Consultation request cancelled.");
         if (cancelled.getMember() != null) {
             events.publishEvent(new NotificationBusinessEvents.ConsultationCancelled(
                     cancelled.getId(), cancelled.getMember().getId()));

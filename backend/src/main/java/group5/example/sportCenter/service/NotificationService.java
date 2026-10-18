@@ -32,10 +32,12 @@ public class NotificationService {
 
     private final NotificationRepository notifications;
     private final UserRepository users;
+    private final AuditLogService auditLogs;
 
-    public NotificationService(NotificationRepository notifications, UserRepository users) {
+    public NotificationService(NotificationRepository notifications, UserRepository users, AuditLogService auditLogs) {
         this.notifications = notifications;
         this.users = users;
+        this.auditLogs = auditLogs;
     }
 
     @Transactional(readOnly = true)
@@ -86,6 +88,8 @@ public class NotificationService {
 
         List<Integer> recipientIds = users.findEligibleActiveUserIds();
         if (recipientIds.isEmpty()) {
+            auditLogs.record("BROADCAST", "NOTIFICATION_BROADCAST", null,
+                    "Notification broadcast completed for 0 active accounts.");
             return new BroadcastNotificationResponse(0);
         }
 
@@ -104,6 +108,8 @@ public class NotificationService {
         if (persisted != recipientIds.size()) {
             throw new IllegalStateException("Broadcast did not persist one notification for every eligible user");
         }
+        auditLogs.record("BROADCAST", "NOTIFICATION_BROADCAST", null,
+                "Notification broadcast completed for " + persisted + " active accounts.");
         return new BroadcastNotificationResponse(persisted);
     }
 

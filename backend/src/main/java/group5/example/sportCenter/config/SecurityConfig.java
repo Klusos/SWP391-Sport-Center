@@ -133,6 +133,8 @@ public class SecurityConfig {
 
                 .requestMatchers(HttpMethod.POST, "/api/admin/notifications/broadcast").hasRole("ADMIN")
                 .requestMatchers("/api/admin/notifications", "/api/admin/notifications/**").denyAll()
+                .requestMatchers(HttpMethod.GET, "/api/admin/audit-logs").hasRole("ADMIN")
+                .requestMatchers("/api/admin/audit-logs", "/api/admin/audit-logs/**").denyAll()
                 .requestMatchers("/api/notifications", "/api/notifications/**")
                     .hasAnyRole("ADMIN", "RECEPTIONIST", "COACH", "MEMBER")
 
