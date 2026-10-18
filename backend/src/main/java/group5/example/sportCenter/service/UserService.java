@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import group5.example.sportCenter.dto.UserProfileResponse;
 import group5.example.sportCenter.dto.UserResponse;
@@ -27,14 +28,17 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AuditLogService auditLogs;
 
 
     public UserService(
             UserRepository userRepository,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            AuditLogService auditLogs) {
 
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.auditLogs = auditLogs;
     }
 
     public List<UserResponse> getAllUsers(Jwt callerJwt) {
@@ -83,6 +87,7 @@ public class UserService {
         );
     }
 
+    @Transactional
     public UserResponse createUser(CreateUserRequest request) {
 
     String role = normalizeRole(request.getRole());
@@ -107,10 +112,12 @@ public class UserService {
     user.setStatus("ACTIVE");
 
     User savedUser = userRepository.save(user);
+    auditLogs.record("CREATE", "USER", savedUser.getId(), "User account created.");
 
     return toResponse(savedUser);
     }
 
+    @Transactional
     public UserResponse updateUser(Integer id, UpdateUserRequest request) {
 
         String role = normalizeRole(request.getRole());
@@ -131,6 +138,8 @@ public class UserService {
             throw new IllegalArgumentException("Email already exists");
         }
 
+        String previousRole = user.getRole();
+        String previousStatus = user.getStatus();
         user.setName(request.getName());
         user.setEmail(request.getEmail());
         user.setDateOfBirth(request.getDateOfBirth());
@@ -140,6 +149,12 @@ public class UserService {
         user.setStatus(request.getStatus());
 
         User updatedUser = userRepository.save(user);
+        if (!previousRole.equalsIgnoreCase(updatedUser.getRole())) {
+            auditLogs.record("ROLE_CHANGE", "USER", id, "User role changed.");
+        }
+        if (!previousStatus.equalsIgnoreCase(updatedUser.getStatus())) {
+            auditLogs.record("STATUS_CHANGE", "USER", id, "User account status changed.");
+        }
 
         return toResponse(updatedUser);
     }
@@ -162,6 +177,7 @@ public class UserService {
         return normalizedRole;
     }
 
+    @Transactional
     public void deleteUser(Integer id) {
 
         User user = userRepository.findById(id)
@@ -172,6 +188,11 @@ public class UserService {
         if ("MEMBER".equalsIgnoreCase(user.getRole())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "MEMBER accounts are retained for business history; deactivate the account instead");
+        }
+
+        if (auditLogs.existsForActor(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This account is referenced by audit history and cannot be physically deleted");
         }
 
         userRepository.delete(user);
