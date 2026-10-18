@@ -226,7 +226,11 @@ class AttendanceIntegrationTest {
         markAsAdmin(startedSession, member, "PRESENT");
         Attendance record = attendance.findByClassSessionIdAndMemberId(startedSession.getId(), member.getId()).orElseThrow();
         mvc.perform(get("/api/attendance/me").header("Authorization", bearer(member)))
-                .andExpect(status().isOk()).andExpect(jsonPath("$[0].attendanceId").value(record.getId()));
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].attendanceId").value(record.getId()))
+                .andExpect(jsonPath("$[0].sportId").value(coachClass.getCourseOffering().getCourse().getSport().getId()))
+                .andExpect(jsonPath("$[0].sportName").value(coachClass.getCourseOffering().getCourse().getSport().getName()))
+                .andExpect(jsonPath("$[0].courseId").value(coachClass.getCourseOffering().getCourse().getId()))
+                .andExpect(jsonPath("$[0].courseClassId").value(coachClass.getId()));
         mvc.perform(get("/api/attendance/me").header("Authorization", bearer(otherMember)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
         mvc.perform(get("/api/attendance/" + record.getId() + "/history").header("Authorization", bearer(member)))
