@@ -3,12 +3,21 @@ package group5.example.sportCenter.repository;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import group5.example.sportCenter.entity.CourseRegistration;
 import group5.example.sportCenter.entity.CourseRegistrationStatus;
 
 public interface CourseRegistrationRepository extends JpaRepository<CourseRegistration, Integer> {
+
+    @EntityGraph(attributePaths = "member")
+    List<CourseRegistration> findByCourseClassIdAndStatus(Integer classId, CourseRegistrationStatus status);
+
+    @EntityGraph(attributePaths = "member")
+    java.util.Optional<CourseRegistration> findByMemberIdAndCourseClassIdAndStatus(
+            Integer memberId, Integer classId, CourseRegistrationStatus status);
+
     boolean existsByMemberIdAndCourseClassIdAndStatus(
             Integer memberId, Integer classId, CourseRegistrationStatus status);
 

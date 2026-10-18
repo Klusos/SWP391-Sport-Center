@@ -105,6 +105,17 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/course-registrations").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers("/api/course-registrations", "/api/course-registrations/**").denyAll()
 
+                .requestMatchers(HttpMethod.GET, "/api/attendance/me").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/attendance/coach/sessions").hasRole("COACH")
+                .requestMatchers(HttpMethod.GET, "/api/attendance/sessions")
+                    .hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers(HttpMethod.GET, "/api/attendance/sessions/*/roster")
+                    .hasAnyRole("ADMIN", "RECEPTIONIST", "COACH")
+                .requestMatchers(HttpMethod.PUT, "/api/attendance/sessions/*/members/*")
+                    .hasAnyRole("ADMIN", "RECEPTIONIST", "COACH")
+                .requestMatchers(HttpMethod.GET, "/api/attendance/*/history").authenticated()
+                .requestMatchers("/api/attendance", "/api/attendance/**").denyAll()
+
                 .requestMatchers(HttpMethod.GET, "/api/pt-bookings/eligible-coaches", "/api/pt-bookings/me").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.POST, "/api/pt-bookings").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/pt-bookings/assigned").hasRole("COACH")

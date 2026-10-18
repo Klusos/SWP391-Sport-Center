@@ -212,6 +212,30 @@ export function getAssignedPtBookingsApi(token) {
   return request("/api/pt-bookings/assigned", { headers: authenticatedHeaders(token) });
 }
 
+export function getCoachAttendanceSessionsApi(token) {
+  return request("/api/attendance/coach/sessions", { headers: authenticatedHeaders(token) });
+}
+
+export function getAttendanceRosterApi(token, sessionId) {
+  return request("/api/attendance/sessions/" + encodeURIComponent(sessionId) + "/roster", {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function markAttendanceApi(token, sessionId, memberId, payload) {
+  return request("/api/attendance/sessions/" + encodeURIComponent(sessionId) + "/members/" + encodeURIComponent(memberId), {
+    method: "PUT",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getAttendanceHistoryApi(token, attendanceId) {
+  return request("/api/attendance/" + encodeURIComponent(attendanceId) + "/history", {
+    headers: authenticatedHeaders(token),
+  });
+}
+
 export function getPublicCoursesBySportApi(sportId) {
   return request("/api/public/sports/" + encodeURIComponent(sportId) + "/courses", {
     headers: { Accept: "application/json" },
@@ -427,4 +451,88 @@ export function updateCoachProfileApi(token, id, payload) {
     headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+}
+
+// Member self-service profile and membership reads.
+export function getMyMemberProfileApi(token) {
+  return request("/api/member-profiles/me", { headers: authenticatedHeaders(token) });
+}
+
+export function saveMyMemberProfileApi(token, payload, exists) {
+  return request("/api/member-profiles/me", {
+    method: exists ? "PUT" : "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getMembershipsByMemberApi(token, memberId) {
+  return request("/api/memberships/member/" + encodeURIComponent(memberId), {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+// Course administration endpoints. Server authorization remains ADMIN-only.
+export function getCoursesBySportApi(token, sportId) {
+  return request("/api/courses/sport/" + encodeURIComponent(sportId), { headers: authenticatedHeaders(token) });
+}
+
+export function saveCourseApi(token, courseId, payload) {
+  return request(courseId ? "/api/courses/" + encodeURIComponent(courseId) : "/api/courses", {
+    method: courseId ? "PUT" : "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getOfferingsApi(token, courseId) {
+  return request("/api/course-offerings/course/" + encodeURIComponent(courseId), { headers: authenticatedHeaders(token) });
+}
+
+export function saveOfferingApi(token, offeringId, payload) {
+  return request(offeringId ? "/api/course-offerings/" + encodeURIComponent(offeringId) : "/api/course-offerings", {
+    method: offeringId ? "PUT" : "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getClassesApi(token, offeringId) {
+  return request("/api/classes/offering/" + encodeURIComponent(offeringId), { headers: authenticatedHeaders(token) });
+}
+
+export function saveClassApi(token, classId, payload) {
+  return request(classId ? "/api/classes/" + encodeURIComponent(classId) : "/api/classes", {
+    method: classId ? "PUT" : "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getSessionsByClassApi(token, classId) {
+  return request("/api/class-sessions/class/" + encodeURIComponent(classId), { headers: authenticatedHeaders(token) });
+}
+
+export function saveSessionApi(token, sessionId, payload) {
+  return request(sessionId ? "/api/class-sessions/" + encodeURIComponent(sessionId) : "/api/class-sessions", {
+    method: sessionId ? "PUT" : "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function setSessionStatusApi(token, sessionId, status) {
+  return request("/api/class-sessions/" + encodeURIComponent(sessionId) + "/status", {
+    method: "PATCH",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+}
+
+export function getMyRegistrationsApi(token) {
+  return request("/api/course-registrations/me", { headers: authenticatedHeaders(token) });
+}
+
+export function getMyClassSessionsApi(token) {
+  return request("/api/course-registrations/me/class-sessions", { headers: authenticatedHeaders(token) });
 }
