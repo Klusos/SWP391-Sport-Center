@@ -572,3 +572,14 @@ export function broadcastNotificationsApi(token, payload) {
     body: JSON.stringify(payload),
   });
 }
+
+export function getAdminAuditLogsApi(token, { page = 0, size = 20, actorUserId, action, entityType, entityId, from, to } = {}, signal) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  for (const [key, value] of Object.entries({ actorUserId, action, entityType, entityId, from, to })) {
+    if (value !== undefined && value !== null && String(value).trim() !== "") params.set(key, String(value).trim());
+  }
+  return request("/api/admin/audit-logs?" + params.toString(), {
+    headers: authenticatedHeaders(token),
+    signal,
+  });
+}
