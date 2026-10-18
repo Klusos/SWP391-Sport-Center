@@ -211,6 +211,24 @@ Course `level` is required on create and update and accepts `BEGINNER`, `INTERME
 
 CourseOffering create body: `courseId`, `name`, `price`, `plannedSessions`, `sessionDuration`, `startDate`, `endDate`, `registrationDeadline`, `cancellationDeadline`; update has the same fields plus `status` and no `courseId`.
 
+CourseOffering dates use timezone-less `LocalDate`/`LocalDateTime` values. A new offering must start today or later, end after it starts, and have future registration and cancellation deadlines no later than midnight at the start date. `registrationDeadline` must be on or before `cancellationDeadline`; this ordering is newly enforced. On update, unchanged historical dates and deadlines may remain in the past; changed start dates cannot be moved into the past, and changed deadlines must be future. Updating the date range cannot exclude existing ClassSessions. Changing `sessionDuration` is rejected if it would make any existing session in the offering use a different duration. Existing registration opening remains 30 days before `startDate`; registration and cancellation deadlines remain separate.
+
+CourseOffering numeric rules (approved): `plannedSessions` is required on creation and must be an integer from 1 through 60; `sessionDuration` is required on creation and must be an integer from 30 through 180 minutes. Updates enforce these ranges when the corresponding value changes. An unchanged legacy value outside the range (including a legacy null planned-session count) may remain during unrelated edits; changing it must set a valid value. Fractional JSON numbers are rejected rather than truncated. ClassSession duration continues to equal the persisted offering duration, and a duration update is rejected if any existing session would no longer match.
+
+Read-only SQL Server legacy-data review (physical names follow the project's `dbo.course_offering` mapping; verify against the target database metadata before use because the original core-schema bootstrap is not in this repository):
+
+```sql
+SELECT id, planned_sessions, session_duration
+FROM dbo.course_offering
+WHERE planned_sessions IS NULL
+   OR planned_sessions < 1 OR planned_sessions > 60
+   OR session_duration IS NULL
+   OR session_duration < 30 OR session_duration > 180
+ORDER BY id;
+```
+
+This query only identifies rows for manual review; no existing offering is changed automatically.
+
 Class create body: `courseOfferingId`, `coachId`, `name`, `capacity`; update body: `coachId`, `name`, `capacity`, `status`.
 
 Response samples: `CourseResponse` contains `id`, `sportId`, `sportName`, `name`, `description`, `targetAgeMin`, `targetAgeMax`, `level`, `learningOutcome`, `status`. `CourseOfferingResponse` contains `id`, course/sport IDs and names, `name`, `price`, `plannedSessions`, `sessionDuration`, `startDate`, `endDate`, registration/cancellation deadlines, and `status`. `CourseClassResponse` contains `id`, offering/course/sport/coach IDs and names, `name`, `capacity`, and `status`.
@@ -261,7 +279,7 @@ Create sample (status omitted to use the `SCHEDULED` default; `facilityId` may b
 {"classId":3,"facilityId":6,"startTime":"2026-10-12T10:00:00","endTime":"2026-10-12T11:00:00"}
 ```
 
-Update body is the same shape and must include `classId`, `startTime`, and `endTime`; `facilityId: null` clears the facility. Status update body: `{"status":"CANCELLED"}`. The response includes `id`, class/facility identifiers and names, start/end times, status, and non-blocking `warnings` (outside CourseOffering date range or the per-CourseClass planned-session threshold). Overlap or invalid state transitions return 409; missing referenced resources return 404; bean validation failures return 400.
+Update body is the same shape and must include `classId`, `startTime`, and `endTime`; `facilityId: null` clears the facility. Status update body: `{"status":"CANCELLED"}`. Both timestamps must fall within the offering's date range, including the whole end date, and their difference must exactly equal persisted CourseOffering `sessionDuration` in whole minutes. End must be strictly after start. Invalid dates or duration return 400; overlaps and invalid state transitions return 409; missing referenced resources return 404. `SCHEDULED` can become `COMPLETED` only at/after `endTime`, or `CANCELLED` only before `startTime`; both terminal statuses remain terminal. There is no hard-delete route. Response warnings may identify per-CourseClass planned-session counts above `plannedSessions`; the counting scope remains provisional.
 
 Response sample:
 
@@ -321,7 +339,7 @@ Marking is allowed at or after the scheduled start time, including after the ses
 
 `docs/sql/phase4b1-class-attendance.sql` creates the Attendance and AttendanceHistory tables. Apply it manually after the approved core schema, the ClassSession migration, and the CourseRegistration migration, and before starting the backend with `spring.jpa.hibernate.ddl-auto=validate`. The migration was not executed or tested against SQL Server as part of this implementation; review and back up the intended database before manual execution.
 
-Facility and Coach overlaps use half-open interval semantics (`existing.startTime < requested.endTime` and `existing.endTime > requested.startTime`), so sessions that only touch at an endpoint do not overlap. Cancelled sessions do not reserve facilities or coaches. Make-up sessions outside CourseOffering dates and counts above `plannedSessions` are saved with warnings; the current code interprets `plannedSessions` per CourseClass for warning purposes only, pending confirmation of the intended counting scope.
+Facility and Coach overlaps use half-open interval semantics (`existing.startTime < requested.endTime` and `existing.endTime > requested.startTime`), so sessions that only touch at an endpoint do not overlap. Cancelled sessions do not reserve facilities or coaches. Sessions outside CourseOffering dates are rejected. Counts above `plannedSessions` remain warnings; the current code interprets `plannedSessions` per CourseClass for warning purposes only, pending confirmation of the intended counting scope. The Member default class schedule excludes CANCELLED sessions; authorized administrative GET routes retain historical visibility.
 
 Lifecycle transitions: `SCHEDULED` can become `COMPLETED` only when current time is at or after `endTime`, and can become `CANCELLED` only before `startTime`. `COMPLETED` and `CANCELLED` are terminal; repeating the same status is idempotent, but changing to another status returns 409. PUT schedule updates are allowed only for `SCHEDULED` sessions. Invalid status/time request data returns 400. Statuses change only through the API; there is no time-driven auto-transition.
 

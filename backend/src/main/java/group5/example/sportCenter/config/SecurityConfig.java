@@ -112,7 +112,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/attendance/sessions/*/roster")
                     .hasAnyRole("ADMIN", "RECEPTIONIST", "COACH")
                 .requestMatchers(HttpMethod.PUT, "/api/attendance/sessions/*/members/*")
-                    .hasAnyRole("ADMIN", "RECEPTIONIST", "COACH")
+                    .hasAnyRole("ADMIN", "COACH")
                 .requestMatchers(HttpMethod.GET, "/api/attendance/*/history").authenticated()
                 .requestMatchers("/api/attendance", "/api/attendance/**").denyAll()
 
@@ -142,7 +142,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/membership-plans", "/api/membership-plans/**").hasRole("ADMIN")
 
                 .requestMatchers(HttpMethod.POST, "/api/memberships/expire").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.POST, "/api/memberships").hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers(HttpMethod.POST, "/api/memberships").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/memberships").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.GET, "/api/memberships/member/*", "/api/memberships/*")
                     .hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")

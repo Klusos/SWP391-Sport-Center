@@ -82,6 +82,8 @@ public class ClassSessionService {
         String status = request.getStatus() == null ? SCHEDULED : normalizeStatus(request.getStatus());
 
         validateRange(request.getStartTime(), request.getEndTime());
+        validateWithinOffering(courseClass, request.getStartTime(), request.getEndTime());
+        validateOfferingDuration(courseClass, request.getStartTime(), request.getEndTime());
         validateCompletedTime(status, request.getEndTime());
         if (!CANCELLED.equals(status)) {
             validateConflicts(courseClass, facility, request.getStartTime(), request.getEndTime(), null);
@@ -105,6 +107,8 @@ public class ClassSessionService {
         CourseClass courseClass = findCourseClass(request.getClassId());
         Facility facility = findFacility(request.getFacilityId());
         validateRange(request.getStartTime(), request.getEndTime());
+        validateWithinOffering(courseClass, request.getStartTime(), request.getEndTime());
+        validateOfferingDuration(courseClass, request.getStartTime(), request.getEndTime());
         validateFacilityForUpdate(session, facility, request.getStartTime());
         validateConflicts(courseClass, facility, request.getStartTime(), request.getEndTime(), id);
 
@@ -170,6 +174,29 @@ public class ClassSessionService {
     private void validateRange(LocalDateTime startTime, LocalDateTime endTime) {
         if (startTime == null || endTime == null || !endTime.isAfter(startTime)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "End time must be after start time");
+        }
+    }
+
+    private void validateWithinOffering(CourseClass courseClass, LocalDateTime startTime, LocalDateTime endTime) {
+        var offering = courseClass.getCourseOffering();
+        LocalDateTime rangeStart = offering.getStartDate().atStartOfDay();
+        LocalDateTime rangeEndExclusive = offering.getEndDate().plusDays(1).atStartOfDay();
+        if (startTime == null || endTime == null || startTime.isBefore(rangeStart)
+                || !startTime.isBefore(rangeEndExclusive) || endTime.isBefore(rangeStart)
+                || !endTime.isBefore(rangeEndExclusive)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "ClassSession startTime and endTime must fall within the CourseOffering startDate and endDate (inclusive)");
+        }
+    }
+
+    private void validateOfferingDuration(CourseClass courseClass, LocalDateTime startTime, LocalDateTime endTime) {
+        Integer requiredMinutes = courseClass.getCourseOffering().getSessionDuration();
+        if (requiredMinutes == null || startTime == null || endTime == null
+                || java.time.Duration.between(startTime, endTime).getSeconds() != requiredMinutes.longValue() * 60
+                || java.time.Duration.between(startTime, endTime).getNano() != 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "ClassSession duration must equal the CourseOffering sessionDuration of "
+                            + requiredMinutes + " minutes");
         }
     }
 
@@ -245,11 +272,6 @@ public class ClassSessionService {
     private ClassSessionResponse toResponse(ClassSession session) {
         List<String> warnings = new ArrayList<>();
         var offering = session.getCourseClass().getCourseOffering();
-        if (session.getStartTime().toLocalDate().isBefore(offering.getStartDate())
-                || session.getEndTime().toLocalDate().isAfter(offering.getEndDate())) {
-            warnings.add("ClassSession is outside the CourseOffering startDate/endDate range");
-        }
-
         if (!CANCELLED.equalsIgnoreCase(session.getStatus()) && offering.getPlannedSessions() != null) {
             long activeCount = classSessionRepository.countByCourseClassIdAndStatusNot(
                     session.getCourseClass().getId(), CANCELLED);

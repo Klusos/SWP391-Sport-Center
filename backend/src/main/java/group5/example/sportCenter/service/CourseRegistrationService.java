@@ -175,7 +175,9 @@ public class CourseRegistrationService {
                 .findByMemberIdAndStatusOrderByRegisteredAtDescIdDesc(actor.getId(), ACTIVE_REGISTRATION)
                 .stream().map(registration -> registration.getCourseClass().getId()).distinct().toList();
         if (classIds.isEmpty()) return List.of();
-        return classSessions.findByClassIds(classIds).stream().map(this::sessionResponse).toList();
+        return classSessions.findByClassIds(classIds).stream()
+                .filter(session -> !"CANCELLED".equalsIgnoreCase(session.getStatus()))
+                .map(this::sessionResponse).toList();
     }
 
     private void validateRegistrationDeadline(CourseOffering offering, LocalDateTime now) {

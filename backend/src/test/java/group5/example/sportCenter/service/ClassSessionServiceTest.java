@@ -68,6 +68,7 @@ class ClassSessionServiceTest {
         offering.setStartDate(LocalDate.now().minusDays(10));
         offering.setEndDate(LocalDate.now().plusDays(10));
         offering.setPlannedSessions(10);
+        offering.setSessionDuration(60);
 
         Coach coach = new Coach();
         coach.setId(9);
@@ -196,19 +197,77 @@ class ClassSessionServiceTest {
     }
 
     @Test
-    void allowsMakeUpSessionOutsideOfferingAndReturnsWarning() {
+    void allowsSessionAtInclusiveOfferingDateBoundaries() {
         stubAvailableClass();
+        LocalDate start = courseClass.getCourseOffering().getStartDate();
+        LocalDate end = courseClass.getCourseOffering().getEndDate();
         when(classSessionRepository.save(any(ClassSession.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        when(classSessionRepository.countByCourseClassIdAndStatusNot(3, "CANCELLED")).thenReturn(11L);
+        when(classSessionRepository.countByCourseClassIdAndStatusNot(3, "CANCELLED")).thenReturn(1L);
 
         ClassSessionResponse response = service.create(request(null, null,
-                LocalDate.now().plusDays(30).atTime(10, 0), LocalDate.now().plusDays(30).atTime(11, 0)));
+                start.atStartOfDay(), start.atTime(1, 0)));
 
         assertEquals("SCHEDULED", response.status());
-        assertEquals(2, response.warnings().size());
-        assertTrue(response.warnings().get(0).contains("outside"));
-        assertTrue(response.warnings().get(1).contains("plannedSessions"));
+
+        ClassSessionResponse lastDayResponse = service.create(request(null, null,
+                end.atTime(22, 59), end.atTime(23, 59)));
+        assertEquals("SCHEDULED", lastDayResponse.status());
+    }
+
+    @Test
+    void rejectsSessionWhoseDurationDiffersFromOfferingOnCreateAndUpdate() {
+        stubAvailableClass();
+        LocalDateTime start = LocalDateTime.now().plusDays(2).withNano(0);
+        ResponseStatusException createError = assertThrows(ResponseStatusException.class,
+                () -> service.create(request(null, null, start, start.plusMinutes(59))));
+        assertEquals(400, createError.getStatusCode().value());
+
+        ClassSession existing = scheduledSession(12, null);
+        when(classSessionRepository.findById(12)).thenReturn(Optional.of(existing));
+        when(courseClassRepository.findById(3)).thenReturn(Optional.of(courseClass));
+        ResponseStatusException updateError = assertThrows(ResponseStatusException.class,
+                () -> service.update(12, updateRequest(3, null, start, start.plusMinutes(61))));
+        assertEquals(400, updateError.getStatusCode().value());
+    }
+
+    @Test
+    void rejectsSessionBeforeOfferingStart() {
+        stubAvailableClass();
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> service.create(request(null, null,
+                        courseClass.getCourseOffering().getStartDate().minusDays(1).atTime(10, 0),
+                        courseClass.getCourseOffering().getStartDate().minusDays(1).atTime(11, 0))));
+        assertEquals(400, exception.getStatusCode().value());
+    }
+
+    @Test
+    void rejectsSessionAfterOfferingEnd() {
+        stubAvailableClass();
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> service.create(request(null, null,
+                        courseClass.getCourseOffering().getEndDate().plusDays(1).atTime(10, 0),
+                        courseClass.getCourseOffering().getEndDate().plusDays(1).atTime(11, 0))));
+        assertEquals(400, exception.getStatusCode().value());
+    }
+
+    @Test
+    void rejectsSessionEndAfterOfferingEndOnCreateAndUpdate() {
+        stubAvailableClass();
+        LocalDate end = courseClass.getCourseOffering().getEndDate();
+        LocalDateTime startTime = end.atTime(23, 30);
+        LocalDateTime endTime = end.plusDays(1).atTime(0, 30);
+
+        ResponseStatusException createError = assertThrows(ResponseStatusException.class,
+                () -> service.create(request(null, null, startTime, endTime)));
+        assertEquals(400, createError.getStatusCode().value());
+
+        ClassSession existing = scheduledSession(12, null);
+        when(classSessionRepository.findById(12)).thenReturn(Optional.of(existing));
+        when(courseClassRepository.findById(3)).thenReturn(Optional.of(courseClass));
+        ResponseStatusException updateError = assertThrows(ResponseStatusException.class,
+                () -> service.update(12, updateRequest(3, null, startTime, endTime)));
+        assertEquals(400, updateError.getStatusCode().value());
     }
 
     @Test

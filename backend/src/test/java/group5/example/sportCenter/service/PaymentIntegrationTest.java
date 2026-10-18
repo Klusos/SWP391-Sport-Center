@@ -200,6 +200,41 @@ class PaymentIntegrationTest {
     }
 
     @Test
+    void receptionistMembershipSaleActivatesOnlyAfterCounterPaymentConfirmation() throws Exception {
+        String paymentBody = "{\"memberId\":" + member.getId()
+                + ",\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"referenceId\":" + plan.getId()
+                + ",\"autoRenew\":false}";
+
+        var created = mvc.perform(post("/api/payments").header("Authorization", bearer(receptionist))
+                        .contentType("application/json").content(paymentBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.amount").value(300000.0))
+                .andReturn();
+        Integer paymentId = com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.id");
+        assertTrue(memberships.findByMemberId(member.getId()).isEmpty());
+
+        mvc.perform(patch("/api/payments/" + paymentId + "/counter")
+                        .header("Authorization", bearer(receptionist))
+                        .contentType("application/json")
+                        .content("{\"success\":true,\"note\":\"Payment received at front desk\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCESS"));
+        assertEquals(1, memberships.findByMemberId(member.getId()).size());
+        assertEquals("ACTIVE", memberships.findByMemberId(member.getId()).get(0).getStatus());
+    }
+
+    @Test
+    void receptionistCannotUseLegacyMembershipCreationToBypassPayment() throws Exception {
+        String body = "{\"memberId\":" + member.getId() + ",\"planId\":" + plan.getId()
+                + ",\"startDate\":\"" + LocalDate.now() + "\",\"autoRenew\":false}";
+        mvc.perform(post("/api/memberships").header("Authorization", bearer(receptionist))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isForbidden());
+        assertTrue(memberships.findByMemberId(member.getId()).isEmpty());
+    }
+
+    @Test
     void failedCounterPaymentIsCancelledAndDoesNotActivate() {
         PaymentResponse payment = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
                 PaymentMethod.COUNTER), jwt(member));

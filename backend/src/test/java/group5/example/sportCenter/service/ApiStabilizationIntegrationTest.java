@@ -77,6 +77,15 @@ class ApiStabilizationIntegrationTest {
     }
 
     @Test
+    void receptionistCannotMutateClassSessionStatus() throws Exception {
+        mvc.perform(patch("/api/class-sessions/{id}/status", 12345)
+                .header("Authorization", bearer(receptionist))
+                .contentType("application/json")
+                .content("{\"status\":\"CANCELLED\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void relationshipBackedDtosMapWithOpenSessionInViewDisabled() throws Exception {
         User coachUser = user("COACH");
         Coach coach = new Coach();

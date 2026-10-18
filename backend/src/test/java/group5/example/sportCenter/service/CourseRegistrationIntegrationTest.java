@@ -133,6 +133,7 @@ class CourseRegistrationIntegrationTest {
         CourseClass selected = courseClass(offering, "ACTIVE", 5);
         CourseClass sibling = courseClass(offering, "ACTIVE", 5);
         session(selected, now.plusDays(2), now.plusDays(2).plusHours(1), "SCHEDULED");
+        session(selected, now.plusDays(4), now.plusDays(4).plusHours(1), "CANCELLED");
         session(sibling, now.plusDays(3), now.plusDays(3).plusHours(1), "SCHEDULED");
 
         var response = service.register(request(selected), jwt(member));

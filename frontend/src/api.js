@@ -381,6 +381,22 @@ export function getMembershipPlansApi(token) {
   return request("/api/membership-plans", { headers: authenticatedHeaders(token) });
 }
 
+export function createPaymentApi(token, payload) {
+  return request("/api/payments", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function processCounterPaymentApi(token, paymentId, success, note = null) {
+  return request("/api/payments/" + encodeURIComponent(paymentId) + "/counter", {
+    method: "PATCH",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ success, note }),
+  });
+}
+
 export function createMembershipPlanApi(token, payload) {
   return request("/api/membership-plans", {
     method: "POST",
