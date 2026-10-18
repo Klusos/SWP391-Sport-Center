@@ -542,3 +542,33 @@ export function getMyRegistrationsApi(token) {
 export function getMyClassSessionsApi(token) {
   return request("/api/course-registrations/me/class-sessions", { headers: authenticatedHeaders(token) });
 }
+export function getNotificationsApi(token, page = 0, size = 20) {
+  const query = new URLSearchParams({ page: String(page), size: String(size) });
+  return request("/api/notifications?" + query.toString(), { headers: authenticatedHeaders(token) });
+}
+
+export function getUnreadNotificationCountApi(token) {
+  return request("/api/notifications/unread-count", { headers: authenticatedHeaders(token) });
+}
+
+export function markNotificationReadApi(token, id) {
+  return request("/api/notifications/" + encodeURIComponent(id) + "/read", {
+    method: "PATCH",
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function markAllNotificationsReadApi(token) {
+  return request("/api/notifications/read-all", {
+    method: "PATCH",
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function broadcastNotificationsApi(token, payload) {
+  return request("/api/admin/notifications/broadcast", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
