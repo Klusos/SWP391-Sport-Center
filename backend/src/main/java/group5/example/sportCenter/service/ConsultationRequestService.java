@@ -9,6 +9,7 @@ import java.util.Locale;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
@@ -39,18 +40,21 @@ public class ConsultationRequestService {
     private final SportRepository sports;
     private final MemberRegistrationService memberRegistration;
     private final AssessmentAccess access;
+    private final ApplicationEventPublisher events;
 
     public ConsultationRequestService(
             ConsultationRequestRepository consultations,
             UserRepository users,
             SportRepository sports,
             MemberRegistrationService memberRegistration,
-            AssessmentAccess access) {
+            AssessmentAccess access,
+            ApplicationEventPublisher events) {
         this.consultations = consultations;
         this.users = users;
         this.sports = sports;
         this.memberRegistration = memberRegistration;
         this.access = access;
+        this.events = events;
     }
 
     @Transactional
@@ -77,7 +81,9 @@ public class ConsultationRequestService {
         consultation.setExperience(trimToNull(request.experience()));
         consultation.setNote(trimToNull(request.note()));
         consultation.setStatus(ConsultationStatus.PENDING);
-        return response(consultations.save(consultation));
+        ConsultationRequest created = consultations.save(consultation);
+        events.publishEvent(new NotificationBusinessEvents.ConsultationCreated(created.getId()));
+        return response(created);
     }
 
     public List<ConsultationResponse> mine(Jwt jwt) {
@@ -146,7 +152,12 @@ public class ConsultationRequestService {
         consultation.setStatus(ConsultationStatus.COMPLETED);
         consultation.setResolutionNote(trimToNull(request.resolutionNote()));
         consultation.setCompletedAt(LocalDateTime.now());
-        return response(consultations.saveAndFlush(consultation));
+        ConsultationRequest completed = consultations.saveAndFlush(consultation);
+        if (completed.getMember() != null) {
+            events.publishEvent(new NotificationBusinessEvents.ConsultationCompleted(
+                    completed.getId(), completed.getMember().getId()));
+        }
+        return response(completed);
     }
 
     @Transactional
@@ -159,7 +170,12 @@ public class ConsultationRequestService {
         consultation.setStatus(ConsultationStatus.CANCELLED);
         consultation.setResolutionNote(request.reason().trim());
         consultation.setCancelledAt(LocalDateTime.now());
-        return response(consultations.saveAndFlush(consultation));
+        ConsultationRequest cancelled = consultations.saveAndFlush(consultation);
+        if (cancelled.getMember() != null) {
+            events.publishEvent(new NotificationBusinessEvents.ConsultationCancelled(
+                    cancelled.getId(), cancelled.getMember().getId()));
+        }
+        return response(cancelled);
     }
 
     @Transactional

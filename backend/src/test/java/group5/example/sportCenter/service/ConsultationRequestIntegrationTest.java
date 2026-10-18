@@ -54,6 +54,7 @@ import group5.example.sportCenter.repository.CoachRepository;
 import group5.example.sportCenter.repository.CoachSportRepository;
 import group5.example.sportCenter.repository.ConsultationRequestRepository;
 import group5.example.sportCenter.repository.MemberSportLevelRepository;
+import group5.example.sportCenter.repository.NotificationRepository;
 import group5.example.sportCenter.repository.SkillAssessmentRepository;
 import group5.example.sportCenter.repository.SportRepository;
 import group5.example.sportCenter.repository.UserRepository;
@@ -69,6 +70,7 @@ class ConsultationRequestIntegrationTest {
     @MockitoSpyBean SkillAssessmentRepository assessments;
     @Autowired MemberSportLevelRepository levels;
     @Autowired UserRepository users;
+    @Autowired NotificationRepository notifications;
     @Autowired SportRepository sports;
     @Autowired CoachRepository coaches;
     @Autowired CoachSportRepository qualifications;
@@ -90,6 +92,7 @@ class ConsultationRequestIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        notifications.deleteAllInBatch();
         assessments.deleteAll();
         consultations.deleteAll();
         levels.deleteAll();

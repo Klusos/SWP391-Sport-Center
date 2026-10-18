@@ -29,4 +29,7 @@ public interface UserRepository extends JpaRepository<User, Integer> {
     @Query("select u.id from User u where upper(u.status) = 'ACTIVE' "
             + "and upper(u.role) in ('ADMIN', 'RECEPTIONIST', 'COACH', 'MEMBER')")
     List<Integer> findEligibleActiveUserIds();
+
+    @Query("select u.id from User u where upper(u.status) = 'ACTIVE' and upper(u.role) = upper(:role)")
+    List<Integer> findActiveUserIdsByRole(@Param("role") String role);
 }

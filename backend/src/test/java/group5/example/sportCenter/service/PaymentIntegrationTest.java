@@ -58,6 +58,7 @@ import group5.example.sportCenter.repository.CourseRegistrationRepository;
 import group5.example.sportCenter.repository.CourseRepository;
 import group5.example.sportCenter.repository.MembershipPlanRepository;
 import group5.example.sportCenter.repository.MembershipRepository;
+import group5.example.sportCenter.repository.NotificationRepository;
 import group5.example.sportCenter.repository.PaymentRepository;
 import group5.example.sportCenter.repository.PersonalTrainingBookingRepository;
 import group5.example.sportCenter.repository.SportRepository;
@@ -73,6 +74,7 @@ class PaymentIntegrationTest {
     @Autowired PaymentService service;
     @Autowired PaymentReportService reports;
     @Autowired PaymentRepository payments;
+    @Autowired NotificationRepository notifications;
     @Autowired UserRepository users;
     @Autowired SportRepository sports;
     @Autowired CoachRepository coaches;
@@ -266,12 +268,61 @@ class PaymentIntegrationTest {
     @Test
     void ptBookingPaymentWithinHoldConfirmsBooking() {
         PersonalTrainingBooking booking = booking(now().plusMinutes(15));
+        assertEquals(0, notifications.count(), "PENDING_PAYMENT booking creation must not send confirmation notices");
         PaymentResponse payment = service.createPayment(request(PaymentPurpose.PT_BOOKING, booking.getId(),
                 PaymentMethod.COUNTER), jwt(member));
         assertEquals(new BigDecimal("425000.00"), payment.getAmount());
 
         assertEquals("SUCCESS", service.processAtCounter(payment.getId(), counter(true), jwt(receptionist)).getStatus());
         assertEquals(PersonalTrainingBookingStatus.CONFIRMED, bookings.findById(booking.getId()).orElseThrow().getStatus());
+        assertEquals(1, notifications.countByUserIdAndReadFalse(member.getId()));
+        assertEquals(1, notifications.countByUserIdAndReadFalse(coach.getUser().getId()),
+                "Coach notification belongs to linked User.id, not Coach.id");
+        assertEquals(2, notifications.count());
+        assertEquals(false, coach.getId().equals(coach.getUser().getId()),
+                "Fixture must use distinct Coach and User identifiers");
+    }
+
+    @Test
+    void replayedSuccessfulPtPaymentCallbackDoesNotDuplicateConfirmationNotices() throws Exception {
+        PersonalTrainingBooking booking = booking(now().plusMinutes(15));
+        PaymentResponse payment = service.createPayment(request(PaymentPurpose.PT_BOOKING, booking.getId(),
+                PaymentMethod.ONLINE), jwt(member));
+
+        mvc.perform(get(callbackPath(payment.getPaymentUrl()))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCESS"));
+        assertEquals(2, notifications.count());
+        mvc.perform(get(callbackPath(payment.getPaymentUrl()))).andExpect(status().isOk());
+        assertEquals(2, notifications.count());
+        assertEquals(1, notifications.countByUserIdAndReadFalse(member.getId()));
+        assertEquals(1, notifications.countByUserIdAndReadFalse(coach.getUser().getId()));
+    }
+
+    @Test
+    void failedPtPaymentDoesNotSendConfirmationNotices() {
+        PersonalTrainingBooking booking = booking(now().plusMinutes(15));
+        PaymentResponse payment = service.createPayment(request(PaymentPurpose.PT_BOOKING, booking.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+
+        assertEquals("CANCELLED", service.processAtCounter(payment.getId(), counter(false), jwt(receptionist)).getStatus());
+        assertEquals(PersonalTrainingBookingStatus.PENDING_PAYMENT,
+                bookings.findById(booking.getId()).orElseThrow().getStatus());
+        assertEquals(0, notifications.count());
+    }
+
+    @Test
+    void inactiveCoachUserDoesNotReceivePtConfirmationNotification() {
+        PersonalTrainingBooking booking = booking(now().plusMinutes(15));
+        PaymentResponse payment = service.createPayment(request(PaymentPurpose.PT_BOOKING, booking.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        coach.getUser().setStatus("INACTIVE");
+        users.saveAndFlush(coach.getUser());
+
+        service.processAtCounter(payment.getId(), counter(true), jwt(receptionist));
+
+        assertEquals(1, notifications.countByUserIdAndReadFalse(member.getId()));
+        assertEquals(0, notifications.countByUserIdAndReadFalse(coach.getUser().getId()));
+        assertEquals(1, notifications.count());
     }
 
     @Test
@@ -287,6 +338,7 @@ class PaymentIntegrationTest {
         PaymentResponse result = service.processAtCounter(payment.getId(), counter(true), jwt(receptionist));
         assertEquals("REFUND_REQUIRED", result.getStatus());
         assertEquals(PersonalTrainingBookingStatus.EXPIRED, bookings.findById(booking.getId()).orElseThrow().getStatus());
+        assertEquals(0, notifications.count());
 
         LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
         assertEquals(0, BigDecimal.ZERO.compareTo(reports.revenueReport(today, today, jwt(admin)).getTotalRevenue()));
@@ -346,6 +398,7 @@ class PaymentIntegrationTest {
      * created them: other test classes may leave rows (e.g. member sport levels) that reference theirs.
      */
     private void cleanDatabase() {
+        notifications.deleteAllInBatch();
         payments.deleteAll();
         bookings.deleteAll();
         classSessions.deleteAll();

@@ -1,6 +1,8 @@
 package group5.example.sportCenter.service;
 
 import java.util.List;
+import java.util.Objects;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,17 +26,20 @@ public class CourseClassService {
     private final CourseOfferingRepository courseOfferingRepository;
     private final CoachRepository coachRepository;
     private final CoachSportRepository coachSportRepository;
+    private final ApplicationEventPublisher events;
 
     public CourseClassService(
             CourseClassRepository courseClassRepository,
             CourseOfferingRepository courseOfferingRepository,
             CoachRepository coachRepository,
-            CoachSportRepository coachSportRepository) {
+            CoachSportRepository coachSportRepository,
+            ApplicationEventPublisher events) {
 
         this.courseClassRepository = courseClassRepository;
         this.courseOfferingRepository = courseOfferingRepository;
         this.coachRepository = coachRepository;
         this.coachSportRepository = coachSportRepository;
+        this.events = events;
     }
 
     @Transactional
@@ -91,8 +96,10 @@ public class CourseClassService {
         courseClass.setCapacity(request.getCapacity());
         courseClass.setStatus("ACTIVE");
 
-        return toResponse(
-                courseClassRepository.save(courseClass));
+        CourseClass created = courseClassRepository.save(courseClass);
+        CourseClassResponse response = toResponse(created);
+        events.publishEvent(new NotificationBusinessEvents.CourseCoachAssigned(created.getId(), coach.getId()));
+        return response;
     }
 
         public List<CourseClassResponse> getAllClasses() {
@@ -141,6 +148,8 @@ public class CourseClassService {
                                 new ResourceNotFoundException(
                                         "Class not found with id: " + id));
 
+        Integer previousCoachId = courseClass.getCoach().getId();
+
         Coach coach =
                 coachRepository.findById(request.getCoachId())
                         .orElseThrow(() ->
@@ -174,8 +183,12 @@ public class CourseClassService {
         courseClass.setCapacity(request.getCapacity());
         courseClass.setStatus(CatalogValues.status(request.getStatus(), "CourseClass", List.of("ACTIVE", "INACTIVE")));
 
-        return toResponse(
-                courseClassRepository.save(courseClass));
+        CourseClass updated = courseClassRepository.save(courseClass);
+        CourseClassResponse response = toResponse(updated);
+        if (!Objects.equals(previousCoachId, coach.getId())) {
+            events.publishEvent(new NotificationBusinessEvents.CourseCoachAssigned(updated.getId(), coach.getId()));
+        }
+        return response;
     }
 
         private CourseClassResponse toResponse(

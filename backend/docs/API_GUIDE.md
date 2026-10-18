@@ -586,3 +586,17 @@ The response is `200 OK` and `recipientCount` is the number of rows persisted by
 ```
 
 The operation uses a batched insert inside one transaction: database failure rolls back the whole broadcast. Invalid bodies return 400, unauthenticated callers receive 401, and non-ADMIN roles receive 403. Each accepted request is a distinct broadcast. Because the schema has no durable idempotency key, retrying after an uncertain network outcome may create duplicate notifications; the server does not deduplicate by title or message. No broadcast table or Notification schema change is used.
+
+### Automatic business notifications (Phase 6.1C)
+
+These are internal notifications; this phase adds no public endpoint and does not change the existing notification or ADMIN broadcast contracts. Typed application events are delivered after the successful business transaction commits. Notification persistence runs in a separate transaction. A delivery exception is logged and contained, so it does not roll back the consultation, PT booking/payment, or class operation.
+
+| Business event | Recipients | Notification condition |
+|---|---|---|
+| Consultation created as `PENDING` | Every ACTIVE RECEPTIONIST | GUEST and MEMBER submissions; one message includes only the persisted consultation ID. Inactive receptionists and other roles are excluded. |
+| Consultation transitions `IN_PROGRESS` -> `COMPLETED` | Linked ACTIVE MEMBER | Guest requests and inactive/non-MEMBER linked accounts are skipped. Rejected/repeated transitions do not notify. |
+| Consultation transitions `IN_PROGRESS` -> `CANCELLED` | Linked ACTIVE MEMBER | Guest requests and inactive/non-MEMBER linked accounts are skipped. Private cancellation details are omitted. |
+| PT booking transitions `PENDING_PAYMENT` -> `CONFIRMED` after verified successful payment | ACTIVE MEMBER and ACTIVE linked COACH User | The Coach is resolved through `Coach.user`; pending creation, failed/cancelled payment, expiration, `REFUND_REQUIRED`, and repeated confirmation do not notify. |
+| CourseClass created with Coach or reassigned to a different Coach | Newly assigned Coach's ACTIVE linked User | An unchanged Coach assignment and unrelated edits do not notify; the previous Coach is not notified. |
+
+The current Notification schema is sufficient; no migration is needed. Delivery is best-effort after commit, not a transactional outbox: a process crash after the business commit and before delivery can lose a notification, and there is no durable event ID for recovery or exactly-once deduplication. Successful transaction events are emitted once by the relevant state-transition code; retries that do not transition state do not emit another event. Recipients are resolved server-side from persisted entities and ACTIVE user/role status. No phone, email, private notes, password, or payment credentials are included. SQL Server migration validation and Postman/live API verification remain pending.

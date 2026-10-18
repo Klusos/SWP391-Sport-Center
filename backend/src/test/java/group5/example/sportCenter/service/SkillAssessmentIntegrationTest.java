@@ -31,6 +31,7 @@ class SkillAssessmentIntegrationTest {
     @Autowired SkillAssessmentService service;
     @Autowired MemberSportLevelService levelService;
     @Autowired UserRepository users;
+    @Autowired NotificationRepository notifications;
     @Autowired SportRepository sports;
     @Autowired CoachRepository coaches;
     @Autowired CoachSportRepository qualifications;
@@ -47,6 +48,7 @@ class SkillAssessmentIntegrationTest {
 
     @BeforeEach
     void setup() {
+        notifications.deleteAllInBatch();
         assessments.deleteAll(); consultationRequests.deleteAll(); levels.deleteAll();
         qualifications.deleteAll(); coaches.deleteAll(); sports.deleteAll(); users.deleteAll();
         admin = user("ADMIN"); receptionist = user("RECEPTIONIST"); member = user("MEMBER"); otherMember = user("MEMBER");

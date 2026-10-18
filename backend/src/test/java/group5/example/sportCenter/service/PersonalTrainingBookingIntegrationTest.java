@@ -51,6 +51,7 @@ import group5.example.sportCenter.repository.CourseRegistrationRepository;
 import group5.example.sportCenter.repository.CourseRepository;
 import group5.example.sportCenter.repository.MembershipPlanRepository;
 import group5.example.sportCenter.repository.MembershipRepository;
+import group5.example.sportCenter.repository.NotificationRepository;
 import group5.example.sportCenter.repository.PersonalTrainingBookingRepository;
 import group5.example.sportCenter.repository.SportRepository;
 import group5.example.sportCenter.repository.UserRepository;
@@ -67,6 +68,7 @@ class PersonalTrainingBookingIntegrationTest {
     @Autowired PersonalTrainingBookingService service;
     @Autowired PtBookingExpirationService expirationService;
     @Autowired UserRepository users;
+    @Autowired NotificationRepository notifications;
     @Autowired SportRepository sports;
     @Autowired CoachRepository coaches;
     @Autowired CoachSportRepository coachSports;
@@ -93,6 +95,7 @@ class PersonalTrainingBookingIntegrationTest {
     @BeforeEach
     void setUp() {
         mvc = MockMvcBuilders.webAppContextSetup(context).addFilters(security).build();
+        notifications.deleteAllInBatch();
         bookings.deleteAll();
         classSessions.deleteAll();
         courseRegistrations.deleteAll();
@@ -147,6 +150,7 @@ class PersonalTrainingBookingIntegrationTest {
         assertEquals(new BigDecimal("425000.00"), result.finalPrice());
         assertEquals(result.createdAt().plusMinutes(15), result.paymentExpiresAt());
         assertEquals(1, service.mine(jwt).size());
+        assertEquals(0, notifications.count(), "A pending payment hold is not a confirmed booking event");
     }
 
     @Test
@@ -162,6 +166,7 @@ class PersonalTrainingBookingIntegrationTest {
         assertEquals(1, expirationService.expireDueBookings());
         assertEquals("EXPIRED", bookings.findById(created.id()).orElseThrow().getStatus().name());
         assertEquals(0, expirationService.expireDueBookings());
+        assertEquals(0, notifications.count(), "Expiration must not emit confirmation notifications");
     }
 
     @Test
