@@ -60,10 +60,11 @@ For a fresh laptop database, use this order:
 4. Run `phase1_5-consultation-requests.sql`; it requires Phase 1's `dbo.skill_assessment` as well as `dbo.users` and `dbo.sport`.
 5. Run `phase2-course-registrations.sql`; it requires `dbo.users` and `dbo.[class]`.
 6. Run the read-only `phase2-personal-training-bookings-preflight.sql` and review column metadata, all CHECK constraints, foreign keys, and indexes. Then run `phase2-personal-training-bookings.sql`; it requires `dbo.users`, `dbo.coach`, `dbo.sport`, and `dbo.class_session`.
-7. Run `phase3-entity-image-urls.sql`; it requires `dbo.sport`, `dbo.coach`, and `dbo.facility` and adds nullable `image_url NVARCHAR(500)` columns only when absent. It validates existing columns and does not alter incompatible ones.
-8. Run `phase3a-coach-bio.sql` after the image migration and before starting with `ddl-auto=validate`; it adds nullable `dbo.coach.bio NVARCHAR(1000)` and validates existing metadata.
-9. After a verified backup and restored-database rehearsal, run `phase3b2-vietnamese-unicode-preflight.sql`, review its output and module/trigger dependencies, stop application writers, and run `phase3b2-vietnamese-unicode.sql` as a standalone batch. Confirm the metadata and unique constraint using the read-only checks above.
-10. Start the application after all required schema scripts complete; `spring.jpa.hibernate.ddl-auto=validate` will then verify mappings.
+7. Run `phase2-payment.sql` (Flow 3); it requires `dbo.users`. It creates `dbo.payment` when absent, or replaces the purpose/status CHECKs of a table created by an earlier draft of the script (it refuses to continue if that draft table holds `COURSE_REGISTRATION` rows). Set `PAYMENT_CALLBACK_SECRET` in `.env` before starting the application.
+8. Run `phase3-entity-image-urls.sql`; it requires `dbo.sport`, `dbo.coach`, and `dbo.facility` and adds nullable `image_url NVARCHAR(500)` columns only when absent. It validates existing columns and does not alter incompatible ones.
+9. Run `phase3a-coach-bio.sql` after the image migration and before starting with `ddl-auto=validate`; it adds nullable `dbo.coach.bio NVARCHAR(1000)` and validates existing metadata.
+10. After a verified backup and restored-database rehearsal, run `phase3b2-vietnamese-unicode-preflight.sql`, review its output and module/trigger dependencies, stop application writers, and run `phase3b2-vietnamese-unicode.sql` as a standalone batch. Confirm the metadata and unique constraint using the read-only checks above.
+11. Start the application after all required schema scripts complete; `spring.jpa.hibernate.ddl-auto=validate` will then verify mappings.
 
 Run each SQL file as its own standalone batch while writers are stopped, after a backup, in `SportCenterDB` (or review the database-name guard for an explicitly renamed deployment). None of these scripts was executed as part of the repository change. A matching ClassSession table with incompatible metadata fails closed; the script never drops, rebuilds, or silently accepts it.
 

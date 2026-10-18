@@ -1,5 +1,22 @@
 # SportCenter Implementation Status
 
+## Flow 3: Payment (2026-10-18)
+
+| Area | Code | Build and automated tests | Postman |
+|---|---|---|---|
+| Create payment (ONLINE/COUNTER) for MEMBERSHIP, COURSE_REGISTRATION, PT_BOOKING; server-derived amount | Implemented | Full suite passed: 166 tests, 0 failures/errors/skips | Not tested |
+| Online callback (HMAC-signed, idempotent), counter processing, cancel PENDING | Implemented; mock gateway only | Passed (H2) | Not tested |
+| Membership activate/renew on payment | Implemented; renewal adds a new ACTIVE membership starting at the latest current `endDate` | Passed (H2) | Not tested |
+| PT booking confirmation; late payment -> `REFUND_REQUIRED`, booking stays `EXPIRED` | Implemented via `PtBookingExpirationService.confirmAfterVerifiedPayment` under the booking row lock | Passed (H2) | Not tested |
+| Revenue / member / class-registration reports (ADMIN) | Implemented; `SUCCESS` only | Passed (H2) | Not tested |
+| SQL Server migration `docs/sql/phase2-payment.sql` | Idempotent; not executed | Static review only | Not applicable |
+
+- Course registration is unchanged: Flow 2 still creates `CONFIRMED` registrations. Payment references `CourseRegistration.id` (not `CourseOffering.id`) and charges the stored `finalPrice`, so membership discounts reconcile.
+- `POST /api/memberships` is restricted to ADMIN/RECEPTIONIST; MEMBER self-activation without payment was removed.
+- Duplicate-payment protection: payment rows are locked during counter/callback processing; the referenced registration/booking row is locked before checking for another `SUCCESS` payment.
+- New required configuration: `app.payment.callback-secret=${PAYMENT_CALLBACK_SECRET}`.
+- Not implemented: real payment gateway (VNPay/MoMo/PayOS), automatic refunds, expiry of abandoned `PENDING` payments, frontend payment pages. The SQL Server E2E harness (`CourseRegistrationSqlServerE2EIT`) now also requires `dbo.payment` to exist.
+
 ## SQL schema synchronization review (2026-10-15)
 
 - Static inspection confirmed none of the three existing scripts defined `dbo.class_session`. They are incremental migrations, not a core database bootstrap; twelve of the sixteen JPA entity tables are not created by those scripts. The approved original core-schema source is not in this repository.

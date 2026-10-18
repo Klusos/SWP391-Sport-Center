@@ -457,3 +457,27 @@ All endpoints require authentication. MEMBER-only endpoints derive the member ID
 `PENDING_PAYMENT` reserves the interval for 15 minutes. A scheduled worker transitions due bookings to terminal `EXPIRED`; overlap checks also ignore pending rows whose `paymentExpiresAt` has passed, so a delayed worker does not hold the slot. `EXPIRED` and `CANCELLED` bookings do not block new bookings. Expiry and payment confirmation must lock the same booking row and recheck status/deadline in the transaction. Flow 3 may transition a booking from `PENDING_PAYMENT` to `CONFIRMED` only after verified payment and only before `paymentExpiresAt`; booking creation is not proof of payment. A late successful payment must leave the booking `EXPIRED`; Flow 3 must record/route the payment exception without confirming the booking. The refund or other remedy for late payment is intentionally unspecified. Payment amounts should reconcile to stored `originalPrice`, `discount`, and `finalPrice`. No cancellation endpoint is exposed.
 
 SQL Server setup: after the core schema and `class_session` table, review and manually run `docs/sql/phase2-personal-training-bookings.sql` in `SportCenterDB`. The migration is not executed by the application and Hibernate remains `ddl-auto=validate`.
+
+## Flow 3: Payment and reports
+
+Payment is a separate operation from membership purchase, course registration and PT booking. The client never sends an amount; the server derives it from the referenced record.
+
+| `purpose` | `referenceId` | Amount charged | On successful payment |
+|---|---|---|---|
+| `MEMBERSHIP` | `MembershipPlan.id` (plan must be `ACTIVE`) | `plan.price` | Activates a new ACTIVE membership from today, or, if one is still valid, renews by adding a new membership that starts on the latest current `endDate` |
+| `COURSE_REGISTRATION` | `CourseRegistration.id` (own, `CONFIRMED`, not yet paid) | registration `finalPrice` snapshot | Records the registration as paid |
+| `PT_BOOKING` | `PersonalTrainingBooking.id` (own, `PENDING_PAYMENT`, hold not expired, not yet paid) | booking `finalPrice` | Confirms the booking (`PENDING_PAYMENT` -> `CONFIRMED`) |
+
+Payment status: `PENDING` -> `SUCCESS` | `CANCELLED` | `REFUND_REQUIRED`. `REFUND_REQUIRED` means money was received but could not be applied (PT hold expired first, registration no longer active, the reference was already paid by another payment, or the gateway reported success after the payment was cancelled). The booking is left `EXPIRED`; the refund itself is handled manually. `REFUND_REQUIRED` is excluded from revenue reports.
+
+Endpoints:
+- `POST /api/payments` - MEMBER (for self) or ADMIN/RECEPTIONIST (with `memberId`). Body `{"method":"ONLINE|COUNTER","purpose":"...","referenceId":1,"autoRenew":false}`; `autoRenew` applies to `MEMBERSHIP` only. `ONLINE` responses include `paymentUrl`.
+- `GET /api/payments/online/callback?transactionCode=&success=&signature=` - public; accepted only with a valid HMAC-SHA256 signature (`app.payment.callback-secret`). Replays are idempotent. `MockPaymentGateway` is the demo gateway: opening `paymentUrl` simulates a successful payment.
+- `PATCH /api/payments/{id}/counter` - ADMIN/RECEPTIONIST; body `{"success":true,"note":"..."}`. Records `processedBy`.
+- `PATCH /api/payments/{id}/cancel` - owner MEMBER or ADMIN/RECEPTIONIST; `PENDING` payments only.
+- `GET /api/payments/me` - MEMBER history. `GET /api/payments/member/{memberId}` - ADMIN/RECEPTIONIST.
+- `GET /api/reports/revenue|members|class-registrations?from=YYYY-MM-DD&to=YYYY-MM-DD` - ADMIN only; inclusive date range over `paidAt`, `SUCCESS` payments only.
+
+`POST /api/memberships` is now ADMIN/RECEPTIONIST only (manual assignment). MEMBER purchases a membership through `POST /api/payments`.
+
+Configuration: set `PAYMENT_CALLBACK_SECRET` (a long random string) in `.env`; the application fails to start without it. SQL Server: run `docs/sql/phase2-payment.sql` before starting with `ddl-auto=validate`.
