@@ -12,6 +12,12 @@ import PtBooking from "./pages/PtBooking";
 import CoachPtSessions from "./pages/CoachPtSessions";
 import CoachSkillAssessments from "./pages/CoachSkillAssessments";
 import MemberLevelsAssessments from "./pages/MemberLevelsAssessments";
+import Dashboard from "./pages/Dashboard";
+import MemberCourses from "./pages/MemberCourses";
+import MemberMembership from "./pages/MemberMembership";
+import Schedule from "./pages/Schedule";
+import CourseManagement from "./pages/CourseManagement";
+import MemberProfile from "./pages/MemberProfile";
 import PublicLayout from "./public-site/PublicLayout";
 import Admission from "./public-site/pages/Admission";
 import Coaches from "./public-site/pages/Coaches";
@@ -26,33 +32,33 @@ const STAFF_ROLES = ["ADMIN", "RECEPTIONIST"];
 function StaffRoute({ auth }) {
   const location = useLocation();
   if (!auth) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
-  if (!STAFF_ROLES.includes(auth.role)) return <Navigate to={auth.role === "COACH" ? "/coach/pt-sessions" : "/member/pt-booking"} replace />;
+  if (!STAFF_ROLES.includes(auth.role)) return <Navigate to={auth.role === "COACH" ? "/coach/dashboard" : "/member/dashboard"} replace />;
   return <Outlet />;
 }
 
 function MemberRoute({ auth }) {
   const location = useLocation();
   if (!auth) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
-  if (auth.role !== "MEMBER") return <Navigate to={auth.role === "COACH" ? "/coach/pt-sessions" : "/staff/register-member"} replace />;
+  if (auth.role !== "MEMBER") return <Navigate to={auth.role === "COACH" ? "/coach/dashboard" : "/staff/dashboard"} replace />;
   return <Outlet />;
 }
 
 function CoachRoute({ auth }) {
   const location = useLocation();
   if (!auth) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
-  if (auth.role !== "COACH") return <Navigate to={auth.role === "MEMBER" ? "/member/pt-booking" : "/staff/register-member"} replace />;
+  if (auth.role !== "COACH") return <Navigate to={auth.role === "MEMBER" ? "/member/dashboard" : "/staff/dashboard"} replace />;
   return <Outlet />;
 }
 
 function homeForRole(role) {
-  if (role === "MEMBER") return "/member/pt-booking";
-  if (role === "COACH") return "/coach/pt-sessions";
-  return "/staff/register-member";
+  if (role === "MEMBER") return "/member/dashboard";
+  if (role === "COACH") return "/coach/dashboard";
+  return "/staff/dashboard";
 }
 
 function AdminRoute({ auth }) {
   if (!auth) return <Navigate to="/login" replace />;
-  if (auth.role !== "ADMIN") return <Navigate to="/staff/register-member" replace />;
+  if (auth.role !== "ADMIN") return <Navigate to="/staff/dashboard" replace />;
   return <Outlet />;
 }
 
@@ -78,25 +84,33 @@ export default function App() {
     token: auth?.accessToken,
     role: auth?.role,
     onLogout: handleLogout,
-    onNavigate: (page) => navigate(page === "consultations"
-      ? "/staff/consultations"
+    onNavigate: (page) => navigate(page === "dashboard" ? "/staff/dashboard"
+      : page === "consultations" ? "/staff/consultations"
       : page === "members" ? "/staff/members"
-        : page === "staff" ? "/staff/staff"
-        : page === "sports" ? "/staff/sports"
-        : page === "facilities" ? "/staff/facilities"
-        : page === "membership-plans" ? "/staff/membership-plans" : "/staff/register-member"),
+      : page === "staff" ? "/staff/staff"
+      : page === "sports" ? "/staff/sports"
+      : page === "facilities" ? "/staff/facilities"
+      : page === "courses" ? "/staff/courses"
+      : page === "membership-plans" ? "/staff/membership-plans" : "/staff/register-member"),
   };
   const coachProps = {
     token: auth?.accessToken,
     role: auth?.role,
     onLogout: handleLogout,
-    onNavigate: (page) => navigate(page === "coach-assessments" ? "/coach/skill-assessments" : "/coach/pt-sessions"),
+    onNavigate: (page) => navigate(page === "dashboard" ? "/coach/dashboard"
+      : page === "coach-schedule" ? "/coach/schedule"
+      : page === "coach-assessments" ? "/coach/skill-assessments" : "/coach/pt-sessions"),
   };
   const memberProps = {
     token: auth?.accessToken,
     role: auth?.role,
     onLogout: handleLogout,
-    onNavigate: (page) => navigate(page === "member-levels" ? "/member/levels-assessments" : "/member/pt-booking"),
+    onNavigate: (page) => navigate(page === "dashboard" ? "/member/dashboard"
+      : page === "member-courses" ? "/member/courses"
+      : page === "member-membership" ? "/member/membership"
+      : page === "member-schedule" ? "/member/schedule"
+      : page === "member-profile" ? "/member/profile"
+      : page === "member-levels" ? "/member/levels-assessments" : "/member/pt-booking"),
   };
 
   return (
@@ -113,7 +127,8 @@ export default function App() {
       </Route>
       <Route path="/login" element={auth ? <Navigate to={homeForRole(auth.role)} replace /> : <Login onLoginSuccess={handleLogin} />} />
       <Route element={<StaffRoute auth={auth} />}>
-        <Route path="/staff" element={<Navigate to="/staff/register-member" replace />} />
+        <Route path="/staff" element={<Navigate to="/staff/dashboard" replace />} />
+        <Route path="/staff/dashboard" element={<Dashboard {...staffProps} />} />
         <Route path="/staff/register-member" element={<RegisterMember {...staffProps} />} />
         <Route path="/staff/consultations" element={<ConsultationQueue {...staffProps} />} />
         <Route path="/staff/membership-plans" element={<MembershipPlans {...staffProps} />} />
@@ -122,13 +137,21 @@ export default function App() {
           <Route path="/staff/staff" element={<StaffManagement {...staffProps} />} />
           <Route path="/staff/sports" element={<SportManagement {...staffProps} />} />
           <Route path="/staff/facilities" element={<FacilityManagement {...staffProps} />} />
+          <Route path="/staff/courses" element={<CourseManagement {...staffProps} />} />
         </Route>
       </Route>
       <Route element={<MemberRoute auth={auth} />}>
+        <Route path="/member/dashboard" element={<Dashboard {...memberProps} />} />
+        <Route path="/member/courses" element={<MemberCourses {...memberProps} />} />
+        <Route path="/member/membership" element={<MemberMembership {...memberProps} />} />
+        <Route path="/member/schedule" element={<Schedule {...memberProps} />} />
+        <Route path="/member/profile" element={<MemberProfile {...memberProps} />} />
         <Route path="/member/pt-booking" element={<PtBooking token={auth?.accessToken} onLogout={handleLogout} />} />
         <Route path="/member/levels-assessments" element={<MemberLevelsAssessments {...memberProps} />} />
       </Route>
       <Route element={<CoachRoute auth={auth} />}>
+        <Route path="/coach/dashboard" element={<Dashboard {...coachProps} />} />
+        <Route path="/coach/schedule" element={<Schedule {...coachProps} />} />
         <Route path="/coach/pt-sessions" element={<CoachPtSessions {...coachProps} />} />
         <Route path="/coach/skill-assessments" element={<CoachSkillAssessments {...coachProps} />} />
       </Route>

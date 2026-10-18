@@ -1,0 +1,11 @@
+.adm-block { margin-bottom: 22px; padding: 22px; border: 1px solid var(--border); border-radius: var(--radius-md); background: #fff; min-width: 0; }
+.adm-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+.adm-head h2 { margin: 0; font-size: 16px; }
+.adm-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.adm-sel td { background: #eaf3ff; }
+.adm-form { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border); }
+.adm-form .grid-2 { gap: 16px 28px; }
+.adm-form textarea { width: 100%; }
+.adm-form .form-actions { gap: 8px; }
+.main .adm-primary { border-color: var(--blue); background: var(--blue); color: #fff; }
+.main .adm-primary:hover:not(:disabled) { border-color: var(--blue-dark); background: var(--blue-dark); color: #fff; }

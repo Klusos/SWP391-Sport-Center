@@ -1,17 +1,27 @@
+function NavButton({ id, activePage, onNavigate, children }) {
+  return (
+    <button className={"nav-item clickable nav-button " + (activePage === id ? "active" : "")}
+      aria-current={activePage === id ? "page" : undefined} type="button" onClick={() => onNavigate(id)}>
+      {children}
+    </button>
+  );
+}
+
 export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
+  const nav = { activePage, onNavigate };
+
   if (role === "MEMBER") {
     return (
       <aside className="sidebar">
         <div className="brand"><strong>SPORTS CENTER</strong><span>Thành viên</span></div>
         <nav aria-label="Member navigation">
-          <button className={"nav-item clickable nav-button " + (activePage === "member-levels" ? "active" : "")}
-            aria-current={activePage === "member-levels" ? "page" : undefined} type="button" onClick={() => onNavigate("member-levels")}>
-            Trình độ &amp; đánh giá
-          </button>
-          <button className={"nav-item clickable nav-button " + (activePage === "member-pt-booking" ? "active" : "")}
-            aria-current={activePage === "member-pt-booking" ? "page" : undefined} type="button" onClick={() => onNavigate("member-pt-booking")}>
-            Đặt buổi huấn luyện
-          </button>
+          <NavButton id="dashboard" {...nav}>Tổng quan</NavButton>
+          <NavButton id="member-courses" {...nav}>Khóa học &amp; lớp học</NavButton>
+          <NavButton id="member-membership" {...nav}>Gói thành viên</NavButton>
+          <NavButton id="member-schedule" {...nav}>Lịch trình</NavButton>
+          <NavButton id="member-levels" {...nav}>Trình độ &amp; đánh giá</NavButton>
+          <NavButton id="member-pt-booking" {...nav}>Đặt buổi huấn luyện</NavButton>
+          <NavButton id="member-profile" {...nav}>Hồ sơ cá nhân</NavButton>
         </nav>
         <div className="nav-footer"><button className="nav-item clickable logout-button" type="button" onClick={onLogout}>Đăng xuất</button></div>
       </aside>
@@ -23,14 +33,10 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
       <aside className="sidebar">
         <div className="brand"><strong>SPORTS CENTER</strong><span>Huấn luyện viên</span></div>
         <nav aria-label="Coach navigation">
-          <button className={"nav-item clickable nav-button " + (activePage === "coach-pt-sessions" ? "active" : "")}
-            aria-current={activePage === "coach-pt-sessions" ? "page" : undefined} type="button" onClick={() => onNavigate("coach-pt-sessions")}>
-            Buổi huấn luyện cá nhân
-          </button>
-          <button className={"nav-item clickable nav-button " + (activePage === "coach-assessments" ? "active" : "")}
-            aria-current={activePage === "coach-assessments" ? "page" : undefined} type="button" onClick={() => onNavigate("coach-assessments")}>
-            Đánh giá kỹ năng
-          </button>
+          <NavButton id="dashboard" {...nav}>Tổng quan</NavButton>
+          <NavButton id="coach-schedule" {...nav}>Lịch trình</NavButton>
+          <NavButton id="coach-pt-sessions" {...nav}>Buổi huấn luyện cá nhân</NavButton>
+          <NavButton id="coach-assessments" {...nav}>Đánh giá kỹ năng</NavButton>
         </nav>
         <div className="nav-footer"><button className="nav-item clickable logout-button" type="button" onClick={onLogout}>Đăng xuất</button></div>
       </aside>
@@ -46,52 +52,18 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
         <span>{role === "ADMIN" ? "Quản trị viên" : "Lễ tân"}</span>
       </div>
       <nav aria-label="Staff navigation">
-        <div className="nav-item">Tổng quan</div>
-        {canAccessConsultations && (
-          <button className={"nav-item clickable nav-button " + (activePage === "members" ? "active" : "")}
-            aria-current={activePage === "members" ? "page" : undefined} type="button" onClick={() => onNavigate("members")}>
-            Thành viên
-          </button>
-        )}
-        {canAccessConsultations && (
-          <button className={"nav-item clickable nav-button " + (activePage === "membership-plans" ? "active" : "")}
-            aria-current={activePage === "membership-plans" ? "page" : undefined} type="button" onClick={() => onNavigate("membership-plans")}>
-            {"G\u00f3i h\u1ed9i vi\u00ean"}
-          </button>
-        )}
-        {role === "ADMIN" && (
-          <button className={"nav-item clickable nav-button " + (activePage === "staff" ? "active" : "")}
-            aria-current={activePage === "staff" ? "page" : undefined} type="button" onClick={() => onNavigate("staff")}>
-            Quản lý nhân sự
-          </button>
-        )}
-        {role === "ADMIN" && (
-          <button className={"nav-item clickable nav-button " + (activePage === "sports" ? "active" : "")}
-            aria-current={activePage === "sports" ? "page" : undefined} type="button" onClick={() => onNavigate("sports")}>
-            {"Qu\u1ea3n l\u00fd b\u1ed9 m\u00f4n"}
-          </button>
-        )}
-        {role === "ADMIN" && (
-          <button className={"nav-item clickable nav-button " + (activePage === "facilities" ? "active" : "")}
-            aria-current={activePage === "facilities" ? "page" : undefined} type="button" onClick={() => onNavigate("facilities")}>
-            {"Qu\u1ea3n l\u00fd c\u01a1 s\u1edf v\u1eadt ch\u1ea5t"}
-          </button>
-        )}
-
-        <button className={"nav-item clickable nav-button " + (activePage === "register" ? "active" : "")}
-          aria-current={activePage === "register" ? "page" : undefined} type="button" onClick={() => onNavigate("register")}>
-          Đăng ký thành viên
-        </button>
-        {canAccessConsultations && (
-          <button className={"nav-item clickable nav-button " + (activePage === "consultations" ? "active" : "")}
-            aria-current={activePage === "consultations" ? "page" : undefined} type="button" onClick={() => onNavigate("consultations")}>
-            Yêu cầu tư vấn
-          </button>
-        )}
+        <NavButton id="dashboard" {...nav}>Tổng quan</NavButton>
+        {canAccessConsultations && <NavButton id="members" {...nav}>Thành viên</NavButton>}
+        {canAccessConsultations && <NavButton id="membership-plans" {...nav}>Gói hội viên</NavButton>}
+        {role === "ADMIN" && <NavButton id="staff" {...nav}>Quản lý nhân sự</NavButton>}
+        {role === "ADMIN" && <NavButton id="sports" {...nav}>Quản lý bộ môn</NavButton>}
+        {role === "ADMIN" && <NavButton id="courses" {...nav}>Quản lý khóa học &amp; lớp</NavButton>}
+        {role === "ADMIN" && <NavButton id="facilities" {...nav}>Quản lý cơ sở vật chất</NavButton>}
+        <NavButton id="register" {...nav}>Đăng ký thành viên</NavButton>
+        {canAccessConsultations && <NavButton id="consultations" {...nav}>Yêu cầu tư vấn</NavButton>}
         <div className="nav-item">Điểm danh</div>
-        <div className="nav-item">Lớp học</div>
         <div className="nav-item">Thanh toán</div>
-        <div className="nav-item">{"H\u1ed7 tr\u1ee3"}</div>
+        <div className="nav-item">Hỗ trợ</div>
       </nav>
       <div className="nav-footer">
         <div className="nav-item">Cài đặt</div>
