@@ -38,7 +38,6 @@ import Layout from "./components/Layout";
 
 // Các trang bổ sung
 import CrudPage from "./pages/CrudPage";
-import SupportPage from "./pages/SupportPage";
 import ReportPage from "./pages/ReportPage";
 import MemberPage from "./pages/MemberPage";
 
@@ -253,7 +252,6 @@ export default function App() {
           register: "/staff/register-member",
           classes: "/admin/classes",
           reports: "/admin/reports",
-          support: "/receptionist/support",
         }[page] || "/staff/dashboard"
       ),
   };
@@ -474,7 +472,7 @@ export default function App() {
 
               <Route
                 path="/receptionist/support"
-                element={<SupportPage />}
+                element={<Navigate to="/staff/consultations" replace />}
               />
             </Route>
           </Route>

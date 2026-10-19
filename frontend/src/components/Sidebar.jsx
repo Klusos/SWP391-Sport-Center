@@ -34,7 +34,6 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
     ["members", "Thành viên"],
     ["membership-sales", "Bán gói hội viên"],
     ["consultations", "Yêu cầu tư vấn"],
-    ["support", "Hỗ trợ hội viên"],
   ];
   const adminLinks = [
     ["dashboard", "Tổng quan"],

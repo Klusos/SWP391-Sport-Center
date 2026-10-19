@@ -20,7 +20,6 @@ const pageByPath = {
   "/admin/courses": "admin-courses",
   "/admin/classes": "classes",
   "/admin/reports": "reports",
-  "/receptionist/support": "support",
   "/member/courses": "member-courses",
   "/member/classes": "member-classes",
   "/member/membership": "member-membership",

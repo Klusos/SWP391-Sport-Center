@@ -44,6 +44,8 @@ import group5.example.sportCenter.entity.CourseRegistration;
 import group5.example.sportCenter.entity.CourseRegistrationStatus;
 import group5.example.sportCenter.entity.Membership;
 import group5.example.sportCenter.entity.MembershipPlan;
+import group5.example.sportCenter.entity.Payment;
+import group5.example.sportCenter.entity.PaymentStatus;
 import group5.example.sportCenter.entity.PaymentMethod;
 import group5.example.sportCenter.entity.PaymentPurpose;
 import group5.example.sportCenter.entity.PersonalTrainingBooking;
@@ -484,6 +486,102 @@ class PaymentIntegrationTest {
         service.processAtCounter(payment.getId(), counter(true), jwt(receptionist));
         assertEquals(receptionist.getId(),
                 payments.findById(payment.getId()).orElseThrow().getProcessedBy().getId());
+    }
+
+    @Test
+    void pendingMembershipQueueIsStaffOnly() throws Exception {
+        String path = "/api/payments/pending-memberships";
+        for (User staff : List.of(admin, receptionist)) {
+            mvc.perform(get(path).header("Authorization", bearer(staff)))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.content").isArray());
+        }
+        for (User forbidden : List.of(member, coach.getUser())) {
+            mvc.perform(get(path).header("Authorization", bearer(forbidden)))
+                    .andExpect(status().isForbidden());
+        }
+        mvc.perform(get(path)).andExpect(status().isUnauthorized());
+        mvc.perform(get(path + "?page=-1").header("Authorization", bearer(admin)))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get(path + "?size=101").header("Authorization", bearer(admin)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void pendingMembershipQueueFiltersAndPaginatesNewestFirst() throws Exception {
+        var newer = queueFixture(otherMember, PaymentMethod.COUNTER, PaymentPurpose.MEMBERSHIP,
+                PaymentStatus.PENDING);
+        var older = queueFixture(member, PaymentMethod.COUNTER, PaymentPurpose.MEMBERSHIP,
+                PaymentStatus.PENDING);
+        // Explicit timestamps also prove creation order, rather than relying on generated IDs.
+        jdbc.update("update Payment set created_at = ? where id = ?", LocalDateTime.of(2026, 1, 1, 0, 0), newer.getId());
+        jdbc.update("update Payment set created_at = ? where id = ?", LocalDateTime.of(2025, 1, 1, 0, 0), older.getId());
+        queueFixture(member, PaymentMethod.ONLINE, PaymentPurpose.MEMBERSHIP,
+                PaymentStatus.PENDING);
+        queueFixture(member, PaymentMethod.COUNTER, PaymentPurpose.COURSE_REGISTRATION,
+                PaymentStatus.PENDING);
+        queueFixture(member, PaymentMethod.COUNTER, PaymentPurpose.PT_BOOKING,
+                PaymentStatus.PENDING);
+        for (var state : List.of(PaymentStatus.SUCCESS,
+                PaymentStatus.CANCELLED,
+                PaymentStatus.REFUND_REQUIRED)) {
+            queueFixture(member, PaymentMethod.COUNTER, PaymentPurpose.MEMBERSHIP, state);
+        }
+        mvc.perform(get("/api/payments/pending-memberships?size=1").header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.totalPages").value(2)).andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(newer.getId()))
+                .andExpect(jsonPath("$.content[0].memberId").value(otherMember.getId()))
+                .andExpect(jsonPath("$.content[0].referenceId").value(plan.getId()))
+                .andExpect(jsonPath("$.content[0].amount").value(300000));
+        mvc.perform(get("/api/payments/pending-memberships?size=1&page=1").header("Authorization", bearer(admin)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.content[0].id").value(older.getId()));
+        mvc.perform(get("/api/payments/pending-memberships?page=2&size=1").header("Authorization", bearer(admin)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.content.length()").value(0));
+    }
+
+    @Test
+    void queueConfirmationActivatesOnceAndCancellationNeverActivates() throws Exception {
+        var payment = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(), PaymentMethod.COUNTER), jwt(member));
+        assertEquals(0, memberships.count());
+        String path = "/api/payments/" + payment.getId() + "/counter";
+        mvc.perform(patch(path).header("Authorization", bearer(receptionist))
+                        .contentType("application/json").content("{\"success\":true}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("SUCCESS"));
+        assertEquals(1, memberships.count());
+        Membership activated = memberships.findAll().get(0);
+        assertEquals(member.getId(), activated.getMember().getId());
+        assertEquals(plan.getId(), activated.getPlan().getId());
+        assertEquals("ACTIVE", activated.getStatus());
+        mvc.perform(get("/api/payments/pending-memberships").header("Authorization", bearer(admin)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0));
+        mvc.perform(patch(path).header("Authorization", bearer(admin))
+                        .contentType("application/json").content("{\"success\":true}"))
+                .andExpect(status().isConflict());
+        assertEquals(1, memberships.count());
+        var cancelled = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(), PaymentMethod.COUNTER), jwt(otherMember));
+        String cancelledPath = "/api/payments/" + cancelled.getId() + "/counter";
+        mvc.perform(patch(cancelledPath).header("Authorization", bearer(admin))
+                        .contentType("application/json").content("{\"success\":false}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CANCELLED"));
+        mvc.perform(patch(cancelledPath).header("Authorization", bearer(receptionist))
+                        .contentType("application/json").content("{\"success\":true}"))
+                .andExpect(status().isConflict());
+        assertEquals(1, memberships.count());
+        mvc.perform(get("/api/payments/pending-memberships").header("Authorization", bearer(admin)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    private Payment queueFixture(User owner, PaymentMethod method,
+            PaymentPurpose purpose, PaymentStatus state) {
+        var payment = new Payment();
+        payment.setMember(owner);
+        payment.setAmount(plan.getPrice());
+        payment.setReferenceId(plan.getId());
+        payment.setMethod(method);
+        payment.setPurpose(purpose);
+        payment.setStatus(state);
+        payment.setTransactionCode("QUEUE-" + java.util.UUID.randomUUID().toString().substring(0, 20));
+        return payments.save(payment);
     }
 
     // ---------------------------------------------------------------- fixtures

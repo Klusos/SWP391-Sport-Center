@@ -9,6 +9,9 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
@@ -223,6 +226,18 @@ public class PaymentService {
         }
         return paymentRepository.findByMemberIdOrderByCreatedAtDesc(memberId)
                 .stream().map(p -> toResponse(p, null)).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PaymentResponse> getPendingMembershipCounterPayments(int page, int size, Jwt jwt) {
+        requireStaff(currentActor(jwt));
+        if (page < 0 || size < 1 || size > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must be nonnegative and size between 1 and 100");
+        }
+        return paymentRepository.findByStatusAndMethodAndPurpose(
+                PaymentStatus.PENDING, PaymentMethod.COUNTER, PaymentPurpose.MEMBERSHIP,
+                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt", "id")))
+                .map(payment -> toResponse(payment, null));
     }
 
     // ---------------------------------------------------------------- helpers
