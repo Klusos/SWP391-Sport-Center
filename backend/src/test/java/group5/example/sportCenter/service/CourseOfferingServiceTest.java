@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -64,6 +65,7 @@ class CourseOfferingServiceTest {
         offering.setRegistrationDeadline(LocalDateTime.of(2027, 1, 9, 12, 0));
         offering.setCancellationDeadline(LocalDateTime.of(2027, 1, 9, 12, 0));
         offering.setStatus("OPEN");
+        lenient().when(offerings.findByIdForScheduleUpdate(11)).thenReturn(Optional.of(offering));
 
         request = new UpdateCourseOfferingRequest();
         request.setName("Spring term updated");
@@ -80,7 +82,7 @@ class CourseOfferingServiceTest {
     @Test
     void rejectsOfferingDateUpdateThatWouldExcludeExistingSessions() {
         request.setStartDate(LocalDate.of(2027, 1, 11));
-        when(offerings.findById(11)).thenReturn(Optional.of(offering));
+        when(offerings.findByIdForScheduleUpdate(11)).thenReturn(Optional.of(offering));
         when(sessions.existsOutsideOfferingRange(11,
                 LocalDate.of(2027, 1, 11).atStartOfDay(),
                 LocalDate.of(2027, 2, 11).atStartOfDay())).thenReturn(true);
@@ -102,7 +104,7 @@ class CourseOfferingServiceTest {
         request.setEndDate(offering.getEndDate());
         request.setRegistrationDeadline(offering.getRegistrationDeadline());
         request.setCancellationDeadline(offering.getCancellationDeadline());
-        when(offerings.findById(11)).thenReturn(Optional.of(offering));
+        when(offerings.findByIdForScheduleUpdate(11)).thenReturn(Optional.of(offering));
         when(offerings.save(any(CourseOffering.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(sessions.existsOutsideOfferingRange(any(), any(), any())).thenReturn(false);
 
@@ -113,7 +115,7 @@ class CourseOfferingServiceTest {
     void rejectsRegistrationDeadlineAfterCancellationDeadline() {
         request.setRegistrationDeadline(LocalDateTime.of(2027, 1, 9, 13, 0));
         request.setCancellationDeadline(LocalDateTime.of(2027, 1, 9, 12, 0));
-        when(offerings.findById(11)).thenReturn(Optional.of(offering));
+        when(offerings.findByIdForScheduleUpdate(11)).thenReturn(Optional.of(offering));
 
         ResponseStatusException error = assertThrows(ResponseStatusException.class,
                 () -> service.updateOffering(11, request));
@@ -127,7 +129,7 @@ class CourseOfferingServiceTest {
         ClassSession existing = new ClassSession();
         existing.setStartTime(LocalDateTime.of(2027, 1, 12, 9, 0));
         existing.setEndTime(LocalDateTime.of(2027, 1, 12, 10, 0));
-        when(offerings.findById(11)).thenReturn(Optional.of(offering));
+        when(offerings.findByIdForScheduleUpdate(11)).thenReturn(Optional.of(offering));
         when(sessions.findByCourseClass_CourseOffering_Id(11)).thenReturn(java.util.List.of(existing));
 
         ResponseStatusException error = assertThrows(ResponseStatusException.class,
@@ -198,7 +200,7 @@ class CourseOfferingServiceTest {
 
     @Test
     void updateAcceptsNumericBoundariesAndRejectsInvalidChangedValues() {
-        when(offerings.findById(11)).thenReturn(Optional.of(offering));
+        when(offerings.findByIdForScheduleUpdate(11)).thenReturn(Optional.of(offering));
         when(offerings.save(any(CourseOffering.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(sessions.existsOutsideOfferingRange(any(), any(), any())).thenReturn(false);
 
@@ -235,7 +237,7 @@ class CourseOfferingServiceTest {
         offering.setSessionDuration(240);
         request.setPlannedSessions(java.math.BigDecimal.valueOf(75));
         request.setSessionDuration(java.math.BigDecimal.valueOf(240));
-        when(offerings.findById(11)).thenReturn(Optional.of(offering));
+        when(offerings.findByIdForScheduleUpdate(11)).thenReturn(Optional.of(offering));
         when(offerings.save(any(CourseOffering.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(sessions.existsOutsideOfferingRange(any(), any(), any())).thenReturn(false);
 
@@ -248,7 +250,7 @@ class CourseOfferingServiceTest {
     void unrelatedUpdatePreservesLegacyNullPlannedSessions() {
         offering.setPlannedSessions(null);
         request.setPlannedSessions(null);
-        when(offerings.findById(11)).thenReturn(Optional.of(offering));
+        when(offerings.findByIdForScheduleUpdate(11)).thenReturn(Optional.of(offering));
         when(offerings.save(any(CourseOffering.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(sessions.existsOutsideOfferingRange(any(), any(), any())).thenReturn(false);
 
@@ -260,7 +262,7 @@ class CourseOfferingServiceTest {
     void rejectsChangingLegacyNumericValuesToValuesOutsideApprovedRanges() {
         offering.setPlannedSessions(75);
         offering.setSessionDuration(240);
-        when(offerings.findById(11)).thenReturn(Optional.of(offering));
+        when(offerings.findByIdForScheduleUpdate(11)).thenReturn(Optional.of(offering));
         request.setPlannedSessions(java.math.BigDecimal.valueOf(61));
         assertEquals(400, assertThrows(ResponseStatusException.class,
                 () -> service.updateOffering(11, request)).getStatusCode().value());

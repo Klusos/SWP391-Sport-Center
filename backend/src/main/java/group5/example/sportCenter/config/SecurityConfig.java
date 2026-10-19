@@ -165,6 +165,10 @@ public class SecurityConfig {
                         "/api/classes", "/api/classes/**",
                         "/api/facilities", "/api/facilities/**")
                     .authenticated()
+                .requestMatchers(HttpMethod.POST,
+                        "/api/class-sessions/generation/preview",
+                        "/api/class-sessions/generation/confirm")
+                    .hasRole("ADMIN")
                 .requestMatchers("/api/sports", "/api/sports/**",
                         "/api/courses", "/api/courses/**",
                         "/api/course-offerings", "/api/course-offerings/**",

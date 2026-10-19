@@ -21,7 +21,9 @@ import group5.example.sportCenter.entity.CourseClass;
 import group5.example.sportCenter.entity.Facility;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.ClassSessionRepository;
+import group5.example.sportCenter.repository.CoachRepository;
 import group5.example.sportCenter.repository.CourseClassRepository;
+import group5.example.sportCenter.repository.CourseOfferingRepository;
 import group5.example.sportCenter.repository.FacilityRepository;
 
 @Service
@@ -35,25 +37,34 @@ public class ClassSessionService {
 
     private final ClassSessionRepository classSessionRepository;
     private final CourseClassRepository courseClassRepository;
+    private final CourseOfferingRepository courseOfferingRepository;
     private final FacilityRepository facilityRepository;
+    private final CoachRepository coachRepository;
     private final Clock clock;
 
     @Autowired
     public ClassSessionService(
             ClassSessionRepository classSessionRepository,
             CourseClassRepository courseClassRepository,
-            FacilityRepository facilityRepository) {
-        this(classSessionRepository, courseClassRepository, facilityRepository, Clock.systemDefaultZone());
+            CourseOfferingRepository courseOfferingRepository,
+            FacilityRepository facilityRepository,
+            CoachRepository coachRepository) {
+        this(classSessionRepository, courseClassRepository, courseOfferingRepository, facilityRepository, coachRepository,
+                Clock.systemDefaultZone());
     }
 
     ClassSessionService(
             ClassSessionRepository classSessionRepository,
             CourseClassRepository courseClassRepository,
+            CourseOfferingRepository courseOfferingRepository,
             FacilityRepository facilityRepository,
+            CoachRepository coachRepository,
             Clock clock) {
         this.classSessionRepository = classSessionRepository;
         this.courseClassRepository = courseClassRepository;
+        this.courseOfferingRepository = courseOfferingRepository;
         this.facilityRepository = facilityRepository;
+        this.coachRepository = coachRepository;
         this.clock = clock;
     }
 
@@ -76,14 +87,19 @@ public class ClassSessionService {
     }
 
     public ClassSessionResponse create(CreateClassSessionRequest request) {
-        CourseClass courseClass = findCourseClass(request.getClassId());
+        CourseClass courseClass = lockCourseClass(request.getClassId());
+        lockOffering(courseClass);
         Facility facility = findFacility(request.getFacilityId());
+        facility = lockScheduleResources(courseClass, facility);
         requireActiveFacility(facility, "Only ACTIVE facilities can be assigned to a new ClassSession");
         String status = request.getStatus() == null ? SCHEDULED : normalizeStatus(request.getStatus());
 
         validateRange(request.getStartTime(), request.getEndTime());
         validateWithinOffering(courseClass, request.getStartTime(), request.getEndTime());
         validateOfferingDuration(courseClass, request.getStartTime(), request.getEndTime());
+        if (!CANCELLED.equals(status)) {
+            validatePlannedSessionSlot(courseClass, null);
+        }
         validateCompletedTime(status, request.getEndTime());
         if (!CANCELLED.equals(status)) {
             validateConflicts(courseClass, facility, request.getStartTime(), request.getEndTime(), null);
@@ -104,11 +120,16 @@ public class ClassSessionService {
             throw new IllegalArgumentException("A ClassSession in a terminal state cannot be rescheduled");
         }
 
-        CourseClass courseClass = findCourseClass(request.getClassId());
+        CourseClass courseClass = lockCourseClass(request.getClassId());
+        lockOffering(courseClass);
         Facility facility = findFacility(request.getFacilityId());
+        facility = lockScheduleResources(courseClass, facility);
         validateRange(request.getStartTime(), request.getEndTime());
         validateWithinOffering(courseClass, request.getStartTime(), request.getEndTime());
         validateOfferingDuration(courseClass, request.getStartTime(), request.getEndTime());
+        if (!session.getCourseClass().getId().equals(courseClass.getId())) {
+            validatePlannedSessionSlot(courseClass, null);
+        }
         validateFacilityForUpdate(session, facility, request.getStartTime());
         validateConflicts(courseClass, facility, request.getStartTime(), request.getEndTime(), id);
 
@@ -198,6 +219,74 @@ public class ClassSessionService {
                     "ClassSession duration must equal the CourseOffering sessionDuration of "
                             + requiredMinutes + " minutes");
         }
+    }
+
+    private void validatePlannedSessionSlot(CourseClass courseClass, Integer excludedSessionId) {
+        Integer target = courseClass.getCourseOffering().getPlannedSessions();
+        if (target == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "CourseOffering plannedSessions is not configured for this CourseClass");
+        }
+        long existing = classSessionRepository.countByCourseClassIdAndStatusNot(courseClass.getId(), CANCELLED);
+        if (excludedSessionId != null) {
+            ClassSession excluded = classSessionRepository.findById(excludedSessionId).orElse(null);
+            if (excluded != null && !CANCELLED.equalsIgnoreCase(excluded.getStatus())
+                    && excluded.getCourseClass().getId().equals(courseClass.getId())) existing--;
+        }
+        if (existing >= target) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "CourseOffering plannedSessions target is " + target + "; this CourseClass already has "
+                            + existing + " non-cancelled sessions");
+        }
+    }
+
+    List<String> validateGeneratedCandidate(CourseClass courseClass, Facility facility,
+            LocalDateTime startTime, LocalDateTime endTime) {
+        List<String> conflicts = new ArrayList<>();
+        try { validateRange(startTime, endTime); }
+        catch (RuntimeException e) { conflicts.add(e.getMessage()); }
+        try { validateWithinOffering(courseClass, startTime, endTime); }
+        catch (RuntimeException e) { conflicts.add(e.getMessage()); }
+        try { validateOfferingDuration(courseClass, startTime, endTime); }
+        catch (RuntimeException e) { conflicts.add(e.getMessage()); }
+        try { requireActiveFacility(facility, "Only ACTIVE facilities can be assigned to a new ClassSession"); }
+        catch (RuntimeException e) { conflicts.add(e.getMessage()); }
+        if (startTime != null && endTime != null && endTime.isAfter(startTime)) {
+            if (facility != null && classSessionRepository
+                    .existsByFacilityIdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThan(
+                            facility.getId(), CANCELLED, endTime, startTime)) {
+                conflicts.add("Facility is already booked during this time range");
+            }
+            if (classSessionRepository
+                    .existsByCourseClass_Coach_IdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThan(
+                            courseClass.getCoach().getId(), CANCELLED, endTime, startTime)) {
+                conflicts.add("Coach is already assigned to another ClassSession during this time range");
+            }
+        }
+        return conflicts;
+    }
+
+    private CourseClass lockCourseClass(Integer classId) {
+        return courseClassRepository.findByIdForScheduleUpdate(classId)
+                .orElseThrow(() -> new ResourceNotFoundException("CourseClass not found with id: " + classId));
+    }
+
+    void lockOffering(CourseClass courseClass) {
+        Integer offeringId = courseClass.getCourseOffering().getId();
+        var offering = courseOfferingRepository.findByIdForScheduleUpdate(offeringId)
+                .orElseThrow(() -> new ResourceNotFoundException("CourseOffering not found with id: " + offeringId));
+        courseClass.setCourseOffering(offering);
+    }
+
+    Facility lockScheduleResources(CourseClass courseClass, Facility facility) {
+        Facility lockedFacility = facility;
+        if (facility != null) {
+            lockedFacility = facilityRepository.findByIdForScheduleUpdate(facility.getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Facility not found with id: " + facility.getId()));
+        }
+        coachRepository.findByIdForBookingUpdate(courseClass.getCoach().getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Coach not found with id: " + courseClass.getCoach().getId()));
+        return lockedFacility;
     }
 
     private void validateCompletedTime(String status, LocalDateTime endTime) {

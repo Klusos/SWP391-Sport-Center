@@ -266,6 +266,12 @@ export function getClassesByOfferingApi(token, offeringId) {
   });
 }
 
+export function getClassSessionsByClassApi(token, classId) {
+  return request("/api/class-sessions/class/" + encodeURIComponent(classId), {
+    headers: authenticatedHeaders(token),
+  });
+}
+
 export function createCourseRegistrationApi(token, classId) {
   return request("/api/course-registrations", {
     method: "POST",
@@ -565,6 +571,22 @@ export function setSessionStatusApi(token, sessionId, status) {
     method: "PATCH",
     headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
+  });
+}
+
+export function previewClassSessionGenerationApi(token, payload) {
+  return request("/api/class-sessions/generation/preview", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function confirmClassSessionGenerationApi(token, payload) {
+  return request("/api/class-sessions/generation/confirm", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
 }
 

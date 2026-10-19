@@ -272,6 +272,8 @@ The SQL Server migration `docs/sql/phase3-entity-image-urls.sql` adds nullable `
 | `POST /api/class-sessions` | ADMIN | `CreateClassSessionRequest` | 201, `ClassSessionResponse` | Not verified |
 | `PUT /api/class-sessions/{id}` | ADMIN | `UpdateClassSessionRequest` | 200, `ClassSessionResponse` | Not verified |
 | `PATCH /api/class-sessions/{id}/status` | ADMIN | `UpdateClassSessionStatusRequest` | 200, `ClassSessionResponse` | Not verified |
+| `POST /api/class-sessions/generation/preview` | ADMIN | `ClassSessionGenerationRequest` | 200, preview response; read-only | Isolated tests |
+| `POST /api/class-sessions/generation/confirm` | ADMIN | `ClassSessionGenerationRequest` | 201, `ClassSessionGenerationResponse` | Isolated tests |
 
 Create sample (status omitted to use the `SCHEDULED` default; `facilityId` may be null):
 
@@ -279,7 +281,25 @@ Create sample (status omitted to use the `SCHEDULED` default; `facilityId` may b
 {"classId":3,"facilityId":6,"startTime":"2026-10-12T10:00:00","endTime":"2026-10-12T11:00:00"}
 ```
 
-Update body is the same shape and must include `classId`, `startTime`, and `endTime`; `facilityId: null` clears the facility. Status update body: `{"status":"CANCELLED"}`. Both timestamps must fall within the offering's date range, including the whole end date, and their difference must exactly equal persisted CourseOffering `sessionDuration` in whole minutes. End must be strictly after start. Invalid dates or duration return 400; overlaps and invalid state transitions return 409; missing referenced resources return 404. `SCHEDULED` can become `COMPLETED` only at/after `endTime`, or `CANCELLED` only before `startTime`; both terminal statuses remain terminal. There is no hard-delete route. Response warnings may identify per-CourseClass planned-session counts above `plannedSessions`; the counting scope remains provisional.
+Update body is the same shape and must include `classId`, `startTime`, and `endTime`; `facilityId: null` clears the facility. Status update body: `{"status":"CANCELLED"}`. Both timestamps must fall within the offering's date range, including the whole end date, and their difference must exactly equal persisted CourseOffering `sessionDuration` in whole minutes. End must be strictly after start. Invalid dates or duration return 400; overlaps, planned-session target violations, and invalid state transitions return 409; missing referenced resources return 404. `SCHEDULED` can become `COMPLETED` only at/after `endTime`, or `CANCELLED` only before `startTime`; both terminal statuses remain terminal. There is no hard-delete route. `plannedSessions` is a target per CourseClass: all non-CANCELLED sessions count, while CANCELLED sessions do not. Manual creation and generated creation share this target.
+
+### Automatic weekly schedule generation
+
+Both generation endpoints are ADMIN-only and use the persisted CourseOffering's duration; the request cannot override it. Timestamps are timezone-less `LocalDateTime` wall-clock values. Weekdays are ISO Java weekday names (`MONDAY` through `SUNDAY`), the first eligible date defaults to the offering start date, and the requested count defaults to the selected CourseClass's remaining target slots. A date is eligible through the offering end date inclusive. Matching dates are traversed chronologically; each session ends exactly `sessionDuration` minutes after the requested daily start time.
+
+Request example:
+
+```json
+{"courseClassId":3,"weekdays":["MONDAY","WEDNESDAY"],"startTime":"18:30:00","facilityId":6,"firstEligibleDate":"2026-10-12","requestedSessionCount":8}
+```
+
+`POST /api/class-sessions/generation/preview` returns candidate timestamps, class/offering/Coach/Facility context, current and remaining target counts, candidate-specific conflicts, overall conflicts, and `canGenerate`. It does not persist sessions. A candidate conflict or too few eligible weekdays makes the preview non-confirmable; conflicting dates are not silently skipped.
+
+`POST /api/class-sessions/generation/confirm` accepts the same request, recomputes all candidates and validates current data again. On success it returns `{"courseClassId":3,"createdCount":8,"sessions":[...]}` with HTTP 201. The entire batch runs in one transaction and any validation or persistence failure rolls back every created session. It uses the normal ClassSession create validation for date range, duration, active Facility, planned target, and Coach/Facility overlaps. Expect 400 for malformed input, 404 for missing referenced records, and 409 when current business constraints prevent generation.
+
+The policy is per CourseClass, although the target is configured on CourseOffering. Existing non-CANCELLED rows count toward that class target regardless of whether they were created manually or automatically; CANCELLED rows are retained but free a slot. Generation never deletes or replaces existing rows. Manual ClassSession creation also cannot exceed the same target. If existing rows already exceed the target, further creation is rejected.
+
+Confirmation takes pessimistic locks in a consistent resource order: CourseClass, CourseOffering, optional Facility, then assigned Coach. ClassSession create/update and the corresponding CourseClass Coach reassignment, CourseOffering update, and Facility status update use the relevant locks to coordinate application writes. Preview is advisory and can become stale; confirm always revalidates. The API is not idempotent: a repeated request is a separate attempt and will normally be rejected when the target has already been filled. Database locks coordinate application operations, but direct SQL writes or other writers that do not follow this lock protocol can still race; there is no schema-level uniqueness constraint for overlapping time intervals.
 
 Response sample:
 
@@ -339,7 +359,7 @@ Marking is allowed at or after the scheduled start time, including after the ses
 
 `docs/sql/phase4b1-class-attendance.sql` creates the Attendance and AttendanceHistory tables. Apply it manually after the approved core schema, the ClassSession migration, and the CourseRegistration migration, and before starting the backend with `spring.jpa.hibernate.ddl-auto=validate`. The migration was not executed or tested against SQL Server as part of this implementation; review and back up the intended database before manual execution.
 
-Facility and Coach overlaps use half-open interval semantics (`existing.startTime < requested.endTime` and `existing.endTime > requested.startTime`), so sessions that only touch at an endpoint do not overlap. Cancelled sessions do not reserve facilities or coaches. Sessions outside CourseOffering dates are rejected. Counts above `plannedSessions` remain warnings; the current code interprets `plannedSessions` per CourseClass for warning purposes only, pending confirmation of the intended counting scope. The Member default class schedule excludes CANCELLED sessions; authorized administrative GET routes retain historical visibility.
+Facility and Coach overlaps use half-open interval semantics (`existing.startTime < requested.endTime` and `existing.endTime > requested.startTime`), so sessions that only touch at an endpoint do not overlap. Cancelled sessions do not reserve facilities or coaches. Sessions outside CourseOffering dates are rejected. The per-CourseClass planned-session target is enforced for both manual and generated creation, counting every non-CANCELLED session. The Member default class schedule excludes CANCELLED sessions; authorized administrative GET routes retain historical visibility.
 
 Lifecycle transitions: `SCHEDULED` can become `COMPLETED` only when current time is at or after `endTime`, and can become `CANCELLED` only before `startTime`. `COMPLETED` and `CANCELLED` are terminal; repeating the same status is idempotent, but changing to another status returns 409. PUT schedule updates are allowed only for `SCHEDULED` sessions. Invalid status/time request data returns 400. Statuses change only through the API; there is no time-driven auto-transition.
 

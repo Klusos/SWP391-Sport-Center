@@ -4,6 +4,7 @@ import "./Portal.css";
 import "./Admin.css";
 import { getSportsApi, getCoachesApi, getFacilitiesApi, getCoursesBySportApi, saveCourseApi, getOfferingsApi, saveOfferingApi, getClassesApi, saveClassApi, getSessionsByClassApi, saveSessionApi, setSessionStatusApi } from "../api";
 import { addMinutesToDateTimeLocal, getSessionActionAvailability, validateClassSessionSchedule, validateCourseOffering } from "../classSessionValidation";
+import ClassSessionGenerationPanel from "./ClassSessionGenerationPanel";
 
 const list = (d) => (Array.isArray(d) ? d : d?.content ?? []);
 const dt = (s) => (s ? String(s).slice(0, 16) : "");
@@ -245,6 +246,8 @@ export default function CourseManagement({ token, role, onLogout, onNavigate }) 
               {availability.cancelReason && <small>{availability.cancelReason}</small>}
             </>;
           }} />
+        {cls && offering && <ClassSessionGenerationPanel key={cls.id} token={token} courseClass={cls}
+          offering={offering} facilities={facilities} sessions={sessions} onGenerated={loadSessions} />}
       </main>
     </div>
   );

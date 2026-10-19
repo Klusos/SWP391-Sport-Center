@@ -126,7 +126,7 @@ public class CourseOfferingService {
             UpdateCourseOfferingRequest request) {
 
         CourseOffering offering =
-                courseOfferingRepository.findById(id)
+                courseOfferingRepository.findByIdForScheduleUpdate(id)
                         .orElseThrow(() ->
                                 new ResourceNotFoundException(
                                         "Course offering not found with id: "

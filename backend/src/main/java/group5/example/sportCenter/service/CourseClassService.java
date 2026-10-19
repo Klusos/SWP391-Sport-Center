@@ -55,7 +55,7 @@ public class CourseClassService {
                                                 + request.getCourseOfferingId()));
 
         Coach coach = coachRepository
-                .findById(request.getCoachId())
+                .findByIdForBookingUpdate(request.getCoachId())
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "Coach not found with id: "
@@ -143,7 +143,7 @@ public class CourseClassService {
             UpdateClassRequest request) {
 
         CourseClass courseClass =
-                courseClassRepository.findById(id)
+                courseClassRepository.findByIdForScheduleUpdate(id)
                         .orElseThrow(() ->
                                 new ResourceNotFoundException(
                                         "Class not found with id: " + id));
@@ -151,7 +151,7 @@ public class CourseClassService {
         Integer previousCoachId = courseClass.getCoach().getId();
 
         Coach coach =
-                coachRepository.findById(request.getCoachId())
+                coachRepository.findByIdForBookingUpdate(request.getCoachId())
                         .orElseThrow(() ->
                                 new ResourceNotFoundException(
                                         "Coach not found with id: "
