@@ -122,7 +122,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/pt-bookings/assigned").hasRole("COACH")
                 .requestMatchers("/api/pt-bookings", "/api/pt-bookings/**").denyAll()
 
-                .requestMatchers(HttpMethod.GET, "/api/payments/online/callback").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/payments/online/callback",
+                        "/api/payments/vnpay/return", "/api/payments/vnpay/ipn").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/payments").hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
                 .requestMatchers(HttpMethod.PATCH, "/api/payments/*/counter").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.PATCH, "/api/payments/*/cancel").hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")

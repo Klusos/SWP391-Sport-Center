@@ -5,11 +5,14 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.HexFormat;
+import java.util.Map;
+import java.util.Optional;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpStatus;
@@ -21,6 +24,7 @@ import org.springframework.web.server.ResponseStatusException;
  * It is disabled unless explicitly enabled in a demo/test profile.
  */
 @Component
+@ConditionalOnProperty(name = "app.payment.provider", havingValue = "mock", matchIfMissing = true)
 public class MockPaymentGateway implements PaymentGateway {
 
     private static final Profiles ALLOWED_PROFILES =
@@ -49,21 +53,30 @@ public class MockPaymentGateway implements PaymentGateway {
     }
 
     @Override
-    public String createPaymentUrl(String transactionCode, BigDecimal amount) {
+    public String createPaymentUrl(String transactionCode, BigDecimal amount, String clientIp) {
         requireEnabled();
         // Demo only: opening this local URL simulates success; it is not proof of real settlement.
         return callbackBaseUrl + "?transactionCode=" + transactionCode
                 + "&success=true&signature=" + sign(transactionCode, true);
     }
 
+    /** Callback dạng ?transactionCode=...&success=true|false&signature=... */
     @Override
-    public boolean verifyCallback(String transactionCode, boolean success, String signature) {
-        if (!enabled || signature == null) {
-            return false;
+    public Optional<GatewayCallback> verifyCallback(Map<String, String> params) {
+        String transactionCode = params.get("transactionCode");
+        String successParam = params.get("success");
+        String signature = params.get("signature");
+        if (!enabled || transactionCode == null || signature == null
+                || !("true".equals(successParam) || "false".equals(successParam))) {
+            return Optional.empty();
         }
-        return MessageDigest.isEqual(
+        boolean success = Boolean.parseBoolean(successParam);
+        boolean valid = MessageDigest.isEqual(
                 sign(transactionCode, success).getBytes(StandardCharsets.UTF_8),
                 signature.getBytes(StandardCharsets.UTF_8));
+        return valid
+                ? Optional.of(new GatewayCallback(transactionCode, success, null, null))
+                : Optional.empty();
     }
 
     private void requireEnabled() {

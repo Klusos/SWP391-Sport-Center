@@ -1,5 +1,20 @@
 # SportCenter Implementation Status
 
+## Flow 3: VNPay sandbox gateway (2026-10-19)
+
+| Area | Code | Build and automated tests | Manual (VNPay sandbox) |
+|---|---|---|---|
+| `VnpayPaymentGateway` (API v2.1.0, HMAC-SHA512 signed `paymentUrl`; verifies signature, TMN code, amount and `vnp_ResponseCode`/`vnp_TransactionStatus`) | Implemented; selected with `PAYMENT_PROVIDER=vnpay` | `VnpayPaymentGatewayTest`: 6 passed | Sandbox accepted the signed URL; NCB test card payment completed |
+| `GET /api/payments/vnpay/return` (updates payment, redirects to frontend with `paymentId`/`paymentStatus`) | Implemented | Not covered by automated tests | Passed: payment #10 `PENDING` -> `SUCCESS`, membership activated |
+| `GET /api/payments/vnpay/ipn` (VNPay `RspCode` response) | Implemented | Not covered by automated tests | Invalid checksum -> `97` verified locally; real IPN not tested (VNPay cannot reach localhost) |
+| Callback amount check (`AMOUNT_MISMATCH` rejected) | Implemented in `PaymentService.processOnlineCallback` | Covered for VNPay tampering in unit tests | Not tested |
+| `PaymentGateway` refactor (callback params map); mock gateway behaviour unchanged | Implemented | `MockPaymentGatewayTest` 4 passed, `PaymentIntegrationTest` 23 passed, `AuthControllerIntegrationTest` 3 passed | Not re-tested manually after the refactor (mock flow was tested manually before it) |
+
+- `PAYMENT_PROVIDER` defaults to `mock`, so existing setups keep the simulator. VNPay requires `PAYMENT_PROVIDER=vnpay`, `VNPAY_TMN_CODE` and `VNPAY_HASH_SECRET` in `backend/.env` (never commit them). Optional: `VNPAY_PAY_URL`, `VNPAY_RETURN_URL`, `PAYMENT_FRONTEND_RESULT_URL`.
+- No database schema change.
+- Frontend: `main` still has no ONLINE purchase button. The `feflow3` branch `Checkout.jsx` works with VNPay (opens `paymentUrl` in a new tab and polls `GET /api/payments/me`); verified manually before merge. The new tab is opened with `noopener`, so it has no session and lands on the login page after the redirect; setting `PAYMENT_FRONTEND_RESULT_URL` to a public page avoids this.
+- Not implemented: expiry of abandoned `PENDING` ONLINE payments (the VNPay link expires after 15 minutes but the payment stays `PENDING` until cancelled), automatic refunds, VNPay refund/query APIs.
+
 ## Flow 3: Payment (2026-10-18)
 
 | Area | Code | Build and automated tests | Postman |
@@ -15,7 +30,7 @@
 - `POST /api/memberships` is restricted to ADMIN for manual assignment; MEMBER self-activation without payment was removed.
 - Duplicate-payment protection: payment rows are locked during counter/callback processing; the referenced registration/booking row is locked before checking for another `SUCCESS` payment.
 - Demo-only mock online payments are disabled by default. Explicit opt-in requires `PAYMENT_MOCK_GATEWAY_ENABLED=true` and an allowed demo/test profile; production profiles remain disabled and callback URLs must be loopback. This simulator is not a real payment provider and does not verify settlement.
-- Not implemented: real payment gateway (VNPay/MoMo/PayOS), automatic refunds, expiry of abandoned `PENDING` payments. MEMBER membership purchase UI is implemented as a counter-payment request; no client-side success action is available. The SQL Server E2E harness (`CourseRegistrationSqlServerE2EIT`) now also requires `dbo.payment` to exist.
+- Not implemented (as of 2026-10-18; VNPay sandbox added 2026-10-19, see above): real payment gateway (VNPay/MoMo/PayOS), automatic refunds, expiry of abandoned `PENDING` payments. MEMBER membership purchase UI is implemented as a counter-payment request; no client-side success action is available. The SQL Server E2E harness (`CourseRegistrationSqlServerE2EIT`) now also requires `dbo.payment` to exist.
 
 ## Phase 8.7C: Course Registration seat holds (2026-10-19)
 
