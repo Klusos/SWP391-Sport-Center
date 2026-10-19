@@ -905,3 +905,407 @@ legend {
   .coach-assessment-notes { grid-column: auto; }
   .coach-assessment-row-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 }
+
+/* =====================================================
+   SPORT MANAGEMENT - BỔ SUNG VÀO CUỐI CSS HIỆN TẠI
+   Dành riêng cho SportManagement.jsx
+   ===================================================== */
+
+/* ---------- Toolbar ---------- */
+
+.sport-admin-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 24px 0 20px;
+}
+
+.sport-admin-toolbar .muted {
+  margin: 0;
+  color: var(--text-sub);
+  font-size: 14px;
+}
+
+.sport-admin-toolbar > .btn-primary {
+  width: auto;
+  min-width: 160px;
+  min-height: 44px;
+  padding: 0 20px;
+  border: 1px solid var(--blue);
+  border-radius: 10px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(23, 105, 210, 0.14);
+  transition: background .18s ease, box-shadow .18s ease;
+}
+
+.sport-admin-toolbar > .btn-primary:hover:not(:disabled) {
+  border-color: var(--blue-dark);
+  background: var(--blue-dark);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(23, 105, 210, 0.2);
+}
+
+/* ---------- Main grid ---------- */
+
+.sport-admin-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(320px, 0.9fr);
+  align-items: start;
+  gap: 24px;
+  margin-top: 20px;
+  min-width: 0;
+}
+
+.sport-admin-list,
+.sport-admin-editor {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 14px);
+  background: #fff;
+  box-shadow: var(--shadow-card);
+}
+
+/* ---------- List table ---------- */
+
+.sport-admin-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid #e2eaf3;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.sport-admin-table {
+  width: 100%;
+  min-width: 580px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+
+.sport-admin-table th {
+  padding: 15px 14px;
+  background: #f3f7fc;
+  color: #526981;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: .04em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sport-admin-table td {
+  padding: 13px 14px;
+  border-top: 1px solid #edf1f6;
+  color: #29415b;
+  vertical-align: middle;
+}
+
+.sport-admin-table tbody tr {
+  transition: background-color .15s ease;
+}
+
+.sport-admin-table tbody tr:hover {
+  background: #f7faff;
+}
+
+.sport-admin-table tbody tr.selected {
+  background: #edf5ff;
+}
+
+.sport-admin-table td:nth-child(2) {
+  color: var(--text-sub);
+  font-variant-numeric: tabular-nums;
+}
+
+.sport-admin-table td:nth-child(3) {
+  min-width: 140px;
+  color: var(--navy);
+  font-weight: 650;
+}
+
+/* ---------- Sport images ---------- */
+
+.sport-admin-thumb {
+  display: block;
+  width: 64px;
+  height: 48px;
+  border: 1px solid #e2eaf3;
+  border-radius: 9px;
+  background: #f3f7fc;
+  object-fit: cover;
+}
+
+/* Preview image in editor */
+
+.sport-admin-preview {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: 180px;
+  margin: 0 0 24px;
+  border: 1px dashed #cbd8e7;
+  border-radius: 12px;
+  background: #f5f8fc;
+  object-fit: cover;
+}
+
+/* ---------- Status labels ---------- */
+
+.sport-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .035em;
+  white-space: nowrap;
+}
+
+.sport-status.active {
+  color: var(--success, #176b43);
+  background: var(--success-bg, #e8f6ee);
+  border-color: #c8ead6;
+}
+
+.sport-status.inactive {
+  color: var(--danger, #a52b2b);
+  background: var(--danger-bg, #fff0ef);
+  border-color: #f3d0cd;
+}
+
+/* ---------- Editor heading ---------- */
+
+.sport-admin-editor h2 {
+  margin: 0 0 20px;
+  color: var(--navy);
+  font-size: 22px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+/* ---------- Editor form ---------- */
+
+.sport-admin-editor form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 9px;
+}
+
+.sport-admin-editor form > label {
+  margin: 10px 0 0;
+  color: #344b64;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.sport-admin-editor form > label:first-child {
+  margin-top: 0;
+}
+
+.sport-admin-editor form > input:not([type="file"]),
+.sport-admin-editor form > select,
+.sport-admin-editor form > textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px solid #ccd8e6;
+  border-radius: 9px;
+  background: #fff;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 13px;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+
+.sport-admin-editor form > textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.sport-admin-editor form > input:focus,
+.sport-admin-editor form > select:focus,
+.sport-admin-editor form > textarea:focus {
+  border-color: var(--blue);
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(23, 105, 210, .12);
+}
+
+/* ---------- File input ---------- */
+
+.sport-admin-editor form > input[type="file"] {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  margin: 0;
+  padding: 6px;
+  border: 1px dashed #b9cbe0;
+  border-radius: 9px;
+  background: #f8fafd;
+  color: var(--text-sub);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.sport-admin-editor form > input[type="file"]::file-selector-button {
+  margin-right: 10px;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: #e6f0ff;
+  color: #1756a4;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sport-admin-editor form > .muted {
+  margin: 2px 0 6px;
+  color: var(--text-sub);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* ---------- Form actions ---------- */
+
+.sport-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 18px;
+  border-top: 1px solid #e8eef5;
+}
+
+.sport-admin-actions .btn-primary,
+.sport-admin-actions .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .18s ease, border-color .18s ease;
+}
+
+.sport-admin-actions .btn-primary {
+  border: 1px solid var(--blue);
+  background: var(--blue);
+  color: #fff;
+}
+
+.sport-admin-actions .btn-primary:hover:not(:disabled) {
+  border-color: var(--blue-dark);
+  background: var(--blue-dark);
+  color: #fff;
+}
+
+.sport-admin-actions .btn-secondary,
+.sport-admin-table .btn-secondary {
+  border: 1px solid #c9dcf3;
+  background: #fff;
+  color: #1756a4;
+}
+
+.sport-admin-actions .btn-secondary:hover:not(:disabled),
+.sport-admin-table .btn-secondary:hover:not(:disabled) {
+  border-color: var(--blue);
+  background: #edf5ff;
+  color: var(--blue-dark);
+}
+
+.sport-admin-actions button:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+/* Edit button inside the table */
+
+.sport-admin-table .btn-secondary {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ---------- Empty / loading state ---------- */
+
+.sport-admin-list .queue-state {
+  min-height: 140px;
+  padding: 28px;
+  border: 1px dashed #cbd8e7;
+  border-radius: 12px;
+  background: #f9fbfe;
+  color: var(--text-sub);
+  text-align: center;
+  line-height: 1.7;
+}
+
+/* ---------- Responsive tablet ---------- */
+
+@media (max-width: 1100px) {
+  .sport-admin-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sport-admin-preview {
+    max-width: 360px;
+  }
+}
+
+/* ---------- Responsive mobile ---------- */
+
+@media (max-width: 700px) {
+  .sport-admin-toolbar {
+    align-items: stretch;
+  }
+
+  .sport-admin-toolbar > .btn-primary {
+    width: 100%;
+  }
+
+  .sport-admin-list,
+  .sport-admin-editor {
+    padding: 16px;
+    border-radius: 12px;
+  }
+
+  .sport-admin-editor h2 {
+    font-size: 20px;
+  }
+
+  .sport-admin-preview {
+    height: 160px;
+  }
+
+  .sport-admin-actions {
+    flex-direction: column;
+  }
+
+  .sport-admin-actions .btn-primary,
+  .sport-admin-actions .btn-secondary {
+    width: 100%;
+  }
+}
