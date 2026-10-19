@@ -503,10 +503,7 @@ export default function App() {
           <Route
             path="/member/pt-booking"
             element={
-              <PtBooking
-                token={auth?.accessToken}
-                onLogout={handleLogout}
-              />
+              <PtBooking {...member} />
             }
           />
 
