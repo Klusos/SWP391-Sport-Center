@@ -905,3 +905,5 @@ legend {
   .coach-assessment-notes { grid-column: auto; }
   .coach-assessment-row-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 }
+.status-present { background: #e7f6ec; color: #146c3b; }
+.status-absent { background: #fdecea; color: #b3261e; }

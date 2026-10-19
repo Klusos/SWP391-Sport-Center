@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import "./Portal.css";
-import { getCurrentUserApi, getMyMemberProfileApi, saveMyMemberProfileApi } from "../api";
+import { getCurrentUserApi } from "../api";
+import { getMyMemberProfileApi, saveMyMemberProfileApi } from "../api";
 
 const GENDER = { M: "Nam", F: "Nữ" };
 
