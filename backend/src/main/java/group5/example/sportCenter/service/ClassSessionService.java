@@ -92,6 +92,7 @@ public class ClassSessionService {
         Facility facility = findFacility(request.getFacilityId());
         facility = lockScheduleResources(courseClass, facility);
         requireActiveFacility(facility, "Only ACTIVE facilities can be assigned to a new ClassSession");
+        validateFacilitySport(courseClass, facility);
         String status = request.getStatus() == null ? SCHEDULED : normalizeStatus(request.getStatus());
 
         validateRange(request.getStartTime(), request.getEndTime());
@@ -124,6 +125,7 @@ public class ClassSessionService {
         lockOffering(courseClass);
         Facility facility = findFacility(request.getFacilityId());
         facility = lockScheduleResources(courseClass, facility);
+        validateFacilitySport(courseClass, facility);
         validateRange(request.getStartTime(), request.getEndTime());
         validateWithinOffering(courseClass, request.getStartTime(), request.getEndTime());
         validateOfferingDuration(courseClass, request.getStartTime(), request.getEndTime());
@@ -251,6 +253,8 @@ public class ClassSessionService {
         catch (RuntimeException e) { conflicts.add(e.getMessage()); }
         try { requireActiveFacility(facility, "Only ACTIVE facilities can be assigned to a new ClassSession"); }
         catch (RuntimeException e) { conflicts.add(e.getMessage()); }
+        try { validateFacilitySport(courseClass, facility); }
+        catch (RuntimeException e) { conflicts.add(e.getMessage()); }
         if (startTime != null && endTime != null && endTime.isAfter(startTime)) {
             if (facility != null && classSessionRepository
                     .existsByFacilityIdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThan(
@@ -355,6 +359,16 @@ public class ClassSessionService {
     private void requireActiveFacility(Facility facility, String message) {
         if (facility != null && !"ACTIVE".equalsIgnoreCase(facility.getStatus())) {
             throw new IllegalArgumentException(message);
+        }
+    }
+
+    private void validateFacilitySport(CourseClass courseClass, Facility facility) {
+        if (facility == null) return;
+        Integer requiredSportId = courseClass.getCourseOffering().getCourse().getSport().getId();
+        boolean supported = facility.getSports().stream()
+                .anyMatch(sport -> requiredSportId.equals(sport.getId()));
+        if (!supported) {
+            throw new IllegalArgumentException("Facility does not support the Sport of the associated Course");
         }
     }
 

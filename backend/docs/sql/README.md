@@ -67,7 +67,30 @@ For a fresh laptop database, use this order:
 11. After a verified backup and restored-database rehearsal, run `phase3b2-vietnamese-unicode-preflight.sql`, review its output and module/trigger dependencies, stop application writers, and run `phase3b2-vietnamese-unicode.sql` as a standalone batch. Confirm the metadata and unique constraint using the read-only checks above.
 12. Run `phase6-1a-notifications.sql` after the core schema (it requires `dbo.users` with an `INT` primary key). It creates or validates `dbo.notification`, adds/validates its owner FK and defaults, and adds the user-created and filtered unread indexes. It is transactional and idempotent, rejects incompatible existing notification structures, and must be run manually; it has not been executed.
 13. Run `phase7-1-audit-log.sql` after the core user table exists and before starting a build containing AuditLog (`ddl-auto=validate`). It creates or validates only `dbo.audit_log`, with a nullable non-cascading actor FK to `dbo.users`, and adds newest-first, actor, and entity indexes. It is transactional and rerunnable, preserves all existing data, and has not been executed.
-14. Start the application after all required schema scripts complete; `spring.jpa.hibernate.ddl-auto=validate` will then verify mappings.
+14. Run `phase8-7b-facility-sports.sql` after the approved core schema and `phase0-class-sessions.sql`, but before deploying the application version that maps the join table. It requires `dbo.facility.sport_id INT NOT NULL` with exactly one trusted, enabled, single-column NO ACTION FK to `dbo.sport(id)`. On first creation it copies exactly each Facility's existing assignment; it does not add other Sports. See the Phase 8.7B section below.
+15. After `phase2-course-registrations.sql` and `phase2-payment.sql`, and before deploying CourseRegistration hold mappings, back up the database, stop writers, rehearse on a restored copy, then review/run `phase8-7c-course-registration-holds.sql`. It requires `dbo.payment` and fails if legacy COURSE_REGISTRATION payments remain PENDING so those transactions can be reconciled first. It preserves historical statuses and price data, adds nullable `payment_deadline` (legacy rows remain NULL), validates status constraints, retains the confirmed-only filtered unique index, and adds a pending-only filtered unique index plus expiration/capacity indexes. It does not execute automatically. Phase 8.7B is independent; when both changes are deployed together, apply both migrations before the application restart.
+16. Start the application after all required schema scripts complete; `spring.jpa.hibernate.ddl-auto=validate` will then verify mappings.
+
+For the 8.7C rehearsal, verify that `payment_deadline` is nullable `DATETIME2(6)`, the status CHECK is enabled/trusted and accepts `PENDING_PAYMENT`, `CONFIRMED`, `CANCELLED`, and `EXPIRED` while requiring a deadline for pending rows, `ux_course_registration_confirmed` and `ux_course_registration_pending` are enabled unique filtered indexes over `(member_id, class_id)`, and both expiration indexes have their documented ordered keys. Example read-only checks:
+
+```sql
+SELECT c.name, t.name AS type_name, c.max_length, c.scale, c.is_nullable
+FROM sys.columns c JOIN sys.types t ON t.user_type_id = c.user_type_id
+WHERE c.object_id = OBJECT_ID(N'dbo.course_registration')
+  AND c.name IN (N'status', N'registered_at', N'payment_deadline');
+
+SELECT name, is_disabled, is_not_trusted, definition
+FROM sys.check_constraints
+WHERE parent_object_id = OBJECT_ID(N'dbo.course_registration');
+
+SELECT name, is_unique, is_disabled, has_filter, filter_definition
+FROM sys.indexes
+WHERE object_id = OBJECT_ID(N'dbo.course_registration')
+  AND name IN (N'ux_course_registration_confirmed', N'ux_course_registration_pending',
+               N'ix_course_registration_expiry', N'ix_course_registration_class_deadline');
+```
+
+Rollback requires a verified backup/restore plan. The migration itself is transactional, so a failed run restores the prior schema. After a successful run, do not drop the new column/indexes or restore the old CHECK while any `PENDING_PAYMENT`/`EXPIRED` rows exist; application rollback first requires an explicit data and payment reconciliation plan. Do not convert legacy `CONFIRMED` rows into holds. Run the backend with `ddl-auto=validate` against the restored test database before production rollout. SQL Server locking/deadlock behavior must be tested on SQL Server; H2 verification does not prove it.
 
 Run each SQL file as its own standalone batch while writers are stopped, after a backup, in `SportCenterDB` (or review the database-name guard for an explicitly renamed deployment). None of these scripts was executed as part of the repository change. A matching ClassSession table with incompatible metadata fails closed; the script never drops, rebuilds, or silently accepts it.
 
@@ -95,3 +118,11 @@ Password for local demonstration only: `SportCenterDemo!2026`. The database stor
 ## Phase 3A Coach biography migration
 
 The project owner reports that `phase3-entity-image-urls.sql` was manually executed successfully in the local SQL Server environment. This repository did not execute that migration. The new `phase3a-coach-bio.sql` has not been run; back up the target database and apply it after the image URL migration, then start the backend with `ddl-auto=validate`. It adds only nullable `dbo.coach.bio NVARCHAR(1000)` and is idempotent.
+
+## Phase 8.7B Facility-Sport compatibility
+
+The application models `Facility.sports` through `dbo.facility_sport(facility_id, sport_id)`. Run `phase8-7b-facility-sports.sql` after the approved core schema (and after `phase0-class-sessions.sql` in the fresh-database sequence) but before deploying this application version. Stop writers, take a verified full backup, and rehearse against a restored copy first. The script checks the actual source column and FK metadata, creates the join table and its composite primary key, Sport lookup index and non-cascading FKs, and backfills only the existing one-Sport assignments on first creation. It never assigns additional Sports automatically.
+
+The legacy required `facility.sport_id` column and its existing FK are deliberately retained because the original core DDL and dependency names are not in this repository. The application mirrors the first selected Sport there to keep the legacy schema valid. Do not remove that column or FK without a separate metadata review and migration. If the join table already exists, the script validates it and does not fill missing assignments; resolve any missing Facility assignment manually before rerunning. Rolling back after multi-Sport assignments have been made requires restoring the pre-migration backup or a reviewed data export because the legacy column cannot represent additional assignments.
+
+After manual execution, verify every Facility has at least one join row and that the expected table, key, index and FK metadata are present, then start with `spring.jpa.hibernate.ddl-auto=validate`. A failed script rolls back its table creation and initial backfill. Do not run this SQL from the application.

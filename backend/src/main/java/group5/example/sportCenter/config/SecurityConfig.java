@@ -100,6 +100,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/member-sport-levels", "/api/member-sport-levels/**").denyAll()
 
                 .requestMatchers(HttpMethod.POST, "/api/course-registrations").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.POST, "/api/course-registrations/*/cancel").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/course-registrations/me",
                         "/api/course-registrations/me/class-sessions").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/course-registrations").hasAnyRole("ADMIN", "RECEPTIONIST")

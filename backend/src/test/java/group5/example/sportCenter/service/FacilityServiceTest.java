@@ -13,6 +13,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -55,6 +56,7 @@ class FacilityServiceTest {
         facility = new Facility();
         facility.setId(6);
         facility.setSport(sport);
+        facility.setSports(Set.of(sport));
         facility.setName("Court A");
         facility.setType("COURT");
         facility.setStatus("ACTIVE");

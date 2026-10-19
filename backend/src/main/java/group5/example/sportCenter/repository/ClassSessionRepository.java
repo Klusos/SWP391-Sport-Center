@@ -55,6 +55,13 @@ public interface ClassSessionRepository extends JpaRepository<ClassSession, Inte
     boolean existsByFacilityIdAndStatusAndEndTimeAfter(
             Integer facilityId, String status, LocalDateTime endTime);
 
+    @Query("select case when count(s) > 0 then true else false end from ClassSession s "
+            + "where s.facility.id = :facilityId and s.courseClass.courseOffering.course.sport.id = :sportId "
+            + "and s.status <> :cancelled and s.endTime > :now")
+    boolean existsFutureNonCancelledByFacilityAndCourseSport(@Param("facilityId") Integer facilityId,
+            @Param("sportId") Integer sportId, @Param("cancelled") String cancelled,
+            @Param("now") LocalDateTime now);
+
     boolean existsByFacilityIdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThan(
             Integer facilityId, String excludedStatus, LocalDateTime endTime, LocalDateTime startTime);
 

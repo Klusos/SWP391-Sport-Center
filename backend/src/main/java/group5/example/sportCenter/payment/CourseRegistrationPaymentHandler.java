@@ -1,6 +1,9 @@
 package group5.example.sportCenter.payment;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 
 import org.springframework.http.HttpStatus;
@@ -24,13 +27,17 @@ import group5.example.sportCenter.repository.PaymentRepository;
  */
 @Component
 public class CourseRegistrationPaymentHandler {
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final CourseRegistrationRepository registrations;
     private final PaymentRepository payments;
+    private final Clock clock;
 
-    public CourseRegistrationPaymentHandler(CourseRegistrationRepository registrations, PaymentRepository payments) {
+    public CourseRegistrationPaymentHandler(CourseRegistrationRepository registrations, PaymentRepository payments,
+            Clock clock) {
         this.registrations = registrations;
         this.payments = payments;
+        this.clock = clock;
     }
 
     /** Kiểm tra đăng ký có thể thanh toán và trả về số tiền phải trả. */
@@ -41,8 +48,11 @@ public class CourseRegistrationPaymentHandler {
         if (!registration.getMember().getId().equals(member.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This course registration belongs to another member");
         }
-        if (registration.getStatus() != CourseRegistrationStatus.CONFIRMED) {
-            throw new IllegalArgumentException("Course registration is not active");
+        LocalDateTime now = LocalDateTime.now(clock.withZone(BUSINESS_ZONE));
+        if (registration.getStatus() != CourseRegistrationStatus.PENDING_PAYMENT
+                || registration.getPaymentDeadline() == null
+                || !registration.getPaymentDeadline().isAfter(now)) {
+            throw new IllegalArgumentException("Course registration payment hold is no longer active");
         }
         if (payments.existsByPurposeAndReferenceIdAndStatus(
                 PaymentPurpose.COURSE_REGISTRATION, registrationId, PaymentStatus.SUCCESS)) {
@@ -57,13 +67,30 @@ public class CourseRegistrationPaymentHandler {
     /** Trả về lý do cần hoàn tiền nếu không áp dụng được; rỗng nếu thành công. */
     public Optional<String> apply(Payment payment) {
         CourseRegistration registration = registrations.findByIdForPaymentUpdate(payment.getReferenceId()).orElse(null);
-        if (registration == null || registration.getStatus() != CourseRegistrationStatus.CONFIRMED) {
+        if (registration == null) {
             return Optional.of("Course registration is no longer active");
         }
-        if (payments.existsByPurposeAndReferenceIdAndStatusAndIdNot(
-                PaymentPurpose.COURSE_REGISTRATION, registration.getId(), PaymentStatus.SUCCESS, payment.getId())) {
-            return Optional.of("Course registration was already paid by another payment");
+        LocalDateTime now = LocalDateTime.now(clock.withZone(BUSINESS_ZONE));
+        if (registration.getStatus() == CourseRegistrationStatus.PENDING_PAYMENT
+                && registration.getPaymentDeadline() != null
+                && registration.getPaymentDeadline().isAfter(now)) {
+            // A payment is scoped to this registration; this row lock serializes success
+            // callbacks, cancellation, and expiration for the same hold.
+            if (payments.existsByPurposeAndReferenceIdAndStatusAndIdNot(
+                    PaymentPurpose.COURSE_REGISTRATION, registration.getId(), PaymentStatus.SUCCESS, payment.getId())) {
+                return Optional.of("Course registration was already paid by another payment");
+            }
+            registration.setStatus(CourseRegistrationStatus.CONFIRMED);
+            return Optional.empty();
         }
-        return Optional.empty();
+        if (registration.getStatus() == CourseRegistrationStatus.PENDING_PAYMENT
+                && registration.getPaymentDeadline() != null
+                && !registration.getPaymentDeadline().isAfter(now)) {
+            registration.setStatus(CourseRegistrationStatus.EXPIRED);
+        }
+        if (registration.getStatus() != CourseRegistrationStatus.PENDING_PAYMENT) {
+            return Optional.of("Course registration hold expired or is no longer payable; review late settlement manually");
+        }
+        return Optional.of("Course registration payment deadline is unavailable; review payment manually");
     }
 }

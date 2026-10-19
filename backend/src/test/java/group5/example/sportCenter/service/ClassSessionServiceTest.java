@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -97,6 +98,9 @@ class ClassSessionServiceTest {
         facility.setId(6);
         facility.setName("Main court");
         facility.setStatus("ACTIVE");
+        Sport supportedSport = new Sport();
+        supportedSport.setId(4);
+        facility.setSports(Set.of(supportedSport));
     }
 
     @Test
@@ -543,6 +547,9 @@ class ClassSessionServiceTest {
         result.setId(id);
         result.setName("Main court");
         result.setStatus(status);
+        Sport supportedSport = new Sport();
+        supportedSport.setId(4);
+        result.setSports(Set.of(supportedSport));
         return result;
     }
 

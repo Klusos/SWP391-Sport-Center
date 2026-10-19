@@ -11,11 +11,20 @@
 | Revenue / member / class-registration reports (ADMIN) | Implemented; `SUCCESS` only | Passed (H2) | Not tested |
 | SQL Server migration `docs/sql/phase2-payment.sql` | Idempotent; not executed | Static review only | Not applicable |
 
-- Course registration is unchanged: Flow 2 still creates `CONFIRMED` registrations. Payment references `CourseRegistration.id` (not `CourseOffering.id`) and charges the stored `finalPrice`, so membership discounts reconcile.
+- Course Registration now starts in `PENDING_PAYMENT`; only verified payment before the stored deadline confirms it. Payment references `CourseRegistration.id` (not `CourseOffering.id`) and uses the stored `finalPrice`; details and verification are recorded in Phase 8.7C below.
 - `POST /api/memberships` is restricted to ADMIN for manual assignment; MEMBER self-activation without payment was removed.
 - Duplicate-payment protection: payment rows are locked during counter/callback processing; the referenced registration/booking row is locked before checking for another `SUCCESS` payment.
 - Demo-only mock online payments are disabled by default. Explicit opt-in requires `PAYMENT_MOCK_GATEWAY_ENABLED=true` and an allowed demo/test profile; production profiles remain disabled and callback URLs must be loopback. This simulator is not a real payment provider and does not verify settlement.
 - Not implemented: real payment gateway (VNPay/MoMo/PayOS), automatic refunds, expiry of abandoned `PENDING` payments. MEMBER membership purchase UI is implemented as a counter-payment request; no client-side success action is available. The SQL Server E2E harness (`CourseRegistrationSqlServerE2EIT`) now also requires `dbo.payment` to exist.
+
+## Phase 8.7C: Course Registration seat holds (2026-10-19)
+
+- MEMBER course registration now starts `PENDING_PAYMENT`, stores `registeredAt` and `paymentDeadline = min(registeredAt + 24 hours, registrationDeadline)`, and returns the server deadline. A registration at/after the offering deadline or with no positive hold is rejected. Existing ACTIVE membership discount selection and persisted price snapshots are unchanged.
+- Capacity includes CONFIRMED rows and pending rows whose deadline is strictly after current Vietnam time. Lazy expiration runs under row locks when a class is checked for capacity, member registration history is loaded, and verified payment is applied. A bounded scheduled worker expires due rows idempotently. PENDING cancellation is available only to the owning MEMBER and releases capacity; confirmed cancellation/refund policy remains unimplemented because none existed in the baseline.
+- PaymentService continues to verify/authorize settlement through existing Flow 3 counter processing or gateway callback. Its course handler accepts only a live pending hold, confirms within the same transaction as `Payment.SUCCESS`, and changes a late hold to EXPIRED while recording `REFUND_REQUIRED`. No gateway endpoint, signature, callback contract, or payment amount behavior was changed. Existing callback lacks a provider settlement timestamp, so success first observed at/after deadline is conservatively treated as late and requires manual Flow 3 reconciliation.
+- SQL Server migration `docs/sql/phase8-7c-course-registration-holds.sql` is manual and unexecuted. It adds nullable `payment_deadline DATETIME2(6)`, validates/replaces the known status CHECK, preserves legacy confirmed rows, and adds filtered pending uniqueness and expiration indexes. Apply after Phase 2 CourseRegistration and Payment migrations, rehearse against a restored backup, and deploy with `ddl-auto=validate` only after migration.
+- Verification: full ordinary Maven `clean verify` with isolated H2: **251 tests passed, 0 failures, 0 errors, 0 skipped**. SQL Server E2E, SQL execution, real callback settlement and browser verification were not run. SQL Server concurrency, migration catalog compatibility, and rollback of successful deployment remain manual rehearsal items.
+- The guarded SQL Server E2E target guard now requires `payment_deadline`, and its registration harness confirms test holds through the existing staff COUNTER settlement flow before checking confirmed-session behavior. The E2E harness was compiled as ordinary test source but was not activated or run.
 
 ## Phase 8.4C Membership Purchase and Receptionist Workflow Consolidation
 

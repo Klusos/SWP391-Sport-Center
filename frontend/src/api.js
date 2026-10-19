@@ -299,6 +299,13 @@ export function createCourseRegistrationApi(token, classId) {
   });
 }
 
+export function cancelCourseRegistrationApi(token, registrationId) {
+  return request(`/api/course-registrations/${encodeURIComponent(registrationId)}/cancel`, {
+    method: "POST",
+    headers: authenticatedHeaders(token),
+  });
+}
+
 export function createMemberConsultationRequestApi(token, payload) {
   return request("/api/consultation-requests", {
     method: "POST",

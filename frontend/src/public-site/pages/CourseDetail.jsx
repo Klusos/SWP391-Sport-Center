@@ -110,7 +110,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
   const selectedOffering = offerings.find((item) => String(item.id) === selectedOfferingId) || null;
   const selectedClass = classes.find((item) => String(item.id) === selectedClassId) || null;
   const existingOfferingRegistration = registrations.find((item) =>
-    Number(item.courseOfferingId) === Number(selectedOfferingId) && String(item.status).toUpperCase() === "CONFIRMED");
+    Number(item.courseOfferingId) === Number(selectedOfferingId) && ["CONFIRMED", "PENDING_PAYMENT"].includes(String(item.status).toUpperCase()));
   const canRegister = Boolean(selectedClass && selectedOffering && isOfferingOpenNow(selectedOffering)
     && String(selectedClass.status).toUpperCase() === "ACTIVE" && !existingOfferingRegistration && !classesError);
 
@@ -222,8 +222,8 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
       setConfirmingRegistration(false);
       setRegistrationError("");
       setRegistrations((current) => [...current.filter((item) => Number(item.courseOfferingId) !== Number(result.courseOfferingId)), result]);
-      try { setRegistrations((await getMyRegistrationsApi(auth.accessToken)).filter((item) => String(item?.status).toUpperCase() === "CONFIRMED")); }
-      catch { /* Keep the confirmed response if refreshing history fails. */ }
+      try { setRegistrations(await getMyRegistrationsApi(auth.accessToken)); }
+      catch { /* Keep the pending response if refreshing history fails. */ }
     } catch (requestError) {
       if (isInsufficientLevel(requestError)) {
         setConsultationAvailable(true);
@@ -351,7 +351,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
                   ? classSchedules[selectedClass.id].map((session) => `${formatLocalDateTime(session.startTime)}–${formatLocalDateTime(session.endTime)}`).join("; ")
                   : "Chưa có lịch cụ thể được công bố."}</p>
                 <p>Học phí tham khảo: {formatPrice(selectedOffering.price)}</p>
-                <p className="member-muted">Xác nhận này tạo đăng ký lớp ở trạng thái CONFIRMED. Đây không phải xác nhận thanh toán; không có khoản thanh toán nào được tạo ở bước này.</p>
+                <p className="member-muted">Đăng ký sẽ tạm giữ một chỗ ở trạng thái PENDING_PAYMENT. Hạn thanh toán do máy chủ trả về; thao tác này không xác nhận thanh toán.</p>
                 <div className="course-consult-actions">
                   <button type="button" className="btn btn-cyan" onClick={() => void confirmRegistration()} disabled={registering}>{registering ? "Đang gửi…" : "Xác nhận đăng ký"}</button>
                   <button type="button" className="btn btn-outline-secondary" onClick={() => setConfirmingRegistration(false)} disabled={registering}>Quay lại</button>
@@ -362,7 +362,10 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
               <strong>Đăng ký thành công — {registration.status}.</strong>
               <p>Mã đăng ký #{registration.id} · {registration.courseName} · {registration.courseOfferingName} · {registration.className}</p>
               <p>Giá gốc {formatPrice(registration.originalPrice)} · Ưu đãi {formatPrice(registration.membershipDiscount)} · Thành tiền {formatPrice(registration.finalPrice)}</p>
-              <p>Trạng thái đăng ký không đồng nghĩa với thanh toán.</p><Link to="/member/schedule">Đi đến lịch học</Link>
+              {registration.status === "PENDING_PAYMENT" && <p role="status">Payment pending. Pay before {formatDate(registration.paymentDeadline)} to keep this seat. Refresh registration history for the current server status.</p>}
+              {registration.status === "CONFIRMED" && <p role="status">Payment confirmed and registration active.</p>}
+              {registration.status === "EXPIRED" && <p role="status">The payment deadline passed; this registration no longer reserves a seat.</p>}
+              <Link to="/member/schedule">Đi đến lịch học</Link>
             </div>}
             {consultationAvailable && <div className="course-level-help">
               <p><strong>Khóa học yêu cầu:</strong> {course.level || "—"}</p>

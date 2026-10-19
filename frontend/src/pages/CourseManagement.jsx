@@ -182,10 +182,13 @@ export default function CourseManagement({ token, role, onLogout, onNavigate }) 
     { key: "capacity", label: "Sĩ số tối đa", type: "number", required: true },
     st("ACTIVE", "INACTIVE"),
   ];
+  const suitableFacilities = facilities.filter((facility) =>
+    (facility.sports || (facility.sportId ? [{ id: facility.sportId }] : []))
+      .some((supportedSport) => Number(supportedSport.id) === Number(course?.sportId)));
   const sessionFields = [
     { key: "startTime", label: "Bắt đầu", type: "datetime-local", required: true, min: offering ? offering.startDate + "T00:00" : undefined, max: offering ? offering.endDate + "T23:59" : undefined },
     { key: "endTime", label: "Kết thúc", type: "datetime-local", required: true, min: offering ? offering.startDate + "T00:00" : undefined, max: offering ? offering.endDate + "T23:59" : undefined },
-    { key: "facilityId", label: "Cơ sở vật chất", type: "select", num: true, options: facilities.map((f) => [f.id, f.name]) },
+    { key: "facilityId", label: "Cơ sở vật chất", type: "select", num: true, options: suitableFacilities.map((f) => [f.id, f.name]) },
   ];
 
   return (
@@ -247,7 +250,7 @@ export default function CourseManagement({ token, role, onLogout, onNavigate }) 
             </>;
           }} />
         {cls && offering && <ClassSessionGenerationPanel key={cls.id} token={token} courseClass={cls}
-          offering={offering} facilities={facilities} sessions={sessions} onGenerated={loadSessions} />}
+          offering={offering} facilities={suitableFacilities} sessions={sessions} onGenerated={loadSessions} />}
       </main>
     </div>
   );

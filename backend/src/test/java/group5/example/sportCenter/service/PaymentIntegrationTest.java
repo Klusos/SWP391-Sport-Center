@@ -18,6 +18,11 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -75,6 +80,7 @@ class PaymentIntegrationTest {
     private static final String EMAIL_DOMAIN = "@payment.example.test";
 
     @Autowired PaymentService service;
+    @Autowired CourseRegistrationExpirationService registrationExpiration;
     @Autowired PaymentReportService reports;
     @Autowired PaymentRepository payments;
     @Autowired NotificationRepository notifications;
@@ -317,6 +323,8 @@ class PaymentIntegrationTest {
                 registration.getId(), PaymentMethod.COUNTER), jwt(member));
         assertEquals(new BigDecimal("450000.00"), payment.getAmount());
         assertEquals("SUCCESS", service.processAtCounter(payment.getId(), counter(true), jwt(receptionist)).getStatus());
+        assertEquals(CourseRegistrationStatus.CONFIRMED,
+                registrations.findById(registration.getId()).orElseThrow().getStatus());
 
         assertThrows(IllegalArgumentException.class, () -> service.createPayment(
                 request(PaymentPurpose.COURSE_REGISTRATION, registration.getId(), PaymentMethod.COUNTER), jwt(member)));
@@ -338,6 +346,65 @@ class PaymentIntegrationTest {
         assertEquals("SUCCESS", service.processAtCounter(first.getId(), counter(true), jwt(receptionist)).getStatus());
         assertEquals("REFUND_REQUIRED",
                 service.processAtCounter(second.getId(), counter(true), jwt(receptionist)).getStatus());
+    }
+
+    @Test
+    void paymentAtTheRegistrationDeadlineCannotReclaimExpiredSeat() {
+        CourseRegistration registration = registration(member, "200000.00", "0.00");
+        PaymentResponse payment = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                registration.getId(), PaymentMethod.COUNTER), jwt(member));
+        CourseRegistration persisted = registrations.findById(registration.getId()).orElseThrow();
+        persisted.setPaymentDeadline(now());
+        registrations.saveAndFlush(persisted);
+
+        assertEquals("REFUND_REQUIRED",
+                service.processAtCounter(payment.getId(), counter(true), jwt(receptionist)).getStatus());
+        assertEquals(CourseRegistrationStatus.EXPIRED,
+                registrations.findById(registration.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void concurrentRegistrationExpirationAndPaymentSettlementLeaveExpiredHoldUnconfirmed() throws Exception {
+        CourseRegistration registration = registration(member, "200000.00", "0.00");
+        PaymentResponse payment = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                registration.getId(), PaymentMethod.COUNTER), jwt(member));
+        CourseRegistration persisted = registrations.findById(registration.getId()).orElseThrow();
+        persisted.setPaymentDeadline(now());
+        registrations.saveAndFlush(persisted);
+
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> settlement = pool.submit(() -> {
+                ready.countDown();
+                await(start);
+                service.processAtCounter(payment.getId(), counter(true), jwt(receptionist));
+            });
+            Future<?> expiry = pool.submit(() -> {
+                ready.countDown();
+                await(start);
+                registrationExpiration.expireDueRegistrations();
+            });
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            settlement.get(10, TimeUnit.SECONDS);
+            expiry.get(10, TimeUnit.SECONDS);
+        } finally {
+            pool.shutdownNow();
+        }
+        assertEquals(CourseRegistrationStatus.EXPIRED,
+                registrations.findById(registration.getId()).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.REFUND_REQUIRED, payments.findById(payment.getId()).orElseThrow().getStatus());
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            if (!latch.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("start timeout");
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(exception);
+        }
     }
 
     @Test
@@ -640,7 +707,9 @@ class PaymentIntegrationTest {
         CourseRegistration registration = new CourseRegistration();
         registration.setMember(owner);
         registration.setCourseClass(courseClass);
-        registration.setStatus(CourseRegistrationStatus.CONFIRMED);
+        registration.setStatus(CourseRegistrationStatus.PENDING_PAYMENT);
+        registration.setRegisteredAt(now());
+        registration.setPaymentDeadline(now().plusHours(24));
         registration.setOriginalPrice(new BigDecimal(originalPrice));
         registration.setMembershipDiscount(new BigDecimal(discount));
         registration.setFinalPrice(new BigDecimal(originalPrice).subtract(new BigDecimal(discount)));

@@ -16,6 +16,7 @@ public record CourseRegistrationResponse(
         String requiredLevel,
         String status,
         LocalDateTime registeredAt,
+        LocalDateTime paymentDeadline,
         LocalDateTime cancelledAt,
         BigDecimal originalPrice,
         BigDecimal membershipDiscount,

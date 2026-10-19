@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
@@ -15,6 +16,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
@@ -37,6 +39,9 @@ import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.server.ResponseStatusException;
 
 import group5.example.sportCenter.dto.ClassSessionGenerationRequest;
+import group5.example.sportCenter.dto.CreateClassSessionRequest;
+import group5.example.sportCenter.dto.CreateFacilityRequest;
+import group5.example.sportCenter.dto.UpdateFacilityRequest;
 import group5.example.sportCenter.entity.ClassSession;
 import group5.example.sportCenter.entity.Coach;
 import group5.example.sportCenter.entity.Course;
@@ -63,6 +68,7 @@ class ClassSessionGenerationIntegrationTest {
 
     @Autowired ClassSessionGenerationService generation;
     @Autowired ClassSessionService classSessions;
+    @Autowired FacilityService facilityService;
     @MockitoSpyBean ClassSessionRepository sessionRows;
     @Autowired CourseClassRepository classRows;
     @Autowired CourseOfferingRepository offeringRows;
@@ -126,6 +132,7 @@ class ClassSessionGenerationIntegrationTest {
 
         facility = new Facility();
         facility.setSport(sport);
+        facility.setSports(new LinkedHashSet<>(List.of(sport)));
         facility.setName("Generation facility " + UUID.randomUUID());
         facility.setType("COURT");
         facility.setStatus("ACTIVE");
@@ -211,6 +218,83 @@ class ClassSessionGenerationIntegrationTest {
         assertEquals(60, preview.sessionDurationMinutes());
         assertEquals(60, java.time.Duration.between(preview.candidates().getFirst().startTime(),
                 preview.candidates().getFirst().endTime()).toMinutes());
+    }
+
+    @Test
+    void facilityCanPersistMultipleActiveSportsAndRejectsDuplicateOrInactiveAssignments() {
+        Sport second = sport("Second sport");
+        CreateFacilityRequest create = new CreateFacilityRequest();
+        create.setSportIds(List.of(facility.getSport().getId(), second.getId()));
+        create.setName("Multi-sport room " + UUID.randomUUID());
+        create.setType("STUDIO");
+        var response = facilityService.createFacility(create);
+        assertEquals(2, response.getSports().size());
+
+        Facility loaded = facilityRows.findById(response.getId()).orElseThrow();
+        assertEquals(2, loaded.getSports().size());
+
+        create.setSportIds(List.of(second.getId(), second.getId()));
+        var duplicate = assertThrows(ResponseStatusException.class, () -> facilityService.createFacility(create));
+        assertEquals(400, duplicate.getStatusCode().value());
+
+        second.setStatus("INACTIVE");
+        sportRows.saveAndFlush(second);
+        create.setSportIds(List.of(second.getId()));
+        var inactive = assertThrows(ResponseStatusException.class, () -> facilityService.createFacility(create));
+        assertEquals(400, inactive.getStatusCode().value());
+    }
+
+    @Test
+    void compatibleManualSessionSucceedsButIncompatibleManualAndGeneratedSessionsAreRejected() {
+        ClassSessionGenerationRequest compatible = request(List.of(DayOfWeek.TUESDAY), LocalTime.of(10, 0), START.plusDays(1), 1, facility.getId());
+        assertTrue(generation.preview(compatible).canGenerate());
+        assertTrue(classSessions.create(createSession(START.atTime(10, 0), facility.getId())).id() > 0);
+        assertEquals(1, generation.generate(compatible).createdCount());
+
+        Sport otherSport = sport("Other sport");
+        facility.setSport(otherSport);
+        facility.setSports(new LinkedHashSet<>(List.of(otherSport)));
+        facilityRows.saveAndFlush(facility);
+
+        ClassSessionGenerationRequest incompatible = request(List.of(DayOfWeek.WEDNESDAY), LocalTime.of(10, 0), START.plusDays(2), 1, facility.getId());
+        var preview = generation.preview(incompatible);
+        assertFalse(preview.canGenerate());
+        assertTrue(preview.candidates().stream().flatMap(candidate -> candidate.conflicts().stream())
+                .anyMatch(text -> text.contains("does not support")));
+        assertThrows(IllegalArgumentException.class, () -> classSessions.create(
+                createSession(START.plusDays(2).atTime(10, 0), facility.getId())));
+        assertThrows(ResponseStatusException.class, () -> generation.generate(incompatible));
+    }
+
+    @Test
+    void removingSportNeededByFutureSessionIsRejected() {
+        ClassSessionGenerationRequest request = request(List.of(DayOfWeek.MONDAY), LocalTime.of(10, 0), START, 1, facility.getId());
+        generation.generate(request);
+        Sport other = sport("Another sport");
+
+        UpdateFacilityRequest update = new UpdateFacilityRequest();
+        update.setName(facility.getName());
+        update.setType(facility.getType());
+        update.setStatus("ACTIVE");
+        update.setSportIds(List.of(other.getId()));
+        var conflict = assertThrows(ResponseStatusException.class,
+                () -> facilityService.updateFacility(facility.getId(), update));
+        assertEquals(409, conflict.getStatusCode().value());
+    }
+
+    @Test
+    void facilityAssignmentMutationRemainsAdminOnly() throws Exception {
+        Sport other = sport("Auth sport");
+        String body = "{\"sportIds\":[" + facility.getSport().getId() + "," + other.getId()
+                + "],\"name\":\"Authorized room\",\"type\":\"STUDIO\"}";
+        mvc.perform(post("/api/facilities").header("Authorization", bearer(admin))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.sports[1].id").exists());
+        for (User user : List.of(receptionist, member, coachUser)) {
+            mvc.perform(post("/api/facilities").header("Authorization", bearer(user))
+                            .contentType("application/json").content(body))
+                    .andExpect(status().isForbidden());
+        }
     }
 
     @Test
@@ -309,6 +393,23 @@ class ClassSessionGenerationIntegrationTest {
         session.setEndTime(end);
         session.setStatus(status);
         return session;
+    }
+
+    private CreateClassSessionRequest createSession(LocalDateTime start, Integer facilityId) {
+        CreateClassSessionRequest request = new CreateClassSessionRequest();
+        request.setClassId(courseClass.getId());
+        request.setFacilityId(facilityId);
+        request.setStartTime(start);
+        request.setEndTime(start.plusMinutes(offering.getSessionDuration()));
+        request.setStatus("SCHEDULED");
+        return request;
+    }
+
+    private Sport sport(String prefix) {
+        Sport sport = new Sport();
+        sport.setName(prefix + " " + UUID.randomUUID());
+        sport.setStatus("ACTIVE");
+        return sportRows.saveAndFlush(sport);
     }
 
     private User user(String role) {
