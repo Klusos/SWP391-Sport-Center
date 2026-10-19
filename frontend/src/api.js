@@ -1,7 +1,23 @@
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 const API_BASE = API_BASE_URL.replace(/\/$/, "");
+let unauthorizedHandler = null;
+
+export function setUnauthorizedHandler(handler) {
+  unauthorizedHandler = typeof handler === "function" ? handler : null;
+}
+
+function getBearerToken(headers) {
+  const authorization = headers instanceof Headers
+    ? headers.get("Authorization")
+    : headers?.Authorization ?? headers?.authorization;
+  const match = typeof authorization === "string"
+    ? authorization.match(/^Bearer\s+(.+)$/i)
+    : null;
+  return match?.[1] || null;
+}
 
 async function request(path, options = {}) {
+  const requestToken = getBearerToken(options.headers);
   const response = await fetch(API_BASE + path, options);
   const text = await response.text();
   let data = {};
@@ -9,6 +25,9 @@ async function request(path, options = {}) {
     try { data = JSON.parse(text); } catch { data = {}; }
   }
   if (!response.ok) {
+    if (response.status === 401 && requestToken) {
+      unauthorizedHandler?.(requestToken);
+    }
     const error = new Error(data.message || data.detail || ("Request failed (" + response.status + ")"));
     error.status = response.status;
     throw error;

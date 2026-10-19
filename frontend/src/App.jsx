@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Navigate,
   Outlet,
@@ -9,6 +9,7 @@ import {
 } from "react-router-dom";
 
 import NotificationBell from "./components/NotificationBell";
+import { setUnauthorizedHandler } from "./api";
 import AdminNotificationBroadcast from "./pages/AdminNotificationBroadcast";
 import AdminAuditLogs from "./pages/AdminAuditLogs";
 import ConsultationQueue from "./pages/ConsultationQueue";
@@ -160,8 +161,34 @@ export default function App() {
   const [auth, setAuth] = useState(readStoredAuth);
   const navigate = useNavigate();
   const location = useLocation();
+  const authRef = useRef(auth);
+  const handledUnauthorizedToken = useRef(null);
+
+  const handleUnauthorized = useCallback((token) => {
+    const currentAuth = authRef.current;
+    if (!currentAuth || currentAuth.accessToken !== token || handledUnauthorizedToken.current === token) {
+      return;
+    }
+
+    handledUnauthorizedToken.current = token;
+    authRef.current = null;
+    try {
+      sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    } catch {
+      // Ignore unavailable browser storage.
+    }
+    setAuth(null);
+    navigate("/login", { replace: true, state: { sessionExpired: true } });
+  }, [navigate]);
+
+  useEffect(() => {
+    setUnauthorizedHandler(handleUnauthorized);
+    return () => setUnauthorizedHandler(null);
+  }, [handleUnauthorized]);
 
   function handleLogin(data) {
+    authRef.current = data;
+    handledUnauthorizedToken.current = null;
     setAuth(data);
     try {
       sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data));
@@ -189,6 +216,7 @@ export default function App() {
   }
 
   function handleLogout(returnTo) {
+    authRef.current = null;
     setAuth(null);
     try {
       sessionStorage.removeItem(AUTH_STORAGE_KEY);
@@ -306,7 +334,10 @@ export default function App() {
             auth ? (
               <Navigate to={home(auth.role)} replace />
             ) : (
-              <Login onLoginSuccess={handleLogin} />
+              <Login
+                onLoginSuccess={handleLogin}
+                sessionExpired={Boolean(location.state?.sessionExpired)}
+              />
             )
           }
         />
