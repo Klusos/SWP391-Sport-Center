@@ -200,6 +200,87 @@ class PaymentIntegrationTest {
     }
 
     @Test
+    void receptionistMembershipSaleActivatesOnlyAfterCounterPaymentConfirmation() throws Exception {
+        String paymentBody = "{\"memberId\":" + member.getId()
+                + ",\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"referenceId\":" + plan.getId()
+                + ",\"autoRenew\":false}";
+
+        var created = mvc.perform(post("/api/payments").header("Authorization", bearer(receptionist))
+                        .contentType("application/json").content(paymentBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.amount").value(300000.0))
+                .andReturn();
+        Integer paymentId = com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.id");
+        assertTrue(memberships.findByMemberId(member.getId()).isEmpty());
+
+        mvc.perform(patch("/api/payments/" + paymentId + "/counter")
+                        .header("Authorization", bearer(receptionist))
+                        .contentType("application/json")
+                        .content("{\"success\":true,\"note\":\"Payment received at front desk\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCESS"));
+        assertEquals(1, memberships.findByMemberId(member.getId()).size());
+        assertEquals("ACTIVE", memberships.findByMemberId(member.getId()).get(0).getStatus());
+    }
+
+    @Test
+    void memberSelfServicePurchaseUsesJwtAndPreventsRepeatedPendingPlanRequests() throws Exception {
+        String body = "{\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"referenceId\":"
+                + plan.getId() + ",\"autoRenew\":false}";
+        var created = mvc.perform(post("/api/payments").header("Authorization", bearer(member))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.memberId").value(member.getId()))
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.amount").value(300000.0))
+                .andReturn();
+        Integer paymentId = com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.id");
+        assertTrue(memberships.findByMemberId(member.getId()).isEmpty());
+
+        mvc.perform(get("/api/payments/me").header("Authorization", bearer(member)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(paymentId))
+                .andExpect(jsonPath("$[0].status").value("PENDING"));
+
+        mvc.perform(post("/api/payments").header("Authorization", bearer(member))
+                        .contentType("application/json")
+                        .content("{\"memberId\":" + otherMember.getId()
+                                + ",\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"referenceId\":"
+                                + plan.getId() + "}"))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(post("/api/payments").header("Authorization", bearer(member))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isConflict());
+        assertEquals(1, payments.findByMemberIdOrderByCreatedAtDesc(member.getId()).size());
+    }
+
+    @Test
+    void membershipPurchaseRejectsInactivePlanServerSide() throws Exception {
+        assertTrue(payments.findByMemberIdOrderByCreatedAtDesc(member.getId()).isEmpty());
+        plan.setStatus("INACTIVE");
+        plans.saveAndFlush(plan);
+        mvc.perform(post("/api/payments").header("Authorization", bearer(member))
+                        .contentType("application/json")
+                        .content("{\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"referenceId\":"
+                                + plan.getId() + "}"))
+                .andExpect(status().isConflict());
+        assertTrue(payments.findByMemberIdOrderByCreatedAtDesc(member.getId()).isEmpty());
+        assertTrue(memberships.findByMemberId(member.getId()).isEmpty());
+    }
+
+    @Test
+    void receptionistCannotUseLegacyMembershipCreationToBypassPayment() throws Exception {
+        String body = "{\"memberId\":" + member.getId() + ",\"planId\":" + plan.getId()
+                + ",\"startDate\":\"" + LocalDate.now() + "\",\"autoRenew\":false}";
+        mvc.perform(post("/api/memberships").header("Authorization", bearer(receptionist))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isForbidden());
+        assertTrue(memberships.findByMemberId(member.getId()).isEmpty());
+    }
+
+    @Test
     void failedCounterPaymentIsCancelledAndDoesNotActivate() {
         PaymentResponse payment = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
                 PaymentMethod.COUNTER), jwt(member));
@@ -360,6 +441,10 @@ class PaymentIntegrationTest {
         PaymentResponse payment = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
                 PaymentMethod.COUNTER), jwt(member));
 
+        mvc.perform(post("/api/payments").contentType("application/json")
+                        .content("{\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"referenceId\":"
+                                + plan.getId() + "}"))
+                .andExpect(status().isUnauthorized());
         mvc.perform(patch("/api/payments/" + payment.getId() + "/counter").header("Authorization", bearer(member))
                         .contentType("application/json").content("{\"success\":true}"))
                 .andExpect(status().isForbidden());
@@ -376,11 +461,19 @@ class PaymentIntegrationTest {
         mvc.perform(get("/api/reports/revenue").param("from", "2026-01-01").param("to", "2026-12-31")
                         .header("Authorization", bearer(admin)))
                 .andExpect(status().isOk());
+        mvc.perform(patch("/api/payments/" + payment.getId() + "/cancel")
+                        .header("Authorization", bearer(member)))
+                .andExpect(status().isOk());
         mvc.perform(post("/api/payments").header("Authorization", bearer(member)).contentType("application/json")
                         .content("{\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"referenceId\":" + plan.getId()
                                 + ",\"amount\":1}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.amount").value(300000.0));
+        mvc.perform(post("/api/payments").header("Authorization", bearer(coach.getUser()))
+                        .contentType("application/json")
+                        .content("{\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"memberId\":"
+                                + member.getId() + ",\"referenceId\":" + plan.getId() + "}"))
+                .andExpect(status().isForbidden());
     }
 
     @Test

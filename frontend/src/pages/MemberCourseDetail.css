@@ -1,0 +1,45 @@
+.member-course-detail { width: 100%; max-width: 1280px; }
+.member-course-page-header { margin-bottom: 20px; }
+.member-course-page-header h1 { margin: 0 0 6px; }
+.member-course-page-header .subtitle { margin-bottom: 0; }
+.course-detail-back { margin: 0 0 16px; }
+.course-detail-back a, .member-course-detail a { color: var(--blue); font-weight: 600; }
+.member-course-detail .course-detail-card,
+.member-course-detail .course-registration-panel { max-width: 1060px; margin: 0 auto 18px; }
+.member-course-detail .course-detail-card { padding: clamp(18px, 3vw, 30px); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-card); }
+.member-course-detail .course-detail-card h1 { margin: 0 0 14px; font-size: clamp(25px, 3vw, 34px); }
+.member-course-detail .course-detail-card h2 { margin-top: 18px; font-size: 18px; }
+.member-course-detail .course-detail-card p { line-height: 1.65; }
+.member-course-detail .course-detail-card .btn { display: inline-flex; align-items: center; margin-top: 5px; }
+.course-section-heading { margin-bottom: 16px; }
+.course-section-heading h2 { margin: 0 0 6px; }
+.course-section-heading p { margin: 0; color: var(--text-sub); }
+.member-offering-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 16px 0; }
+.member-offering-list button { display: grid; gap: 6px; padding: 14px; text-align: left; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #fff; color: var(--text); cursor: pointer; }
+.member-offering-list button.selected { border-color: var(--blue); background: var(--blue-soft); box-shadow: 0 0 0 2px rgb(23 105 210 / 12%); }
+.member-offering-list button span { color: var(--text-sub); font-size: 13px; }
+.member-offering-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 9px 18px; margin: 14px 0 18px; padding: 14px; border-radius: var(--radius-sm); background: #f5f8fb; font-size: 13px; }
+.member-class-list { display: grid; gap: 10px; margin: 12px 0 16px; }
+.member-class-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start; padding: 15px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #fff; cursor: pointer; }
+.member-class-card.selected { border-color: var(--blue); background: var(--blue-soft); }
+.member-class-card input { margin-top: 5px; accent-color: var(--blue); }
+.member-class-card-content { display: grid; gap: 6px; min-width: 0; }
+.member-class-card-content > span, .member-class-card-content small { color: var(--text-sub); overflow-wrap: anywhere; }
+.member-registration-confirm { margin-top: 16px; padding: 18px; border: 1px solid #bfd3e8; border-radius: var(--radius-sm); background: #f5f9fd; }
+.member-registration-confirm h3 { margin-top: 0; }
+.member-registration-confirm p { margin: 8px 0; }
+.member-muted { color: var(--text-sub); font-size: 13px; line-height: 1.55; }
+.member-course-detail .course-registration-success a { display: inline-block; margin-top: 10px; }
+.member-course-history { margin-top: 28px; }
+.member-course-history-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.member-course-history-heading h2 { margin: 0; }
+.member-registration-list { display: grid; gap: 10px; }
+.member-registration-list article { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; padding: 13px 15px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.member-registration-list article div { display: grid; gap: 4px; flex: 1 1 240px; }
+.member-registration-list article div span { color: var(--text-sub); font-size: 13px; }
+.member-registration-status { padding: 4px 9px; border-radius: 999px; background: #e9f7ef; color: #1c6840; font-size: 12px; font-weight: 700; }
+@media (max-width: 650px) {
+  .member-course-detail { padding-top: 22px; }
+  .member-course-history-heading { align-items: flex-start; flex-direction: column; }
+  .member-class-card { padding: 12px; }
+}

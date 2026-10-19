@@ -266,6 +266,12 @@ export function getClassesByOfferingApi(token, offeringId) {
   });
 }
 
+export function getClassSessionsByClassApi(token, classId) {
+  return request("/api/class-sessions/class/" + encodeURIComponent(classId), {
+    headers: authenticatedHeaders(token),
+  });
+}
+
 export function createCourseRegistrationApi(token, classId) {
   return request("/api/course-registrations", {
     method: "POST",
@@ -379,6 +385,39 @@ export function getPublicMembershipPlansApi() {
 
 export function getMembershipPlansApi(token) {
   return request("/api/membership-plans", { headers: authenticatedHeaders(token) });
+}
+
+export function createPaymentApi(token, payload) {
+  return request("/api/payments", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function processCounterPaymentApi(token, paymentId, success, note = null) {
+  return request("/api/payments/" + encodeURIComponent(paymentId) + "/counter", {
+    method: "PATCH",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ success, note }),
+  });
+}
+
+export function getMyPaymentsApi(token) {
+  return request("/api/payments/me", { headers: authenticatedHeaders(token) });
+}
+
+export function getMemberPaymentsApi(token, memberId) {
+  return request("/api/payments/member/" + encodeURIComponent(memberId), {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function cancelPaymentApi(token, paymentId) {
+  return request("/api/payments/" + encodeURIComponent(paymentId) + "/cancel", {
+    method: "PATCH",
+    headers: authenticatedHeaders(token),
+  });
 }
 
 export function createMembershipPlanApi(token, payload) {
@@ -532,6 +571,22 @@ export function setSessionStatusApi(token, sessionId, status) {
     method: "PATCH",
     headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
+  });
+}
+
+export function previewClassSessionGenerationApi(token, payload) {
+  return request("/api/class-sessions/generation/preview", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function confirmClassSessionGenerationApi(token, payload) {
+  return request("/api/class-sessions/generation/confirm", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
   });
 }
 

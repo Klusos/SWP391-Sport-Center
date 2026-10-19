@@ -71,7 +71,24 @@ public class PaymentService {
         User actor = currentActor(callerJwt);
         User member = resolveMember(actor, request.getMemberId());
 
+        if (request.getPurpose() == PaymentPurpose.MEMBERSHIP) {
+            // Serialize repeated requests on a stable member row before checking PENDING payments.
+            Integer lockedMemberId = member.getId();
+            member = userRepository.findByIdForBookingUpdate(lockedMemberId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + lockedMemberId));
+            if (!"MEMBER".equalsIgnoreCase(member.getRole()) || !"ACTIVE".equalsIgnoreCase(member.getStatus())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "Membership payment requires an ACTIVE MEMBER account");
+            }
+        }
+
         BigDecimal amount = resolveAmountAndValidate(request, member);
+        if (request.getPurpose() == PaymentPurpose.MEMBERSHIP
+                && paymentRepository.existsByMember_IdAndPurposeAndReferenceIdAndStatus(
+                        member.getId(), PaymentPurpose.MEMBERSHIP, request.getReferenceId(), PaymentStatus.PENDING)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "A pending membership payment already exists for this member and plan");
+        }
 
         Payment payment = new Payment();
         payment.setMember(member);

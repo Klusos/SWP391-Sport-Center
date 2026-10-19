@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -57,11 +58,12 @@ class FacilityServiceTest {
         facility.setName("Court A");
         facility.setType("COURT");
         facility.setStatus("ACTIVE");
+        lenient().when(facilityRepository.findByIdForScheduleUpdate(6)).thenReturn(Optional.of(facility));
     }
 
     @Test
     void normalizesActiveInputToUppercase() {
-        when(facilityRepository.findById(6)).thenReturn(Optional.of(facility));
+        when(facilityRepository.findByIdForScheduleUpdate(6)).thenReturn(Optional.of(facility));
         when(facilityRepository.save(facility)).thenReturn(facility);
 
         FacilityResponse response = service.updateFacility(6, request(" active "));
@@ -74,7 +76,7 @@ class FacilityServiceTest {
 
     @Test
     void allowsActiveToInactiveWhenThereIsNoInProgressOrUpcomingScheduledSession() {
-        when(facilityRepository.findById(6)).thenReturn(Optional.of(facility));
+        when(facilityRepository.findByIdForScheduleUpdate(6)).thenReturn(Optional.of(facility));
         when(classSessionRepository.existsByFacilityIdAndStatusAndEndTimeAfter(6, "SCHEDULED", NOW))
                 .thenReturn(false);
         when(facilityRepository.save(facility)).thenReturn(facility);
@@ -88,7 +90,7 @@ class FacilityServiceTest {
 
     @Test
     void rejectsActiveToInactiveWhenScheduledSessionIsInProgress() {
-        when(facilityRepository.findById(6)).thenReturn(Optional.of(facility));
+        when(facilityRepository.findByIdForScheduleUpdate(6)).thenReturn(Optional.of(facility));
         when(classSessionRepository.existsByFacilityIdAndStatusAndEndTimeAfter(6, "SCHEDULED", NOW))
                 .thenReturn(true);
 
@@ -102,7 +104,7 @@ class FacilityServiceTest {
 
     @Test
     void rejectsActiveToInactiveWhenFutureScheduledSessionExists() {
-        when(facilityRepository.findById(6)).thenReturn(Optional.of(facility));
+        when(facilityRepository.findByIdForScheduleUpdate(6)).thenReturn(Optional.of(facility));
         when(classSessionRepository.existsByFacilityIdAndStatusAndEndTimeAfter(6, "SCHEDULED", NOW))
                 .thenReturn(true);
 
@@ -115,7 +117,7 @@ class FacilityServiceTest {
 
     @Test
     void allowsDeactivationWhenScheduledSessionHasEnded() {
-        when(facilityRepository.findById(6)).thenReturn(Optional.of(facility));
+        when(facilityRepository.findByIdForScheduleUpdate(6)).thenReturn(Optional.of(facility));
         when(classSessionRepository.existsByFacilityIdAndStatusAndEndTimeAfter(6, "SCHEDULED", NOW))
                 .thenReturn(false);
         when(facilityRepository.save(facility)).thenReturn(facility);
@@ -127,7 +129,7 @@ class FacilityServiceTest {
 
     @Test
     void allowsDeactivationWhenScheduledSessionEndsExactlyNow() {
-        when(facilityRepository.findById(6)).thenReturn(Optional.of(facility));
+        when(facilityRepository.findByIdForScheduleUpdate(6)).thenReturn(Optional.of(facility));
         when(classSessionRepository.existsByFacilityIdAndStatusAndEndTimeAfter(6, "SCHEDULED", NOW))
                 .thenReturn(false);
         when(facilityRepository.save(facility)).thenReturn(facility);

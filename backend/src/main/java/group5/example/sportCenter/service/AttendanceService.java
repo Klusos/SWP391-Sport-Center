@@ -105,7 +105,7 @@ public class AttendanceService {
         User actor = access.actor(jwt);
         ClassSession session = classSessionRepository.findByIdForAttendanceUpdate(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("ClassSession not found with id: " + sessionId));
-        authorizeSessionAccess(actor, session);
+        authorizeMarkAccess(actor, session);
         validateSessionCanBeMarked(session);
 
         var confirmedRegistration = registrationRepository.findByMemberIdAndCourseClassIdAndStatus(
@@ -189,6 +189,14 @@ public class AttendanceService {
         var coach = access.coach(actor);
         if (!coach.getId().equals(session.getCourseClass().getCoach().getId())) {
             throw error(HttpStatus.FORBIDDEN, "Only the assigned Coach can access attendance for this ClassSession");
+        }
+    }
+
+    private void authorizeMarkAccess(User actor, ClassSession session) {
+        if ("ADMIN".equalsIgnoreCase(actor.getRole())) return;
+        var coach = access.coach(actor);
+        if (!coach.getId().equals(session.getCourseClass().getCoach().getId())) {
+            throw error(HttpStatus.FORBIDDEN, "Only the assigned Coach or ADMIN can mark attendance");
         }
     }
 

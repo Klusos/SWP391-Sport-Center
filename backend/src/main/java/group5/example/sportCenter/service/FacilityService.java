@@ -123,7 +123,7 @@ public class FacilityService {
 
         String status = normalizeStatus(request.getStatus());
 
-        Facility facility = facilityRepository.findById(id)
+        Facility facility = facilityRepository.findByIdForScheduleUpdate(id)
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "Facility not found with id: " + id));

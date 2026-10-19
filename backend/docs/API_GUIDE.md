@@ -98,7 +98,7 @@ Profile values use height 50-250 cm, weight 10-500 kg, at most two decimal place
 
 ## Membership and MembershipPlan
 
-Membership ownership is checked in `MembershipService` using the authenticated JWT subject. ADMIN and RECEPTIONIST can act for any MEMBER. MEMBER can create, view, and change auto-renew only for their own Membership. COACH has no Membership access. Membership creation still sets status to `ACTIVE` immediately; no Payment entity or processing service was found, so the endpoint does not verify that payment occurred.
+Membership ownership is checked in `MembershipService` using the authenticated JWT subject. ADMIN and RECEPTIONIST can act for any MEMBER. MEMBER can view and change auto-renew only for their own Membership. COACH has no Membership access. Membership activation/renewal is payment-backed: it occurs only after a Payment reaches `SUCCESS`; the legacy `POST /api/memberships` assignment route is ADMIN-only.
 
 Membership validity uses an exclusive `endDate`: it is date-valid only when `startDate <= today < endDate`. The scheduled expiration job runs daily at midnight in `Asia/Ho_Chi_Minh`; the ADMIN expiration endpoint invokes the same service behavior. Every `ACTIVE` Membership with `today >= endDate` becomes `EXPIRED`, regardless of `autoRenew`. `autoRenew` is currently an intent flag only; it does not extend membership or trigger renewal/payment. Existing CourseRegistration discount and price snapshots are not recalculated when a Membership expires.
 
@@ -107,7 +107,7 @@ Membership validity uses an exclusive `endDate`: it is date-valid only when `sta
 | `GET /api/memberships` | ADMIN, RECEPTIONIST | None | 200, `MembershipResponse[]` | Not verified after authorization changes |
 | `GET /api/memberships/{id}` | ADMIN, RECEPTIONIST; MEMBER only for own membership | None | 200, `MembershipResponse` | Not verified after authorization changes |
 | `GET /api/memberships/member/{memberId}` | ADMIN, RECEPTIONIST; MEMBER only when memberId is own ID | None | 200, `MembershipResponse[]` | Not verified after authorization changes |
-| `POST /api/memberships` | ADMIN, RECEPTIONIST; MEMBER for self only | `CreateMembershipRequest` | 201, `MembershipResponse` | Not verified after authorization changes |
+| `POST /api/memberships` | ADMIN (manual assignment only) | `CreateMembershipRequest` | 201, `MembershipResponse` | Payment-backed purchase uses `POST /api/payments` |
 | `PATCH /api/memberships/{id}/cancel-renewal` | ADMIN, RECEPTIONIST; MEMBER only for own membership | None | 200, `MembershipResponse` | Not verified after authorization changes |
 | `PATCH /api/memberships/{id}/enable-auto-renew` | ADMIN, RECEPTIONIST; MEMBER only for own membership | None | 200, `MembershipResponse` | Not verified after authorization changes |
 | `POST /api/memberships/expire` | ADMIN | None | 200, text message | Not verified after authorization changes |
@@ -211,6 +211,24 @@ Course `level` is required on create and update and accepts `BEGINNER`, `INTERME
 
 CourseOffering create body: `courseId`, `name`, `price`, `plannedSessions`, `sessionDuration`, `startDate`, `endDate`, `registrationDeadline`, `cancellationDeadline`; update has the same fields plus `status` and no `courseId`.
 
+CourseOffering dates use timezone-less `LocalDate`/`LocalDateTime` values. A new offering must start today or later, end after it starts, and have future registration and cancellation deadlines no later than midnight at the start date. `registrationDeadline` must be on or before `cancellationDeadline`; this ordering is newly enforced. On update, unchanged historical dates and deadlines may remain in the past; changed start dates cannot be moved into the past, and changed deadlines must be future. Updating the date range cannot exclude existing ClassSessions. Changing `sessionDuration` is rejected if it would make any existing session in the offering use a different duration. Existing registration opening remains 30 days before `startDate`; registration and cancellation deadlines remain separate.
+
+CourseOffering numeric rules (approved): `plannedSessions` is required on creation and must be an integer from 1 through 60; `sessionDuration` is required on creation and must be an integer from 30 through 180 minutes. Updates enforce these ranges when the corresponding value changes. An unchanged legacy value outside the range (including a legacy null planned-session count) may remain during unrelated edits; changing it must set a valid value. Fractional JSON numbers are rejected rather than truncated. ClassSession duration continues to equal the persisted offering duration, and a duration update is rejected if any existing session would no longer match.
+
+Read-only SQL Server legacy-data review (physical names follow the project's `dbo.course_offering` mapping; verify against the target database metadata before use because the original core-schema bootstrap is not in this repository):
+
+```sql
+SELECT id, planned_sessions, session_duration
+FROM dbo.course_offering
+WHERE planned_sessions IS NULL
+   OR planned_sessions < 1 OR planned_sessions > 60
+   OR session_duration IS NULL
+   OR session_duration < 30 OR session_duration > 180
+ORDER BY id;
+```
+
+This query only identifies rows for manual review; no existing offering is changed automatically.
+
 Class create body: `courseOfferingId`, `coachId`, `name`, `capacity`; update body: `coachId`, `name`, `capacity`, `status`.
 
 Response samples: `CourseResponse` contains `id`, `sportId`, `sportName`, `name`, `description`, `targetAgeMin`, `targetAgeMax`, `level`, `learningOutcome`, `status`. `CourseOfferingResponse` contains `id`, course/sport IDs and names, `name`, `price`, `plannedSessions`, `sessionDuration`, `startDate`, `endDate`, registration/cancellation deadlines, and `status`. `CourseClassResponse` contains `id`, offering/course/sport/coach IDs and names, `name`, `capacity`, and `status`.
@@ -254,6 +272,8 @@ The SQL Server migration `docs/sql/phase3-entity-image-urls.sql` adds nullable `
 | `POST /api/class-sessions` | ADMIN | `CreateClassSessionRequest` | 201, `ClassSessionResponse` | Not verified |
 | `PUT /api/class-sessions/{id}` | ADMIN | `UpdateClassSessionRequest` | 200, `ClassSessionResponse` | Not verified |
 | `PATCH /api/class-sessions/{id}/status` | ADMIN | `UpdateClassSessionStatusRequest` | 200, `ClassSessionResponse` | Not verified |
+| `POST /api/class-sessions/generation/preview` | ADMIN | `ClassSessionGenerationRequest` | 200, preview response; read-only | Isolated tests |
+| `POST /api/class-sessions/generation/confirm` | ADMIN | `ClassSessionGenerationRequest` | 201, `ClassSessionGenerationResponse` | Isolated tests |
 
 Create sample (status omitted to use the `SCHEDULED` default; `facilityId` may be null):
 
@@ -261,7 +281,25 @@ Create sample (status omitted to use the `SCHEDULED` default; `facilityId` may b
 {"classId":3,"facilityId":6,"startTime":"2026-10-12T10:00:00","endTime":"2026-10-12T11:00:00"}
 ```
 
-Update body is the same shape and must include `classId`, `startTime`, and `endTime`; `facilityId: null` clears the facility. Status update body: `{"status":"CANCELLED"}`. The response includes `id`, class/facility identifiers and names, start/end times, status, and non-blocking `warnings` (outside CourseOffering date range or the per-CourseClass planned-session threshold). Overlap or invalid state transitions return 409; missing referenced resources return 404; bean validation failures return 400.
+Update body is the same shape and must include `classId`, `startTime`, and `endTime`; `facilityId: null` clears the facility. Status update body: `{"status":"CANCELLED"}`. Both timestamps must fall within the offering's date range, including the whole end date, and their difference must exactly equal persisted CourseOffering `sessionDuration` in whole minutes. End must be strictly after start. Invalid dates or duration return 400; overlaps, planned-session target violations, and invalid state transitions return 409; missing referenced resources return 404. `SCHEDULED` can become `COMPLETED` only at/after `endTime`, or `CANCELLED` only before `startTime`; both terminal statuses remain terminal. There is no hard-delete route. `plannedSessions` is a target per CourseClass: all non-CANCELLED sessions count, while CANCELLED sessions do not. Manual creation and generated creation share this target.
+
+### Automatic weekly schedule generation
+
+Both generation endpoints are ADMIN-only and use the persisted CourseOffering's duration; the request cannot override it. Timestamps are timezone-less `LocalDateTime` wall-clock values. Weekdays are ISO Java weekday names (`MONDAY` through `SUNDAY`), the first eligible date defaults to the offering start date, and the requested count defaults to the selected CourseClass's remaining target slots. A date is eligible through the offering end date inclusive. Matching dates are traversed chronologically; each session ends exactly `sessionDuration` minutes after the requested daily start time.
+
+Request example:
+
+```json
+{"courseClassId":3,"weekdays":["MONDAY","WEDNESDAY"],"startTime":"18:30:00","facilityId":6,"firstEligibleDate":"2026-10-12","requestedSessionCount":8}
+```
+
+`POST /api/class-sessions/generation/preview` returns candidate timestamps, class/offering/Coach/Facility context, current and remaining target counts, candidate-specific conflicts, overall conflicts, and `canGenerate`. It does not persist sessions. A candidate conflict or too few eligible weekdays makes the preview non-confirmable; conflicting dates are not silently skipped.
+
+`POST /api/class-sessions/generation/confirm` accepts the same request, recomputes all candidates and validates current data again. On success it returns `{"courseClassId":3,"createdCount":8,"sessions":[...]}` with HTTP 201. The entire batch runs in one transaction and any validation or persistence failure rolls back every created session. It uses the normal ClassSession create validation for date range, duration, active Facility, planned target, and Coach/Facility overlaps. Expect 400 for malformed input, 404 for missing referenced records, and 409 when current business constraints prevent generation.
+
+The policy is per CourseClass, although the target is configured on CourseOffering. Existing non-CANCELLED rows count toward that class target regardless of whether they were created manually or automatically; CANCELLED rows are retained but free a slot. Generation never deletes or replaces existing rows. Manual ClassSession creation also cannot exceed the same target. If existing rows already exceed the target, further creation is rejected.
+
+Confirmation takes pessimistic locks in a consistent resource order: CourseClass, CourseOffering, optional Facility, then assigned Coach. ClassSession create/update and the corresponding CourseClass Coach reassignment, CourseOffering update, and Facility status update use the relevant locks to coordinate application writes. Preview is advisory and can become stale; confirm always revalidates. The API is not idempotent: a repeated request is a separate attempt and will normally be rejected when the target has already been filled. Database locks coordinate application operations, but direct SQL writes or other writers that do not follow this lock protocol can still race; there is no schema-level uniqueness constraint for overlapping time intervals.
 
 Response sample:
 
@@ -321,7 +359,7 @@ Marking is allowed at or after the scheduled start time, including after the ses
 
 `docs/sql/phase4b1-class-attendance.sql` creates the Attendance and AttendanceHistory tables. Apply it manually after the approved core schema, the ClassSession migration, and the CourseRegistration migration, and before starting the backend with `spring.jpa.hibernate.ddl-auto=validate`. The migration was not executed or tested against SQL Server as part of this implementation; review and back up the intended database before manual execution.
 
-Facility and Coach overlaps use half-open interval semantics (`existing.startTime < requested.endTime` and `existing.endTime > requested.startTime`), so sessions that only touch at an endpoint do not overlap. Cancelled sessions do not reserve facilities or coaches. Make-up sessions outside CourseOffering dates and counts above `plannedSessions` are saved with warnings; the current code interprets `plannedSessions` per CourseClass for warning purposes only, pending confirmation of the intended counting scope.
+Facility and Coach overlaps use half-open interval semantics (`existing.startTime < requested.endTime` and `existing.endTime > requested.startTime`), so sessions that only touch at an endpoint do not overlap. Cancelled sessions do not reserve facilities or coaches. Sessions outside CourseOffering dates are rejected. The per-CourseClass planned-session target is enforced for both manual and generated creation, counting every non-CANCELLED session. The Member default class schedule excludes CANCELLED sessions; authorized administrative GET routes retain historical visibility.
 
 Lifecycle transitions: `SCHEDULED` can become `COMPLETED` only when current time is at or after `endTime`, and can become `CANCELLED` only before `startTime`. `COMPLETED` and `CANCELLED` are terminal; repeating the same status is idempotent, but changing to another status returns 409. PUT schedule updates are allowed only for `SCHEDULED` sessions. Invalid status/time request data returns 400. Statuses change only through the API; there is no time-driven auto-transition.
 
@@ -337,11 +375,11 @@ No Swagger/OpenAPI dependency or configuration was found in `pom.xml` or source.
 
 ## Pre-merge review items
 
-- Membership creation currently persists `ACTIVE` without a Payment record or processing step. This existing behavior was preserved; confirm the purchase/payment contract before production use.
+- Membership purchase is payment-backed through the Flow 3 `POST /api/payments` operation; pending payments do not activate memberships. See the Payment section for the current Member and receptionist workflows.
 - The application requires `DB_USERNAME`, `DB_PASSWORD`, and `JWT_SECRET`; configure them in the runtime environment. If the previously tracked SQL Server password was real or shared, rotate it because Git history may retain it.
 - Configure `CORS_ALLOWED_ORIGINS` for deployed frontend origins. Defaults permit only `http://localhost:5173` and `http://localhost:3000`.
 - The CourseClass registration revision passed the full isolated-H2 Maven suite and package build; Postman verification remains pending. SQL Server locking and migration behavior still need validation in a disposable database before deployment.
-- CourseClass registration is implemented under `/api/course-registrations`; no Payment/Bill or public account-registration endpoint is exposed.
+- CourseClass registration is implemented under `/api/course-registrations`; registration remains independent of payment, while a separate Payment may record successful payment for a confirmed registration. No public account-registration endpoint is exposed.
 
 
 ## Phase 1: Skill assessments and current sport levels (2026-10-12)
@@ -530,7 +568,11 @@ Endpoints:
 - `GET /api/payments/me` - MEMBER history. `GET /api/payments/member/{memberId}` - ADMIN/RECEPTIONIST.
 - `GET /api/reports/revenue|members|class-registrations?from=YYYY-MM-DD&to=YYYY-MM-DD` - ADMIN only; inclusive date range over `paidAt`, `SUCCESS` payments only.
 
-`POST /api/memberships` is now ADMIN/RECEPTIONIST only (manual assignment). MEMBER purchases a membership through `POST /api/payments`.
+`POST /api/memberships` is ADMIN-only (manual assignment). A MEMBER purchases for the JWT-authenticated account through `POST /api/payments`; omit `memberId` in a MEMBER request. The server checks that the account is active and has MEMBER role, requires an active plan, and derives amount from the plan. A pending payment does not activate a Membership. The Member UI uses `method: "COUNTER"` because no real online provider is available; it offers no simulated success action. The mock ONLINE capability remains restricted to explicit demo/test configuration. Payment confirmation remains a staff-only counter operation. A repeated pending purchase for the same member and plan returns 409, and the member may cancel their own pending payment through the existing cancel route before retrying. This prevents common repeated clicks but is not a general idempotency key.
+
+The MEMBER membership page shows active memberships, pending payment requests, and active plans. It never confirms payment or activates a Membership from the client. Pending requests instruct the member to pay at reception; only a successful staff confirmation activates or renews the membership. The mock online gateway remains limited to its explicit demo/test configuration and is not a real payment provider.
+
+Receptionist membership sales are handled in one workflow at `/receptionist/membership-sales`: select an active MEMBER, review current memberships and payment history, choose an active plan, create a COUNTER payment, then explicitly record whether payment was received. The payment API remains the only purchase and confirmation implementation. The Consultation Queue already supports converting/linking a consultation to a MEMBER, so the receptionist sidebar no longer duplicates that path with standalone member registration. The legacy receptionist `/staff/register-member` URL redirects to `/staff/consultations`; ADMIN access to the registration page remains.
 
 Configuration: simulated callbacks require `PAYMENT_CALLBACK_SECRET` (a long random string) and `PAYMENT_MOCK_GATEWAY_ENABLED=true` under an explicitly active `demo`, `dev`, `development`, `test`, or `phase1` profile; the callback URL must use loopback. Production profiles always disable the simulator. When disabled, ONLINE payment creation returns 503; COUNTER payments remain available. SQL Server: review and manually run `docs/sql/phase2-payment.sql` before starting with `ddl-auto=validate`; it has not been executed as part of this integration.
 

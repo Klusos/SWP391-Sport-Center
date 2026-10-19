@@ -35,7 +35,9 @@ import group5.example.sportCenter.entity.Sport;
 import group5.example.sportCenter.entity.ClassSession;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.ClassSessionRepository;
+import group5.example.sportCenter.repository.CoachRepository;
 import group5.example.sportCenter.repository.CourseClassRepository;
+import group5.example.sportCenter.repository.CourseOfferingRepository;
 import group5.example.sportCenter.repository.FacilityRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -49,25 +51,33 @@ class ClassSessionServiceTest {
     @Mock
     private CourseClassRepository courseClassRepository;
     @Mock
+    private CourseOfferingRepository courseOfferingRepository;
+    @Mock
     private FacilityRepository facilityRepository;
+    @Mock
+    private CoachRepository coachRepository;
     private ClassSessionService service;
 
     private CourseClass courseClass;
+    private CourseOffering offering;
     private Facility facility;
 
     @BeforeEach
     void setUp() {
-        service = new ClassSessionService(classSessionRepository, courseClassRepository, facilityRepository, FIXED_CLOCK);
+        service = new ClassSessionService(classSessionRepository, courseClassRepository, courseOfferingRepository,
+                facilityRepository, coachRepository, FIXED_CLOCK);
 
         Sport sport = new Sport();
         sport.setId(4);
         Course course = new Course();
         course.setSport(sport);
-        CourseOffering offering = new CourseOffering();
+        offering = new CourseOffering();
+        offering.setId(8);
         offering.setCourse(course);
         offering.setStartDate(LocalDate.now().minusDays(10));
         offering.setEndDate(LocalDate.now().plusDays(10));
         offering.setPlannedSessions(10);
+        offering.setSessionDuration(60);
 
         Coach coach = new Coach();
         coach.setId(9);
@@ -76,6 +86,12 @@ class ClassSessionServiceTest {
         courseClass.setName("Morning class");
         courseClass.setCourseOffering(offering);
         courseClass.setCoach(coach);
+
+        lenient().when(courseClassRepository.findByIdForScheduleUpdate(3)).thenReturn(Optional.of(courseClass));
+        lenient().when(courseOfferingRepository.findByIdForScheduleUpdate(8)).thenReturn(Optional.of(offering));
+        lenient().when(coachRepository.findByIdForBookingUpdate(9)).thenReturn(Optional.of(coach));
+        lenient().when(facilityRepository.findByIdForScheduleUpdate(6))
+                .thenAnswer(invocation -> facilityRepository.findById(6));
 
         facility = new Facility();
         facility.setId(6);
@@ -196,19 +212,75 @@ class ClassSessionServiceTest {
     }
 
     @Test
-    void allowsMakeUpSessionOutsideOfferingAndReturnsWarning() {
+    void allowsSessionAtInclusiveOfferingDateBoundaries() {
         stubAvailableClass();
+        LocalDate start = courseClass.getCourseOffering().getStartDate();
+        LocalDate end = courseClass.getCourseOffering().getEndDate();
         when(classSessionRepository.save(any(ClassSession.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        when(classSessionRepository.countByCourseClassIdAndStatusNot(3, "CANCELLED")).thenReturn(11L);
+        when(classSessionRepository.countByCourseClassIdAndStatusNot(3, "CANCELLED")).thenReturn(1L);
 
         ClassSessionResponse response = service.create(request(null, null,
-                LocalDate.now().plusDays(30).atTime(10, 0), LocalDate.now().plusDays(30).atTime(11, 0)));
+                start.atStartOfDay(), start.atTime(1, 0)));
 
         assertEquals("SCHEDULED", response.status());
-        assertEquals(2, response.warnings().size());
-        assertTrue(response.warnings().get(0).contains("outside"));
-        assertTrue(response.warnings().get(1).contains("plannedSessions"));
+
+        ClassSessionResponse lastDayResponse = service.create(request(null, null,
+                end.atTime(22, 59), end.atTime(23, 59)));
+        assertEquals("SCHEDULED", lastDayResponse.status());
+    }
+
+    @Test
+    void rejectsSessionWhoseDurationDiffersFromOfferingOnCreateAndUpdate() {
+        stubAvailableClass();
+        LocalDateTime start = LocalDateTime.now().plusDays(2).withNano(0);
+        ResponseStatusException createError = assertThrows(ResponseStatusException.class,
+                () -> service.create(request(null, null, start, start.plusMinutes(59))));
+        assertEquals(400, createError.getStatusCode().value());
+
+        ClassSession existing = scheduledSession(12, null);
+        when(classSessionRepository.findById(12)).thenReturn(Optional.of(existing));
+        ResponseStatusException updateError = assertThrows(ResponseStatusException.class,
+                () -> service.update(12, updateRequest(3, null, start, start.plusMinutes(61))));
+        assertEquals(400, updateError.getStatusCode().value());
+    }
+
+    @Test
+    void rejectsSessionBeforeOfferingStart() {
+        stubAvailableClass();
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> service.create(request(null, null,
+                        courseClass.getCourseOffering().getStartDate().minusDays(1).atTime(10, 0),
+                        courseClass.getCourseOffering().getStartDate().minusDays(1).atTime(11, 0))));
+        assertEquals(400, exception.getStatusCode().value());
+    }
+
+    @Test
+    void rejectsSessionAfterOfferingEnd() {
+        stubAvailableClass();
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> service.create(request(null, null,
+                        courseClass.getCourseOffering().getEndDate().plusDays(1).atTime(10, 0),
+                        courseClass.getCourseOffering().getEndDate().plusDays(1).atTime(11, 0))));
+        assertEquals(400, exception.getStatusCode().value());
+    }
+
+    @Test
+    void rejectsSessionEndAfterOfferingEndOnCreateAndUpdate() {
+        stubAvailableClass();
+        LocalDate end = courseClass.getCourseOffering().getEndDate();
+        LocalDateTime startTime = end.atTime(23, 30);
+        LocalDateTime endTime = end.plusDays(1).atTime(0, 30);
+
+        ResponseStatusException createError = assertThrows(ResponseStatusException.class,
+                () -> service.create(request(null, null, startTime, endTime)));
+        assertEquals(400, createError.getStatusCode().value());
+
+        ClassSession existing = scheduledSession(12, null);
+        when(classSessionRepository.findById(12)).thenReturn(Optional.of(existing));
+        ResponseStatusException updateError = assertThrows(ResponseStatusException.class,
+                () -> service.update(12, updateRequest(3, null, startTime, endTime)));
+        assertEquals(400, updateError.getStatusCode().value());
     }
 
     @Test
@@ -220,7 +292,6 @@ class ClassSessionServiceTest {
         existing.setEndTime(LocalDateTime.parse("2026-10-12T11:00:00"));
         existing.setStatus("SCHEDULED");
         when(classSessionRepository.findById(12)).thenReturn(Optional.of(existing));
-        when(courseClassRepository.findById(3)).thenReturn(Optional.of(courseClass));
         when(classSessionRepository.existsByCourseClass_Coach_IdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThanAndIdNot(
                 9, "CANCELLED", LocalDateTime.parse("2026-10-12T11:00:00"),
                 LocalDateTime.parse("2026-10-12T10:00:00"), 12)).thenReturn(false);
@@ -243,7 +314,7 @@ class ClassSessionServiceTest {
         existing.setId(12);
         existing.setStatus("SCHEDULED");
         when(classSessionRepository.findById(12)).thenReturn(Optional.of(existing));
-        when(courseClassRepository.findById(77)).thenReturn(Optional.empty());
+        when(courseClassRepository.findByIdForScheduleUpdate(77)).thenReturn(Optional.empty());
 
         UpdateClassSessionRequest request = new UpdateClassSessionRequest();
         request.setClassId(77);
@@ -258,7 +329,6 @@ class ClassSessionServiceTest {
         ClassSession existing = scheduledSession(12, facilityWithId(5, "ACTIVE"));
         Facility inactiveFacility = facilityWithId(6, "INACTIVE");
         when(classSessionRepository.findById(12)).thenReturn(Optional.of(existing));
-        when(courseClassRepository.findById(3)).thenReturn(Optional.of(courseClass));
         when(facilityRepository.findById(6)).thenReturn(Optional.of(inactiveFacility));
 
         UpdateClassSessionRequest request = updateRequest(3, 6,
@@ -272,7 +342,6 @@ class ClassSessionServiceTest {
         Facility inactiveFacility = facilityWithId(6, "INACTIVE");
         ClassSession existing = scheduledSession(12, inactiveFacility);
         when(classSessionRepository.findById(12)).thenReturn(Optional.of(existing));
-        when(courseClassRepository.findById(3)).thenReturn(Optional.of(courseClass));
         when(facilityRepository.findById(6)).thenReturn(Optional.of(inactiveFacility));
 
         LocalDateTime start = LocalDateTime.now().plusDays(2).withNano(0);
@@ -442,7 +511,6 @@ class ClassSessionServiceTest {
     @Test
     void rejectsInvalidScheduleRangeAsBadRequest() {
         CreateClassSessionRequest request = request(null, null, NOW.plusHours(1), NOW.plusHours(1));
-        when(courseClassRepository.findById(3)).thenReturn(Optional.of(courseClass));
 
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> service.create(request));
@@ -451,7 +519,6 @@ class ClassSessionServiceTest {
     }
 
     private void stubAvailableClass() {
-        when(courseClassRepository.findById(3)).thenReturn(Optional.of(courseClass));
         lenient().when(classSessionRepository.existsByCourseClass_Coach_IdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThan(
                 org.mockito.ArgumentMatchers.eq(9), org.mockito.ArgumentMatchers.eq("CANCELLED"),
                 any(LocalDateTime.class), any(LocalDateTime.class))).thenReturn(false);

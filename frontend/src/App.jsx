@@ -19,6 +19,7 @@ import StaffManagement from "./pages/StaffManagement";
 import SportManagement from "./pages/SportManagement";
 import FacilityManagement from "./pages/FacilityManagement";
 import MembershipPlans from "./pages/MembershipPlans";
+import ReceptionistMembershipSales from "./pages/ReceptionistMembershipSales";
 import PtBooking from "./pages/PtBooking";
 import CoachPtSessions from "./pages/CoachPtSessions";
 import CoachSkillAssessments from "./pages/CoachSkillAssessments";
@@ -36,7 +37,6 @@ import Layout from "./components/Layout";
 
 // Các trang bổ sung
 import CrudPage from "./pages/CrudPage";
-import AttendancePage from "./pages/AttendancePage";
 import SupportPage from "./pages/SupportPage";
 import ReportPage from "./pages/ReportPage";
 import MemberPage from "./pages/MemberPage";
@@ -53,6 +53,18 @@ import CourseDetail from "./public-site/pages/CourseDetail";
 import "./public-site/styles.css";
 
 const STAFF_ROLES = ["ADMIN", "RECEPTIONIST"];
+const AUTH_STORAGE_KEY = "sportcenter.auth";
+
+function readStoredAuth() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(AUTH_STORAGE_KEY) || "null");
+    return value?.accessToken && ["ADMIN", "RECEPTIONIST", "COACH", "MEMBER"].includes(value.role)
+      ? value
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 const home = (role) => {
   if (role === "MEMBER") return "/member/dashboard";
@@ -145,12 +157,17 @@ function AdminRoute({ auth }) {
 }
 
 export default function App() {
-  const [auth, setAuth] = useState(null);
+  const [auth, setAuth] = useState(readStoredAuth);
   const navigate = useNavigate();
   const location = useLocation();
 
   function handleLogin(data) {
     setAuth(data);
+    try {
+      sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data));
+    } catch {
+      // Keep this login active in memory if session storage is unavailable.
+    }
 
     const returnPath = location.state?.from;
 
@@ -158,16 +175,26 @@ export default function App() {
     const courseReturn =
       data.role === "MEMBER" &&
       typeof returnPath === "string" &&
-      /^\/khoa-hoc\/[^/]+$/.test(returnPath);
+      (/^\/member\/courses\/[1-9]\d*$/.test(returnPath) ||
+        /^\/khoa-hoc\/[1-9]\d*$/.test(returnPath));
+
+    const memberCoursePath = courseReturn
+      ? returnPath.replace(/^\/khoa-hoc\//, "/member/courses/")
+      : returnPath;
 
     navigate(
-      courseReturn ? returnPath : home(data.role),
+      courseReturn ? memberCoursePath : home(data.role),
       { replace: true }
     );
   }
 
   function handleLogout(returnTo) {
     setAuth(null);
+    try {
+      sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    } catch {
+      // Ignore unavailable browser storage.
+    }
 
     navigate("/login", {
       replace: true,
@@ -193,10 +220,8 @@ export default function App() {
           "notification-broadcast": "/admin/notifications/broadcast",
           "audit-logs": "/admin/audit-logs",
           "membership-plans": "/staff/membership-plans",
-          attendance:
-            auth?.role === "ADMIN"
-              ? "/admin/attendance"
-              : "/receptionist/attendance",
+          "membership-sales": "/receptionist/membership-sales",
+          attendance: "/admin/attendance",
           register: "/staff/register-member",
           classes: "/admin/classes",
           reports: "/admin/reports",
@@ -253,10 +278,14 @@ export default function App() {
           <Route
             path="/khoa-hoc/:courseId"
             element={
-              <CourseDetail
-                auth={auth}
-                onLogout={handleLogout}
-              />
+              auth?.role === "MEMBER" ? (
+                <Navigate
+                  to={`/member/courses/${location.pathname.split("/").at(-1)}`}
+                  replace
+                />
+              ) : (
+                <CourseDetail auth={auth} onLogout={handleLogout} />
+              )
             }
           />
 
@@ -296,7 +325,7 @@ export default function App() {
                 to={
                   auth?.role === "ADMIN"
                     ? "/admin/attendance"
-                    : "/receptionist/attendance"
+                    : "/staff/dashboard"
                 }
                 replace
               />
@@ -310,7 +339,7 @@ export default function App() {
 
           <Route
             path="/staff/register-member"
-            element={<RegisterMember {...staff} />}
+            element={auth?.role === "ADMIN" ? <RegisterMember {...staff} /> : <Navigate to="/staff/consultations" replace />}
           />
 
           <Route
@@ -319,17 +348,23 @@ export default function App() {
           />
 
           <Route
-            path="/staff/membership-plans"
-            element={<MembershipPlans {...staff} />}
-          />
-
-          <Route
             path="/staff/members"
             element={<MemberList {...staff} />}
           />
 
+          <Route element={<ReceptionistRoute auth={auth} />}>
+            <Route
+              path="/receptionist/membership-sales"
+              element={<ReceptionistMembershipSales {...staff} />}
+            />
+          </Route>
+
           {/* Chỉ Admin */}
           <Route element={<AdminRoute auth={auth} />}>
+            <Route
+              path="/staff/membership-plans"
+              element={<MembershipPlans {...staff} />}
+            />
             <Route
               path="/admin/attendance"
               element={<StaffAttendance {...staff} />}
@@ -369,7 +404,7 @@ export default function App() {
             <Route element={<Layout {...staff} />}>
               <Route
                 path="/admin"
-                element={<Navigate to="/admin/courses" replace />}
+                element={<Navigate to="/staff/dashboard" replace />}
               />
 
               <Route
@@ -377,8 +412,8 @@ export default function App() {
                 element={
                   <CrudPage
                     kind="courses"
-                    title="Quản lý khóa học"
-                    subtitle="Tạo, cập nhật và quản lý khóa học."
+                    title="Demo — Quản lý khóa học"
+                    subtitle="Giao diện mẫu với dữ liệu minh họa; quản lý khóa học thật tại mục Khóa học."
                   />
                 }
               />
@@ -388,8 +423,8 @@ export default function App() {
                 element={
                   <CrudPage
                     kind="classes"
-                    title="Quản lý lớp học"
-                    subtitle="Theo dõi lịch học, huấn luyện viên và sức chứa."
+                    title="Demo — Quản lý lớp học"
+                    subtitle="Giao diện mẫu với dữ liệu minh họa; không sửa dữ liệu SportCenter."
                   />
                 }
               />
@@ -404,10 +439,7 @@ export default function App() {
           {/* Chỉ Receptionist — bọc trong Layout */}
           <Route element={<ReceptionistRoute auth={auth} />}>
             <Route element={<Layout {...staff} />}>
-              <Route
-                path="/receptionist/attendance"
-                element={<AttendancePage />}
-              />
+              <Route path="/receptionist/attendance" element={<Navigate to="/staff/dashboard" replace />} />
 
               <Route
                 path="/receptionist/support"
@@ -454,6 +486,11 @@ export default function App() {
             element={<MemberCourses {...member} />}
           />
 
+          <Route
+            path="/member/courses/:courseId"
+            element={<CourseDetail auth={auth} memberRoute onLogout={handleLogout} onNavigate={member.onNavigate} />}
+          />
+
           {/* Trang mới của hội viên — bọc trong Layout */}
           <Route element={<Layout {...member} />}>
             <Route
@@ -461,8 +498,8 @@ export default function App() {
               element={
                 <MemberPage
                   kind="member-classes"
-                  title="Lớp học"
-                  subtitle="Xem lịch và thông tin các lớp học."
+                title="Demo — Lớp học"
+                subtitle="Giao diện mẫu với dữ liệu minh họa; lịch thật xem tại mục Lịch trình."
                 />
               }
             />
