@@ -31,6 +31,7 @@ import MemberLevelsAssessments from "./pages/MemberLevelsAssessments";
 import Dashboard from "./pages/Dashboard";
 import CourseManagement from "./pages/CourseManagement";
 import MemberCourses from "./pages/MemberCourses";
+import CourseCheckout from "./pages/CourseCheckout";
 import MemberMembership from "./pages/MemberMembership";
 import MemberProfile from "./pages/MemberProfile";
 import Schedule from "./pages/Schedule";
@@ -100,7 +101,7 @@ function MemberRoute({ auth }) {
       <Navigate
         to="/login"
         replace
-        state={{ from: location.pathname }}
+        state={{ from: location.pathname + location.search }}
       />
     );
   }
@@ -177,8 +178,8 @@ export default function App() {
       // Ignore unavailable browser storage.
     }
     setAuth(null);
-    navigate("/login", { replace: true, state: { sessionExpired: true } });
-  }, [navigate]);
+    navigate("/login", { replace: true, state: { sessionExpired: true, from: location.pathname + location.search } });
+  }, [navigate, location.pathname, location.search]);
 
   useEffect(() => {
     setUnauthorizedHandler(handleUnauthorized);
@@ -201,7 +202,9 @@ export default function App() {
     const courseReturn =
       data.role === "MEMBER" &&
       typeof returnPath === "string" &&
-      (/^\/member\/courses\/[1-9]\d*$/.test(returnPath) ||
+      (/^\/member\/(?:course-checkout\/[1-9]\d*|payment-result)(?:\?[^#]*)?$/.test(returnPath) ||
+        /^\/member\/membership(?:\?[^#]*)?$/.test(returnPath) ||
+        /^\/member\/courses\/[1-9]\d*$/.test(returnPath) ||
         /^\/khoa-hoc\/[1-9]\d*$/.test(returnPath));
 
     const memberCoursePath = courseReturn
@@ -479,6 +482,8 @@ export default function App() {
         </Route>
 
         {/* Khu vực hội viên */}
+        <Route path="/member/payment-result" element={<CourseCheckout key={location.pathname + location.search} auth={auth} {...member} />} />
+        <Route path="/member/course-checkout/:registrationId" element={<CourseCheckout key={location.pathname} auth={auth} {...member} />} />
         <Route element={<MemberRoute auth={auth} />}>
           <Route
             path="/member"
@@ -536,7 +541,9 @@ export default function App() {
 
           <Route
             path="/member/membership"
-            element={<MemberMembership {...member} />}
+            element={new URLSearchParams(location.search).has("paymentId") || new URLSearchParams(location.search).has("paymentStatus") || new URLSearchParams(location.search).has("reason")
+              ? <Navigate to={"/member/payment-result" + location.search} replace />
+              : <MemberMembership {...member} />}
           />
 
           <Route
