@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -29,6 +30,8 @@ import group5.example.sportCenter.entity.PaymentStatus;
 import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.payment.CourseRegistrationPaymentHandler;
+import group5.example.sportCenter.payment.GatewayCallback;
+import group5.example.sportCenter.payment.OnlineCallbackResult;
 import group5.example.sportCenter.payment.PaymentGateway;
 import group5.example.sportCenter.payment.PtBookingPaymentHandler;
 import group5.example.sportCenter.repository.MembershipPlanRepository;
@@ -71,6 +74,12 @@ public class PaymentService {
     /** Member chọn phương thức thanh toán -> tạo Payment PENDING. */
     @Transactional
     public PaymentResponse createPayment(CreatePaymentRequest request, Jwt callerJwt) {
+        return createPayment(request, callerJwt, null);
+    }
+
+    /** clientIp: IP trình duyệt của người thanh toán (VNPay yêu cầu vnp_IpAddr). */
+    @Transactional
+    public PaymentResponse createPayment(CreatePaymentRequest request, Jwt callerJwt, String clientIp) {
         User actor = currentActor(callerJwt);
         User member = resolveMember(actor, request.getMemberId());
 
@@ -107,7 +116,7 @@ public class PaymentService {
         payment = paymentRepository.save(payment);
 
         String url = request.getMethod() == PaymentMethod.ONLINE
-                ? paymentGateway.createPaymentUrl(payment.getTransactionCode(), amount)
+                ? paymentGateway.createPaymentUrl(payment.getTransactionCode(), amount, clientIp)
                 : null;
         return toResponse(payment, url);
     }
@@ -129,25 +138,41 @@ public class PaymentService {
         return toResponse(finalizePayment(payment, request.getSuccess(), request.getNote()), null);
     }
 
-    /** Nhánh "Online": callback từ cổng thanh toán (endpoint public, bảo vệ bằng chữ ký). */
+    /**
+     * Nhánh "Online": callback từ cổng thanh toán (endpoint public, bảo vệ bằng chữ ký).
+     * Không ném lỗi cho các trường hợp bị từ chối để controller tự trả về theo định dạng của từng cổng
+     * (mock: HTTP status, VNPay IPN: RspCode, VNPay return: redirect về frontend).
+     */
     @Transactional
-    public PaymentResponse handleOnlineCallback(String transactionCode, boolean success, String signature) {
-        if (!paymentGateway.verifyCallback(transactionCode, success, signature)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Invalid payment callback signature");
+    public OnlineCallbackResult processOnlineCallback(Map<String, String> params) {
+        Optional<GatewayCallback> verified = paymentGateway.verifyCallback(params);
+        if (verified.isEmpty()) {
+            return new OnlineCallbackResult(OnlineCallbackResult.Status.INVALID_SIGNATURE, null);
         }
-        Payment payment = paymentRepository.findByTransactionCodeForUpdate(transactionCode)
-                .orElseThrow(() -> new ResourceNotFoundException("Payment not found"));
+        GatewayCallback callback = verified.get();
+        Optional<Payment> found = paymentRepository.findByTransactionCodeForUpdate(callback.transactionCode());
+        if (found.isEmpty()) {
+            return new OnlineCallbackResult(OnlineCallbackResult.Status.NOT_FOUND, null);
+        }
+        Payment payment = found.get();
         if (payment.getMethod() != PaymentMethod.ONLINE) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This payment is not an online payment");
+            return new OnlineCallbackResult(OnlineCallbackResult.Status.NOT_ONLINE, null);
         }
-        if (payment.getStatus() == PaymentStatus.CANCELLED && success) {
+        if (callback.amount() != null && payment.getAmount().compareTo(callback.amount()) != 0) {
+            return new OnlineCallbackResult(OnlineCallbackResult.Status.AMOUNT_MISMATCH, null);
+        }
+        if (payment.getStatus() == PaymentStatus.CANCELLED && callback.success()) {
             // Member đã huỷ nhưng cổng vẫn báo trừ tiền: không áp dụng, chuyển sang hoàn tiền.
-            return toResponse(markRefundRequired(payment, "Payment succeeded after it was cancelled"), null);
+            return new OnlineCallbackResult(OnlineCallbackResult.Status.APPLIED,
+                    toResponse(markRefundRequired(payment, "Payment succeeded after it was cancelled"), null));
         }
         if (payment.getStatus() != PaymentStatus.PENDING) {
-            return toResponse(payment, null); // callback lặp lại: bỏ qua (idempotent)
+            // callback lặp lại: bỏ qua (idempotent)
+            return new OnlineCallbackResult(OnlineCallbackResult.Status.ALREADY_PROCESSED, toResponse(payment, null));
         }
-        return toResponse(finalizePayment(payment, success, success ? null : "Online payment failed"), null);
+        String failureNote = callback.failureReason() != null ? callback.failureReason() : "Online payment failed";
+        return new OnlineCallbackResult(OnlineCallbackResult.Status.APPLIED, toResponse(
+                finalizePayment(payment, callback.success(), callback.success() ? null : failureNote), null));
     }
 
     /** Huỷ payment đang PENDING (member huỷ của mình, hoặc staff huỷ). */
