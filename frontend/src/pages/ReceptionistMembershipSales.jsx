@@ -3,6 +3,7 @@ import Sidebar from "../components/Sidebar";
 import {
   createPaymentApi,
   getMembershipsByMemberApi,
+  getMemberPaymentsApi,
   getPublicMembershipPlansApi,
   getUsersApi,
   processCounterPaymentApi,
@@ -19,6 +20,7 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
   const [planId, setPlanId] = useState("");
   const [query, setQuery] = useState("");
   const [membershipData, setMembershipData] = useState(null);
+  const [paymentData, setPaymentData] = useState(null);
   const [pendingPayment, setPendingPayment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -53,8 +55,15 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
   useEffect(() => {
     if (!memberId) return undefined;
     let current = true;
-    getMembershipsByMemberApi(token, memberId)
-      .then((result) => { if (current) setMembershipData({ memberId, rows: rows(result) }); })
+    Promise.all([getMembershipsByMemberApi(token, memberId), getMemberPaymentsApi(token, memberId)])
+      .then(([membershipResult, paymentResult]) => {
+        if (!current) return;
+        const memberPayments = rows(paymentResult).filter((payment) => payment.purpose === "MEMBERSHIP");
+        setMembershipData({ memberId, rows: rows(membershipResult) });
+        setPaymentData({ memberId, rows: memberPayments });
+        const pending = memberPayments.find((payment) => payment.status === "PENDING");
+        if (pending) setPendingPayment(pending);
+      })
       .catch((requestError) => { if (current) setError(requestError.message || "Không tải được thông tin gói hiện tại."); });
     return () => { current = false; };
   }, [memberId, token]);
@@ -81,6 +90,10 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
         autoRenew: false,
       });
       setPendingPayment(payment);
+      setPaymentData((current) => ({
+        memberId: String(selectedMember.id),
+        rows: [payment, ...(current?.memberId === String(selectedMember.id) ? current.rows : [])],
+      }));
       setNotice(`Đã tạo thanh toán tại quầy #${payment.id} ở trạng thái ${payment.status}. Chưa kích hoạt gói.`);
     } catch (requestError) {
       setError(requestError.status === 401
@@ -100,10 +113,17 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
       const result = await processCounterPaymentApi(token, pendingPayment.id, success,
         success ? "Front desk payment confirmed" : "Front desk payment not received");
       setPendingPayment(result);
+      setPaymentData((current) => current?.memberId === String(selectedMember.id)
+        ? { ...current, rows: current.rows.map((payment) => payment.id === result.id ? result : payment) }
+        : current);
       if (result.status === "SUCCESS") {
         setNotice(`Thanh toán #${result.id} thành công. Gói hội viên đã được kích hoạt hoặc gia hạn.`);
-        const updated = await getMembershipsByMemberApi(token, selectedMember.id);
+        const [updated, paymentHistory] = await Promise.all([
+          getMembershipsByMemberApi(token, selectedMember.id),
+          getMemberPaymentsApi(token, selectedMember.id),
+        ]);
         setMembershipData({ memberId: String(selectedMember.id), rows: rows(updated) });
+        setPaymentData({ memberId: String(selectedMember.id), rows: rows(paymentHistory).filter((payment) => payment.purpose === "MEMBERSHIP") });
       } else if (result.status === "CANCELLED") {
         setNotice(`Thanh toán #${result.id} đã được ghi nhận thất bại. Gói hội viên chưa được kích hoạt.`);
       } else {
@@ -134,13 +154,20 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
         <section className="membership-sales-card">
           <h2>1. Chọn thành viên</h2>
           <label>Tìm theo tên hoặc mã thành viên<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nhập tên hoặc mã…" /></label>
-          <label>Thành viên<select value={memberId} disabled={Boolean(pendingPayment)} onChange={(event) => { setMemberId(event.target.value); setNotice(""); setError(""); }}>
+          <label>Thành viên<select value={memberId} disabled={Boolean(pendingPayment?.status === "PENDING")} onChange={(event) => { setMemberId(event.target.value); setMembershipData(null); setPaymentData(null); setPendingPayment(null); setNotice(""); setError(""); }}>
             <option value="">Chọn thành viên ACTIVE</option>{visibleMembers.map((member) => <option key={member.id} value={member.id}>#{member.id} · {member.name || "Thành viên"}</option>)}
           </select></label>
           {selectedMember && memberMemberships === null && <p role="status">Đang tải gói hiện tại…</p>}
           {selectedMember && memberMemberships && <p className="membership-sales-current">{activeMemberships.length
             ? `Thành viên đang có ${activeMemberships.length} gói ACTIVE. Gói mua mới sẽ được gia hạn sau ngày kết thúc hiện tại theo quy tắc backend.`
             : "Thành viên chưa có gói ACTIVE; thanh toán thành công sẽ kích hoạt gói mới."}</p>}
+          {selectedMember && paymentData?.memberId === memberId && <div className="membership-sales-history">
+            <h3>Lịch sử thanh toán gói</h3>
+            {paymentData.rows.length === 0 ? <p>Chưa có giao dịch membership.</p> : paymentData.rows.map((payment) => <div key={payment.id} className="membership-sales-history-row">
+              <span>#{payment.id} · {money(payment.amount)} · {payment.status}</span>
+              {payment.status === "PENDING" && <button type="button" disabled={saving} onClick={() => { setPendingPayment(payment); setPlanId(String(payment.referenceId)); }}>Tiếp tục xử lý</button>}
+            </div>)}
+          </div>}
         </section>
         <section className="membership-sales-card">
           <h2>2. Chọn gói</h2>
@@ -154,7 +181,7 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
         </form>}
         {pendingPayment && <section className="membership-sales-card membership-sales-payment" aria-live="polite">
           <h2>Thanh toán #{pendingPayment.id}</h2><dl><div><dt>Thành viên</dt><dd>{selectedMember?.name || `#${pendingPayment.memberId || memberId}`}</dd></div>
-            <div><dt>Gói</dt><dd>{selectedPlan?.name || pendingPayment.purpose}</dd></div><div><dt>Số tiền</dt><dd>{money(pendingPayment.amount)}</dd></div>
+            <div><dt>Gói</dt><dd>{selectedPlan?.name || `Gói #${pendingPayment.referenceId}`}</dd></div><div><dt>Số tiền</dt><dd>{money(pendingPayment.amount)}</dd></div>
             <div><dt>Trạng thái</dt><dd>{pendingPayment.status}</dd></div></dl>
           {pendingPayment.status === "PENDING" ? <div className="membership-sales-actions">
             <button type="button" disabled={saving} onClick={() => void processPayment(true)}>{saving ? "Đang xử lý…" : "Xác nhận đã nhận thanh toán"}</button>

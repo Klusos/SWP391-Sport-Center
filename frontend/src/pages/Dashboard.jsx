@@ -115,8 +115,9 @@ function Admin({ d }) {
 
 function Receptionist({ d, onNavigate }) {
   const actions = [
-    ["Đăng ký thành viên", "Mới", "register"], ["Yêu cầu tư vấn", "Tiếp nhận", "consultations"],
-    ["Danh sách thành viên", "Tra cứu", "members"], ["Gói hội viên", "Bảng giá", "membership-plans"],
+    ["Yêu cầu tư vấn", "Tiếp nhận / tạo thành viên", "consultations"],
+    ["Bán gói hội viên", "Thanh toán tại quầy", "membership-sales"],
+    ["Danh sách thành viên", "Tra cứu", "members"],
   ];
   return (<>
     <Stats items={[

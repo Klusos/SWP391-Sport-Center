@@ -32,6 +32,9 @@ public interface PaymentRepository extends JpaRepository<Payment, Integer> {
 
     boolean existsByPurposeAndReferenceIdAndStatus(PaymentPurpose purpose, Integer referenceId, PaymentStatus status);
 
+    boolean existsByMember_IdAndPurposeAndReferenceIdAndStatus(
+            Integer memberId, PaymentPurpose purpose, Integer referenceId, PaymentStatus status);
+
     boolean existsByPurposeAndReferenceIdAndStatusAndIdNot(
             PaymentPurpose purpose, Integer referenceId, PaymentStatus status, Integer id);
 

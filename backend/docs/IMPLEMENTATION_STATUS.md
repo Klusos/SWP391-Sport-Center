@@ -12,10 +12,17 @@
 | SQL Server migration `docs/sql/phase2-payment.sql` | Idempotent; not executed | Static review only | Not applicable |
 
 - Course registration is unchanged: Flow 2 still creates `CONFIRMED` registrations. Payment references `CourseRegistration.id` (not `CourseOffering.id`) and charges the stored `finalPrice`, so membership discounts reconcile.
-- `POST /api/memberships` is restricted to ADMIN/RECEPTIONIST; MEMBER self-activation without payment was removed.
+- `POST /api/memberships` is restricted to ADMIN for manual assignment; MEMBER self-activation without payment was removed.
 - Duplicate-payment protection: payment rows are locked during counter/callback processing; the referenced registration/booking row is locked before checking for another `SUCCESS` payment.
 - Demo-only mock online payments are disabled by default. Explicit opt-in requires `PAYMENT_MOCK_GATEWAY_ENABLED=true` and an allowed demo/test profile; production profiles remain disabled and callback URLs must be loopback. This simulator is not a real payment provider and does not verify settlement.
-- Not implemented: real payment gateway (VNPay/MoMo/PayOS), automatic refunds, expiry of abandoned `PENDING` payments, frontend payment pages. The SQL Server E2E harness (`CourseRegistrationSqlServerE2EIT`) now also requires `dbo.payment` to exist.
+- Not implemented: real payment gateway (VNPay/MoMo/PayOS), automatic refunds, expiry of abandoned `PENDING` payments. MEMBER membership purchase UI is implemented as a counter-payment request; no client-side success action is available. The SQL Server E2E harness (`CourseRegistrationSqlServerE2EIT`) now also requires `dbo.payment` to exist.
+
+## Phase 8.4C Membership Purchase and Receptionist Workflow Consolidation
+
+- MEMBER self-service uses existing `POST /api/payments`, `/api/payments/me`, and payment cancellation APIs. Member identity comes from JWT, amount and plan eligibility are server-derived, inactive plans are rejected, and an existing pending payment for the same plan returns 409. No Membership is activated until staff confirms a COUNTER payment successfully. The UI does not expose online mock-payment success; the existing mock capability remains subject to its demo/test configuration guard.
+- Receptionist membership sales use the existing staff member, membership, public-plan and payment APIs in one page. Payment history restores a pending counter transaction after refresh; confirmation remains explicit and only the existing PaymentService activates the membership. The Consultation Queue already supports linking/creating the member, so redundant receptionist registration and plan browsing navigation were removed while ADMIN plan management and registration remain available.
+- `PaymentIntegrationTest`: added coverage for JWT-scoped member purchase, duplicate pending purchase, inactive plan rejection, coach denial, and existing pending-versus-confirmed activation behavior. Focused suite: 20 tests passed. Full isolated suite: 232 tests passed; 0 failures, errors, or skips. Frontend lint/build passed; no frontend test runner is configured.
+- No schema changes, migration execution, SQL Server writes, browser testing, or real payment settlement were performed for this phase.
 
 ## SQL schema synchronization review (2026-10-15)
 

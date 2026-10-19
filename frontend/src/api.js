@@ -397,6 +397,23 @@ export function processCounterPaymentApi(token, paymentId, success, note = null)
   });
 }
 
+export function getMyPaymentsApi(token) {
+  return request("/api/payments/me", { headers: authenticatedHeaders(token) });
+}
+
+export function getMemberPaymentsApi(token, memberId) {
+  return request("/api/payments/member/" + encodeURIComponent(memberId), {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function cancelPaymentApi(token, paymentId) {
+  return request("/api/payments/" + encodeURIComponent(paymentId) + "/cancel", {
+    method: "PATCH",
+    headers: authenticatedHeaders(token),
+  });
+}
+
 export function createMembershipPlanApi(token, payload) {
   return request("/api/membership-plans", {
     method: "POST",
