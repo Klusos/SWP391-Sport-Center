@@ -1,47 +1,44 @@
-﻿# Phase 2 SQL Server HTTP E2E harness
+# SQL Server HTTP E2E harness
 
-CourseRegistrationSqlServerE2EIT is an opt-in Failsafe integration test. It uses a random HTTP port and the application's real security/JWT filters. Ordinary mvn test and mvn verify do not select *IT classes with Surefire, and Failsafe is configured only in the e2e-sqlserver Maven profile.
+`CourseRegistrationSqlServerE2EIT` is an opt-in Failsafe test for an isolated, disposable SQL Server instance. It performs real HTTP requests through the application and writes test fixtures. Ordinary Surefire tests do not select `*IT` classes; the harness runs only with `mvn -Pe2e-sqlserver verify`.
 
-## Safety gates
+## Target requirements
 
-Before Spring context refresh, the test initializer requires all of the following:
+The harness requires an explicit Failsafe profile, a separate destructive-test opt-in, explicit JDBC target values, and a read-only identity check before Spring starts. Configure all values in the approved process environment; do not put credentials in command arguments, shell history, source files, or reports.
 
-- Failsafe's profile property sportcenter.e2e.sqlserver.enabled=true.
-- SPORTCENTER_E2E_SQLSERVER_CONFIRM=DESKTOP-EMK77PD/SportCenterDB.
-- E2E_SQLSERVER_JDBC_URL exactly equals E2E_SQLSERVER_EXPECTED_JDBC_URL, and its parsed host/database are the approved SQL Server and database.
-- A read-only JDBC query confirms @@SERVERNAME, DB_NAME() and ONLINE state.
-- dbo.users.id=11 has the supplied expected email, run marker 20261014095644-80179052, role ADMIN and status ACTIVE.
-- dbo.course_registration has the expected Phase 2 columns.
+- `SPORTCENTER_E2E_SQLSERVER_DESTRUCTIVE_OPT_IN=true`
+- `E2E_SQLSERVER_JDBC_URL`
+- `E2E_SQLSERVER_EXPECTED_JDBC_URL` (must exactly equal the configured URL)
+- `E2E_SQLSERVER_EXPECTED_SERVER` (must equal SQL Server's `@@SERVERNAME`)
+- `E2E_SQLSERVER_USERNAME`
+- `E2E_SQLSERVER_PASSWORD`
+- `E2E_SQLSERVER_JWT_SECRET`
+- `E2E_ADMIN_EMAIL`
+- `E2E_ADMIN_PASSWORD`
+- `E2E_ADMIN_RUN_ID` (at least 8 characters and included in the test account email)
 
-Any missing or mismatched condition aborts before Spring starts Hibernate, the HTTP server or scheduled callbacks. The test profile sets ddl-auto=validate, disables SQL display and uses only environment-supplied connection properties. Never point this profile at H2 or another database.
+The JDBC URL must explicitly name `databaseName=SportCenterDB`, and the database must be `ONLINE`. The migrations retain their `SportCenterDB` name guard. Use a dedicated SQL Server instance and disposable database with that exact name; do not point the harness at a shared, production, or default local target. The guard rejects common local/default and production-like host names, but naming checks cannot prove that a server is disposable. The operator is responsible for provisioning and approving the isolated instance.
 
-MembershipScheduler is replaced with a Mockito test bean in the E2E context. This prevents its production expiration callback from mutating unrelated memberships during this run; the test also asserts that the callback was not invoked.
+Before Spring refresh, the initializer verifies that the URL matches both configured URL values, the resolved datasource credentials and `ddl-auto=validate` match the test profile, the connected server/database identity matches the explicit expected identity, the database is online, the configured account is the unique ACTIVE ADMIN whose email carries the run marker, and the required registration schema columns exist. It performs SELECT-only checks. Missing, ambiguous, mismatched, or obviously unsafe target configuration stops the run before application startup.
 
-## Credentials
+Provision a dedicated test-owned ACTIVE ADMIN account for the run and provide its password through `E2E_ADMIN_PASSWORD`. The harness authenticates with that account and never resets or updates its password. Do not use an employee, administrator, or other shared account. Create a new unique run marker/account for each isolated database rehearsal.
 
-Provide these as process environment variables in the approved terminal/session, without putting values in shell history, command arguments, source files or reports:
+## Writes, side effects, and cleanup
 
-- E2E_SQLSERVER_JDBC_URL
-- E2E_SQLSERVER_EXPECTED_JDBC_URL
-- E2E_SQLSERVER_USERNAME
-- E2E_SQLSERVER_PASSWORD
-- E2E_SQLSERVER_JWT_SECRET
-- E2E_ADMIN_EMAIL
-- E2E_ADMIN_RUN_ID (must be 20261014095644-80179052)
-- SPORTCENTER_E2E_SQLSERVER_CONFIRM (must be DESKTOP-EMK77PD/SportCenterDB)
+The destructive opt-in permits the application tests to write fixtures after the read-only guard succeeds. Scenarios create users, coaches, sports, courses, offerings, classes, sessions, registrations, membership plans, memberships, and payments. Fixtures are deliberately retained, and the report prints created record IDs. Failed tests can leave partial fixtures. The harness does not delete fixtures or restore the database. Keep a verified backup and restore plan, and prefer a fresh disposable database for each run.
 
-The harness generates a fresh password for only user ID 11 and updates that row with a parameterized statement constrained by ID, expected email, ADMIN role and ACTIVE status. It verifies exactly one affected row and then authenticates through /api/auth/login. Generated account passwords and JWTs stay in test-process memory and are not logged. E2E fixture data is deliberately retained after the run.
+Membership, CourseRegistration, and PT booking expiration services are replaced in the test context so their scheduled sweeps cannot change unrelated rows. The harness still starts the application with Hibernate schema validation and real HTTP/security handling. The configured database should contain only the schema and test-owned seed records required for the test.
 
-## Later execution
+The current harness uses the configured test-owned ADMIN account but creates other test users through the application's ADMIN APIs. It does not directly insert fixture users or modify preexisting account credentials. Fixture cleanup remains a manual database restore/recreation operation.
 
-Only after a separate explicit authorization to perform database writes, set the environment values in the approved process and invoke the cached Maven 3.9.16 installation directly (do not use mvnw or a PowerShell script):
+## Execution
 
+Run only after separately authorizing writes to the named disposable target and verifying the environment values without printing them:
+
+```text
 mvn -Pe2e-sqlserver verify
+```
 
-This runs the ordinary H2 suite first, then Failsafe *IT classes. The test uses real HTTP requests for login, role checks, registration, duplicate and offering-level protection, capacity/concurrent last-seat behavior, schedule overlap/adjacency, member session visibility, membership pricing, and SQL read-back of registration snapshots.
+Do not combine this profile with `-Dspring.profiles.active=phase1`; that would override the SQL Server profile. The run executes ordinary tests before Failsafe integration tests. Never use this harness against a production or shared database.
 
-The harness does not delete records. Its report lists the IDs returned by fixture-creation APIs. If a test fails after creating fixtures, preserve that report for later review; do not rerun until deciding whether the retained records affect a subsequent run.
-
-## Important implementation boundary
-
-Password reset is a write. The guard performs only SELECTs; the reset occurs only after the guard succeeds and the Spring test context has started with schema validation. Running the E2E profile is not authorized by ordinary test/build approval and must be explicitly authorized separately.
+The test currently covers registration eligibility and role checks, duplicate/offering protection, last-seat concurrency, schedule overlap, member visibility, price snapshots, and COUNTER settlement. It does not exercise the Phase 8.8A/B receptionist queue or real VNPay callbacks. SQL Server migration behavior and provider E2E still require separate rehearsals.

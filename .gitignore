@@ -31,3 +31,4 @@ build/
 
 ### VS Code ###
 .vscode/
+backend/docs/SQLSERVER_E2E.md
