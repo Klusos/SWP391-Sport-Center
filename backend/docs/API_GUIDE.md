@@ -683,3 +683,60 @@ The single-table migration is `docs/sql/phase7-1-audit-log.sql`; it requires `db
 - Status reads are sequential, bounded to 12 reads at five-second intervals, stop at terminal states/errors, and ignore results after unmount. Manual refresh remains available. Existing registration-history cancellation remains available via POST /api/course-registrations/{id}/cancel and refreshes registration history.
 - Existing API gaps retained: no single-payment query, payment URL recovery/regeneration, provider-link expiry status, provider settlement timestamp, or general payment idempotency key. UI locking and refreshed history reduce accidental duplicates in one page but cannot guarantee exclusion across separate tabs/devices. The backend duplicate-success/REFUND_REQUIRED rules remain necessary. No new staff course-payment queue is exposed; counter customers provide their payment ID for existing authorized settlement.
 - Manual verification remains required: same-tab sandbox return and real IPN, default/overridden return destinations, authentication loss/login recovery, browser refresh/back, pending/terminal/error displays, mobile layout, cancellation, deadline races and SQL Server compatibility. No live gateway or SQL Server verification was performed in Phase 8.7D.
+
+
+## Phase 8.8A actionable course counter-payment queue
+
+GET /api/payments/pending-courses?page=0&size=20 is available only to active ADMIN and RECEPTIONIST accounts. MEMBER/COACH receive 403; unauthenticated callers receive 401. The service independently checks the active staff account. Pagination matches pending-memberships: page is zero-based and nonnegative, size is 1-100 (default 20), invalid values return 400. There are no search or client-controlled sorting parameters in this phase.
+
+The response is a Spring Page of PendingCoursePaymentResponse. Example (standard Page metadata abbreviated):
+
+```json
+{
+  "content": [{
+    "paymentId": 42,
+    "memberId": 12,
+    "memberName": "Example Member",
+    "registrationId": 31,
+    "courseId": 5,
+    "courseName": "Beginner Swimming",
+    "classId": 8,
+    "className": "Morning class",
+    "amount": 450000.00,
+    "paymentStatus": "PENDING",
+    "registrationStatus": "PENDING_PAYMENT",
+    "paymentDeadline": "2026-10-20T10:00:00",
+    "paymentCreatedAt": "2026-10-19T10:00:00"
+  }],
+  "number": 0,
+  "size": 20,
+  "totalElements": 1,
+  "totalPages": 1,
+  "first": true,
+  "last": true
+}
+```
+
+Eligibility is evaluated in the database using one server-time cutoff in Asia/Ho_Chi_Minh per request: Payment COUNTER + COURSE_REGISTRATION + PENDING, referenced registration PENDING_PAYMENT, paymentDeadline strictly greater than now. Equality, null deadlines, terminal registration/payment states, ONLINE, MEMBERSHIP and PT_BOOKING are excluded. The purpose-scoped Payment.referenceId is joined to CourseRegistration.id; registration member must match payment member. Missing/inconsistent references are excluded. Course/class details come from CourseRegistration -> CourseClass -> CourseOffering -> Course. No passwords, email, phone, gateway URL, transaction code or secrets are exposed.
+
+Results are ordered by Payment.createdAt ASC, Payment.id ASC (oldest first). Projection and count queries use database pagination with scalar DTO construction; no collection fetch, per-row lazy entity access, or in-memory pagination is used. This is a changing queue, not a reserved/snapshot selection: settlement must always revalidate, and offset pages may move as other staff process payments.
+
+Settlement remains PATCH /api/payments/{paymentId}/counter with {"success":true,"note":"Receipt verified at reception"}. The existing transaction locks Payment, requires COUNTER/PENDING, locks/rechecks CourseRegistration and the current deadline, confirms a valid hold and records SUCCESS atomically. Repeated settlement of the same payment returns 409. Another received payment for an already confirmed registration becomes REFUND_REQUIRED without a second confirmation. success=false records CANCELLED and does not confirm a hold.
+
+An expired/canceled hold with a still-pending Payment is NON-ACTIONABLE: listing this queue does not change Payment, paidAt, or registration status, and does not infer money receipt. Existing scheduled/lazy registration expiration continues independently. Only explicit verified receipt through settlement can record received money: a late receipt is REFUND_REQUIRED and cannot reclaim an expired seat; a canceled registration remains CANCELLED. Refunds/reconciliation remain manual. A missing queue entry is not evidence that money was received or refunded.
+
+No separate exception API is added. Staff can review existing GET /api/payments/member/{memberId} history and registration records for stale attempts. A future exception screen may be useful, but should distinguish unpaid stale attempts from received funds requiring refund. This phase adds no frontend queue and does not broaden MEMBER history access.
+
+No SQL/schema change is required. Existing payment purpose-scoped references and the deployed Phase 8.7C payment_deadline/status schema are prerequisites. No migration was executed. H2 confirms application query behavior; SQL Server pagination, query-plan/index performance, migrated-schema compatibility, concurrent staff settlement and deadline races still require approved integration verification.
+
+
+## Phase 8.8B receptionist course-payment workflow
+
+- Open /receptionist/course-payments from Thanh toan khoa hoc (Vietnamese course-payments label) in the ADMIN or RECEPTIONIST sidebar. The route uses the existing StaffRoute guard, with an additional page role check; MEMBER/COACH cannot use the page. Existing membership sales, consultations, PT and member checkout routes remain unchanged.
+- The page reads GET /api/payments/pending-courses?page=0&size=20. Pagination is server-side, oldest first, without a partial-page search. It shows member, course/class, registration/payment IDs, VND amount, creation/deadline in Asia/Ho_Chi_Minh, payment status and last returned registration status. Loading, empty, error/retry and empty-last-page recovery are supported. It refreshes every 30 seconds and on focus, without issuing settlement requests while merely viewing.
+- Xac nhan da nhan tien (confirm money received) first opens an explicit browser confirmation dialog with member, course, class, amount and payment ID. Only acceptance dispatches PATCH /api/payments/{paymentId}/counter with exactly {"success":true,"note":"Course payment received at reception"}. A synchronous action lock prevents duplicate clicks; there is no fake-success or automatic receipt action. This page does not offer a new cancellation/settlement API.
+- The client checks the displayed deadline again after the dialog, disables stale/expired rows and refreshes the queue. Countdown uses the browser clock for guidance only. Backend transaction status/deadline checks remain authoritative and can still return REFUND_REQUIRED when a hold expires during settlement. Payment SUCCESS is shown only from a returned/verified Payment status; the settlement DTO does not return registrationStatus, so the page explicitly does not claim registration CONFIRMED. REFUND_REQUIRED is a separate exception requiring staff reconciliation/refund, never a success notification.
+- Settlement errors (including 404/409 from concurrent staff activity) trigger an authorized GET /api/payments/member/{memberId} lookup and queue refresh. History matching checks payment ID, member ID, course-registration reference and COUNTER method. A missing queue entry never proves paid, canceled, expired or refunded. PENDING/missing history remains unresolved and may represent a canceled/expired hold or an in-flight transaction.
+- The UI stops waiting for a receipt response after 15 seconds. This neither cancels nor retries the original server transaction. It checks history, refreshes the queue and blocks another receipt for the same unresolved payment. Minimal payment/member/registration IDs are saved in sessionStorage, scoped to the staff account, before settlement dispatch; storage failure prevents unsafe dispatch. On reload, unresolved entries remain blocked and expose a separate history-check action. Terminal authenticated history clears the local unresolved marker. No credentials, payment URLs or new gateway data are stored. Manual reconciliation is required if history remains pending/missing; this is not a cross-tab or cross-device lock.
+- Staff can retry a failed queue GET or explicitly check unresolved history; neither action retries settlement. Existing backend payment row locking and duplicate handling remain necessary. Frontend source changes do not modify Phase 8.8A or gateway contracts.
+- Verification used dependency-free Node workflow/API-helper tests, lint and build. Native browser dialog rendering, nested route navigation, session-expiry transitions, mobile/keyboard layout, real network interruption and multi-staff scenarios remain manual browser checks. No live VNPay, SQL Server or browser verification was performed.

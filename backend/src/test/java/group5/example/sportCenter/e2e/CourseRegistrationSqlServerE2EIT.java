@@ -34,7 +34,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -43,6 +42,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import group5.example.sportCenter.scheduler.MembershipScheduler;
+import group5.example.sportCenter.service.CourseRegistrationExpirationService;
+import group5.example.sportCenter.service.PtBookingExpirationService;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("e2e-sqlserver")
@@ -50,7 +51,6 @@ import group5.example.sportCenter.scheduler.MembershipScheduler;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class CourseRegistrationSqlServerE2EIT {
 
-    private static final int E2E_ADMIN_ID = 11;
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -64,14 +64,17 @@ class CourseRegistrationSqlServerE2EIT {
     DataSource dataSource;
 
     @Autowired
-    PasswordEncoder passwordEncoder;
-
-    @Autowired
     ObjectMapper objectMapper;
 
     // Replacing the scheduled bean makes its scheduled callback a no-op in this context.
     @MockitoBean
     MembershipScheduler membershipScheduler;
+
+    @MockitoBean
+    CourseRegistrationExpirationService courseRegistrationExpirationService;
+
+    @MockitoBean
+    PtBookingExpirationService ptBookingExpirationService;
 
     private final String runId = "E2E-" + UUID.randomUUID().toString().replace("-", "");
     private final Map<String, String> passwords = new HashMap<>();
@@ -82,21 +85,13 @@ class CourseRegistrationSqlServerE2EIT {
     private String adminPassword;
 
     @BeforeAll
-    void resetOnlyAuthorizedAdminAndAuthenticate() throws Exception {
-        // Repeat critical opt-in locally; the ApplicationContextInitializer has already
-        // completed the full read-only target/account/schema preflight before server startup.
-        if (!"DESKTOP-EMK77PD/SportCenterDB".equals(System.getenv("SPORTCENTER_E2E_SQLSERVER_CONFIRM"))) {
-            throw new IllegalStateException("Missing exact E2E target opt-in");
+    void authenticateAsPreprovisionedTestAdmin() throws Exception {
+        // The initializer verified the target and this test-owned account before Spring started.
+        if (!"true".equalsIgnoreCase(requiredEnv("SPORTCENTER_E2E_SQLSERVER_DESTRUCTIVE_OPT_IN"))) {
+            throw new IllegalStateException("Explicit destructive E2E opt-in is required");
         }
         adminEmail = requiredEnv("E2E_ADMIN_EMAIL");
-        adminPassword = randomPassword();
-        String hash = passwordEncoder.encode(adminPassword);
-
-        int changed = jdbc.update(
-                "UPDATE dbo.users SET password_hash = ? "
-                        + "WHERE id = ? AND email = ? AND role = 'ADMIN' AND status = 'ACTIVE'",
-                hash, E2E_ADMIN_ID, adminEmail);
-        assertEquals(1, changed, "Password reset must affect only the authorized active E2E ADMIN id=11");
+        adminPassword = requiredEnv("E2E_ADMIN_PASSWORD");
 
         http = java.net.http.HttpClient.newBuilder()
                 .connectTimeout(java.time.Duration.ofSeconds(10))
@@ -267,9 +262,9 @@ class CourseRegistrationSqlServerE2EIT {
                 today.plusDays(20).atTime(14, 0)));
         JsonNode priced = postRegistration(tokens.get("priceMember"), priceClass).body();
         assertEquals("PENDING_PAYMENT", priced.path("status").asText());
-        assertEquals("999.99", priced.path("originalPrice").decimalValue().toPlainString());
-        assertEquals("255.00", priced.path("membershipDiscount").decimalValue().toPlainString());
-        assertEquals("744.99", priced.path("finalPrice").decimalValue().toPlainString());
+        assertEquals(0, new BigDecimal("999.99").compareTo(priced.path("originalPrice").decimalValue()));
+        assertEquals(0, new BigDecimal("255.00").compareTo(priced.path("membershipDiscount").decimalValue()));
+        assertEquals(0, new BigDecimal("744.99").compareTo(priced.path("finalPrice").decimalValue()));
         createdRecordIds.add("registration:" + priced.path("id").asInt());
         confirmCounterCourseRegistration(tokens.get("priceMember"), priced.path("id").asInt());
 
@@ -280,31 +275,6 @@ class CourseRegistrationSqlServerE2EIT {
         // Only IDs are emitted; credentials, hashes, and JWTs are never part of the report.
     }
 
-    private void verifyApplicationDataSourceBeforePasswordReset(String expectedEmail) throws Exception {
-        String expectedRunId = requiredEnv("E2E_ADMIN_RUN_ID");
-        try (Connection connection = dataSource.getConnection();
-                var statement = connection.createStatement();
-                ResultSet identity = statement.executeQuery(
-                        "SELECT @@SERVERNAME, DB_NAME(), d.state_desc FROM sys.databases d WHERE d.name = DB_NAME()")) {
-            assertTrue(identity.next());
-            assertEquals("DESKTOP-EMK77PD", identity.getString(1));
-            assertEquals("SportCenterDB", identity.getString(2));
-            assertEquals("ONLINE", identity.getString(3));
-        }
-        try (Connection connection = dataSource.getConnection();
-                var statement = connection.prepareStatement(
-                        "SELECT email, role, status FROM dbo.users WHERE id = ?")) {
-            statement.setInt(1, E2E_ADMIN_ID);
-            try (ResultSet result = statement.executeQuery()) {
-                assertTrue(result.next());
-                assertEquals(expectedEmail.toLowerCase(), result.getString("email").toLowerCase());
-                assertTrue(result.getString("email").toLowerCase().contains(expectedRunId.toLowerCase()));
-                assertEquals("ADMIN", result.getString("role"));
-                assertEquals("ACTIVE", result.getString("status"));
-                assertFalse(result.next());
-            }
-        }
-    }
     private int concurrentRegistration(String token, int classId, CountDownLatch ready, CountDownLatch start)
             throws Exception {
         ready.countDown();

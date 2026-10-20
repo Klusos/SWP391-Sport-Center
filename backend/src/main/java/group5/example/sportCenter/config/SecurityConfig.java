@@ -100,6 +100,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/member-sport-levels", "/api/member-sport-levels/**").denyAll()
 
                 .requestMatchers(HttpMethod.POST, "/api/course-registrations").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.POST, "/api/course-registrations/staff").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.POST, "/api/course-registrations/*/cancel").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/course-registrations/me",
                         "/api/course-registrations/me/class-sessions").hasRole("MEMBER")
@@ -127,7 +128,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/payments").hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
                 .requestMatchers(HttpMethod.PATCH, "/api/payments/*/counter").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.PATCH, "/api/payments/*/cancel").hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
-                .requestMatchers(HttpMethod.GET, "/api/payments/pending-memberships").hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers(HttpMethod.GET, "/api/payments/pending-memberships", "/api/payments/pending-courses").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.GET, "/api/payments/me").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/payments/member/*").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers("/api/payments", "/api/payments/**").denyAll()

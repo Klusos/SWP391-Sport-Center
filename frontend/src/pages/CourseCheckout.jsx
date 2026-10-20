@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
-import { createPaymentApi, getMyPaymentsApi, getMyRegistrationsApi, cancelPaymentApi } from "../api";
+import { createPaymentApi, getCurrentUserApi, getMembershipsByMemberApi, getMyPaymentsApi, getMyRegistrationsApi, cancelPaymentApi } from "../api";
 import { acquireAction, canCheckout, checkoutAccess, paymentMessage, pendingCounter, positiveId, prepareCheckout, registrationMessage, registrationPayments, shouldPoll, startStatusPolling, validVnpayUrl, vietnamDate } from "../courseCheckout";
 import "./CourseCheckout.css";
 
@@ -38,9 +38,20 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
   }
 
   const read = useCallback(async () => {
+    if (result && paymentId) {
+      const payments = array(await getMyPaymentsApi(token));
+      const returnedPayment = payments.find((item) => item.id === paymentId);
+      if (returnedPayment?.purpose === "MEMBERSHIP") {
+        const user = await getCurrentUserApi(token);
+        const memberships = array(await getMembershipsByMemberApi(token, user.id));
+        return { payments, registrations: [], memberships };
+      }
+      const registrations = array(await getMyRegistrationsApi(token));
+      return { payments, registrations, memberships: [] };
+    }
     const [payments, registrations] = await Promise.all([getMyPaymentsApi(token), getMyRegistrationsApi(token)]);
-    return { payments: array(payments), registrations: array(registrations) };
-  }, [token]);
+    return { payments: array(payments), registrations: array(registrations), memberships: [] };
+  }, [token, result, paymentId]);
 
   useEffect(() => {
     const resume = () => { if (!action.current) setRefreshVersion((value) => value + 1); };
@@ -57,7 +68,9 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
       (next) => {
         const payment = next.payments.find((item) => item.id === paymentId);
         const registration = next.registrations.find((item) => item.id === (positiveId(registrationId) || (payment?.purpose === "COURSE_REGISTRATION" ? payment.referenceId : null)));
-        return shouldPoll(registration, registrationPayments(next.payments, registration?.id)) || (result && paymentId && !payment);
+        return shouldPoll(registration, registrationPayments(next.payments, registration?.id))
+          || (result && paymentId && !payment)
+          || (result && payment?.purpose === "MEMBERSHIP" && payment.status === "PENDING");
       }) : () => {};
     return () => { alive.current = false; stop(); };
   }, [read, token, auth?.role, paymentId, registrationId, result, refreshVersion]);
@@ -130,7 +143,18 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
       {notice && <p role="status">{notice}</p>}
       {!data ? <p role="status">{error || statusError ? "Chưa tải được trạng thái xác thực." : "Đang tải trạng thái…"}</p> : <>
         {result && paymentId && !targetPayment && <p role="alert">Không tìm thấy thanh toán trong tài khoản hiện tại. Kiểm tra tài khoản và mã thanh toán.</p>}
-        {result && targetPayment && targetPayment.purpose !== "COURSE_REGISTRATION" && <section><h2>Thanh toán #{targetPayment.id}</h2><p>{paymentMessage(targetPayment)}</p><Link to="/member/membership">Xem gói hội viên</Link><Link to="/member/pt-booking">Xem lịch PT</Link></section>}
+        {result && targetPayment && targetPayment.purpose !== "COURSE_REGISTRATION" && <section>
+          <h2>Thanh toán #{targetPayment.id}</h2>
+          <p>{paymentMessage(targetPayment)}</p>
+          {targetPayment.purpose === "MEMBERSHIP" && <>
+            <p role="status">{targetPayment.status === "PENDING" ? "Đang chờ VNPay hoặc máy chủ xác minh. Gói hội viên chưa được kích hoạt." : targetPayment.status === "REFUND_REQUIRED" ? "Khoản thanh toán cần nhân viên đối soát hoặc xử lý hoàn tiền. Gói chưa được suy đoán là đã kích hoạt." : targetPayment.status === "CANCELLED" ? "Thanh toán đã hủy; không kích hoạt gói từ giao dịch này." : "Trạng thái thanh toán do máy chủ xác nhận. Trạng thái gói bên dưới được tải riêng từ tài khoản của bạn."}</p>
+            <h3>Trạng thái gói hội viên</h3>
+            {!data?.memberships ? <p role="status">Đang tải trạng thái gói…</p> : data.memberships.length === 0
+              ? <p>Chưa có gói hội viên trong tài khoản.</p>
+              : <ul>{data.memberships.map((membership) => <li key={membership.id}>{membership.planName} · {membership.status} · {membership.startDate} → {membership.endDate}</li>)}</ul>}
+          </>}
+          <Link to="/member/membership">Xem gói hội viên và lịch sử thanh toán</Link><Link to="/member/pt-booking">Xem lịch PT</Link>
+        </section>}
         {!result && !registration && <p role="alert">Không tìm thấy đăng ký trong tài khoản của bạn.</p>}
         {registration && <>
           <section><h2>Đăng ký #{registration.id}</h2><p>{registration.courseName} · {registration.courseOfferingName} · {registration.className}</p>

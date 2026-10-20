@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import group5.example.sportCenter.dto.ClassSessionResponse;
 import group5.example.sportCenter.dto.CourseRegistrationResponse;
 import group5.example.sportCenter.dto.CreateCourseRegistrationRequest;
+import group5.example.sportCenter.dto.StaffCreateCourseRegistrationRequest;
 import group5.example.sportCenter.service.CourseRegistrationService;
 import jakarta.validation.Valid;
 
@@ -34,6 +35,15 @@ public class CourseRegistrationController {
     public CourseRegistrationResponse register(@Valid @RequestBody CreateCourseRegistrationRequest request,
             @AuthenticationPrincipal Jwt jwt) {
         return service.register(request, jwt);
+    }
+
+    @PostMapping("/staff")
+    @ResponseStatus(HttpStatus.CREATED)
+    public CourseRegistrationResponse registerForMember(
+            @Valid @RequestBody StaffCreateCourseRegistrationRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        return service.registerForMember(request.memberId(),
+                new CreateCourseRegistrationRequest(request.classId()), jwt);
     }
 
     @GetMapping("/me")

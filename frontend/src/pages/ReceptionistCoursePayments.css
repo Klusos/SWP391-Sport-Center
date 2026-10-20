@@ -1,0 +1,17 @@
+.course-payment-queue header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.course-payment-queue button { padding: 10px 14px; border: 1px solid #1769a0; border-radius: 8px; background: #1769a0; color: white; cursor: pointer; }
+.course-payment-queue button:disabled { opacity: .55; cursor: default; }
+.course-payment-queue button:focus-visible { outline: 3px solid #dfaa23; outline-offset: 3px; }
+.course-payment-queue .course-payment-table { overflow-x: auto; margin: 20px 0; background: white; border: 1px solid #d4dfeb; border-radius: 12px; }
+.course-payment-queue table { width: 100%; min-width: 1000px; border-collapse: collapse; }
+.course-payment-queue caption { padding: 12px; text-align: left; }
+.course-payment-queue th, .course-payment-queue td { padding: 14px; text-align: left; vertical-align: top; border-bottom: 1px solid #e0e8f0; }
+.course-payment-queue th { background: #eff5fb; }
+.course-payment-queue small { display: block; margin-top: 6px; }
+.course-payment-queue .course-payment-pagination { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+.course-payment-queue .receipt-outcome, .course-payment-queue .receipt-review { padding: 16px; border: 1px solid #b9cadd; border-radius: 10px; margin: 16px 0; overflow-wrap: anywhere; }
+.course-payment-queue .receipt-outcome.success { background: #e7f5ec; color: #185b36; }
+.course-payment-queue .receipt-outcome.exception { background: #fff0ed; color: #8a2720; }
+.course-payment-queue .receipt-outcome.warning, .course-payment-queue .receipt-review { background: #fff5dc; color: #664c12; }
+.course-payment-queue .receipt-review > div { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 12px 0; }
+@media (max-width: 700px) { .course-payment-queue header { flex-direction: column; } .course-payment-queue th, .course-payment-queue td { padding: 10px; } }

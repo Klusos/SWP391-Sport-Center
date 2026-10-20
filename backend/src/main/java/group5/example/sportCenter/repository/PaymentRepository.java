@@ -16,11 +16,40 @@ import org.springframework.data.repository.query.Param;
 import group5.example.sportCenter.entity.Payment;
 import group5.example.sportCenter.entity.PaymentPurpose;
 import group5.example.sportCenter.entity.PaymentStatus;
+import group5.example.sportCenter.dto.PendingCoursePaymentResponse;
 import jakarta.persistence.LockModeType;
 
 public interface PaymentRepository extends JpaRepository<Payment, Integer> {
 
     Page<Payment> findByStatusAndMethodAndPurpose(PaymentStatus status, PaymentMethod method, PaymentPurpose purpose, Pageable pageable);
+
+    // Scalar projection avoids lazy-loading member/course/class entities for each queue row.
+    // referenceId is purpose-scoped; it is not a mapped Payment -> registration association.
+    @Query(value = """
+        select new group5.example.sportCenter.dto.PendingCoursePaymentResponse(
+            p.id, m.id, m.name, r.id, c.id, c.name, cl.id, cl.name,
+            p.amount, p.status, r.status, r.paymentDeadline, p.createdAt)
+        from Payment p join p.member m, CourseRegistration r
+        join r.courseClass cl join cl.courseOffering o join o.course c
+        where p.referenceId = r.id and m.id = r.member.id
+          and p.method = group5.example.sportCenter.entity.PaymentMethod.COUNTER
+          and p.purpose = group5.example.sportCenter.entity.PaymentPurpose.COURSE_REGISTRATION
+          and p.status = group5.example.sportCenter.entity.PaymentStatus.PENDING
+          and r.status = group5.example.sportCenter.entity.CourseRegistrationStatus.PENDING_PAYMENT
+          and r.paymentDeadline > :now
+        order by p.createdAt asc, p.id asc
+        """, countQuery = """
+        select count(p.id)
+        from Payment p join p.member m, CourseRegistration r
+        join r.courseClass cl join cl.courseOffering o join o.course c
+        where p.referenceId = r.id and m.id = r.member.id
+          and p.method = group5.example.sportCenter.entity.PaymentMethod.COUNTER
+          and p.purpose = group5.example.sportCenter.entity.PaymentPurpose.COURSE_REGISTRATION
+          and p.status = group5.example.sportCenter.entity.PaymentStatus.PENDING
+          and r.status = group5.example.sportCenter.entity.CourseRegistrationStatus.PENDING_PAYMENT
+          and r.paymentDeadline > :now
+        """)
+    Page<PendingCoursePaymentResponse> findPendingCoursePayments(@Param("now") LocalDateTime now, Pageable pageable);
 
     List<Payment> findByMemberIdOrderByCreatedAtDesc(Integer memberId);
 

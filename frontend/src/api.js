@@ -1,4 +1,4 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+export const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || "http://localhost:8080";
 const API_BASE = API_BASE_URL.replace(/\/$/, "");
 let unauthorizedHandler = null;
 
@@ -299,6 +299,18 @@ export function createCourseRegistrationApi(token, classId) {
   });
 }
 
+export function createStaffCourseRegistrationApi(token, memberId, classId) {
+  return request("/api/course-registrations/staff", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ memberId, classId }),
+  });
+}
+
+export function getAllCourseRegistrationsApi(token) {
+  return request("/api/course-registrations", { headers: authenticatedHeaders(token) });
+}
+
 export function cancelCourseRegistrationApi(token, registrationId) {
   return request(`/api/course-registrations/${encodeURIComponent(registrationId)}/cancel`, {
     method: "POST",
@@ -435,6 +447,13 @@ export function getPendingMembershipPaymentsApi(token, page = 0, size = 20) {
   });
 }
 
+export function getPendingCoursePaymentsApi(token, page = 0, size = 20) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  return request("/api/payments/pending-courses?" + params.toString(), {
+    headers: authenticatedHeaders(token),
+  });
+}
+
 export function getMyPaymentsApi(token) {
   return request("/api/payments/me", { headers: authenticatedHeaders(token) });
 }
@@ -550,6 +569,14 @@ export function getMembershipsByMemberApi(token, memberId) {
 }
 
 // Course administration endpoints. Server authorization remains ADMIN-only.
+export function getCoursesApi(token) {
+  return request("/api/courses", { headers: authenticatedHeaders(token) });
+}
+
+export function getCourseApi(token, courseId) {
+  return request("/api/courses/" + encodeURIComponent(courseId), { headers: authenticatedHeaders(token) });
+}
+
 export function getCoursesBySportApi(token, sportId) {
   return request("/api/courses/sport/" + encodeURIComponent(sportId), { headers: authenticatedHeaders(token) });
 }

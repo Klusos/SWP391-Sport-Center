@@ -33,12 +33,16 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
     ["dashboard", "Tổng quan"],
     ["members", "Thành viên"],
     ["membership-sales", "Bán gói hội viên"],
+    ["course-registration", "Đăng ký khóa học tại quầy"],
+    ["course-payments", "Thanh toán khóa học"],
     ["consultations", "Yêu cầu tư vấn"],
   ];
   const adminLinks = [
     ["dashboard", "Tổng quan"],
     ["members", "Thành viên"],
     ["membership-plans", "Gói hội viên"],
+    ["course-payments", "Thanh toán khóa học"],
+    ["course-registration", "Đăng ký khóa học tại quầy"],
     ["attendance", "Điểm danh lớp học"],
     ["staff", "Quản lý nhân sự"],
     ["sports", "Quản lý bộ môn"],

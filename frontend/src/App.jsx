@@ -21,6 +21,8 @@ import SportManagement from "./pages/SportManagement";
 import FacilityManagement from "./pages/FacilityManagement";
 import MembershipPlans from "./pages/MembershipPlans";
 import ReceptionistMembershipSales from "./pages/ReceptionistMembershipSales";
+import ReceptionistCoursePayments from "./pages/ReceptionistCoursePayments";
+import ReceptionistCourseRegistration from "./pages/ReceptionistCourseRegistration";
 import PtBooking from "./pages/PtBooking";
 import CoachPtSessions from "./pages/CoachPtSessions";
 import CoachSkillAssessments from "./pages/CoachSkillAssessments";
@@ -30,6 +32,8 @@ import MemberAttendance from "./pages/MemberAttendance";
 import MemberLevelsAssessments from "./pages/MemberLevelsAssessments";
 import Dashboard from "./pages/Dashboard";
 import CourseManagement from "./pages/CourseManagement";
+import CourseList from "./pages/CourseList";
+import CourseForm from "./pages/CourseForm";
 import MemberCourses from "./pages/MemberCourses";
 import CourseCheckout from "./pages/CourseCheckout";
 import MemberMembership from "./pages/MemberMembership";
@@ -251,6 +255,8 @@ export default function App() {
           "audit-logs": "/admin/audit-logs",
           "membership-plans": "/staff/membership-plans",
           "membership-sales": "/receptionist/membership-sales",
+          "course-payments": "/receptionist/course-payments",
+          "course-registration": "/receptionist/course-registration",
           attendance: "/admin/attendance",
           register: "/staff/register-member",
           classes: "/admin/classes",
@@ -384,6 +390,8 @@ export default function App() {
             element={<MemberList {...staff} />}
           />
 
+          <Route path="/receptionist/course-payments" element={<ReceptionistCoursePayments {...staff} userId={auth?.userId} />} />
+          <Route path="/receptionist/course-registration" element={<ReceptionistCourseRegistration {...staff} />} />
           <Route element={<ReceptionistRoute auth={auth} />}>
             <Route
               path="/receptionist/membership-sales"
@@ -417,10 +425,10 @@ export default function App() {
               element={<FacilityManagement {...staff} />}
             />
 
-            <Route
-              path="/staff/courses"
-              element={<CourseManagement {...staff} />}
-            />
+            <Route path="/staff/courses" element={<CourseList {...staff} />} />
+            <Route path="/staff/courses/new" element={<CourseForm {...staff} />} />
+            <Route path="/staff/courses/:courseId/edit" element={<CourseForm {...staff} />} />
+            <Route path="/staff/courses/:courseId" element={<CourseManagement {...staff} />} />
 
             <Route
               path="/admin/notifications/broadcast"
@@ -441,13 +449,7 @@ export default function App() {
 
               <Route
                 path="/admin/courses"
-                element={
-                  <CrudPage
-                    kind="courses"
-                    title="Demo — Quản lý khóa học"
-                    subtitle="Giao diện mẫu với dữ liệu minh họa; quản lý khóa học thật tại mục Khóa học."
-                  />
-                }
+                element={<Navigate to="/staff/courses" replace />}
               />
 
               <Route

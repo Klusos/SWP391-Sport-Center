@@ -24,6 +24,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import group5.example.sportCenter.dto.CounterPaymentRequest;
 import group5.example.sportCenter.dto.CreatePaymentRequest;
 import group5.example.sportCenter.dto.PaymentResponse;
+import group5.example.sportCenter.dto.PendingCoursePaymentResponse;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.payment.OnlineCallbackResult;
 import group5.example.sportCenter.service.PaymentService;
@@ -122,6 +123,14 @@ public class PaymentController {
 
     private static Map<String, String> vnpayIpnResponse(String code, String message) {
         return Map.of("RspCode", code, "Message", message);
+    }
+
+    @GetMapping("/pending-courses")
+    public Page<PendingCoursePaymentResponse> pendingCourses(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @AuthenticationPrincipal Jwt jwt) {
+        return paymentService.getPendingCourseCounterPayments(page, size, jwt);
     }
 
     @GetMapping("/pending-memberships")
