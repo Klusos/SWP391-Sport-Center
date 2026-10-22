@@ -1463,3 +1463,380 @@ legend {
     width: 100%;
   }
 }
+
+/* =========================================
+   MEMBER LEVELS & ASSESSMENTS
+   ========================================= */
+
+.main.member-levels-page {
+  min-width: 0;
+  padding: 34px 38px;
+  background: #f2f6fc;
+  color: #12375b;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.member-levels-page .page-header {
+  margin-bottom: 32px;
+}
+
+.member-levels-page .page-header .eyebrow {
+  margin: 0 0 10px;
+  color: #087bc1;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+}
+
+.member-levels-page .page-header h1 {
+  margin: 0;
+  color: #153e67;
+  font-size: clamp(26px, 2.4vw, 34px);
+  line-height: 1.3;
+  font-weight: 800;
+}
+
+.member-levels-page .page-header .subtitle {
+  margin: 10px 0 0;
+  color: #667f9b;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+/* Section layout */
+
+.member-levels-page .member-levels-section {
+  margin-top: 28px;
+  min-width: 0;
+}
+
+.member-levels-page .member-levels-section > h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 17px;
+  color: #173e65;
+  font-size: 21px;
+  line-height: 1.4;
+  font-weight: 800;
+}
+
+.member-levels-page .member-levels-section > h2::before {
+  content: "";
+  display: block;
+  width: 5px;
+  height: 25px;
+  flex-shrink: 0;
+  border-radius: 5px;
+  background: #1479d0;
+}
+
+/* Sport level cards */
+
+.member-levels-page .member-level-grid {
+  display: grid;
+  grid-template-columns: repeat( auto-fit, minmax(210px, 1fr) );
+  gap: 16px;
+}
+
+.member-level-page .member-level-card {
+  min-width: 0;
+}
+
+.member-levels-page .member-level-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 13px;
+  padding: 22px;
+  background: #fff;
+  border: 1px solid #dce7f4;
+  border-radius: 15px;
+  box-shadow: 0 5px 18px rgba(27, 65, 105, 0.035);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.member-levels-page .member-level-card:hover {
+  transform: translateY(-3px);
+  border-color: #a9d3f7;
+  box-shadow: 0 12px 26px rgba(28, 78, 130, 0.09);
+}
+
+.member-levels-page .member-level-card > div {
+  width: 100%;
+}
+
+.member-levels-page .member-level-card .eyebrow {
+  margin: 0 0 7px;
+  color: #7b91aa;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+}
+
+.member-levels-page .member-level-card h3 {
+  margin: 0;
+  color: #163d64;
+  font-size: 17px;
+  line-height: 1.5;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.member-levels-page .member-level-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 31px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #e9f3ff;
+  color: #1268b1;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+
+.member-levels-page .member-level-card > p {
+  margin: 0;
+  color: #6a809a;
+  font-size: 13px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+/* History lists */
+
+.member-levels-page .member-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.member-levels-page .member-history-card {
+  min-width: 0;
+  padding: 22px 24px;
+  background: #fff;
+  border: 1px solid #dce7f4;
+  border-radius: 15px;
+  box-shadow: 0 5px 18px rgba(27, 65, 105, 0.035);
+  transition:
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.member-levels-page .member-history-card:hover {
+  border-color: #b7d6f3;
+  box-shadow: 0 8px 22px rgba(27, 65, 105, 0.07);
+}
+
+.member-levels-page .member-history-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 17px;
+  border-bottom: 1px solid #edf2f8;
+}
+
+.member-levels-page .member-history-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.member-levels-page .member-history-heading > div > strong {
+  color: #173e65;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.member-levels-page .member-history-heading > div > span {
+  color: #71869e;
+  font-size: 13px;
+}
+
+.member-levels-page .coach-assessment-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: #edf2f8;
+  color: #536981;
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* Assessment and consultation status colors */
+
+.member-levels-page .status-pending {
+  background: #fff4d9;
+  color: #996000;
+}
+
+.member-levels-page .status-completed {
+  background: #e2f7ec;
+  color: #167447;
+}
+
+.member-levels-page .status-cancelled {
+  background: #ffebeb;
+  color: #b42332;
+}
+
+.member-levels-page .status-in_progress {
+  background: #e5f1ff;
+  color: #1765ae;
+}
+
+/* Details grid */
+
+.member-levels-page .member-history-facts {
+  display: grid;
+  grid-template-columns: repeat( auto-fit, minmax(180px, 1fr) );
+  gap: 18px 24px;
+  margin: 18px 0 0;
+}
+
+.member-levels-page .member-history-facts > div {
+  min-width: 0;
+}
+
+.member-levels-page .member-history-facts dt {
+  margin-bottom: 6px;
+  color: #8295aa;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.member-levels-page .member-history-facts dd {
+  margin: 0;
+  color: #244766;
+  font-size: 14px;
+  line-height: 1.7;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.member-levels-page .member-history-card > p {
+  margin: 16px 0 0;
+  color: #667f99;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.member-levels-page .member-history-notes {
+  padding: 13px 15px;
+  background: #f4f8fd;
+  border-left: 3px solid #2785d2;
+  border-radius: 5px 9px 9px 5px;
+  overflow-wrap: anywhere;
+}
+
+.member-levels-page .member-history-notes strong {
+  color: #244766;
+}
+
+/* Empty and loading states */
+
+.member-levels-page .queue-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+  padding: 24px;
+  background: #fff;
+  border: 1px dashed #c8d9ed;
+  border-radius: 14px;
+  color: #71869e;
+  font-size: 14px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.member-levels-page .banner.error {
+  margin: 12px 0;
+  padding: 14px 17px;
+  background: #fff0f0;
+  border: 1px solid #f3caca;
+  border-radius: 10px;
+  color: #a52332;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Responsive */
+
+@media (max-width: 1100px) {
+  .main.member-levels-page {
+    padding: 28px 24px;
+  }
+
+  .member-levels-page .member-level-grid {
+    grid-template-columns: repeat( auto-fit, minmax(190px, 1fr) );
+  }
+}
+
+@media (max-width: 768px) {
+  .main.member-levels-page {
+    padding: 22px 16px;
+  }
+
+  .member-levels-page .page-header {
+    margin-bottom: 25px;
+  }
+
+  .member-levels-page .page-header h1 {
+    font-size: 26px;
+  }
+
+  .member-levels-page .member-levels-section {
+    margin-top: 24px;
+  }
+
+  .member-levels-page .member-levels-section > h2 {
+    font-size: 19px;
+  }
+
+  .member-levels-page .member-level-grid {
+    grid-template-columns: repeat( auto-fit, minmax(160px, 1fr) );
+    gap: 12px;
+  }
+
+  .member-levels-page .member-level-card {
+    padding: 17px;
+  }
+
+  .member-levels-page .member-history-card {
+    padding: 17px;
+  }
+
+  .member-levels-page .member-history-facts {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+
+@media (max-width: 420px) {
+  .member-levels-page .member-level-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .member-levels-page .member-history-heading {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
