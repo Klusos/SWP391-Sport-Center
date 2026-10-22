@@ -13,6 +13,7 @@ public record OnlineCallbackResult(Status status, PaymentResponse payment) {
         INVALID_SIGNATURE,
         NOT_FOUND,
         NOT_ONLINE,
-        AMOUNT_MISMATCH
+        AMOUNT_MISMATCH,
+        RECONCILIATION_REQUIRED
     }
 }

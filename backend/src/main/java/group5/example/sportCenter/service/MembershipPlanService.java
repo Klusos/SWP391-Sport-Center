@@ -10,10 +10,14 @@ import java.util.ArrayList;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import group5.example.sportCenter.dto.UpdateMembershipPlanRequest;
 import group5.example.sportCenter.dto.CreateMembershipPlanRequest;
 import group5.example.sportCenter.dto.MembershipPlanResponse;
+import group5.example.sportCenter.dto.MembershipPlanUpgradeResponse;
 import group5.example.sportCenter.entity.MembershipPlan;
 import group5.example.sportCenter.entity.MembershipPlanUpgrade;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
@@ -63,6 +67,51 @@ public class MembershipPlanService {
         return toResponse(plan);
     }
 
+    @Transactional(readOnly = true)
+    public List<MembershipPlanUpgradeResponse> getUpgradePaths() {
+        return upgradeRepository.findAllByOrderByIdAsc().stream().map(this::toUpgradeResponse).toList();
+    }
+
+    @Transactional
+    public MembershipPlanUpgradeResponse addUpgradePath(Integer fromPlanId, Integer toPlanId) {
+        if (fromPlanId == null || toPlanId == null || fromPlanId.equals(toPlanId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Source and target plans must be different");
+        }
+        int firstPlanId = Math.min(fromPlanId, toPlanId);
+        int secondPlanId = Math.max(fromPlanId, toPlanId);
+        MembershipPlan firstPlan = membershipPlanRepository.findByIdForUpgradeUpdate(firstPlanId)
+                .orElseThrow(() -> new ResourceNotFoundException("Membership plan not found: " + firstPlanId));
+        MembershipPlan secondPlan = membershipPlanRepository.findByIdForUpgradeUpdate(secondPlanId)
+                .orElseThrow(() -> new ResourceNotFoundException("Membership plan not found: " + secondPlanId));
+        MembershipPlan from = firstPlanId == fromPlanId ? firstPlan : secondPlan;
+        MembershipPlan to = firstPlanId == toPlanId ? firstPlan : secondPlan;
+        validateNewUpgradePath(from, to);
+        if (upgradeRepository.existsByFromPlan_IdAndToPlan_Id(fromPlanId, toPlanId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This upgrade path is already configured");
+        }
+        MembershipPlanUpgrade path = new MembershipPlanUpgrade();
+        path.setFromPlan(from);
+        path.setToPlan(to);
+        try {
+            MembershipPlanUpgrade saved = upgradeRepository.saveAndFlush(path);
+            auditLogs.record("CREATE", "MEMBERSHIP_PLAN_UPGRADE", saved.getId(),
+                    "Configured upgrade path from plan " + fromPlanId + " to plan " + toPlanId + ".");
+            return toUpgradeResponse(saved);
+        } catch (DataIntegrityViolationException exception) {
+            // The database unique constraint is the final guard for concurrent duplicate requests.
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This upgrade path is already configured", exception);
+        }
+    }
+
+    @Transactional
+    public void removeUpgradePath(Integer pathId) {
+        MembershipPlanUpgrade path = upgradeRepository.findById(pathId)
+                .orElseThrow(() -> new ResourceNotFoundException("Membership upgrade path not found: " + pathId));
+        auditLogs.record("DELETE", "MEMBERSHIP_PLAN_UPGRADE", pathId,
+                "Removed upgrade path from plan " + path.getFromPlan().getId() + " to plan " + path.getToPlan().getId() + ".");
+        upgradeRepository.delete(path);
+    }
+
     @Transactional
     public MembershipPlanResponse createPlan(
             CreateMembershipPlanRequest request) {
@@ -103,10 +152,12 @@ public class MembershipPlanService {
             Integer id,
             UpdateMembershipPlanRequest request) {
 
-        MembershipPlan plan = membershipPlanRepository.findById(id)
+        MembershipPlan plan = membershipPlanRepository.findByIdForUpgradeUpdate(id)
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "Membership plan not found with id: " + id));
+
+        validatePriceKeepsExistingUpgradePaths(plan, request.getMonthlyPrice());
 
         boolean meaningfulChange = !java.util.Objects.equals(plan.getName(), request.getName())
                 || !java.util.Objects.equals(plan.getDescription(), request.getDescription())
@@ -116,6 +167,12 @@ public class MembershipPlanService {
                 || !java.util.Objects.equals(plan.getAllowPersonalTrainingPlan(), request.getAllowPersonalTrainingPlan())
                 || !java.util.Objects.equals(plan.getAllowOneOnOneCoaching(), request.getAllowOneOnOneCoaching());
         String previousStatus = plan.getStatus();
+        String requestedStatus = normalizeStatus(request.getStatus());
+        if (previousStatus.equalsIgnoreCase("ACTIVE") && requestedStatus.equals("INACTIVE")
+                && hasUpgradePath(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Remove configured upgrade paths before deactivating this plan");
+        }
         List<Integer> previousUpgradeSources = upgradeRepository.findByToPlan_Id(id).stream()
                 .map(edge -> edge.getFromPlan().getId()).sorted().toList();
         plan.setName(request.getName());
@@ -134,7 +191,7 @@ public class MembershipPlanService {
         plan.setAllowOneOnOneCoaching(
                 request.getAllowOneOnOneCoaching());
 
-        plan.setStatus(normalizeStatus(request.getStatus()));
+        plan.setStatus(requestedStatus);
 
         MembershipPlan updatedPlan =
                 membershipPlanRepository.save(plan);
@@ -154,11 +211,16 @@ public class MembershipPlanService {
 
     @Transactional
     public MembershipPlanResponse updateStatus(Integer id, String requestedStatus) {
-        MembershipPlan plan = membershipPlanRepository.findById(id)
+        MembershipPlan plan = membershipPlanRepository.findByIdForUpgradeUpdate(id)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Membership plan not found with id: " + id));
         String previousStatus = plan.getStatus();
-        plan.setStatus(normalizeStatus(requestedStatus));
+        String nextStatus = normalizeStatus(requestedStatus);
+        if (previousStatus.equalsIgnoreCase("ACTIVE") && nextStatus.equals("INACTIVE") && hasUpgradePath(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Remove configured upgrade paths before deactivating this plan");
+        }
+        plan.setStatus(nextStatus);
         MembershipPlan saved = membershipPlanRepository.save(plan);
         if (!previousStatus.equalsIgnoreCase(saved.getStatus())) {
             auditLogs.record("STATUS_CHANGE", "MEMBERSHIP_PLAN", id, "Membership plan status changed.");
@@ -173,12 +235,16 @@ public class MembershipPlanService {
     @Transactional
     public void deletePlan(Integer id) {
 
-        MembershipPlan plan = membershipPlanRepository.findById(id)
+        MembershipPlan plan = membershipPlanRepository.findByIdForUpgradeUpdate(id)
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "Membership plan not found with id: " + id));
 
         String previousStatus = plan.getStatus();
+        if (previousStatus.equalsIgnoreCase("ACTIVE") && hasUpgradePath(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Remove configured upgrade paths before deactivating this plan");
+        }
         plan.setStatus("INACTIVE");
         membershipPlanRepository.save(plan);
         if (!previousStatus.equalsIgnoreCase(plan.getStatus())) {
@@ -219,18 +285,27 @@ public class MembershipPlanService {
         if (sourceIds.stream().anyMatch(id -> id == null || id.equals(target.getId()))) {
             throw new IllegalArgumentException("A plan cannot upgrade to itself");
         }
+        List<Integer> lockIds = new ArrayList<>(sourceIds);
+        lockIds.add(target.getId());
+        for (Integer planId : lockIds.stream().distinct().sorted().toList()) {
+            membershipPlanRepository.findByIdForUpgradeUpdate(planId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Upgrade plan not found: " + planId));
+        }
         Map<Integer, Set<Integer>> graph = new HashMap<>();
         for (MembershipPlanUpgrade edge : upgradeRepository.findAll()) {
             if (!edge.getToPlan().getId().equals(target.getId())) {
                 graph.computeIfAbsent(edge.getFromPlan().getId(), ignored -> new HashSet<>()).add(edge.getToPlan().getId());
             }
         }
+        List<MembershipPlan> sources = new ArrayList<>();
         for (Integer sourceId : sourceIds) {
-            membershipPlanRepository.findById(sourceId)
+            MembershipPlan source = membershipPlanRepository.findById(sourceId)
                     .orElseThrow(() -> new ResourceNotFoundException("Upgrade source plan not found: " + sourceId));
+            sources.add(source);
             graph.computeIfAbsent(sourceId, ignored -> new HashSet<>()).add(target.getId());
         }
         if (hasCycle(graph)) throw new IllegalArgumentException("Membership plan upgrade relationships cannot contain cycles");
+        for (MembershipPlan source : sources) validateNewUpgradePath(source, target);
 
         upgradeRepository.deleteByToPlan_Id(target.getId());
         List<MembershipPlanUpgrade> replacements = new ArrayList<>();
@@ -241,6 +316,43 @@ public class MembershipPlanService {
             replacements.add(edge);
         }
         upgradeRepository.saveAll(replacements);
+    }
+
+    private void validateNewUpgradePath(MembershipPlan source, MembershipPlan target) {
+        if (!"ACTIVE".equalsIgnoreCase(source.getStatus()) || !"ACTIVE".equalsIgnoreCase(target.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Upgrade paths can only be configured between ACTIVE plans");
+        }
+        if (source.getEffectiveMonthlyPrice() == null || target.getEffectiveMonthlyPrice() == null
+                || target.getEffectiveMonthlyPrice().compareTo(source.getEffectiveMonthlyPrice()) <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Target plan monthly price must be greater than source plan monthly price");
+        }
+    }
+
+    private boolean hasUpgradePath(Integer planId) {
+        return upgradeRepository.findAll().stream().anyMatch(path -> path.getFromPlan().getId().equals(planId)
+                || path.getToPlan().getId().equals(planId));
+    }
+
+    private void validatePriceKeepsExistingUpgradePaths(MembershipPlan plan, java.math.BigDecimal proposedPrice) {
+        for (MembershipPlanUpgrade path : upgradeRepository.findAll()) {
+            if (path.getFromPlan().getId().equals(plan.getId())
+                    && path.getToPlan().getEffectiveMonthlyPrice().compareTo(proposedPrice) <= 0) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Monthly price change would make a configured upgrade target no more expensive");
+            }
+            if (path.getToPlan().getId().equals(plan.getId())
+                    && proposedPrice.compareTo(path.getFromPlan().getEffectiveMonthlyPrice()) <= 0) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Monthly price change would make this plan no more expensive than a configured source");
+            }
+        }
+    }
+
+    private MembershipPlanUpgradeResponse toUpgradeResponse(MembershipPlanUpgrade path) {
+        MembershipPlan from = path.getFromPlan();
+        MembershipPlan to = path.getToPlan();
+        return new MembershipPlanUpgradeResponse(path.getId(), from.getId(), from.getName(),
+                from.getEffectiveMonthlyPrice(), to.getId(), to.getName(), to.getEffectiveMonthlyPrice());
     }
 
     private boolean hasCycle(Map<Integer, Set<Integer>> graph) {

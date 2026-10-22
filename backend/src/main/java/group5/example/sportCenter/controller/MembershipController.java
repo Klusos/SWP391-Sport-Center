@@ -16,7 +16,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 import group5.example.sportCenter.dto.CreateMembershipRequest;
 import group5.example.sportCenter.dto.MembershipResponse;
+import group5.example.sportCenter.dto.MembershipUpgradeQuoteResponse;
+import group5.example.sportCenter.dto.CreateMembershipUpgradePaymentRequest;
+import group5.example.sportCenter.dto.MembershipUpgradePaymentResponse;
 import group5.example.sportCenter.service.MembershipService;
+import group5.example.sportCenter.service.MembershipUpgradeQuoteService;
+import group5.example.sportCenter.service.MembershipUpgradePaymentService;
 import jakarta.validation.Valid;
 
 @RestController
@@ -24,15 +29,34 @@ import jakarta.validation.Valid;
 public class MembershipController {
 
     private final MembershipService membershipService;
+    private final MembershipUpgradeQuoteService membershipUpgradeQuoteService;
+    private final MembershipUpgradePaymentService membershipUpgradePaymentService;
 
     public MembershipController(
-            MembershipService membershipService) {
+            MembershipService membershipService,
+            MembershipUpgradeQuoteService membershipUpgradeQuoteService,
+            MembershipUpgradePaymentService membershipUpgradePaymentService) {
         this.membershipService = membershipService;
+        this.membershipUpgradeQuoteService = membershipUpgradeQuoteService;
+        this.membershipUpgradePaymentService = membershipUpgradePaymentService;
     }
 
     @GetMapping
     public List<MembershipResponse> getAllMemberships(@AuthenticationPrincipal Jwt jwt) {
         return membershipService.getAllMemberships(jwt);
+    }
+
+    @GetMapping("/me/upgrade-options")
+    public MembershipUpgradeQuoteResponse getMyUpgradeOptions(@AuthenticationPrincipal Jwt jwt) {
+        return membershipUpgradeQuoteService.getMyUpgradeOptions(jwt);
+    }
+
+    @PostMapping("/me/upgrade-payments")
+    @ResponseStatus(HttpStatus.CREATED)
+    public MembershipUpgradePaymentResponse createMyUpgradePayment(
+            @jakarta.validation.Valid @RequestBody CreateMembershipUpgradePaymentRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        return membershipUpgradePaymentService.create(jwt, request);
     }
 
     @GetMapping("/{id}")

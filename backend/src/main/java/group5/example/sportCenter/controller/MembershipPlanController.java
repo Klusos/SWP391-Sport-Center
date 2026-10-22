@@ -18,6 +18,8 @@ import group5.example.sportCenter.dto.UpdateMembershipPlanRequest;
 import group5.example.sportCenter.dto.CreateMembershipPlanRequest;
 import group5.example.sportCenter.dto.MembershipPlanResponse;
 import group5.example.sportCenter.dto.UpdateMembershipPlanStatusRequest;
+import group5.example.sportCenter.dto.MembershipPlanUpgradeRequest;
+import group5.example.sportCenter.dto.MembershipPlanUpgradeResponse;
 import group5.example.sportCenter.service.MembershipPlanService;
 import jakarta.validation.Valid;
 
@@ -41,6 +43,23 @@ public class MembershipPlanController {
     public MembershipPlanResponse getPlanById(
             @PathVariable Integer id) {
         return membershipPlanService.getPlanById(id);
+    }
+
+    @GetMapping("/upgrade-paths")
+    public List<MembershipPlanUpgradeResponse> getUpgradePaths() {
+        return membershipPlanService.getUpgradePaths();
+    }
+
+    @PostMapping("/upgrade-paths")
+    @ResponseStatus(HttpStatus.CREATED)
+    public MembershipPlanUpgradeResponse addUpgradePath(@Valid @RequestBody MembershipPlanUpgradeRequest request) {
+        return membershipPlanService.addUpgradePath(request.fromPlanId(), request.toPlanId());
+    }
+
+    @DeleteMapping("/upgrade-paths/{pathId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void removeUpgradePath(@PathVariable Integer pathId) {
+        membershipPlanService.removeUpgradePath(pathId);
     }
 
     @PostMapping

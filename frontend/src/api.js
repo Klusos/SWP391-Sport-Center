@@ -425,6 +425,24 @@ export function getMembershipPlansApi(token) {
   return request("/api/membership-plans", { headers: authenticatedHeaders(token) });
 }
 
+export function getMembershipPlanUpgradePathsApi(token) {
+  return request("/api/membership-plans/upgrade-paths", { headers: authenticatedHeaders(token) });
+}
+
+export function addMembershipPlanUpgradePathApi(token, fromPlanId, toPlanId) {
+  return request("/api/membership-plans/upgrade-paths", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ fromPlanId, toPlanId }),
+  });
+}
+
+export function removeMembershipPlanUpgradePathApi(token, pathId) {
+  return request(`/api/membership-plans/upgrade-paths/${encodeURIComponent(pathId)}`, {
+    method: "DELETE", headers: authenticatedHeaders(token),
+  });
+}
+
 export function createPaymentApi(token, payload) {
   return request("/api/payments", {
     method: "POST",
@@ -456,6 +474,21 @@ export function getPendingCoursePaymentsApi(token, page = 0, size = 20) {
 
 export function getMyPaymentsApi(token) {
   return request("/api/payments/me", { headers: authenticatedHeaders(token) });
+}
+
+export function selectRenewalPaymentMethodApi(token, paymentId, payload) {
+  return request(`/api/payments/${encodeURIComponent(paymentId)}/renewal-method`, {
+    method: "PATCH",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createRenewalCheckoutApi(token, paymentId) {
+  return request(`/api/payments/${encodeURIComponent(paymentId)}/renewal-checkout`, {
+    method: "POST",
+    headers: authenticatedHeaders(token),
+  });
 }
 
 export function getMemberPaymentsApi(token, memberId) {
@@ -564,6 +597,20 @@ export function saveMyMemberProfileApi(token, payload, exists) {
 
 export function getMembershipsByMemberApi(token, memberId) {
   return request("/api/memberships/member/" + encodeURIComponent(memberId), {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function enableMembershipAutoRenewApi(token, membershipId) {
+  return request(`/api/memberships/${encodeURIComponent(membershipId)}/enable-auto-renew`, {
+    method: "PATCH",
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function cancelMembershipAutoRenewApi(token, membershipId) {
+  return request(`/api/memberships/${encodeURIComponent(membershipId)}/cancel-renewal`, {
+    method: "PATCH",
     headers: authenticatedHeaders(token),
   });
 }

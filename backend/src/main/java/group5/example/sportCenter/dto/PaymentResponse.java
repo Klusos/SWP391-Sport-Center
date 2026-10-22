@@ -3,7 +3,10 @@ package group5.example.sportCenter.dto;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import lombok.AllArgsConstructor;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -26,4 +29,14 @@ public class PaymentResponse {
     private LocalDateTime createdAt;
     private LocalDateTime paidAt;
     private Integer purchasedMonths;
+    @Getter(AccessLevel.NONE)
+    private boolean isRenewal;
+    private Integer renewalSourceMembershipId;
+    private Boolean renewalAutoRenewChoice;
+    private RenewalCheckoutAttemptResponse renewalCheckoutAttempt;
+
+    @JsonProperty("isRenewal")
+    public boolean isRenewal() {
+        return isRenewal;
+    }
 }

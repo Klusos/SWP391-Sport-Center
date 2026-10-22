@@ -19,7 +19,6 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
   const [plans, setPlans] = useState([]);
   const [memberId, setMemberId] = useState("");
   const [planId, setPlanId] = useState("");
-  const [purchaseMonths, setPurchaseMonths] = useState(1);
   const [query, setQuery] = useState("");
   const [membershipData, setMembershipData] = useState(null);
   const [paymentData, setPaymentData] = useState(null);
@@ -122,7 +121,7 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
         method: "COUNTER",
         purpose: "MEMBERSHIP",
         referenceId: Number(selectedPlan.id),
-        purchasedMonths: Number(purchaseMonths),
+        purchasedMonths: 1,
         autoRenew: false,
       });
       setPendingPayment(payment);
@@ -223,8 +222,7 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
           {plans.length === 0 ? <p>Hiện không có gói ACTIVE để bán.</p> : <label>Gói hội viên<select value={planId} disabled={Boolean(pendingPayment)} onChange={(event) => setPlanId(event.target.value)}>
             <option value="">Chọn gói ACTIVE</option>{plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {money(plan.monthlyPrice)} / tháng</option>)}
           </select></label>}
-          {selectedPlan && !pendingPayment && <label>Số tháng<select value={purchaseMonths} disabled={saving} onChange={(event) => setPurchaseMonths(Number(event.target.value))}>{[1, 3, 6, 12].map((months) => <option key={months} value={months}>{months} tháng</option>)}</select></label>}
-          {selectedPlan && <div className="membership-sales-plan"><strong>{selectedPlan.name}</strong><span>{money(pendingPayment?.amount ?? Number(selectedPlan.monthlyPrice) * purchaseMonths)} · {pendingPayment ? (pendingPayment.purchasedMonths == null ? "thời hạn theo hợp đồng cũ" : `${pendingPayment.purchasedMonths} tháng`) : `${purchaseMonths} tháng`}</span><small>Giá tháng do backend lấy từ MembershipPlan; form không gửi số tiền.</small></div>}
+          {selectedPlan && <div className="membership-sales-plan"><strong>{selectedPlan.name}</strong><span>{money(pendingPayment?.amount ?? Number(selectedPlan.monthlyPrice))} · {pendingPayment ? (pendingPayment.purchasedMonths == null ? "thời hạn theo hợp đồng cũ" : `${pendingPayment.purchasedMonths} tháng`) : "1 tháng"}</span><small>Khoản mua mới có thời hạn cố định 1 tháng. Giá do backend lấy từ MembershipPlan; form không gửi số tiền.</small></div>}
         </section>
         {!pendingPayment && <form onSubmit={createPendingPayment} className="membership-sales-actions">
           <button type="submit" disabled={saving || !selectedMember || !selectedPlan || memberMemberships === null}>{saving ? "Đang tạo…" : "Tạo thanh toán tại quầy"}</button>

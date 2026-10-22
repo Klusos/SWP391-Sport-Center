@@ -1,10 +1,12 @@
 package group5.example.sportCenter.repository;
 
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -26,6 +28,7 @@ public interface PaymentCheckoutAttemptRepository extends JpaRepository<PaymentC
             + "where a.transactionReference = :reference")
     Optional<RenewalAttemptLockKeys> findRenewalLockKeysByTransactionReference(@Param("reference") String reference);
 
+    @EntityGraph(attributePaths = {"payment", "payment.renewalMembership"})
     Optional<PaymentCheckoutAttempt> findByTransactionReference(String transactionReference);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -37,6 +40,11 @@ public interface PaymentCheckoutAttemptRepository extends JpaRepository<PaymentC
     List<PaymentCheckoutAttempt> findByPaymentIdForUpdateOrderByCreatedAtAscIdAsc(@Param("paymentId") Integer paymentId);
 
     List<PaymentCheckoutAttempt> findByPayment_IdOrderByCreatedAtAscIdAsc(Integer paymentId);
+
+    /** One bounded bulk read for payment-history DTO mapping with deterministic newest-first ordering. */
+    @Query("select a from PaymentCheckoutAttempt a where a.payment.id in :paymentIds "
+            + "order by a.payment.id asc, a.createdAt desc, a.id desc")
+    List<PaymentCheckoutAttempt> findNewestFirstForPayments(@Param("paymentIds") Collection<Integer> paymentIds);
 
     Optional<PaymentCheckoutAttempt> findFirstByPayment_IdAndAppliedMembershipIsNotNull(Integer paymentId);
 

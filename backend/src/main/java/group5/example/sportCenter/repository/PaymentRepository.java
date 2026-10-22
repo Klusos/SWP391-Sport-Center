@@ -4,12 +4,14 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Collection;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import group5.example.sportCenter.entity.PaymentMethod;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -57,7 +59,16 @@ public interface PaymentRepository extends JpaRepository<Payment, Integer> {
         """)
     Page<PendingCoursePaymentResponse> findPendingCoursePayments(@Param("now") LocalDateTime now, Pageable pageable);
 
+    @EntityGraph(attributePaths = {"member", "renewalMembership"})
     List<Payment> findByMemberIdOrderByCreatedAtDesc(Integer memberId);
+
+    List<Payment> findByMember_IdAndPurposeAndStatusIn(Integer memberId, PaymentPurpose purpose,
+            Collection<PaymentStatus> statuses);
+
+    boolean existsByMember_IdAndPurposeAndStatus(Integer memberId, PaymentPurpose purpose, PaymentStatus status);
+
+    boolean existsByMember_IdAndPurposeAndStatusAndIdNot(
+            Integer memberId, PaymentPurpose purpose, PaymentStatus status, Integer excludedPaymentId);
 
     Optional<Payment> findByTransactionCode(String transactionCode);
 

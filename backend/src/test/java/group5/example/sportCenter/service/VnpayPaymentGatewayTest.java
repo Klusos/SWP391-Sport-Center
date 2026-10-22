@@ -66,6 +66,20 @@ class VnpayPaymentGatewayTest {
         assertEquals("TXN-ABC123", callback.transactionCode());
         assertTrue(callback.success());
         assertEquals(0, new BigDecimal("500000").compareTo(callback.amount()));
+        assertEquals("14000001", callback.providerTransactionId());
+        assertEquals("00", callback.responseCode());
+        assertEquals("00", callback.transactionStatus());
+        assertEquals("TXNABC123", callback.rawTransactionReference());
+    }
+
+    @Test
+    void renewalReferenceAndProviderEvidenceRemainCorrelatedAfterSignatureVerification() {
+        Map<String, String> params = signedReturn("00", "00", "50000000", "RNL0123456789abcdef0123456789abcdef", TMN_CODE);
+        GatewayCallback callback = gateway.verifyCallback(params).orElseThrow();
+
+        assertEquals("RNL0123456789abcdef0123456789abcdef", callback.transactionCode());
+        assertEquals(callback.transactionCode(), callback.rawTransactionReference());
+        assertEquals("14000001", callback.providerTransactionId());
     }
 
     @Test
@@ -108,6 +122,11 @@ class VnpayPaymentGatewayTest {
 
     /** Mô phỏng tham số VNPay gửi về Return URL / IPN, ký độc lập theo đặc tả VNPay. */
     private static Map<String, String> signedReturn(String responseCode, String transactionStatus, String amount) {
+        return signedReturn(responseCode, transactionStatus, amount, "TXNABC123", TMN_CODE);
+    }
+
+    private static Map<String, String> signedReturn(String responseCode, String transactionStatus, String amount,
+            String reference, String merchantCode) {
         Map<String, String> params = new TreeMap<>();
         params.put("vnp_Amount", amount);
         params.put("vnp_BankCode", "NCB");
@@ -116,10 +135,10 @@ class VnpayPaymentGatewayTest {
         params.put("vnp_OrderInfo", "Thanh toan giao dich TXN-ABC123");
         params.put("vnp_PayDate", "20261019120500");
         params.put("vnp_ResponseCode", responseCode);
-        params.put("vnp_TmnCode", TMN_CODE);
+        params.put("vnp_TmnCode", merchantCode);
         params.put("vnp_TransactionNo", "14000001");
         params.put("vnp_TransactionStatus", transactionStatus);
-        params.put("vnp_TxnRef", "TXNABC123");
+        params.put("vnp_TxnRef", reference);
         params.put("vnp_SecureHash", sign(params));
         params.put("vnp_SecureHashType", "HmacSHA512");
         return params;

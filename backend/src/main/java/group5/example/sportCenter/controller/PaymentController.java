@@ -25,6 +25,8 @@ import group5.example.sportCenter.dto.CounterPaymentRequest;
 import group5.example.sportCenter.dto.CreatePaymentRequest;
 import group5.example.sportCenter.dto.PaymentResponse;
 import group5.example.sportCenter.dto.PendingCoursePaymentResponse;
+import group5.example.sportCenter.dto.RenewalCheckoutResponse;
+import group5.example.sportCenter.dto.MembershipUpgradeCheckoutResponse;
 import group5.example.sportCenter.dto.SelectRenewalPaymentMethodRequest;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.payment.OnlineCallbackResult;
@@ -75,6 +77,18 @@ public class PaymentController {
         return paymentService.selectRenewalPaymentMethod(id, request, jwt);
     }
 
+    @PostMapping("/{id}/renewal-checkout")
+    public RenewalCheckoutResponse createRenewalCheckout(@PathVariable Integer id,
+            @AuthenticationPrincipal Jwt jwt, HttpServletRequest httpRequest) {
+        return paymentService.createRenewalCheckout(id, jwt, httpRequest.getRemoteAddr());
+    }
+
+    @PostMapping("/{id}/upgrade-checkout")
+    public MembershipUpgradeCheckoutResponse createUpgradeCheckout(@PathVariable Integer id,
+            @AuthenticationPrincipal Jwt jwt, HttpServletRequest httpRequest) {
+        return paymentService.createUpgradeCheckout(id,jwt,httpRequest.getRemoteAddr());
+    }
+
     /** Callback của mock gateway. Public (permitAll) nhưng bắt buộc có chữ ký hợp lệ. */
     @GetMapping("/online/callback")
     public PaymentResponse onlineCallback(@RequestParam Map<String, String> params) {
@@ -88,6 +102,8 @@ public class PaymentController {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This payment is not an online payment");
             case AMOUNT_MISMATCH ->
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Payment amount does not match");
+            case RECONCILIATION_REQUIRED ->
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Payment requires manual reconciliation");
         };
     }
 
@@ -97,6 +113,28 @@ public class PaymentController {
      */
     @GetMapping("/vnpay/return")
     public ResponseEntity<Void> vnpayReturn(@RequestParam Map<String, String> params) {
+        String rawReference = params.get("vnp_TxnRef");
+        if (rawReference != null && rawReference.startsWith("UGP")) {
+            // Upgrade browser returns are hints only. Settlement is initiated exclusively by IPN.
+            return ResponseEntity.status(HttpStatus.FOUND).location(UriComponentsBuilder.fromUriString(frontendResultUrl)
+                    .queryParam("paymentStatus", "PENDING").build().toUri()).build();
+        }
+        if (rawReference != null && rawReference.startsWith("UPG")) {
+            // Pre-attempt draft references are not return-settlement credentials either.
+            return ResponseEntity.status(HttpStatus.FOUND).location(UriComponentsBuilder.fromUriString(frontendResultUrl)
+                    .queryParam("paymentStatus", "PENDING").build().toUri()).build();
+        }
+        if (rawReference != null && rawReference.startsWith("RNL")) {
+            // Browser query parameters are not settlement evidence. Renewal status is
+            // reloaded by the frontend through the authenticated payment history. A payment
+            // ID is included only as a locator after signed callback verification and attempt
+            // correlation; it grants no access and never invokes settlement.
+            UriComponentsBuilder renewalLocation = UriComponentsBuilder.fromUriString(frontendResultUrl)
+                    .queryParam("paymentStatus", "PENDING");
+            paymentService.resolveVerifiedRenewalReturnPaymentId(params)
+                    .ifPresent(id -> renewalLocation.queryParam("paymentId", id));
+            return ResponseEntity.status(HttpStatus.FOUND).location(renewalLocation.build().toUri()).build();
+        }
         OnlineCallbackResult result = paymentService.processOnlineCallback(params);
         UriComponentsBuilder location = UriComponentsBuilder.fromUriString(frontendResultUrl);
         if (result.payment() != null) {
@@ -116,13 +154,14 @@ public class PaymentController {
     @GetMapping("/vnpay/ipn")
     public Map<String, String> vnpayIpn(@RequestParam Map<String, String> params) {
         try {
-            OnlineCallbackResult result = paymentService.processOnlineCallback(params);
+            OnlineCallbackResult result = paymentService.processVnpayIpn(params);
             return switch (result.status()) {
-                case APPLIED -> vnpayIpnResponse("00", "Confirm Success");
+                case APPLIED -> vnpayIpnResponse("00", "Callback processed");
                 case ALREADY_PROCESSED -> vnpayIpnResponse("02", "Order already confirmed");
                 case INVALID_SIGNATURE -> vnpayIpnResponse("97", "Invalid Checksum");
                 case NOT_FOUND, NOT_ONLINE -> vnpayIpnResponse("01", "Order not found");
                 case AMOUNT_MISMATCH -> vnpayIpnResponse("04", "Invalid amount");
+                case RECONCILIATION_REQUIRED -> vnpayIpnResponse("00", "Capture recorded for reconciliation");
             };
         } catch (RuntimeException e) {
             return vnpayIpnResponse("99", "Unknown error");

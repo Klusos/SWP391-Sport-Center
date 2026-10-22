@@ -133,6 +133,7 @@ BEGIN TRY
 
     DECLARE @isExpectedStatusCheck BIT = CASE WHEN @normalizedStatusCheck IN (
         N'statusin(''pending_payment'',''confirmed'',''cancelled'',''expired'')and(status<>''pending_payment''orpayment_deadlineisnotnull)',
+        N'(status=''expired''orstatus=''cancelled''orstatus=''confirmed''orstatus=''pending_payment'')and(status<>''pending_payment''orpayment_deadlineisnotnull)',
         N'(statusin(''pending_payment'',''confirmed'',''cancelled'',''expired''))and((status<>''pending_payment'')or(payment_deadlineisnotnull))',
         N'statusin(''pending_payment'',''confirmed'',''cancelled'',''expired'')and((status<>''pending_payment'')or(payment_deadlineisnotnull))',
         N'(statusin(''pending_payment'',''confirmed'',''cancelled'',''expired''))and(status<>''pending_payment''orpayment_deadlineisnotnull)',

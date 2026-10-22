@@ -1,10 +1,9 @@
-export function membershipPaymentPayload(planId, method, purchasedMonths) {
+export function membershipPaymentPayload(planId, method) {
   const id = Number(planId);
-  if (!Number.isSafeInteger(id) || id <= 0 || !["ONLINE", "COUNTER"].includes(method)
-      || ![1, 3, 6, 12].includes(Number(purchasedMonths))) {
+  if (!Number.isSafeInteger(id) || id <= 0 || !["ONLINE", "COUNTER"].includes(method)) {
     throw new Error("Invalid membership checkout selection.");
   }
-  return { method, purpose: "MEMBERSHIP", referenceId: id, autoRenew: false, purchasedMonths: Number(purchasedMonths) };
+  return { method, purpose: "MEMBERSHIP", referenceId: id, autoRenew: false, purchasedMonths: 1 };
 }
 
 export function membershipPaymentMessage(payment) {

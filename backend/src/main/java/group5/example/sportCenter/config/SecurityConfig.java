@@ -128,6 +128,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/payments").hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
                 .requestMatchers(HttpMethod.PATCH, "/api/payments/*/counter").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.PATCH, "/api/payments/*/renewal-method").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.POST, "/api/payments/*/renewal-checkout").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.POST, "/api/payments/*/upgrade-checkout").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.PATCH, "/api/payments/*/cancel").hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/payments/pending-memberships", "/api/payments/pending-courses").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.GET, "/api/payments/me").hasRole("MEMBER")
@@ -156,6 +158,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/membership-plans", "/api/membership-plans/**").hasRole("ADMIN")
 
                 .requestMatchers(HttpMethod.POST, "/api/memberships/expire").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/memberships/me/upgrade-options").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.POST, "/api/memberships/me/upgrade-payments").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.POST, "/api/memberships").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/memberships").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.GET, "/api/memberships/member/*", "/api/memberships/*")

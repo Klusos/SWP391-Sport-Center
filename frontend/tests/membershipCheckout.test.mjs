@@ -3,16 +3,15 @@ import assert from "node:assert/strict";
 import { membershipPaymentMessage, membershipPaymentPayload } from "../src/membershipCheckout.js";
 import { validVnpayUrl } from "../src/courseCheckout.js";
 
-test("membership checkout creates the selected plan payment without client amount or member identity", () => {
-  assert.deepEqual(membershipPaymentPayload("42", "ONLINE", 3), {
-    method: "ONLINE", purpose: "MEMBERSHIP", referenceId: 42, autoRenew: false, purchasedMonths: 3,
+test("new membership checkout is fixed to one month without client amount or member identity", () => {
+  assert.deepEqual(membershipPaymentPayload("42", "ONLINE"), {
+    method: "ONLINE", purpose: "MEMBERSHIP", referenceId: 42, autoRenew: false, purchasedMonths: 1,
   });
-  assert.deepEqual(membershipPaymentPayload(42, "COUNTER", 12), {
-    method: "COUNTER", purpose: "MEMBERSHIP", referenceId: 42, autoRenew: false, purchasedMonths: 12,
+  assert.deepEqual(membershipPaymentPayload(42, "COUNTER"), {
+    method: "COUNTER", purpose: "MEMBERSHIP", referenceId: 42, autoRenew: false, purchasedMonths: 1,
   });
   assert.throws(() => membershipPaymentPayload(0, "ONLINE"));
   assert.throws(() => membershipPaymentPayload(42, "SUCCESS"));
-  assert.throws(() => membershipPaymentPayload(42, "ONLINE", 2));
 });
 
 test("membership ONLINE URL policy uses the existing strict VNPay Sandbox validation", () => {

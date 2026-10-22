@@ -35,6 +35,8 @@ public class RenewalSettlementTransactions {
 
     public record RecordedOnlineCapture(Integer attemptId, Integer paymentId, Integer appliedMembershipId,
             boolean conflictingEvidence, String reconciliationReason) {}
+    public record RecordedOnlineFailure(Integer attemptId, Integer paymentId, boolean duplicate,
+            boolean conflictingEvidence) {}
 
     private final MembershipRepository membershipRepository;
     private final PaymentRepository paymentRepository;
@@ -68,7 +70,19 @@ public class RenewalSettlementTransactions {
         verifyAttemptContext(attempt, context.payment());
 
         boolean conflictingEvidence = false;
-        if (attempt.getVerifiedAt() == null) {
+        if (attempt.getVerifiedAt() == null && attempt.getStatus() == CheckoutAttemptStatus.FAILED
+                && (attempt.getProviderTransactionId() != null || attempt.getProviderResponseCode() != null)) {
+            // A later signed capture conflicts with a previously signed decline. Preserve
+            // the capture evidence needed for reconciliation, but never auto-apply it.
+            attempt.setVerifiedAt(observedAt);
+            attempt.setProviderTransactionId(capture.providerTransactionId());
+            attempt.setProviderAmount(capture.reportedAmount());
+            attempt.setProviderResponseCode(capture.responseCode());
+            attempt.setStatus(CheckoutAttemptStatus.RECONCILIATION_REQUIRED);
+            attempt.setReconciliationReason("Signed capture conflicts with a previously recorded failed provider outcome");
+            conflictingEvidence = true;
+        } else if (attempt.getVerifiedAt() == null && attempt.getProviderTransactionId() == null
+                && attempt.getProviderResponseCode() == null) {
             attempt.setVerifiedAt(observedAt);
             attempt.setProviderTransactionId(capture.providerTransactionId());
             attempt.setProviderAmount(capture.reportedAmount());
@@ -83,6 +97,44 @@ public class RenewalSettlementTransactions {
         return new RecordedOnlineCapture(attempt.getId(), context.payment().getId(),
                 attempt.getAppliedMembership() == null ? null : attempt.getAppliedMembership().getId(),
                 conflictingEvidence, attempt.getReconciliationReason());
+    }
+
+    /** Persists a signed unsuccessful provider outcome without changing the parent Payment or creating a Membership. */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public RecordedOnlineFailure recordVerifiedOnlineFailure(String reference, String providerTransactionId,
+            BigDecimal providerAmount, String responseCode) {
+        var keys = attemptRepository.findRenewalLockKeysByTransactionReference(reference)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Renewal checkout attempt was not found"));
+        if (keys.getSourceMembershipId() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Checkout attempt is not linked to a renewal");
+        }
+        LockContext context = lock(keys.getMemberId(), keys.getSourceMembershipId(), keys.getPaymentId());
+        PaymentCheckoutAttempt attempt = attemptRepository.findByTransactionReferenceForUpdate(reference)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Renewal checkout attempt was not found"));
+        verifyAttemptContext(attempt, context.payment());
+        if (attempt.getProvider() == null || !"VNPAY".equals(attempt.getProvider().name())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Checkout attempt provider is not VNPay");
+        }
+
+        boolean duplicate = attempt.getStatus() == CheckoutAttemptStatus.FAILED
+                && attempt.getVerifiedAt() == null
+                && equalsNullable(attempt.getProviderTransactionId(), providerTransactionId)
+                && decimalEquals(attempt.getProviderAmount(), providerAmount)
+                && equalsNullable(attempt.getProviderResponseCode(), responseCode);
+        boolean conflict = false;
+        if (!duplicate && attempt.getVerifiedAt() == null && attempt.getProviderTransactionId() == null
+                && attempt.getProviderResponseCode() == null) {
+            attempt.setProviderTransactionId(providerTransactionId);
+            attempt.setProviderAmount(providerAmount);
+            attempt.setProviderResponseCode(responseCode);
+            attempt.setStatus(CheckoutAttemptStatus.FAILED);
+        } else if (!duplicate) {
+            conflict = true;
+            attempt.setStatus(CheckoutAttemptStatus.RECONCILIATION_REQUIRED);
+            attempt.setReconciliationReason("Repeated signed provider callback conflicts with previously recorded attempt evidence");
+        }
+        attemptRepository.saveAndFlush(attempt);
+        return new RecordedOnlineFailure(attempt.getId(), context.payment().getId(), duplicate, conflict);
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)

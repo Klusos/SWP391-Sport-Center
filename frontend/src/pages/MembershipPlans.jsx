@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
+import { availableUpgradeTargets, upgradePathRequestError } from "../membershipPlanUpgrade";
+import "./MembershipPlans.css";
 import {
   createMembershipPlanApi,
   getMembershipPlansApi,
+  getMembershipPlanUpgradePathsApi,
+  addMembershipPlanUpgradePathApi,
+  removeMembershipPlanUpgradePathApi,
   getPublicMembershipPlansApi,
   updateMembershipPlanApi,
   updateMembershipPlanStatusApi,
@@ -12,7 +17,6 @@ const EMPTY_FORM = {
   name: "",
   description: "",
   monthlyPrice: "",
-  upgradeFromPlanIds: [],
   courseDiscountPercent: "0",
   personalTrainingDiscountPercent: "0",
   allowPersonalTrainingPlan: false,
@@ -24,7 +28,6 @@ function formFromPlan(plan) {
     name: plan.name || "",
     description: plan.description || "",
     monthlyPrice: String(plan.monthlyPrice ?? ""),
-    upgradeFromPlanIds: Array.isArray(plan.upgradeFromPlanIds) ? plan.upgradeFromPlanIds.map(Number) : [],
     courseDiscountPercent: String(plan.courseDiscountPercent ?? "0"),
     personalTrainingDiscountPercent: String(plan.personalTrainingDiscountPercent ?? "0"),
     allowPersonalTrainingPlan: Boolean(plan.allowPersonalTrainingPlan),
@@ -40,6 +43,9 @@ function formatPrice(value) {
 export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
   const admin = role === "ADMIN";
   const [plans, setPlans] = useState([]);
+  const [upgradePaths, setUpgradePaths] = useState([]);
+  const [upgradeTargetByPlan, setUpgradeTargetByPlan] = useState({});
+  const [upgradeBusy, setUpgradeBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [statusSaving, setStatusSaving] = useState(null);
@@ -53,8 +59,17 @@ export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
     setLoading(true);
     setError("");
     try {
-      const rows = admin ? await getMembershipPlansApi(token) : await getPublicMembershipPlansApi();
-      setPlans(Array.isArray(rows) ? rows : []);
+      if (admin) {
+        const [planRows, pathRows] = await Promise.all([
+          getMembershipPlansApi(token), getMembershipPlanUpgradePathsApi(token),
+        ]);
+        setPlans(Array.isArray(planRows) ? planRows : []);
+        setUpgradePaths(Array.isArray(pathRows) ? pathRows : []);
+      } else {
+        const rows = await getPublicMembershipPlansApi();
+        setPlans(Array.isArray(rows) ? rows : []);
+        setUpgradePaths([]);
+      }
     } catch (requestError) {
       setError(requestError.message || "Không thể tải danh sách gói hội viên.");
     } finally {
@@ -108,7 +123,6 @@ export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
       name: form.name.trim(),
       description: form.description.trim() || null,
       monthlyPrice: Number(form.monthlyPrice),
-      upgradeFromPlanIds: form.upgradeFromPlanIds,
       courseDiscountPercent: Number(form.courseDiscountPercent),
       personalTrainingDiscountPercent: Number(form.personalTrainingDiscountPercent),
       allowPersonalTrainingPlan: form.allowPersonalTrainingPlan,
@@ -132,6 +146,34 @@ export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function addUpgradeTarget(source, targetId) {
+    if (!targetId || upgradeBusy) return;
+    setUpgradeBusy(true); setError(""); setNotice("");
+    try {
+      await addMembershipPlanUpgradePathApi(token, source.id, Number(targetId));
+      setUpgradeTargetByPlan((current) => ({ ...current, [source.id]: "" }));
+      setNotice("Đã thêm hướng nâng cấp.");
+      await load();
+    } catch (requestError) {
+      const message = upgradePathRequestError(requestError.status);
+      setError(message || requestError.message || "Không thể thêm hướng nâng cấp.");
+    } finally { setUpgradeBusy(false); }
+  }
+
+  async function removeUpgradeTarget(path) {
+    if (upgradeBusy || !window.confirm(`Xóa hướng nâng cấp ${path.fromPlanName} → ${path.toPlanName}?`)) return;
+    setUpgradeBusy(true); setError(""); setNotice("");
+    try {
+      await removeMembershipPlanUpgradePathApi(token, path.id);
+      setNotice("Đã xóa hướng nâng cấp. Membership và lịch sử thanh toán không bị ảnh hưởng.");
+      await load();
+    } catch (requestError) {
+      const message = upgradePathRequestError(requestError.status);
+      setError(message || requestError.message || "Không thể xóa hướng nâng cấp.");
+      if (requestError.status === 404) await load();
+    } finally { setUpgradeBusy(false); }
   }
 
   async function changeStatus(plan) {
@@ -206,17 +248,6 @@ export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
                   onChange={(event) => setForm({ ...form, allowPersonalTrainingPlan: event.target.checked })} />
                 <label className="form-check-label" htmlFor="allowPersonal">Cho phép gói huấn luyện cá nhân</label>
               </div>
-              <div className="col-12">
-                <fieldset><legend className="form-label">Các gói được phép nâng cấp trực tiếp lên gói này</legend>
-                  {plans.filter((plan) => plan.id !== editingId).map((plan) => <label className="d-block" key={plan.id}>
-                    <input type="checkbox" checked={form.upgradeFromPlanIds.includes(Number(plan.id))}
-                      onChange={(event) => setForm((current) => ({ ...current, upgradeFromPlanIds: event.target.checked
-                        ? [...current.upgradeFromPlanIds, Number(plan.id)]
-                        : current.upgradeFromPlanIds.filter((id) => id !== Number(plan.id)) }))} /> {plan.name}
-                  </label>)}
-                  <small>Chỉ lưu các hướng được chọn; máy chủ từ chối tự nâng cấp và mọi chu trình.</small>
-                </fieldset>
-              </div>
               <div className="col-md-6 form-check ms-2">
                 <input className="form-check-input" id="allowOneOnOne" type="checkbox" checked={form.allowOneOnOneCoaching}
                   onChange={(event) => setForm({ ...form, allowOneOnOneCoaching: event.target.checked })} />
@@ -235,14 +266,31 @@ export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
             : <div className="queue-table-wrap">
               <table className="queue-table">
                 <thead><tr>
-                  <th>Tên gói</th><th>Giá / tháng</th><th>Nâng cấp trực tiếp</th><th>Ưu đãi</th><th>Trạng thái</th>{admin && <th>Thao tác</th>}
+                  <th>Tên gói</th><th>Giá / tháng</th><th>Các gói nâng cấp</th><th>Ưu đãi</th><th>Trạng thái</th>{admin && <th>Thao tác</th>}
                 </tr></thead>
                 <tbody>
                   {plans.map((plan) => (
                     <tr key={plan.id}>
                       <td><strong>{plan.name}</strong><br /><small>{plan.description || "Chưa có mô tả."}</small></td>
                       <td>{plan.monthlyPrice == null ? "Cần cấu hình giá tháng" : formatPrice(plan.monthlyPrice)}</td>
-                      <td>{(plan.upgradeFromPlanIds || []).map((id) => plans.find((item) => Number(item.id) === Number(id))?.name || `#${id}`).join(", ") || "—"}</td>
+                      <td>{admin ? <div className="membership-upgrade-paths">
+                        {upgradePaths.filter((path) => Number(path.fromPlanId) === Number(plan.id)).map((path) => <div key={path.id} className="membership-upgrade-path">
+                          <span>{path.toPlanName} · {formatPrice(path.toMonthlyPrice)}</span>
+                          <button type="button" disabled={upgradeBusy} onClick={() => void removeUpgradeTarget(path)}>Xóa</button>
+                        </div>)}
+                        {plan.status === "ACTIVE" && <div className="membership-upgrade-add">
+                          <label className="visually-hidden" htmlFor={`upgrade-target-${plan.id}`}>Gói đích cho {plan.name}</label>
+                          <select id={`upgrade-target-${plan.id}`} value={upgradeTargetByPlan[plan.id] || ""} disabled={upgradeBusy}
+                            onChange={(event) => setUpgradeTargetByPlan((current) => ({ ...current, [plan.id]: event.target.value }))}>
+                            <option value="">Chọn gói đích</option>
+                            {availableUpgradeTargets(plan, plans, upgradePaths)
+                              .map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name} · {formatPrice(candidate.monthlyPrice)}</option>)}
+                          </select>
+                          <button type="button" disabled={upgradeBusy || !upgradeTargetByPlan[plan.id]}
+                            onClick={() => void addUpgradeTarget(plan, upgradeTargetByPlan[plan.id])}>Thêm hướng</button>
+                        </div>}
+                        {!upgradePaths.some((path) => Number(path.fromPlanId) === Number(plan.id)) && <small>Chưa có hướng nâng cấp.</small>}
+                      </div> : "—"}</td>
                       <td>Khóa học {plan.courseDiscountPercent}%<br />Huấn luyện cá nhân {plan.personalTrainingDiscountPercent}%</td>
                       <td><span className={"status-pill status-" + String(plan.status).toLowerCase()}>{plan.status === "ACTIVE" ? "\u0110ang \u00e1p d\u1ee5ng" : "Ng\u1eebng \u00e1p d\u1ee5ng"}</span></td>
                       {admin && <td>

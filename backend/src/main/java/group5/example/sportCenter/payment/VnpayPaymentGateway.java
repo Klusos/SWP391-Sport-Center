@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.ResolverStyle;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Map;
@@ -34,7 +35,7 @@ import org.springframework.stereotype.Component;
 public class VnpayPaymentGateway implements PaymentGateway {
 
     private static final ZoneId VNPAY_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
-    private static final DateTimeFormatter VNPAY_TIME = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+    private static final DateTimeFormatter VNPAY_TIME = DateTimeFormatter.ofPattern("uuuuMMddHHmmss");
     private static final String TXN_PREFIX = "TXN-";
 
     private final String tmnCode;
@@ -65,7 +66,36 @@ public class VnpayPaymentGateway implements PaymentGateway {
 
     @Override
     public String createPaymentUrl(String transactionCode, BigDecimal amount, String clientIp) {
-        LocalDateTime now = LocalDateTime.now(clock.withZone(VNPAY_ZONE));
+        return createUrl(transactionCode, amount, clientIp, LocalDateTime.now(clock.withZone(VNPAY_ZONE)));
+    }
+
+    @Override
+    public String createRenewalPaymentUrl(String transactionReference, BigDecimal amount,
+            String clientIp, LocalDateTime createdAt) {
+        return createUrl(transactionReference, amount, clientIp, createdAt);
+    }
+
+    @Override
+    public boolean supportsUpgradeCheckout() { return true; }
+
+    @Override
+    public String createUpgradePaymentUrl(String transactionReference, BigDecimal amount,
+            String clientIp, LocalDateTime createdAt, LocalDateTime expiresAt) {
+        if (createdAt == null || expiresAt == null || !expiresAt.isAfter(createdAt)) {
+            throw new IllegalArgumentException("Upgrade checkout expiry must be after its creation time");
+        }
+        if (transactionReference == null || !transactionReference.matches("UGP[0-9A-F]{32}")) {
+            throw new IllegalArgumentException("Upgrade checkout reference is malformed");
+        }
+        return createUrl(transactionReference, amount, clientIp, createdAt, expiresAt);
+    }
+
+    private String createUrl(String transactionCode, BigDecimal amount, String clientIp, LocalDateTime now) {
+        return createUrl(transactionCode, amount, clientIp, now, now.plusMinutes(expireMinutes));
+    }
+
+    private String createUrl(String transactionCode, BigDecimal amount, String clientIp,
+            LocalDateTime now, LocalDateTime expiresAt) {
         SortedMap<String, String> params = new TreeMap<>();
         params.put("vnp_Version", "2.1.0");
         params.put("vnp_Command", "pay");
@@ -80,11 +110,17 @@ public class VnpayPaymentGateway implements PaymentGateway {
         params.put("vnp_ReturnUrl", returnUrl);
         params.put("vnp_IpAddr", normalizeIp(clientIp));
         params.put("vnp_CreateDate", now.format(VNPAY_TIME));
-        params.put("vnp_ExpireDate", now.plusMinutes(expireMinutes).format(VNPAY_TIME));
+        params.put("vnp_ExpireDate", expiresAt.format(VNPAY_TIME));
 
         String query = encode(params);
         return payUrl + "?" + query + "&vnp_SecureHash=" + hmacSha512(query);
     }
+
+    @Override
+    public boolean supportsRenewalCheckout() { return true; }
+
+    @Override
+    public int renewalCheckoutExpiryMinutes() { return expireMinutes; }
 
     @Override
     public Optional<GatewayCallback> verifyCallback(Map<String, String> params) {
@@ -115,11 +151,48 @@ public class VnpayPaymentGateway implements PaymentGateway {
         }
         String responseCode = signed.get("vnp_ResponseCode");
         String transactionStatus = signed.get("vnp_TransactionStatus");
+        if (responseCode == null || !responseCode.matches("[0-9]{2}")
+                || transactionStatus == null || !transactionStatus.matches("[0-9]{2}")) {
+            return Optional.empty();
+        }
         boolean success = "00".equals(responseCode) && "00".equals(transactionStatus);
         String failureReason = success ? null
                 : "VNPay payment failed (response code " + responseCode + ", status " + transactionStatus + ")";
-        return Optional.of(new GatewayCallback(
-                fromTxnRef(signed.get("vnp_TxnRef")), success, amount, failureReason));
+        String rawReference = signed.get("vnp_TxnRef");
+        if (rawReference != null && rawReference.startsWith("UGP")
+                && (!rawReference.matches("UGP[0-9A-F]{32}") || !"VND".equals(signed.get("vnp_CurrCode")))) {
+            return Optional.empty();
+        }
+        String providerTransactionId = signed.get("vnp_TransactionNo");
+        if (providerTransactionId == null || providerTransactionId.isBlank() || providerTransactionId.length() > 100) {
+            return Optional.empty();
+        }
+        // UGP references identify a persisted Upgrade checkout attempt. Do not map them
+        // to a parent Payment transaction code; the IPN dispatcher resolves the attempt.
+        String transactionCode = rawReference != null && rawReference.matches("UGP[0-9A-Fa-f]{32}")
+                ? rawReference.toUpperCase(Locale.ROOT) : fromTxnRef(rawReference);
+        VerifiedUpgradeCapture verifiedCapture = null;
+        VerifiedUpgradeFailure verifiedFailure = null;
+        String payDate = signed.get("vnp_PayDate");
+        if (success) {
+            java.time.Instant capturedAt = null;
+            if (payDate != null && payDate.matches("[0-9]{14}")) {
+                try {
+                    var localCaptureTime = LocalDateTime.parse(payDate,
+                            DateTimeFormatter.ofPattern("uuuuMMddHHmmss").withResolverStyle(ResolverStyle.STRICT));
+                    capturedAt = localCaptureTime.atZone(VNPAY_ZONE).toInstant();
+                } catch (RuntimeException ignored) {
+                    // A signed but malformed/missing provider time is not usable as capture proof.
+                }
+            }
+            verifiedCapture = new VerifiedUpgradeCapture(transactionCode, amount, providerTransactionId,
+                    responseCode, capturedAt);
+        } else if (rawReference != null && rawReference.matches("UGP[0-9A-Fa-f]{32}")) {
+            verifiedFailure = new VerifiedUpgradeFailure(transactionCode, amount, providerTransactionId,
+                    responseCode, transactionStatus);
+        }
+        return Optional.of(new GatewayCallback(transactionCode, success, amount, failureReason,
+                providerTransactionId, responseCode, transactionStatus, rawReference, verifiedCapture, verifiedFailure));
     }
 
     /** vnp_TxnRef chỉ nên chứa chữ và số: "TXN-ABC123" -> "TXNABC123". */
@@ -129,9 +202,10 @@ public class VnpayPaymentGateway implements PaymentGateway {
 
     private static String fromTxnRef(String txnRef) {
         String prefix = TXN_PREFIX.replace("-", "");
-        return txnRef.startsWith(prefix) && !txnRef.contains("-")
-                ? TXN_PREFIX + txnRef.substring(prefix.length())
-                : txnRef;
+        if (txnRef.startsWith(prefix) && !txnRef.contains("-"))
+            return TXN_PREFIX + txnRef.substring(prefix.length());
+        if (txnRef.matches("UPG[A-F0-9]{16}")) return "UPG-" + txnRef.substring(3);
+        return txnRef;
     }
 
     private static String normalizeIp(String clientIp) {

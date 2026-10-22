@@ -64,7 +64,7 @@ import group5.example.sportCenter.service.VerifiedRenewalCapture;
  * Explicit test-only settlement rehearsal for an exactly configured development database
  * or disposable clone. It is excluded from ordinary verify and never deletes fixtures.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @ActiveProfiles("renewal-sqlserver")
 class RenewalSettlementSqlServerIT {
     private static final ZoneId HCM = ZoneId.of("Asia/Ho_Chi_Minh");

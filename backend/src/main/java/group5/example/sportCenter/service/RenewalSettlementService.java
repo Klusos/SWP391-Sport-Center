@@ -29,9 +29,12 @@ public class RenewalSettlementService {
         RenewalSettlementTransactions.RecordedOnlineCapture recorded =
                 transactions.recordVerifiedOnlineCapture(capture, observedAt);
         if (recorded.conflictingEvidence()) {
+            RenewalSettlementResult reconciled = transactions.recordOnlineReconciliation(recorded.attemptId(),
+                    recorded.reconciliationReason() == null
+                            ? "Conflicting verified provider evidence requires manual reconciliation"
+                            : recorded.reconciliationReason());
             return new RenewalSettlementResult(RenewalSettlementResult.Outcome.RECONCILIATION_REQUIRED,
-                    recorded.paymentId(), recorded.attemptId(), recorded.appliedMembershipId(),
-                    recorded.reconciliationReason());
+                    recorded.paymentId(), recorded.attemptId(), recorded.appliedMembershipId(), reconciled.reason());
         }
         try {
             return transactions.applyOnlineCapture(recorded.attemptId());
@@ -39,6 +42,21 @@ public class RenewalSettlementService {
             return transactions.recordOnlineReconciliation(recorded.attemptId(),
                     "A database uniqueness or relationship constraint prevented renewal application; manual reconciliation required");
         }
+    }
+
+    /** Records a signed unsuccessful VNPay outcome; this never settles or cancels the parent payment. */
+    public RenewalSettlementResult recordVerifiedOnlineFailure(String reference, String providerTransactionId,
+            java.math.BigDecimal providerAmount, String responseCode) {
+        RenewalSettlementTransactions.RecordedOnlineFailure recorded = transactions.recordVerifiedOnlineFailure(
+                reference, providerTransactionId, providerAmount, responseCode);
+        if (recorded.conflictingEvidence()) {
+            return new RenewalSettlementResult(RenewalSettlementResult.Outcome.RECONCILIATION_REQUIRED,
+                    recorded.paymentId(), recorded.attemptId(), null,
+                    "Repeated signed provider callback conflicts with previously recorded attempt evidence");
+        }
+        return new RenewalSettlementResult(recorded.duplicate()
+                ? RenewalSettlementResult.Outcome.ALREADY_APPLIED : RenewalSettlementResult.Outcome.APPLIED,
+                recorded.paymentId(), recorded.attemptId(), null, null);
     }
 
     /**

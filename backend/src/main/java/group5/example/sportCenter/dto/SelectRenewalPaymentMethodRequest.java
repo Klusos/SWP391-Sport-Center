@@ -11,4 +11,7 @@ public class SelectRenewalPaymentMethodRequest {
     @NotNull(message = "Payment method is required")
     private PaymentMethod method;
 
+    /** Explicit preference for the next Membership period; null means no choice was supplied. */
+    private Boolean renewalAutoRenewChoice;
+
 }

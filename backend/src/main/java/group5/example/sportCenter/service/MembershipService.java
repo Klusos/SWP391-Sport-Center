@@ -138,7 +138,7 @@ public class MembershipService {
      * bắt đầu đúng ngày gói hiện tại kết thúc (endDate là mốc loại trừ), không sửa gói cũ.
      */
     @Transactional
-    public Membership activateOrRenewFromPayment(Payment payment) {
+    public Optional<String> activateOrRenewFromPayment(Payment payment) {
         Integer memberId = payment.getMember().getId();
         Integer planId = payment.getReferenceId();
         // Khoá dòng user để hai lần gia hạn song song không cùng tính từ một endDate.
@@ -147,30 +147,45 @@ public class MembershipService {
         MembershipPlan plan = membershipPlanRepository.findById(planId)
                 .orElseThrow(() -> new ResourceNotFoundException("Membership plan not found with id: " + planId));
 
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        Optional<String> blocker = ordinaryPurchaseConflict(memberId, payment.getId(), today);
+        if (blocker.isPresent()) return blocker;
+
         // Null purchasedMonths is a pre-9.2A pending payment: preserve its captured amount and
         // legacy fixed plan duration. New payments always carry the selected month snapshot.
         int purchasedMonths = payment.getPurchasedMonths() == null
                 ? plan.getDurationMonths() : payment.getPurchasedMonths();
         if (purchasedMonths <= 0) throw new IllegalArgumentException("Membership payment duration is invalid");
 
-        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
-        LocalDate startDate = membershipRepository
-                .findByMemberIdAndStatusAndEndDateGreaterThan(memberId, "ACTIVE", today).stream()
-                .map(Membership::getEndDate)
-                .max(LocalDate::compareTo)
-                .orElse(today);
-
         Membership membership = new Membership();
         membership.setMember(member);
         membership.setPlan(plan);
-        membership.setStartDate(startDate);
-        membership.setEndDate(startDate.plusMonths(purchasedMonths));
+        membership.setStartDate(today);
+        membership.setEndDate(today.plusMonths(purchasedMonths));
         membership.setAutoRenew(Boolean.TRUE.equals(payment.getAutoRenew()));
         membership.setStatus("ACTIVE");
         membership.setPurchasedMonths(payment.getPurchasedMonths());
         membership.setPaidAmount(payment.getAmount());
         membership.setSourcePayment(payment);
-        return membershipRepository.save(membership);
+        membershipRepository.save(membership);
+        return Optional.empty();
+    }
+
+    /** Returns why an ordinary purchase cannot be issued or applied for this member. */
+    public Optional<String> ordinaryPurchaseConflict(Integer memberId, Integer excludedPaymentId, LocalDate today) {
+        if (!membershipRepository.findByMemberIdAndStatusAndEndDateGreaterThan(memberId, "ACTIVE", today).isEmpty()) {
+            return Optional.of("Member already has a current or future Membership; use the dedicated Renewal or Upgrade workflow");
+        }
+        boolean pendingPayment = excludedPaymentId == null
+                ? paymentRepository.existsByMember_IdAndPurposeAndStatus(
+                        memberId, group5.example.sportCenter.entity.PaymentPurpose.MEMBERSHIP, PaymentStatus.PENDING)
+                : paymentRepository.existsByMember_IdAndPurposeAndStatusAndIdNot(
+                        memberId, group5.example.sportCenter.entity.PaymentPurpose.MEMBERSHIP,
+                        PaymentStatus.PENDING, excludedPaymentId);
+        if (pendingPayment) {
+            return Optional.of("Member already has a pending Membership payment that must be resolved first");
+        }
+        return Optional.empty();
     }
 
     @Transactional

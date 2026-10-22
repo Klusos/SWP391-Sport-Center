@@ -58,4 +58,12 @@ public class Membership {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "source_payment_id", foreignKey = @ForeignKey(name = "fk_membership_source_payment"))
     private Payment sourcePayment;
+
+    /** Original paid endDate stays intact when an Upgrade replaces this entitlement. */
+    @Column(name = "replaced_on")
+    private LocalDate replacedOn;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "replacement_membership_id", foreignKey = @ForeignKey(name = "fk_membership_replacement"))
+    private Membership replacementMembership;
 }

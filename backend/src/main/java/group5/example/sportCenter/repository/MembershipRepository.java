@@ -4,6 +4,7 @@ package group5.example.sportCenter.repository;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Lock;
 import jakarta.persistence.LockModeType;
 
@@ -14,6 +15,18 @@ import group5.example.sportCenter.entity.Membership;
 
 public interface MembershipRepository extends JpaRepository<Membership, Integer> {
     List<Membership> findByMemberId(Integer memberId);
+
+    @EntityGraph(attributePaths = {"plan", "sourcePayment", "sourcePayment.member"})
+    @Query("select m from Membership m where m.member.id = :memberId and upper(m.status) = 'ACTIVE' "
+            + "and m.startDate <= :today and m.endDate > :today order by m.id")
+    List<Membership> findEffectiveMembershipsForUpgrade(@Param("memberId") Integer memberId,
+            @Param("today") LocalDate today);
+
+    @EntityGraph(attributePaths = {"plan"})
+    @Query("select m from Membership m where m.member.id = :memberId and upper(m.status) = 'ACTIVE' "
+            + "and m.startDate > :today and m.endDate > :today order by m.startDate, m.id")
+    List<Membership> findFutureActiveMembershipsForUpgrade(@Param("memberId") Integer memberId,
+            @Param("today") LocalDate today);
     List<Membership> findByPlanId(Integer planId);
     List<Membership> findByStatus(String status);
 
@@ -42,6 +55,11 @@ public interface MembershipRepository extends JpaRepository<Membership, Integer>
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select m from Membership m where m.id = :id")
     Optional<Membership> findByIdForRenewalUpdate(@Param("id") Integer id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"plan", "sourcePayment", "sourcePayment.member"})
+    @Query("select m from Membership m where m.id = :id")
+    Optional<Membership> findByIdForUpgradeUpdate(@Param("id") Integer id);
 
     @Query("select m.id from Membership m where upper(m.status) = 'ACTIVE' and m.autoRenew = true "
             + "and m.sourcePayment.status = 'SUCCESS' and m.startDate <= :today and m.endDate > :today "

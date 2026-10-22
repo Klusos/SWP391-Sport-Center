@@ -18,6 +18,7 @@ import group5.example.sportCenter.entity.Membership;
 import group5.example.sportCenter.entity.MembershipPlan;
 import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.repository.MembershipPlanRepository;
+import group5.example.sportCenter.repository.MembershipPlanUpgradeRepository;
 import group5.example.sportCenter.repository.MembershipRepository;
 import group5.example.sportCenter.repository.UserRepository;
 import group5.example.sportCenter.security.JwtService;
@@ -42,6 +43,7 @@ class MembershipPlanIntegrationTest {
     @Autowired private FilterChainProxy security;
     @Autowired private UserRepository users;
     @Autowired private MembershipPlanRepository plans;
+    @Autowired private MembershipPlanUpgradeRepository upgradePaths;
     @Autowired private MembershipRepository memberships;
     @Autowired private JwtService tokens;
     @Autowired private ObjectMapper objectMapper;
@@ -186,6 +188,113 @@ class MembershipPlanIntegrationTest {
         mvc.perform(post("/api/membership-plans").header("Authorization", adminToken)
                         .contentType("application/json").content(duplicateBody))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void adminCanManageOnlyValidDirectionalUpgradePaths() throws Exception {
+        String adminToken = bearer(user("ADMIN"));
+        MembershipPlan source = plan("ACTIVE");
+        source.setMonthlyPrice(new BigDecimal("100.00"));
+        source = plans.saveAndFlush(source);
+        MembershipPlan target = plan("ACTIVE");
+        target.setMonthlyPrice(new BigDecimal("200.00"));
+        target = plans.saveAndFlush(target);
+        int sourceId = source.getId();
+        int targetId = target.getId();
+
+        String body = "{\"fromPlanId\":" + sourceId + ",\"toPlanId\":" + targetId + "}";
+        String created = mvc.perform(post("/api/membership-plans/upgrade-paths")
+                        .header("Authorization", adminToken).contentType("application/json").content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.fromPlanId").value(sourceId))
+                .andExpect(jsonPath("$.toPlanId").value(targetId))
+                .andReturn().getResponse().getContentAsString();
+        int pathId = objectMapper.readTree(created).get("id").intValue();
+        mvc.perform(get("/api/membership-plans/upgrade-paths").header("Authorization", adminToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[?(@.id == " + pathId + ")]").exists());
+        mvc.perform(post("/api/membership-plans/upgrade-paths")
+                        .header("Authorization", adminToken).contentType("application/json").content(body))
+                .andExpect(status().isConflict());
+        mvc.perform(post("/api/membership-plans/upgrade-paths")
+                        .header("Authorization", adminToken).contentType("application/json")
+                        .content("{\"fromPlanId\":" + sourceId + ",\"toPlanId\":" + sourceId + "}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/membership-plans/upgrade-paths")
+                        .header("Authorization", adminToken).contentType("application/json")
+                        .content("{\"fromPlanId\":999999,\"toPlanId\":" + targetId + "}"))
+                .andExpect(status().isNotFound());
+
+        mvc.perform(delete("/api/membership-plans/upgrade-paths/{id}", pathId).header("Authorization", adminToken))
+                .andExpect(status().isNoContent());
+        mvc.perform(delete("/api/membership-plans/upgrade-paths/{id}", pathId).header("Authorization", adminToken))
+                .andExpect(status().isNotFound());
+        assertTrue(plans.existsById(sourceId));
+        assertTrue(plans.existsById(targetId));
+    }
+
+    @Test
+    void upgradePathRejectsMissingTargetInactivePlansAndNonIncreasingPrices() throws Exception {
+        String adminToken = bearer(user("ADMIN"));
+        MembershipPlan source = plan("ACTIVE");
+        source.setMonthlyPrice(new BigDecimal("200.00"));
+        source = plans.saveAndFlush(source);
+        MembershipPlan equal = plan("ACTIVE");
+        equal.setMonthlyPrice(new BigDecimal("200.00"));
+        equal = plans.saveAndFlush(equal);
+        MembershipPlan cheaper = plan("ACTIVE");
+        cheaper.setMonthlyPrice(new BigDecimal("150.00"));
+        cheaper = plans.saveAndFlush(cheaper);
+        MembershipPlan inactive = plan("INACTIVE");
+        inactive.setMonthlyPrice(new BigDecimal("300.00"));
+        inactive = plans.saveAndFlush(inactive);
+
+        for (int targetId : new int[] {equal.getId(), cheaper.getId(), inactive.getId(), 999999}) {
+            mvc.perform(post("/api/membership-plans/upgrade-paths")
+                            .header("Authorization", adminToken).contentType("application/json")
+                            .content("{\"fromPlanId\":" + source.getId() + ",\"toPlanId\":" + targetId + "}"))
+                    .andExpect(status().is(targetId == 999999 ? 404 : 400));
+        }
+    }
+
+    @Test
+    void upgradePathManagementIsAdminOnly() throws Exception {
+        MembershipPlan source = plan("ACTIVE");
+        MembershipPlan target = plan("ACTIVE");
+        String body = "{\"fromPlanId\":" + source.getId() + ",\"toPlanId\":" + target.getId() + "}";
+        for (String role : new String[] {"MEMBER", "RECEPTIONIST"}) {
+            String token = bearer(user(role));
+            mvc.perform(get("/api/membership-plans/upgrade-paths").header("Authorization", token))
+                    .andExpect(status().isForbidden());
+            mvc.perform(post("/api/membership-plans/upgrade-paths").header("Authorization", token)
+                            .contentType("application/json").content(body))
+                    .andExpect(status().isForbidden());
+            mvc.perform(delete("/api/membership-plans/upgrade-paths/{id}", 1).header("Authorization", token))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
+    @Test
+    void planPriceOrDeactivationCannotSilentlyInvalidateConfiguredUpgradePath() throws Exception {
+        String adminToken = bearer(user("ADMIN"));
+        MembershipPlan source = plan("ACTIVE");
+        source.setMonthlyPrice(new BigDecimal("100.00"));
+        source = plans.saveAndFlush(source);
+        MembershipPlan target = plan("ACTIVE");
+        target.setMonthlyPrice(new BigDecimal("200.00"));
+        target = plans.saveAndFlush(target);
+        String pathBody = "{\"fromPlanId\":" + source.getId() + ",\"toPlanId\":" + target.getId() + "}";
+        mvc.perform(post("/api/membership-plans/upgrade-paths").header("Authorization", adminToken)
+                        .contentType("application/json").content(pathBody)).andExpect(status().isCreated());
+        mvc.perform(put("/api/membership-plans/{id}", source.getId()).header("Authorization", adminToken)
+                        .contentType("application/json")
+                        .content(updateBody(source.getName(), "250.00", 1, "0", "0", "ACTIVE")))
+                .andExpect(status().isConflict());
+        mvc.perform(patch("/api/membership-plans/{id}/status", target.getId()).header("Authorization", adminToken)
+                        .contentType("application/json").content("{\"status\":\"INACTIVE\"}"))
+                .andExpect(status().isConflict());
+        assertEquals(new BigDecimal("100.00"), plans.findById(source.getId()).orElseThrow().getMonthlyPrice());
+        assertEquals("ACTIVE", plans.findById(target.getId()).orElseThrow().getStatus());
+        assertEquals(1, upgradePaths.count());
     }
 
     @Test

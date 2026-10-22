@@ -13,6 +13,7 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
   const location = useLocation();
   const { registrationId } = useParams();
   const params = new URLSearchParams(location.search);
+  const paymentStatusHint = params.get("paymentStatus");
   const result = !registrationId;
   const paymentId = positiveId(params.get("paymentId"));
   const key = `sportcenter.course-checkout.${auth?.userId}`;
@@ -41,7 +42,7 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
     if (result && paymentId) {
       const payments = array(await getMyPaymentsApi(token));
       const returnedPayment = payments.find((item) => item.id === paymentId);
-      if (returnedPayment?.purpose === "MEMBERSHIP") {
+      if (returnedPayment?.purpose === "MEMBERSHIP" || paymentStatusHint === "PENDING") {
         const user = await getCurrentUserApi(token);
         const memberships = array(await getMembershipsByMemberApi(token, user.id));
         return { payments, registrations: [], memberships };
@@ -51,7 +52,7 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
     }
     const [payments, registrations] = await Promise.all([getMyPaymentsApi(token), getMyRegistrationsApi(token)]);
     return { payments: array(payments), registrations: array(registrations), memberships: [] };
-  }, [token, result, paymentId]);
+  }, [token, result, paymentId, paymentStatusHint]);
 
   useEffect(() => {
     const resume = () => { if (!action.current) setRefreshVersion((value) => value + 1); };
@@ -147,7 +148,9 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
           <h2>Thanh toán #{targetPayment.id}</h2>
           <p>{paymentMessage(targetPayment)}</p>
           {targetPayment.purpose === "MEMBERSHIP" && <>
+            {targetPayment.isRenewal === true && <p>Đây là yêu cầu gia hạn #{targetPayment.id} từ gói #{targetPayment.renewalSourceMembershipId}. Lựa chọn tự động gia hạn kỳ mới: {targetPayment.renewalAutoRenewChoice === true ? "Bật" : targetPayment.renewalAutoRenewChoice === false ? "Tắt" : "Chưa có"}.</p>}
             <p role="status">{targetPayment.status === "PENDING" ? "Đang chờ VNPay hoặc máy chủ xác minh. Gói hội viên chưa được kích hoạt." : targetPayment.status === "REFUND_REQUIRED" ? "Khoản thanh toán cần nhân viên đối soát hoặc xử lý hoàn tiền. Gói chưa được suy đoán là đã kích hoạt." : targetPayment.status === "CANCELLED" ? "Thanh toán đã hủy; không kích hoạt gói từ giao dịch này." : "Trạng thái thanh toán do máy chủ xác nhận. Trạng thái gói bên dưới được tải riêng từ tài khoản của bạn."}</p>
+            {targetPayment.isRenewal === true && targetPayment.renewalCheckoutAttempt && <p role="status">Trạng thái phiên checkout: {targetPayment.renewalCheckoutAttempt.status}{targetPayment.renewalCheckoutAttempt.expiresAt ? ` · Hết hạn ${deadline(targetPayment.renewalCheckoutAttempt.expiresAt)} (giờ Việt Nam)` : ""}. Đây là trạng thái phiên, tách biệt với trạng thái thanh toán.</p>}
             <h3>Trạng thái gói hội viên</h3>
             {!data?.memberships ? <p role="status">Đang tải trạng thái gói…</p> : data.memberships.length === 0
               ? <p>Chưa có gói hội viên trong tài khoản.</p>
