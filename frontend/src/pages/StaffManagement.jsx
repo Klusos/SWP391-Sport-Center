@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import Img from "../public-site/components/Img";
+import "./StaffManagement.css";
 import {
   assignCoachSportApi,
   createStaffCoachApi,
@@ -314,24 +315,30 @@ export default function StaffManagement({ token, role, onLogout, onNavigate }) {
   return (
     <div className="layout">
       <Sidebar role={role} activePage="staff" onNavigate={onNavigate} onLogout={onLogout} />
-      <main className="main">
+      <main className="main staff-page">
         <h1>Quản lý nhân sự</h1>
         <p className="subtitle">Quản lý tài khoản COACH, RECEPTIONIST và chuyên môn Coach.</p>
         {notice && <div className="banner success" role="status">{notice}</div>}
         {error && <div className="banner error" role="alert">{error}</div>}
-        <div className="member-list-toolbar">
-          <label htmlFor="staffSearch">Tìm theo tên, email, ID, vai trò hoặc trạng thái</label>
-          <input id="staffSearch" type="search" value={query} onChange={(event) => setQuery(event.target.value)} />
-          <button type="button" onClick={load} disabled={loading}>{loading ? "Đang tải…" : "Làm mới"}</button>
-          <button type="button" onClick={() => { setCreating((value) => !value); setSelected(null); setForm(EMPTY_FORM); setCreateImage(null); setCreateImagePreview(""); }}>Tạo nhân sự</button>
+        <div className="staff-toolbar">
+          <div className="staff-search">
+            <label htmlFor="staffSearch">Tìm theo tên, email, ID, vai trò hoặc trạng thái</label>
+            <input id="staffSearch" type="search" placeholder="Nhập từ khóa để tìm kiếm…" value={query} onChange={(event) => setQuery(event.target.value)} />
+          </div>
+          <div className="staff-toolbar-actions">
+            <button type="button" onClick={load} disabled={loading}>{loading ? "Đang tải…" : "Làm mới"}</button>
+            <button type="button" className="btn-primary" onClick={() => { setCreating((value) => !value); setSelected(null); setForm(EMPTY_FORM); setCreateImage(null); setCreateImagePreview(""); }}>{creating ? "Đóng form" : "+ Tạo nhân sự"}</button>
+          </div>
         </div>
 
         {creating && <form className="form-card staff-create-form" onSubmit={createStaff}>
           <h2>Tạo tài khoản nhân sự</h2>
-          <label htmlFor="staffType">Loại tài khoản</label>
-          <select id="staffType" value={createRole} onChange={(event) => setCreateRole(event.target.value)}>
-            <option value="RECEPTIONIST">RECEPTIONIST</option><option value="COACH">COACH</option>
-          </select>
+          <div className="field field-narrow">
+            <label htmlFor="staffType">Loại tài khoản</label>
+            <select id="staffType" value={createRole} onChange={(event) => setCreateRole(event.target.value)}>
+              <option value="RECEPTIONIST">RECEPTIONIST</option><option value="COACH">COACH</option>
+            </select>
+          </div>
           <div className="grid-2">
             <label>Họ tên<input required maxLength={100} value={form.name} onChange={(event) => updateForm("name", event.target.value)} /></label>
             <label>Email<input required type="email" maxLength={150} value={form.email} onChange={(event) => updateForm("email", event.target.value)} /></label>
