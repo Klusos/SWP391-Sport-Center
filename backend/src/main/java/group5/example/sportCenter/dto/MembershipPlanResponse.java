@@ -14,8 +14,8 @@ public class MembershipPlanResponse {
     private Integer id;
     private String name;
     private String description;
-    private BigDecimal price;
-    private Integer durationMonths;
+    private BigDecimal monthlyPrice;
+    private java.util.Set<Integer> upgradeFromPlanIds;
 
     private BigDecimal courseDiscountPercent;
     private BigDecimal personalTrainingDiscountPercent;

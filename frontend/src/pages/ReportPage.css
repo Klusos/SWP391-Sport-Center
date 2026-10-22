@@ -1,0 +1,21 @@
+.app-shell .revenue-report-page{display:grid;gap:18px}
+.app-shell .revenue-report-page .page-intro{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.app-shell .revenue-report-page .page-intro h1{margin:0 0 6px}
+.app-shell .revenue-report-page .page-intro p,.app-shell .revenue-chart-panel .panel-head p{margin:0;color:#71849c;font-size:13px}
+.app-shell .revenue-filters{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
+.app-shell .revenue-filters label{display:grid;gap:6px;color:#425a73;font-size:12px;font-weight:600}
+.app-shell .revenue-filters input,.app-shell .revenue-filters select{height:40px;min-width:160px;border:1px solid #dce5f0;border-radius:8px;padding:0 10px;background:#fff;color:#173450}
+.app-shell .revenue-filters .revenue-error{flex-basis:100%;margin:0}
+.app-shell .revenue-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.app-shell .revenue-summary-grid .panel{display:grid;gap:10px;margin:0}
+.app-shell .revenue-total-card{grid-column:span 1;background:linear-gradient(135deg,#0d5ce5,#398bff);color:#fff}
+.app-shell .revenue-summary-grid span{font-size:12px;color:inherit;opacity:.8}
+.app-shell .revenue-summary-grid strong{font-size:clamp(18px,2vw,25px);color:inherit;overflow-wrap:anywhere}
+.app-shell .revenue-summary-grid small{font-size:11px;opacity:.8}
+.app-shell .revenue-chart-panel{min-width:0}
+.app-shell .revenue-chart-panel h2{margin:0 0 5px;font-size:18px}
+.app-shell .revenue-state{padding:24px;text-align:center;color:#657b92}
+.app-shell .revenue-error{color:#a22d34}
+.app-shell .revenue-footnote,.app-shell .revenue-empty-note{margin:0;color:#657b92;font-size:12px;line-height:1.6}
+@media(max-width:850px){.app-shell .revenue-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.app-shell .revenue-report-page .page-intro{display:grid}.app-shell .revenue-filters{align-items:stretch}.app-shell .revenue-filters label,.app-shell .revenue-filters input,.app-shell .revenue-filters select{width:100%}.app-shell .revenue-summary-grid{grid-template-columns:1fr}}

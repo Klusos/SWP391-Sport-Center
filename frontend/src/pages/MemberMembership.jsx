@@ -30,6 +30,7 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
   const [uncertainAttempt, setUncertainAttempt] = useState(null);
   const [retryAccepted, setRetryAccepted] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
+  const [purchaseMonths, setPurchaseMonths] = useState(1);
   const actionLock = useRef(false);
 
   const load = useCallback(async () => {
@@ -103,7 +104,7 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
       try { sessionStorage.setItem(key, JSON.stringify(marker)); }
       catch { throw new Error("Không thể lưu trạng thái khôi phục. Hãy bật session storage trước khi bắt đầu thanh toán."); }
       requestStarted = true;
-      const payment = await createPaymentApi(token, membershipPaymentPayload(plan.id, method));
+      const payment = await createPaymentApi(token, membershipPaymentPayload(plan.id, method, purchaseMonths));
       sessionStorage.setItem(key, JSON.stringify({ ...marker, paymentId: payment.id, uncertain: false }));
       setPayments((current) => [payment, ...(current || [])]);
       setSelectedPlan(null);
@@ -230,20 +231,26 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
       {loading ? <div className="queue-state" role="status">Đang tải gói…</div>
         : !plans?.length ? <p className="dash-empty">Hiện chưa có gói ACTIVE nào.</p>
           : <div className="pf-plans">{plans.map((plan) => <article key={plan.id} className="pf-plan">
-            <h2>{plan.name}</h2><strong>{money(plan.price)}</strong>
-            <small>Thời hạn: {plan.durationMonths} tháng · Giảm khóa học {plan.courseDiscountPercent ?? 0}%</small>
+            <h2>{plan.name}</h2><strong>{plan.monthlyPrice == null ? "Chưa cấu hình giá" : `${money(plan.monthlyPrice)} / tháng`}</strong>
+            <small>Thời hạn mua: 1, 3, 6 hoặc 12 tháng · Giảm khóa học {plan.courseDiscountPercent ?? 0}%</small>
             {plan.description && <p>{plan.description}</p>}
             <div className="membership-payment-actions">
-              <button type="button" disabled={busyPlanId !== null || pendingMembershipPayments.length > 0 || (uncertainAttempt && !retryAccepted)} onClick={() => setSelectedPlan(plan)}>
-                Mua / gia hạn
+              <button type="button" disabled={busyPlanId !== null || !plan.monthlyPrice || pendingMembershipPayments.length > 0 || (uncertainAttempt && !retryAccepted)} onClick={() => { setPurchaseMonths(1); setSelectedPlan(plan); }}>
+                Mua gói / Gia hạn
               </button>
             </div>
           </article>)}</div>}
       <p className="banner info" role="note">Thanh toán trực tuyến sử dụng VNPay Sandbox. Gói chỉ được kích hoạt sau khi máy chủ xác minh thanh toán thành công; yêu cầu COUNTER cần nhân viên xác nhận đã nhận tiền.</p>
       {selectedPlan && <div className="membership-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && busyPlanId === null) setSelectedPlan(null); }}>
         <section className="membership-payment-dialog" role="dialog" aria-modal="true" aria-labelledby="membership-dialog-title" aria-describedby="membership-dialog-description">
-          <h2 id="membership-dialog-title">Mua / gia hạn gói</h2>
-          <p id="membership-dialog-description"><strong>{selectedPlan.name}</strong><br />Giá: {money(selectedPlan.price)}</p>
+          <h2 id="membership-dialog-title">Mua gói / Gia hạn</h2>
+          <p id="membership-dialog-description"><strong>{selectedPlan.name}</strong><br />Giá hàng tháng: {money(selectedPlan.monthlyPrice)}</p>
+          <label htmlFor="membership-purchase-months">Thời hạn mua</label>
+          <select id="membership-purchase-months" value={purchaseMonths} disabled={busyPlanId !== null}
+            onChange={(event) => setPurchaseMonths(Number(event.target.value))}>
+            {[1, 3, 6, 12].map((months) => <option key={months} value={months}>{months} tháng</option>)}
+          </select>
+          <p>Tổng tiền: {money(Number(selectedPlan.monthlyPrice) * purchaseMonths)}</p>
           <p>Chọn phương thức thanh toán. Chưa có giao dịch nào được tạo.</p>
           <div className="membership-dialog-actions">
             <button type="button" disabled={busyPlanId !== null} onClick={() => void startPurchase(selectedPlan, "ONLINE")}>

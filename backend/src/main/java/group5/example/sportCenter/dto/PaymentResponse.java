@@ -25,4 +25,5 @@ public class PaymentResponse {
     private String note;
     private LocalDateTime createdAt;
     private LocalDateTime paidAt;
+    private Integer purchasedMonths;
 }

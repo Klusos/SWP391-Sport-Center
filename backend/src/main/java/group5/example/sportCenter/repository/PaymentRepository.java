@@ -23,6 +23,12 @@ public interface PaymentRepository extends JpaRepository<Payment, Integer> {
 
     Page<Payment> findByStatusAndMethodAndPurpose(PaymentStatus status, PaymentMethod method, PaymentPurpose purpose, Pageable pageable);
 
+    @Query("select p from Payment p where p.status = :status and p.method = :method "
+            + "and p.purpose = :purpose and p.renewalMembership is null")
+    Page<Payment> findOrdinaryPendingMembershipPayments(@Param("status") PaymentStatus status,
+            @Param("method") PaymentMethod method, @Param("purpose") PaymentPurpose purpose,
+            Pageable pageable);
+
     // Scalar projection avoids lazy-loading member/course/class entities for each queue row.
     // referenceId is purpose-scoped; it is not a mapped Payment -> registration association.
     @Query(value = """
@@ -55,6 +61,12 @@ public interface PaymentRepository extends JpaRepository<Payment, Integer> {
 
     Optional<Payment> findByTransactionCode(String transactionCode);
 
+    Optional<Payment> findByRenewalMembership_Id(Integer membershipId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Payment p where p.renewalMembership.id = :membershipId")
+    Optional<Payment> findRenewalByMembershipIdForUpdate(@Param("membershipId") Integer membershipId);
+
     /** Khoá dòng payment để counter/callback xử lý song song không áp dụng 2 lần. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from Payment p where p.id = :id")
@@ -68,6 +80,13 @@ public interface PaymentRepository extends JpaRepository<Payment, Integer> {
 
     boolean existsByMember_IdAndPurposeAndReferenceIdAndStatus(
             Integer memberId, PaymentPurpose purpose, Integer referenceId, PaymentStatus status);
+
+    @Query("select case when count(p) > 0 then true else false end from Payment p "
+            + "where p.member.id = :memberId and p.purpose = :purpose and p.referenceId = :referenceId "
+            + "and p.status = :status and p.renewalMembership is null")
+    boolean existsOrdinaryPayment(@Param("memberId") Integer memberId,
+            @Param("purpose") PaymentPurpose purpose, @Param("referenceId") Integer referenceId,
+            @Param("status") PaymentStatus status);
 
     boolean existsByPurposeAndReferenceIdAndStatusAndIdNot(
             PaymentPurpose purpose, Integer referenceId, PaymentStatus status, Integer id);
@@ -86,6 +105,17 @@ public interface PaymentRepository extends JpaRepository<Payment, Integer> {
         GROUP BY p.purpose
         """)
     List<Object[]> revenueByPurpose(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    /** Daily database aggregate of verified revenue, split further by purpose in the service. */
+    @Query("""
+        SELECT FUNCTION('year', p.paidAt), FUNCTION('month', p.paidAt), FUNCTION('day', p.paidAt),
+               p.purpose, SUM(p.amount)
+        FROM Payment p
+        WHERE p.status = group5.example.sportCenter.entity.PaymentStatus.SUCCESS
+          AND p.paidAt >= :from AND p.paidAt < :to
+        GROUP BY FUNCTION('year', p.paidAt), FUNCTION('month', p.paidAt), FUNCTION('day', p.paidAt), p.purpose
+        """)
+    List<Object[]> revenueBySettlementDay(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
     @Query("""
         SELECT p.method, COALESCE(SUM(p.amount), 0) FROM Payment p

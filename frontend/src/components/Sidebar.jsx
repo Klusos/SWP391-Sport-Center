@@ -20,6 +20,7 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
     ["member-levels", "Trình độ & đánh giá"],
     ["member-attendance", "Lịch sử điểm danh"],
     ["member-pt-booking", "Đặt buổi huấn luyện"],
+    ["support-tickets", "Hỗ trợ"],
     ["member-profile", "Hồ sơ cá nhân"],
   ];
   const coachLinks = [
@@ -36,6 +37,7 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
     ["course-registration", "Đăng ký khóa học tại quầy"],
     ["course-payments", "Thanh toán khóa học"],
     ["consultations", "Yêu cầu tư vấn"],
+    ["support-tickets", "Yêu cầu hỗ trợ"],
   ];
   const adminLinks = [
     ["dashboard", "Tổng quan"],
@@ -52,6 +54,7 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
     ["audit-logs", "Audit Logs"],
     ["register", "Đăng ký thành viên"],
     ["consultations", "Yêu cầu tư vấn"],
+    ["support-tickets", "Yêu cầu hỗ trợ"],
   ];
   const links = role === "MEMBER"
     ? memberLinks

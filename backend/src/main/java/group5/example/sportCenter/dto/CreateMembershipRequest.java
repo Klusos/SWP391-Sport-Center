@@ -19,6 +19,6 @@ public class CreateMembershipRequest {
     @NotNull(message = "Start date is required")
     private LocalDate startDate;
 
-    @NotNull(message = "Auto renew option is required")
-    private Boolean autoRenew;
+    /** Manual ADMIN assignments do not opt into future renewal requests by default. */
+    private Boolean autoRenew = Boolean.FALSE;
 }

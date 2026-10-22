@@ -127,6 +127,7 @@ public class SecurityConfig {
                         "/api/payments/vnpay/return", "/api/payments/vnpay/ipn").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/payments").hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
                 .requestMatchers(HttpMethod.PATCH, "/api/payments/*/counter").hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers(HttpMethod.PATCH, "/api/payments/*/renewal-method").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.PATCH, "/api/payments/*/cancel").hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/payments/pending-memberships", "/api/payments/pending-courses").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.GET, "/api/payments/me").hasRole("MEMBER")
@@ -134,6 +135,15 @@ public class SecurityConfig {
                 .requestMatchers("/api/payments", "/api/payments/**").denyAll()
                 .requestMatchers(HttpMethod.GET, "/api/reports/**").hasRole("ADMIN")
                 .requestMatchers("/api/reports", "/api/reports/**").denyAll()
+
+                .requestMatchers(HttpMethod.POST, "/api/support-tickets").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/support-tickets/me").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/support-tickets").hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers(HttpMethod.GET, "/api/support-tickets/*").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/support-tickets/*/messages").authenticated()
+                .requestMatchers(HttpMethod.PATCH, "/api/support-tickets/*/status",
+                        "/api/support-tickets/*/assign-to-me").hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers("/api/support-tickets", "/api/support-tickets/**").denyAll()
 
                 .requestMatchers(HttpMethod.POST, "/api/admin/notifications/broadcast").hasRole("ADMIN")
                 .requestMatchers("/api/admin/notifications", "/api/admin/notifications/**").denyAll()

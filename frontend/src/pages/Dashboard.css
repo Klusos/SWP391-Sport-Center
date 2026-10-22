@@ -23,6 +23,7 @@
 
 .dash-bars { display: flex; align-items: flex-end; gap: 4%; height: 220px; padding: 0 4px; }
 .dash-bars span { flex: 1; border-radius: 6px 6px 3px 3px; background: #0a61f2; min-width: 0; }
+.admin-revenue-total{margin:0;color:var(--text-sub);font-size:12px}.admin-revenue-total strong{color:var(--navy);font-size:15px}.admin-revenue-link{display:inline-block;margin-top:8px;color:var(--blue);font-size:12px;font-weight:650}
 
 .dash-rows { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .dash-rows li { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid #edf2f7; font-size: 13px; }

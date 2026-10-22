@@ -31,11 +31,16 @@ public class MembershipPlan {
     @Column(columnDefinition = "nvarchar(max)")
     private String description;
 
+    /** Legacy catalog amount retained for pre-9.2A pending-payment settlement compatibility. */
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal price;
 
+    /** Legacy fixed duration retained until all old-contract pending payments are gone. */
     @Column(nullable = false)
     private Integer durationMonths;
+
+    @Column(name = "monthly_price", nullable = false, precision = 12, scale = 2)
+    private BigDecimal monthlyPrice;
 
     @Column(nullable = false, precision = 5, scale = 2)
     private BigDecimal courseDiscountPercent;
@@ -51,4 +56,10 @@ public class MembershipPlan {
 
     @Column(nullable = false, length = 30)
     private String status;
+
+    /** Safe compatibility for known one-month legacy plans; multi-month plans need reviewed mapping. */
+    public BigDecimal getEffectiveMonthlyPrice() {
+        if (monthlyPrice != null) return monthlyPrice;
+        return Integer.valueOf(1).equals(durationMonths) ? price : null;
+    }
 }

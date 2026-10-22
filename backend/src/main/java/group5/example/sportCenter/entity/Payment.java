@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import org.hibernate.annotations.Nationalized;
+import org.hibernate.annotations.Check;
 
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -12,6 +13,11 @@ import lombok.Setter;
 
 @Entity
 @Table(name = "Payment")
+@Check(name = "ck_payment_method", constraints = "(method IS NOT NULL AND method IN ('ONLINE', 'COUNTER')) "
+        + "OR (method IS NULL AND purpose = 'MEMBERSHIP' AND status IN ('PENDING', 'CANCELLED') "
+        + "AND renewal_membership_id IS NOT NULL AND purchased_months IS NOT NULL AND purchased_months = 1 "
+        + "AND monthly_price_snapshot IS NOT NULL AND monthly_price_snapshot > 0 "
+        + "AND amount = monthly_price_snapshot)")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -29,7 +35,7 @@ public class Payment {
     private BigDecimal amount;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = true, length = 20)
     private PaymentMethod method;
 
     @Enumerated(EnumType.STRING)
@@ -42,6 +48,23 @@ public class Payment {
 
     /** Chỉ dùng cho purpose = MEMBERSHIP. */
     private Boolean autoRenew;
+
+    /** Present for 9.2A membership purchases; null preserves the old pending-payment contract. */
+    @Column(name = "purchased_months")
+    private Integer purchasedMonths;
+
+    /** Monthly catalog price captured when a new-contract membership payment was created. */
+    @Column(name = "monthly_price_snapshot", precision = 12, scale = 2)
+    private BigDecimal monthlyPriceSnapshot;
+
+    /** Explicit member choice for the next period created by a renewal; null means not chosen. */
+    @Column(name = "renewal_auto_renew_choice")
+    private Boolean renewalAutoRenewChoice;
+
+    /** Set only for a future automatically prepared renewal request; ordinary payments remain null. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "renewal_membership_id", foreignKey = @ForeignKey(name = "fk_payment_renewal_membership"))
+    private Membership renewalMembership;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

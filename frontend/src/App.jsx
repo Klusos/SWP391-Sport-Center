@@ -45,6 +45,7 @@ import Layout from "./components/Layout";
 import CrudPage from "./pages/CrudPage";
 import ReportPage from "./pages/ReportPage";
 import MemberPage from "./pages/MemberPage";
+import SupportTickets from "./pages/SupportTickets";
 
 // Public website
 import PublicLayout from "./public-site/PublicLayout";
@@ -245,6 +246,7 @@ export default function App() {
         {
           dashboard: "/staff/dashboard",
           consultations: "/staff/consultations",
+          "support-tickets": "/staff/support-tickets",
           members: "/staff/members",
           staff: "/staff/staff",
           sports: "/staff/sports",
@@ -296,6 +298,7 @@ export default function App() {
           "member-levels": "/member/levels-assessments",
           "member-attendance": "/member/attendance",
           "member-pt-booking": "/member/pt-booking",
+          "support-tickets": "/member/support-tickets",
           "member-classes": "/member/classes",
         }[page] || "/member/dashboard"
       ),
@@ -385,6 +388,8 @@ export default function App() {
             element={<ConsultationQueue {...staff} />}
           />
 
+          <Route path="/staff/support-tickets" element={<SupportTickets {...staff} />} />
+
           <Route
             path="/staff/members"
             element={<MemberList {...staff} />}
@@ -465,7 +470,7 @@ export default function App() {
 
               <Route
                 path="/admin/reports"
-                element={<ReportPage />}
+                element={<ReportPage {...staff} />}
               />
             </Route>
           </Route>
@@ -477,7 +482,7 @@ export default function App() {
 
               <Route
                 path="/receptionist/support"
-                element={<Navigate to="/staff/consultations" replace />}
+                element={<Navigate to="/staff/support-tickets" replace />}
               />
             </Route>
           </Route>
@@ -487,6 +492,7 @@ export default function App() {
         <Route path="/member/payment-result" element={<CourseCheckout key={location.pathname + location.search} auth={auth} {...member} />} />
         <Route path="/member/course-checkout/:registrationId" element={<CourseCheckout key={location.pathname} auth={auth} {...member} />} />
         <Route element={<MemberRoute auth={auth} />}>
+          <Route path="/member/support-tickets" element={<SupportTickets {...member} />} />
           <Route
             path="/member"
             element={<Navigate to="/member/dashboard" replace />}

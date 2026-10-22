@@ -11,8 +11,8 @@ import {
 const EMPTY_FORM = {
   name: "",
   description: "",
-  price: "",
-  durationMonths: "1",
+  monthlyPrice: "",
+  upgradeFromPlanIds: [],
   courseDiscountPercent: "0",
   personalTrainingDiscountPercent: "0",
   allowPersonalTrainingPlan: false,
@@ -23,8 +23,8 @@ function formFromPlan(plan) {
   return {
     name: plan.name || "",
     description: plan.description || "",
-    price: String(plan.price ?? ""),
-    durationMonths: String(plan.durationMonths ?? "1"),
+    monthlyPrice: String(plan.monthlyPrice ?? ""),
+    upgradeFromPlanIds: Array.isArray(plan.upgradeFromPlanIds) ? plan.upgradeFromPlanIds.map(Number) : [],
     courseDiscountPercent: String(plan.courseDiscountPercent ?? "0"),
     personalTrainingDiscountPercent: String(plan.personalTrainingDiscountPercent ?? "0"),
     allowPersonalTrainingPlan: Boolean(plan.allowPersonalTrainingPlan),
@@ -84,8 +84,7 @@ export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
   function validateForm() {
     if (!form.name.trim()) return "Vui lòng nhập tên gói.";
     if (form.name.trim().length > 100) return "Tên gói không được vượt quá 100 ký tự.";
-    if (!/^[0-9]+(?:\.[0-9]{1,2})?$/.test(form.price) || Number(form.price) < 0) return "Giá phải từ 0 trở lên và có tối đa 2 chữ số thập phân.";
-    if (!Number.isInteger(Number(form.durationMonths)) || Number(form.durationMonths) <= 0) return "Thời hạn phải là số tháng nguyên dương.";
+    if (!/^[0-9]+(?:\.[0-9]{1,2})?$/.test(form.monthlyPrice) || Number(form.monthlyPrice) <= 0) return "Giá tháng phải lớn hơn 0 và có tối đa 2 chữ số thập phân.";
     for (const field of ["courseDiscountPercent", "personalTrainingDiscountPercent"]) {
       const rawValue = form[field];
       const value = Number(rawValue);
@@ -108,8 +107,8 @@ export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
     const payload = {
       name: form.name.trim(),
       description: form.description.trim() || null,
-      price: Number(form.price),
-      durationMonths: Number(form.durationMonths),
+      monthlyPrice: Number(form.monthlyPrice),
+      upgradeFromPlanIds: form.upgradeFromPlanIds,
       courseDiscountPercent: Number(form.courseDiscountPercent),
       personalTrainingDiscountPercent: Number(form.personalTrainingDiscountPercent),
       allowPersonalTrainingPlan: form.allowPersonalTrainingPlan,
@@ -183,14 +182,9 @@ export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
                   onChange={(event) => setForm({ ...form, name: event.target.value })} />
               </div>
               <div className="col-md-6">
-                <label className="form-label" htmlFor="planPrice">Giá</label>
-                <input className="form-control" id="planPrice" type="number" min="0" step="0.01" required value={form.price}
-                  onChange={(event) => setForm({ ...form, price: event.target.value })} />
-              </div>
-              <div className="col-md-6">
-                <label className="form-label" htmlFor="planDuration">Thời hạn (tháng)</label>
-                <input className="form-control" id="planDuration" type="number" min="1" step="1" required value={form.durationMonths}
-                  onChange={(event) => setForm({ ...form, durationMonths: event.target.value })} />
+                <label className="form-label" htmlFor="planPrice">Giá mỗi tháng (VND)</label>
+                <input className="form-control" id="planPrice" type="number" min="0.01" step="0.01" required value={form.monthlyPrice}
+                  onChange={(event) => setForm({ ...form, monthlyPrice: event.target.value })} />
               </div>
               <div className="col-md-6">
                 <label className="form-label" htmlFor="planCourseDiscount">Ưu đãi khóa học (%)</label>
@@ -212,6 +206,17 @@ export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
                   onChange={(event) => setForm({ ...form, allowPersonalTrainingPlan: event.target.checked })} />
                 <label className="form-check-label" htmlFor="allowPersonal">Cho phép gói huấn luyện cá nhân</label>
               </div>
+              <div className="col-12">
+                <fieldset><legend className="form-label">Các gói được phép nâng cấp trực tiếp lên gói này</legend>
+                  {plans.filter((plan) => plan.id !== editingId).map((plan) => <label className="d-block" key={plan.id}>
+                    <input type="checkbox" checked={form.upgradeFromPlanIds.includes(Number(plan.id))}
+                      onChange={(event) => setForm((current) => ({ ...current, upgradeFromPlanIds: event.target.checked
+                        ? [...current.upgradeFromPlanIds, Number(plan.id)]
+                        : current.upgradeFromPlanIds.filter((id) => id !== Number(plan.id)) }))} /> {plan.name}
+                  </label>)}
+                  <small>Chỉ lưu các hướng được chọn; máy chủ từ chối tự nâng cấp và mọi chu trình.</small>
+                </fieldset>
+              </div>
               <div className="col-md-6 form-check ms-2">
                 <input className="form-check-input" id="allowOneOnOne" type="checkbox" checked={form.allowOneOnOneCoaching}
                   onChange={(event) => setForm({ ...form, allowOneOnOneCoaching: event.target.checked })} />
@@ -230,14 +235,14 @@ export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
             : <div className="queue-table-wrap">
               <table className="queue-table">
                 <thead><tr>
-                  <th>Tên gói</th><th>Giá</th><th>Thời hạn</th><th>Ưu đãi</th><th>Trạng thái</th>{admin && <th>Thao tác</th>}
+                  <th>Tên gói</th><th>Giá / tháng</th><th>Nâng cấp trực tiếp</th><th>Ưu đãi</th><th>Trạng thái</th>{admin && <th>Thao tác</th>}
                 </tr></thead>
                 <tbody>
                   {plans.map((plan) => (
                     <tr key={plan.id}>
                       <td><strong>{plan.name}</strong><br /><small>{plan.description || "Chưa có mô tả."}</small></td>
-                      <td>{formatPrice(plan.price)}</td>
-                      <td>{plan.durationMonths} tháng</td>
+                      <td>{plan.monthlyPrice == null ? "Cần cấu hình giá tháng" : formatPrice(plan.monthlyPrice)}</td>
+                      <td>{(plan.upgradeFromPlanIds || []).map((id) => plans.find((item) => Number(item.id) === Number(id))?.name || `#${id}`).join(", ") || "—"}</td>
                       <td>Khóa học {plan.courseDiscountPercent}%<br />Huấn luyện cá nhân {plan.personalTrainingDiscountPercent}%</td>
                       <td><span className={"status-pill status-" + String(plan.status).toLowerCase()}>{plan.status === "ACTIVE" ? "\u0110ang \u00e1p d\u1ee5ng" : "Ng\u1eebng \u00e1p d\u1ee5ng"}</span></td>
                       {admin && <td>

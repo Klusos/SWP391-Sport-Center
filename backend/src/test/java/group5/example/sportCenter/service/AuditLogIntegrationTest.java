@@ -199,8 +199,8 @@ class AuditLogIntegrationTest {
     void membershipPlanCreateUpdateStatusAndLegacyDeleteAreAuditedOnlyOnActualChanges() throws Exception {
         User admin = user("ADMIN");
         String token = bearer(admin);
-        String createBody = "{\"name\":\"Audit Plan\",\"description\":\"Initial\",\"price\":10,"
-                + "\"durationMonths\":1,\"courseDiscountPercent\":0,\"personalTrainingDiscountPercent\":0,"
+        String createBody = "{\"name\":\"Audit Plan\",\"description\":\"Initial\",\"monthlyPrice\":10,"
+                + "\"upgradeFromPlanIds\":[],\"courseDiscountPercent\":0,\"personalTrainingDiscountPercent\":0,"
                 + "\"allowPersonalTrainingPlan\":false,\"allowOneOnOneCoaching\":false}";
         String response = mvc.perform(post("/api/membership-plans").header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON).content(createBody))
@@ -208,8 +208,8 @@ class AuditLogIntegrationTest {
         int planId = objectMapper.readTree(response).get("id").intValue();
         assertEquals(1, auditLogs.count());
 
-        String updateBody = "{\"name\":\"Audit Plan Updated\",\"description\":\"Changed\",\"price\":10,"
-                + "\"durationMonths\":1,\"courseDiscountPercent\":0,\"personalTrainingDiscountPercent\":0,"
+        String updateBody = "{\"name\":\"Audit Plan Updated\",\"description\":\"Changed\",\"monthlyPrice\":10,"
+                + "\"upgradeFromPlanIds\":[],\"courseDiscountPercent\":0,\"personalTrainingDiscountPercent\":0,"
                 + "\"allowPersonalTrainingPlan\":false,\"allowOneOnOneCoaching\":false,\"status\":\"ACTIVE\"}";
         mvc.perform(put("/api/membership-plans/{id}", planId).header("Authorization", token)
                         .contentType(MediaType.APPLICATION_JSON).content(updateBody))

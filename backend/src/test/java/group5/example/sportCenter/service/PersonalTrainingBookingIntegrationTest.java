@@ -385,6 +385,7 @@ class PersonalTrainingBookingIntegrationTest {
         MembershipPlan plan = new MembershipPlan();
         plan.setName("PT plan " + System.nanoTime());
         plan.setPrice(new BigDecimal("500.00"));
+        plan.setMonthlyPrice(new BigDecimal("500.00"));
         plan.setDurationMonths(1);
         plan.setCourseDiscountPercent(BigDecimal.ZERO);
         plan.setPersonalTrainingDiscountPercent(new BigDecimal(percent));

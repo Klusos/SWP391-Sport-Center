@@ -2,6 +2,7 @@ package group5.example.sportCenter.service;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -23,6 +24,8 @@ import group5.example.sportCenter.dto.CounterPaymentRequest;
 import group5.example.sportCenter.dto.CreatePaymentRequest;
 import group5.example.sportCenter.dto.PaymentResponse;
 import group5.example.sportCenter.dto.PendingCoursePaymentResponse;
+import group5.example.sportCenter.dto.SelectRenewalPaymentMethodRequest;
+import group5.example.sportCenter.entity.Membership;
 import group5.example.sportCenter.entity.MembershipPlan;
 import group5.example.sportCenter.entity.Payment;
 import group5.example.sportCenter.entity.PaymentMethod;
@@ -37,6 +40,7 @@ import group5.example.sportCenter.payment.PaymentGateway;
 import group5.example.sportCenter.payment.PtBookingPaymentHandler;
 import group5.example.sportCenter.repository.MembershipPlanRepository;
 import group5.example.sportCenter.repository.PaymentRepository;
+import group5.example.sportCenter.repository.PaymentCheckoutAttemptRepository;
 import group5.example.sportCenter.repository.UserRepository;
 
 @Service
@@ -45,6 +49,7 @@ public class PaymentService {
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final PaymentRepository paymentRepository;
+    private final PaymentCheckoutAttemptRepository paymentCheckoutAttemptRepository;
     private final UserRepository userRepository;
     private final MembershipPlanRepository membershipPlanRepository;
     private final MembershipService membershipService;
@@ -55,6 +60,7 @@ public class PaymentService {
 
     public PaymentService(
             PaymentRepository paymentRepository,
+            PaymentCheckoutAttemptRepository paymentCheckoutAttemptRepository,
             UserRepository userRepository,
             MembershipPlanRepository membershipPlanRepository,
             MembershipService membershipService,
@@ -63,6 +69,7 @@ public class PaymentService {
             PaymentGateway paymentGateway,
             Clock clock) {
         this.paymentRepository = paymentRepository;
+        this.paymentCheckoutAttemptRepository = paymentCheckoutAttemptRepository;
         this.userRepository = userRepository;
         this.membershipPlanRepository = membershipPlanRepository;
         this.membershipService = membershipService;
@@ -97,7 +104,7 @@ public class PaymentService {
 
         BigDecimal amount = resolveAmountAndValidate(request, member);
         if (request.getPurpose() == PaymentPurpose.MEMBERSHIP
-                && paymentRepository.existsByMember_IdAndPurposeAndReferenceIdAndStatus(
+                && paymentRepository.existsOrdinaryPayment(
                         member.getId(), PaymentPurpose.MEMBERSHIP, request.getReferenceId(), PaymentStatus.PENDING)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "A pending membership payment already exists for this member and plan");
@@ -109,6 +116,13 @@ public class PaymentService {
         payment.setMethod(request.getMethod());
         payment.setPurpose(request.getPurpose());
         payment.setReferenceId(request.getReferenceId());
+        if (request.getPurpose() == PaymentPurpose.MEMBERSHIP) {
+            MembershipPlan plan = membershipPlanRepository.findById(request.getReferenceId()).orElseThrow();
+            // New purchases are one month. Keep this explicit on the payment so later settlement
+            // never depends on a mutable catalog duration; older pending rows retain their snapshot.
+            payment.setPurchasedMonths(request.getPurchasedMonths() == null ? 1 : request.getPurchasedMonths());
+            payment.setMonthlyPriceSnapshot(plan.getEffectiveMonthlyPrice());
+        }
         payment.setAutoRenew(request.getPurpose() == PaymentPurpose.MEMBERSHIP
                 ? Boolean.TRUE.equals(request.getAutoRenew()) : null);
         payment.setStatus(PaymentStatus.PENDING);
@@ -130,6 +144,10 @@ public class PaymentService {
 
         Payment payment = paymentRepository.findByIdForUpdate(paymentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + paymentId));
+        if (payment.getRenewalMembership() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Membership renewal settlement is unavailable until Stage C");
+        }
         if (payment.getMethod() != PaymentMethod.COUNTER) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This payment is not a counter payment");
         }
@@ -159,6 +177,13 @@ public class PaymentService {
         if (payment.getMethod() != PaymentMethod.ONLINE) {
             return new OnlineCallbackResult(OnlineCallbackResult.Status.NOT_ONLINE, null);
         }
+        if (callback.success() && payment.getRenewalMembership() != null
+                && callback.amount() != null && payment.getAmount().compareTo(callback.amount()) != 0
+                && payment.getStatus() == PaymentStatus.PENDING) {
+            return new OnlineCallbackResult(OnlineCallbackResult.Status.APPLIED,
+                    toResponse(markRefundRequired(payment,
+                            "Verified renewal callback amount mismatch requires manual reconciliation; Stage C settlement is unavailable"), null));
+        }
         if (callback.amount() != null && payment.getAmount().compareTo(callback.amount()) != 0) {
             return new OnlineCallbackResult(OnlineCallbackResult.Status.AMOUNT_MISMATCH, null);
         }
@@ -172,22 +197,105 @@ public class PaymentService {
             return new OnlineCallbackResult(OnlineCallbackResult.Status.ALREADY_PROCESSED, toResponse(payment, null));
         }
         String failureNote = callback.failureReason() != null ? callback.failureReason() : "Online payment failed";
+        if (callback.success() && payment.getRenewalMembership() != null) {
+            // A signed success is evidence that funds may have been captured. Stage B cannot
+            // activate renewals, so retain the captured-payment reconciliation state.
+            return new OnlineCallbackResult(OnlineCallbackResult.Status.APPLIED,
+                    toResponse(markRefundRequired(payment,
+                            "Verified renewal payment requires manual reconciliation; renewal settlement is not available until Stage C"), null));
+        }
         return new OnlineCallbackResult(OnlineCallbackResult.Status.APPLIED, toResponse(
                 finalizePayment(payment, callback.success(), callback.success() ? null : failureNote), null));
+    }
+
+    @Transactional
+    public PaymentResponse selectRenewalPaymentMethod(Integer paymentId,
+            group5.example.sportCenter.dto.SelectRenewalPaymentMethodRequest request, Jwt callerJwt) {
+        User actor = currentActor(callerJwt);
+        if (!"MEMBER".equalsIgnoreCase(actor.getRole())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Only the owning MEMBER can select a renewal payment method");
+        }
+        Payment snapshot = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + paymentId));
+        Membership snapshotMembership = snapshot.getRenewalMembership();
+        if (snapshotMembership == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Payment is not a renewal request");
+        }
+        userRepository.findByIdForBookingUpdate(snapshot.getMember().getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Member not found"));
+        Membership source = membershipService.lockRenewalSource(snapshotMembership.getId());
+        Payment payment = paymentRepository.findByIdForUpdate(paymentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + paymentId));
+        List<group5.example.sportCenter.entity.PaymentCheckoutAttempt> attempts = paymentCheckoutAttemptRepository
+                .findByPaymentIdForUpdateOrderByCreatedAtAscIdAsc(paymentId);
+        if (attempts.stream().anyMatch(attempt -> attempt.getVerifiedAt() != null)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "A verified renewal capture is recorded; payment method cannot be changed before reconciliation");
+        }
+        if (!payment.getMember().getId().equals(actor.getId())
+                || !source.getMember().getId().equals(actor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "You can only select a payment method for your own renewal request");
+        }
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        if (payment.getRenewalMembership() == null
+                || !payment.getRenewalMembership().getId().equals(source.getId())
+                || payment.getPurpose() != PaymentPurpose.MEMBERSHIP
+                || payment.getStatus() != PaymentStatus.PENDING
+                || !"ACTIVE".equalsIgnoreCase(source.getStatus())
+                || source.getStartDate() == null || source.getStartDate().isAfter(today)
+                || source.getEndDate() == null || !source.getEndDate().isAfter(today)
+                || source.getEndDate().isAfter(today.plusDays(3))
+                || !Boolean.TRUE.equals(source.getAutoRenew())
+                || !membershipService.isFinalPaidRenewalPeriod(source)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Renewal request is no longer eligible for payment method selection");
+        }
+        if (request.getMethod() != PaymentMethod.ONLINE && request.getMethod() != PaymentMethod.COUNTER) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Renewal method must be ONLINE or COUNTER");
+        }
+        // No checkout URL or counter settlement is issued in Stage B, so method selection
+        // remains reversible while the request is pending and no processing has begun.
+        payment.setMethod(request.getMethod());
+        payment.setNote("Payment method selected; renewal settlement will be available in Stage C");
+        return toResponse(paymentRepository.save(payment), null);
     }
 
     /** Huỷ payment đang PENDING (member huỷ của mình, hoặc staff huỷ). */
     @Transactional
     public PaymentResponse cancelPayment(Integer paymentId, Jwt callerJwt) {
         User actor = currentActor(callerJwt);
-        Payment payment = paymentRepository.findByIdForUpdate(paymentId)
+        Payment snapshot = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + paymentId));
+        Payment payment;
+        java.util.List<group5.example.sportCenter.entity.PaymentCheckoutAttempt> renewalAttempts = java.util.List.of();
+        if (snapshot.getRenewalMembership() != null) {
+            userRepository.findByIdForBookingUpdate(snapshot.getMember().getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Member not found"));
+            membershipService.lockRenewalSource(snapshot.getRenewalMembership().getId());
+            payment = paymentRepository.findByIdForUpdate(paymentId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + paymentId));
+            renewalAttempts = paymentCheckoutAttemptRepository.findByPaymentIdForUpdateOrderByCreatedAtAscIdAsc(paymentId);
+        } else {
+            // Preserve the ordinary payment locking path outside renewal processing.
+            payment = paymentRepository.findByIdForUpdate(paymentId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + paymentId));
+        }
         if (!isStaff(actor) && !payment.getMember().getId().equals(actor.getId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only cancel your own payments");
         }
         requirePending(payment);
-        payment.setStatus(PaymentStatus.CANCELLED);
-        payment.setNote("Cancelled by " + actor.getRole().toUpperCase(Locale.ROOT));
+        var verifiedAttempt = renewalAttempts.stream().filter(a -> a.getVerifiedAt() != null).findFirst().orElse(null);
+        if (payment.getRenewalMembership() != null && verifiedAttempt != null) {
+            payment.setStatus(payment.getMethod() == null ? PaymentStatus.CANCELLED : PaymentStatus.REFUND_REQUIRED);
+            payment.setPaidAt(verifiedAttempt.getVerifiedAt());
+            payment.setNote("Verified renewal capture exists; cancellation requires manual reconciliation");
+        } else {
+            payment.setStatus(PaymentStatus.CANCELLED);
+            payment.setNote("Cancelled by " + actor.getRole().toUpperCase(Locale.ROOT));
+        }
         return toResponse(paymentRepository.save(payment), null);
     }
 
@@ -205,11 +313,14 @@ public class PaymentService {
             return paymentRepository.save(payment);
         }
 
+        if (payment.getRenewalMembership() != null) {
+            return markRefundRequired(payment,
+                    "Verified renewal payment requires manual reconciliation; renewal settlement is not available until Stage C");
+        }
+
         Optional<String> refundReason = switch (payment.getPurpose()) {
             case MEMBERSHIP -> {
-                membershipService.activateOrRenewFromPayment(
-                        payment.getMember().getId(), payment.getReferenceId(),
-                        Boolean.TRUE.equals(payment.getAutoRenew()));
+                membershipService.activateOrRenewFromPayment(payment);
                 yield Optional.empty();
             }
             case COURSE_REGISTRATION -> courseRegistrationHandler.apply(payment);
@@ -260,7 +371,7 @@ public class PaymentService {
         if (page < 0 || size < 1 || size > 100) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must be nonnegative and size between 1 and 100");
         }
-        return paymentRepository.findByStatusAndMethodAndPurpose(
+        return paymentRepository.findOrdinaryPendingMembershipPayments(
                 PaymentStatus.PENDING, PaymentMethod.COUNTER, PaymentPurpose.MEMBERSHIP,
                 PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt", "id")))
                 .map(payment -> toResponse(payment, null));
@@ -282,13 +393,21 @@ public class PaymentService {
     private BigDecimal resolveAmountAndValidate(CreatePaymentRequest request, User member) {
         return switch (request.getPurpose()) {
             case MEMBERSHIP -> {
+                Integer months = request.getPurchasedMonths();
+                if (months != null && months != 1) {
+                    throw new IllegalArgumentException("New membership purchases must be exactly one month");
+                }
                 MembershipPlan plan = membershipPlanRepository.findById(request.getReferenceId())
                         .orElseThrow(() -> new ResourceNotFoundException(
                                 "Membership plan not found with id: " + request.getReferenceId()));
                 if (!"ACTIVE".equalsIgnoreCase(plan.getStatus())) {
                     throw new IllegalArgumentException("Membership plan is not active");
                 }
-                yield plan.getPrice();
+                BigDecimal monthlyPrice = plan.getEffectiveMonthlyPrice();
+                if (monthlyPrice == null || monthlyPrice.signum() < 0) {
+                    throw new IllegalArgumentException("Membership plan monthly price has not been safely configured");
+                }
+                yield monthlyPrice.setScale(2, java.math.RoundingMode.UNNECESSARY);
             }
             case COURSE_REGISTRATION -> courseRegistrationHandler.quote(member, request.getReferenceId());
             case PT_BOOKING -> ptBookingHandler.quote(member, request.getReferenceId());
@@ -360,7 +479,7 @@ public class PaymentService {
     private PaymentResponse toResponse(Payment p, String paymentUrl) {
         return new PaymentResponse(
                 p.getId(), p.getMember().getId(), p.getMember().getName(), p.getAmount(),
-                p.getMethod().name(), p.getPurpose().name(), p.getReferenceId(), p.getStatus().name(),
-                p.getTransactionCode(), paymentUrl, p.getNote(), p.getCreatedAt(), p.getPaidAt());
+                p.getMethod() == null ? null : p.getMethod().name(), p.getPurpose().name(), p.getReferenceId(), p.getStatus().name(),
+                p.getTransactionCode(), paymentUrl, p.getNote(), p.getCreatedAt(), p.getPaidAt(), p.getPurchasedMonths());
     }
 }

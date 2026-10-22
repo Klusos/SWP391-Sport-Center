@@ -38,6 +38,7 @@ import org.springframework.security.web.FilterChainProxy;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.context.annotation.Import;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
@@ -46,7 +47,11 @@ import org.springframework.web.server.ResponseStatusException;
 import group5.example.sportCenter.dto.CounterPaymentRequest;
 import group5.example.sportCenter.dto.CreatePaymentRequest;
 import group5.example.sportCenter.dto.PaymentResponse;
+import group5.example.sportCenter.dto.RevenueGrouping;
+import group5.example.sportCenter.dto.SelectRenewalPaymentMethodRequest;
 import group5.example.sportCenter.entity.Coach;
+import group5.example.sportCenter.entity.CheckoutAttemptStatus;
+import group5.example.sportCenter.entity.CheckoutProvider;
 import group5.example.sportCenter.entity.Course;
 import group5.example.sportCenter.entity.CourseClass;
 import group5.example.sportCenter.entity.CourseOffering;
@@ -55,6 +60,7 @@ import group5.example.sportCenter.entity.CourseRegistrationStatus;
 import group5.example.sportCenter.entity.Membership;
 import group5.example.sportCenter.entity.MembershipPlan;
 import group5.example.sportCenter.entity.Payment;
+import group5.example.sportCenter.entity.PaymentCheckoutAttempt;
 import group5.example.sportCenter.entity.PaymentStatus;
 import group5.example.sportCenter.entity.PaymentMethod;
 import group5.example.sportCenter.entity.PaymentPurpose;
@@ -62,6 +68,8 @@ import group5.example.sportCenter.entity.PersonalTrainingBooking;
 import group5.example.sportCenter.entity.PersonalTrainingBookingStatus;
 import group5.example.sportCenter.entity.Sport;
 import group5.example.sportCenter.entity.User;
+import group5.example.sportCenter.payment.PaymentGateway;
+import group5.example.sportCenter.payment.OnlineCallbackResult;
 import group5.example.sportCenter.repository.ClassSessionRepository;
 import group5.example.sportCenter.repository.CoachRepository;
 import group5.example.sportCenter.repository.CoachSportRepository;
@@ -73,10 +81,14 @@ import group5.example.sportCenter.repository.MembershipPlanRepository;
 import group5.example.sportCenter.repository.MembershipRepository;
 import group5.example.sportCenter.repository.NotificationRepository;
 import group5.example.sportCenter.repository.PaymentRepository;
+import group5.example.sportCenter.repository.PaymentCheckoutAttemptRepository;
 import group5.example.sportCenter.repository.PersonalTrainingBookingRepository;
 import group5.example.sportCenter.repository.SportRepository;
 import group5.example.sportCenter.repository.UserRepository;
 import group5.example.sportCenter.security.JwtService;
+import group5.example.sportCenter.service.RenewalSettlementResult;
+import group5.example.sportCenter.service.RenewalSettlementService;
+import group5.example.sportCenter.service.VerifiedRenewalCapture;
 
 @SpringBootTest
 @ActiveProfiles("phase1")
@@ -86,9 +98,14 @@ class PaymentIntegrationTest {
     private static final String EMAIL_DOMAIN = "@payment.example.test";
 
     @Autowired PaymentService service;
+    @Autowired PaymentGateway paymentGateway;
+    @Autowired MembershipRenewalService renewalService;
+    @Autowired RenewalSettlementService renewalSettlementService;
+    @Autowired MembershipService membershipService;
     @Autowired CourseRegistrationExpirationService registrationExpiration;
     @Autowired PaymentReportService reports;
     @Autowired PaymentRepository payments;
+    @Autowired PaymentCheckoutAttemptRepository checkoutAttempts;
     @Autowired NotificationRepository notifications;
     @Autowired UserRepository users;
     @Autowired JdbcTemplate jdbc;
@@ -131,6 +148,7 @@ class PaymentIntegrationTest {
         plan = new MembershipPlan();
         plan.setName("Pay plan " + System.nanoTime());
         plan.setPrice(new BigDecimal("300000.00"));
+        plan.setMonthlyPrice(new BigDecimal("300000.00"));
         plan.setDurationMonths(1);
         plan.setCourseDiscountPercent(BigDecimal.ZERO);
         plan.setPersonalTrainingDiscountPercent(BigDecimal.ZERO);
@@ -192,6 +210,787 @@ class PaymentIntegrationTest {
     }
 
     @Test
+    void renewalSchedulerCreatesOneMethodNeutralPaymentInsideThreeDayWindow() {
+        PaymentResponse original = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        service.processAtCounter(original.getId(), counter(true), jwt(receptionist));
+        Membership source = memberships.findByMemberId(member.getId()).get(0);
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        source.setStartDate(today.minusMonths(1));
+        source.setEndDate(today.plusDays(3));
+        source.setAutoRenew(true);
+        memberships.saveAndFlush(source);
+
+        assertEquals(1, renewalService.createDueRenewalRequests());
+        assertEquals(0, renewalService.createDueRenewalRequests());
+        Payment renewal = payments.findByRenewalMembership_Id(source.getId()).orElseThrow();
+        assertEquals(PaymentPurpose.MEMBERSHIP, renewal.getPurpose());
+        assertEquals(PaymentStatus.PENDING, renewal.getStatus());
+        assertNull(renewal.getMethod());
+        assertEquals(source.getMember().getId(), renewal.getMember().getId());
+        assertEquals(source.getPlan().getId(), renewal.getReferenceId());
+        assertEquals(1, renewal.getPurchasedMonths());
+        assertEquals(plan.getMonthlyPrice(), renewal.getMonthlyPriceSnapshot());
+        assertEquals(plan.getMonthlyPrice(), renewal.getAmount());
+        assertEquals(1, memberships.findByMemberId(member.getId()).size());
+    }
+
+    @Test
+    void oneRenewalPaymentCanRetainMultipleDistinctCheckoutAttempts() {
+        // H2 has no SQL Server-style filtered indexes. This test-only computed key
+        // models their exact uniqueness rule: NULL links get distinct attempt keys,
+        // while a non-NULL Membership can be linked only once.
+        jdbc.execute("alter table payment_checkout_attempt add applied_membership_unique_key int "
+                + "generated always as (case when applied_membership_id is null then -id "
+                + "else applied_membership_id end)");
+        jdbc.execute("alter table payment_checkout_attempt add winning_payment_unique_key int "
+                + "generated always as (case when applied_membership_id is null then -id "
+                + "else payment_id end)");
+        jdbc.execute("create unique index ux_test_attempt_applied_membership "
+                + "on payment_checkout_attempt(applied_membership_unique_key)");
+        jdbc.execute("create unique index ux_test_attempt_winning_payment "
+                + "on payment_checkout_attempt(winning_payment_unique_key)");
+
+        PaymentResponse original = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        service.processAtCounter(original.getId(), counter(true), jwt(receptionist));
+        Membership source = memberships.findByMemberId(member.getId()).get(0);
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        source.setStartDate(today.minusMonths(1));
+        source.setEndDate(today.plusDays(2));
+        source.setAutoRenew(true);
+        memberships.saveAndFlush(source);
+        renewalService.createDueRenewalRequests();
+        Payment renewal = payments.findByRenewalMembership_Id(source.getId()).orElseThrow();
+
+        LocalDateTime createdAt = LocalDateTime.now(clock.withZone(BUSINESS_ZONE));
+        PaymentCheckoutAttempt first = checkoutAttempt(renewal, createdAt, "RNL" + java.util.UUID.randomUUID().toString().replace("-", ""));
+        PaymentCheckoutAttempt second = checkoutAttempt(renewal, createdAt.plusSeconds(1), "RNL" + java.util.UUID.randomUUID().toString().replace("-", ""));
+        checkoutAttempts.saveAndFlush(first);
+        checkoutAttempts.saveAndFlush(second);
+
+        // Multiple non-winning attempts may leave the applied Membership link NULL.
+        first.setAppliedMembership(source);
+        checkoutAttempts.saveAndFlush(first);
+
+        List<PaymentCheckoutAttempt> stored = checkoutAttempts.findByPayment_IdOrderByCreatedAtAscIdAsc(renewal.getId());
+        assertEquals(2, stored.size());
+        assertTrue(!stored.get(0).getTransactionReference().equals(stored.get(1).getTransactionReference()));
+        assertEquals(renewal.getId(), stored.get(0).getPayment().getId());
+        assertEquals(source.getId(), stored.get(0).getAppliedMembership().getId());
+        assertNull(stored.get(1).getAppliedMembership());
+        assertEquals(renewal.getAmount(), stored.get(0).getAmount());
+        assertEquals(CheckoutProvider.VNPAY, stored.get(0).getProvider());
+        assertEquals(CheckoutAttemptStatus.URL_ISSUED, stored.get(0).getStatus());
+        PaymentCheckoutAttempt duplicateReference = checkoutAttempt(renewal, createdAt.plusSeconds(2),
+                stored.get(0).getTransactionReference());
+        assertThrows(DataIntegrityViolationException.class, () -> checkoutAttempts.saveAndFlush(duplicateReference));
+        PaymentCheckoutAttempt duplicateAppliedMembership = checkoutAttempt(renewal, createdAt.plusSeconds(3),
+                "RNL" + java.util.UUID.randomUUID().toString().replace("-", ""));
+        duplicateAppliedMembership.setAppliedMembership(source);
+        assertThrows(DataIntegrityViolationException.class,
+                () -> checkoutAttempts.saveAndFlush(duplicateAppliedMembership));
+        Membership unrelatedMembership = new Membership();
+        unrelatedMembership.setMember(member);
+        unrelatedMembership.setPlan(plan);
+        unrelatedMembership.setAutoRenew(false);
+        unrelatedMembership.setStartDate(today.plusMonths(3));
+        unrelatedMembership.setEndDate(today.plusMonths(4));
+        unrelatedMembership.setStatus("ACTIVE");
+        unrelatedMembership = memberships.saveAndFlush(unrelatedMembership);
+        PaymentCheckoutAttempt duplicateWinningAttempt = checkoutAttempt(renewal, createdAt.plusSeconds(4),
+                "RNL" + java.util.UUID.randomUUID().toString().replace("-", ""));
+        duplicateWinningAttempt.setAppliedMembership(unrelatedMembership);
+        Membership persistedUnrelatedMembership = unrelatedMembership;
+        assertThrows(DataIntegrityViolationException.class,
+                () -> checkoutAttempts.saveAndFlush(duplicateWinningAttempt));
+        assertEquals(2, checkoutAttempts.findByPayment_IdOrderByCreatedAtAscIdAsc(renewal.getId()).size());
+    }
+
+    @Test
+    void overlappingRenewalSchedulerRunsCreateOnlyOneAttempt() throws Exception {
+        PaymentResponse original = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        service.processAtCounter(original.getId(), counter(true), jwt(receptionist));
+        Membership source = memberships.findByMemberId(member.getId()).get(0);
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        source.setStartDate(today.minusMonths(1));
+        source.setEndDate(today.plusDays(3));
+        source.setAutoRenew(true);
+        memberships.saveAndFlush(source);
+
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<Integer> first = pool.submit(() -> {
+                start.await();
+                return renewalService.createDueRenewalRequests();
+            });
+            Future<Integer> second = pool.submit(() -> {
+                start.await();
+                return renewalService.createDueRenewalRequests();
+            });
+            start.countDown();
+            int created = first.get(10, TimeUnit.SECONDS) + second.get(10, TimeUnit.SECONDS);
+            assertEquals(1, created);
+            assertEquals(1, payments.findAll().stream()
+                    .filter(p -> p.getRenewalMembership() != null
+                            && p.getRenewalMembership().getId().equals(source.getId())).count());
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void renewalSchedulerDoesNotCreateBeforeWindowOrAfterExpiry() {
+        PaymentResponse original = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        service.processAtCounter(original.getId(), counter(true), jwt(receptionist));
+        Membership source = memberships.findByMemberId(member.getId()).get(0);
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        source.setStartDate(today.minusMonths(1));
+        source.setEndDate(today.plusDays(4));
+        source.setAutoRenew(false);
+        memberships.saveAndFlush(source);
+        assertEquals(0, renewalService.createDueRenewalRequests());
+        source.setAutoRenew(true);
+        memberships.saveAndFlush(source);
+        assertEquals(0, renewalService.createDueRenewalRequests());
+
+        source.setEndDate(today);
+        memberships.saveAndFlush(source);
+        assertEquals(0, renewalService.createDueRenewalRequests());
+    }
+
+    @Test
+    void enablingAutoRenewInsideWindowCreatesRequestButDoesNotGrantTime() {
+        PaymentResponse original = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        service.processAtCounter(original.getId(), counter(true), jwt(receptionist));
+        Membership source = memberships.findByMemberId(member.getId()).get(0);
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        source.setStartDate(today.minusMonths(1));
+        source.setEndDate(today.plusDays(2));
+        source.setAutoRenew(false);
+        memberships.saveAndFlush(source);
+
+        membershipService.enableAutoRenew(source.getId(), jwt(member));
+        Payment renewal = payments.findByRenewalMembership_Id(source.getId()).orElseThrow();
+        assertEquals(PaymentStatus.PENDING, renewal.getStatus());
+        assertNull(renewal.getMethod());
+        assertEquals(1, memberships.findByMemberId(member.getId()).size());
+        assertEquals(today.plusDays(2), memberships.findById(source.getId()).orElseThrow().getEndDate());
+    }
+
+    @Test
+    void nullMethodIsAllowedOnlyForPendingOrCancelledRenewalPayments() {
+        Payment ordinary = methodNeutralPayment(null, PaymentStatus.PENDING, null);
+        assertThrows(DataIntegrityViolationException.class, () -> payments.saveAndFlush(ordinary));
+
+        PaymentResponse original = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        service.processAtCounter(original.getId(), counter(true), jwt(receptionist));
+        Membership source = memberships.findByMemberId(member.getId()).get(0);
+
+        Payment success = methodNeutralPayment(source, PaymentStatus.SUCCESS, null);
+        assertThrows(DataIntegrityViolationException.class, () -> payments.saveAndFlush(success));
+        Payment refundRequired = methodNeutralPayment(source, PaymentStatus.REFUND_REQUIRED, null);
+        assertThrows(DataIntegrityViolationException.class, () -> payments.saveAndFlush(refundRequired));
+
+        Payment cancelled = methodNeutralPayment(source, PaymentStatus.CANCELLED, null);
+        assertEquals(PaymentStatus.CANCELLED, payments.saveAndFlush(cancelled).getStatus());
+    }
+
+    @Test
+    void futurePaidMembershipPeriodPreventsEarlierPeriodRenewal() {
+        PaymentResponse original = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        service.processAtCounter(original.getId(), counter(true), jwt(receptionist));
+        Membership current = memberships.findByMemberId(member.getId()).get(0);
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        current.setStartDate(today.minusMonths(1));
+        current.setEndDate(today.plusDays(2));
+        current.setAutoRenew(true);
+        memberships.saveAndFlush(current);
+
+        Payment queuedPayment = new Payment();
+        queuedPayment.setMember(member);
+        queuedPayment.setAmount(plan.getMonthlyPrice());
+        queuedPayment.setMethod(PaymentMethod.COUNTER);
+        queuedPayment.setPurpose(PaymentPurpose.MEMBERSHIP);
+        queuedPayment.setReferenceId(plan.getId());
+        queuedPayment.setPurchasedMonths(1);
+        queuedPayment.setMonthlyPriceSnapshot(plan.getMonthlyPrice());
+        queuedPayment.setStatus(PaymentStatus.SUCCESS);
+        queuedPayment.setTransactionCode("TXN-FUTURE-" + System.nanoTime());
+        queuedPayment.setPaidAt(now());
+        queuedPayment = payments.saveAndFlush(queuedPayment);
+        Membership future = new Membership();
+        future.setMember(member);
+        future.setPlan(plan);
+        future.setAutoRenew(false);
+        future.setStartDate(current.getEndDate());
+        future.setEndDate(current.getEndDate().plusMonths(1));
+        future.setStatus("ACTIVE");
+        future.setPurchasedMonths(1);
+        future.setPaidAmount(plan.getMonthlyPrice());
+        future.setSourcePayment(queuedPayment);
+        memberships.saveAndFlush(future);
+
+        assertEquals(0, renewalService.createDueRenewalRequests());
+        assertTrue(payments.findByRenewalMembership_Id(current.getId()).isEmpty());
+        assertEquals(current.getEndDate(), memberships.findById(current.getId()).orElseThrow().getEndDate());
+        assertEquals(future.getStartDate(), memberships.findById(future.getId()).orElseThrow().getStartDate());
+    }
+
+    @Test
+    void renewalMethodSelectionIsOwnerOnlyAndCounterSettlementFailsClosed() throws Exception {
+        PaymentResponse original = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        service.processAtCounter(original.getId(), counter(true), jwt(receptionist));
+        Membership source = memberships.findByMemberId(member.getId()).get(0);
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        source.setStartDate(today.minusMonths(1));
+        source.setEndDate(today.plusDays(2));
+        source.setAutoRenew(true);
+        memberships.saveAndFlush(source);
+        renewalService.createDueRenewalRequests();
+        Payment renewal = payments.findByRenewalMembership_Id(source.getId()).orElseThrow();
+
+        mvc.perform(patch("/api/payments/{id}/renewal-method", renewal.getId())
+                        .header("Authorization", bearer(otherMember))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"method\":\"COUNTER\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(patch("/api/payments/{id}/renewal-method", renewal.getId())
+                        .header("Authorization", bearer(member))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(patch("/api/payments/{id}/renewal-method", renewal.getId())
+                        .header("Authorization", bearer(member))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"method\":\"OFFLINE\"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(patch("/api/payments/{id}/renewal-method", renewal.getId())
+                        .header("Authorization", bearer(member))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"method\":\"COUNTER\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.method").value("COUNTER"));
+        assertThrows(ResponseStatusException.class,
+                () -> service.processAtCounter(renewal.getId(), counter(true), jwt(receptionist)));
+        assertEquals(PaymentStatus.PENDING, payments.findById(renewal.getId()).orElseThrow().getStatus());
+        assertEquals(1, memberships.findByMemberId(member.getId()).size());
+    }
+
+    @Test
+    void disablingRenewalCancelsPendingAttemptAndExpiryIsIdempotent() {
+        PaymentResponse original = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        service.processAtCounter(original.getId(), counter(true), jwt(receptionist));
+        Membership source = memberships.findByMemberId(member.getId()).get(0);
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        source.setStartDate(today.minusMonths(1));
+        source.setEndDate(today.plusDays(2));
+        source.setAutoRenew(true);
+        memberships.saveAndFlush(source);
+        renewalService.createDueRenewalRequests();
+        Payment renewal = payments.findByRenewalMembership_Id(source.getId()).orElseThrow();
+        Integer sourceId = source.getId();
+        assertEquals(PaymentStatus.PENDING, renewal.getStatus());
+        assertNull(renewal.getMethod());
+
+        membershipService.cancelAutoRenew(source.getId(), jwt(member));
+        assertEquals("CANCELLED", payments.findById(renewal.getId()).orElseThrow().getStatus().name());
+        assertNull(payments.findById(renewal.getId()).orElseThrow().getMethod());
+        membershipService.cancelAutoRenew(source.getId(), jwt(member));
+        assertEquals(PaymentStatus.CANCELLED, payments.findById(renewal.getId()).orElseThrow().getStatus());
+        assertNull(payments.findById(renewal.getId()).orElseThrow().getMethod());
+        assertEquals(0, renewalService.createDueRenewalRequests());
+        assertThrows(ResponseStatusException.class, () -> membershipService.enableAutoRenew(sourceId, jwt(member)));
+
+        source = memberships.findById(source.getId()).orElseThrow();
+        source.setAutoRenew(false);
+        source.setEndDate(today);
+        memberships.saveAndFlush(source);
+        assertEquals(1, membershipService.expireMemberships());
+        assertEquals(0, membershipService.expireMemberships());
+        assertEquals("EXPIRED", memberships.findById(source.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void expirationCancelsPendingRenewalWithoutChangingPaidFuturePeriods() {
+        PaymentResponse original = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        service.processAtCounter(original.getId(), counter(true), jwt(receptionist));
+        Membership source = memberships.findByMemberId(member.getId()).get(0);
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        source.setStartDate(today.minusMonths(1));
+        source.setEndDate(today.plusDays(1));
+        source.setAutoRenew(true);
+        memberships.saveAndFlush(source);
+        renewalService.createDueRenewalRequests();
+        Payment renewal = payments.findByRenewalMembership_Id(source.getId()).orElseThrow();
+
+        clock.setInstant(today.plusDays(1).atStartOfDay(BUSINESS_ZONE).toInstant());
+        assertEquals(1, membershipService.expireMemberships());
+        assertEquals(PaymentStatus.CANCELLED, payments.findById(renewal.getId()).orElseThrow().getStatus());
+        assertNull(payments.findById(renewal.getId()).orElseThrow().getMethod());
+        assertEquals("EXPIRED", memberships.findById(source.getId()).orElseThrow().getStatus());
+        assertEquals(0, membershipService.expireMemberships());
+    }
+
+    @Test
+    void expiredRenewalRequestRejectsMethodSelection() {
+        PaymentResponse original = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        service.processAtCounter(original.getId(), counter(true), jwt(receptionist));
+        Membership source = memberships.findByMemberId(member.getId()).get(0);
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        source.setStartDate(today.minusMonths(1));
+        source.setEndDate(today.plusDays(1));
+        source.setAutoRenew(true);
+        memberships.saveAndFlush(source);
+        renewalService.createDueRenewalRequests();
+        Payment renewal = payments.findByRenewalMembership_Id(source.getId()).orElseThrow();
+        SelectRenewalPaymentMethodRequest method = new SelectRenewalPaymentMethodRequest();
+        method.setMethod(PaymentMethod.ONLINE);
+
+        clock.setInstant(today.plusDays(1).atStartOfDay(BUSINESS_ZONE).toInstant());
+        assertThrows(ResponseStatusException.class,
+                () -> service.selectRenewalPaymentMethod(renewal.getId(), method, jwt(member)));
+        assertEquals(PaymentStatus.PENDING, payments.findById(renewal.getId()).orElseThrow().getStatus());
+        assertEquals(1, memberships.findByMemberId(member.getId()).size());
+    }
+
+    @Test
+    void verifiedRenewalCallbackFailsClosedIntoRefundRequired() {
+        PaymentResponse original = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        service.processAtCounter(original.getId(), counter(true), jwt(receptionist));
+        Membership source = memberships.findByMemberId(member.getId()).get(0);
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        source.setStartDate(today.minusMonths(1));
+        source.setEndDate(today.plusDays(2));
+        source.setAutoRenew(true);
+        memberships.saveAndFlush(source);
+        renewalService.createDueRenewalRequests();
+        Payment renewal = payments.findByRenewalMembership_Id(source.getId()).orElseThrow();
+        SelectRenewalPaymentMethodRequest method = new SelectRenewalPaymentMethodRequest();
+        method.setMethod(PaymentMethod.ONLINE);
+        service.selectRenewalPaymentMethod(renewal.getId(), method, jwt(member));
+
+        String signedUrl = paymentGateway.createPaymentUrl(renewal.getTransactionCode(), renewal.getAmount(), "127.0.0.1");
+        String query = signedUrl.substring(signedUrl.indexOf('?') + 1);
+        java.util.Map<String, String> params = java.util.Arrays.stream(query.split("&"))
+                .map(part -> part.split("=", 2))
+                .collect(java.util.stream.Collectors.toMap(pair -> pair[0], pair -> pair[1]));
+        OnlineCallbackResult result = service.processOnlineCallback(params);
+
+        assertEquals(OnlineCallbackResult.Status.APPLIED, result.status());
+        assertEquals("REFUND_REQUIRED", result.payment().getStatus());
+        assertEquals(1, memberships.findByMemberId(member.getId()).size());
+        assertEquals(PaymentStatus.REFUND_REQUIRED, payments.findById(renewal.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void timelyRenewalCaptureCreatesExactNextPeriodWithExplicitAutoRenewChoice() {
+        RenewalFixture fixture = renewalFixture(PaymentMethod.ONLINE, true, true);
+        LocalDateTime observed = LocalDateTime.now(clock.withZone(BUSINESS_ZONE));
+
+        RenewalSettlementResult result = renewalSettlementService.settleVerifiedOnlineCapture(
+                new VerifiedRenewalCapture(fixture.attempt().getTransactionReference(), "provider-1",
+                        fixture.payment().getAmount(), "00"));
+
+        assertEquals(RenewalSettlementResult.Outcome.APPLIED, result.outcome());
+        Membership next = memberships.findById(result.membershipId()).orElseThrow();
+        assertEquals(fixture.source().getEndDate(), next.getStartDate());
+        assertEquals(fixture.source().getEndDate().plusMonths(1), next.getEndDate());
+        assertEquals(fixture.source().getPlan().getId(), next.getPlan().getId());
+        assertEquals(fixture.payment().getMonthlyPriceSnapshot(), next.getPaidAmount());
+        assertEquals(1, next.getPurchasedMonths());
+        assertTrue(next.getAutoRenew());
+        assertEquals(fixture.payment().getId(), next.getSourcePayment().getId());
+        Payment appliedPayment = payments.findById(fixture.payment().getId()).orElseThrow();
+        assertEquals(PaymentStatus.SUCCESS, appliedPayment.getStatus());
+        assertEquals(observed, appliedPayment.getPaidAt());
+        assertEquals(next.getId(), checkoutAttempts.findById(fixture.attempt().getId()).orElseThrow()
+                .getAppliedMembership().getId());
+    }
+
+    @Test
+    void falseNextPeriodAutoRenewChoiceIsPreservedAndWinningCallbackReplayIsIdempotent() {
+        RenewalFixture fixture = renewalFixture(PaymentMethod.ONLINE, false, true);
+        VerifiedRenewalCapture capture = new VerifiedRenewalCapture(fixture.attempt().getTransactionReference(),
+                "provider-replay", fixture.payment().getAmount(), "00");
+
+        RenewalSettlementResult first = renewalSettlementService.settleVerifiedOnlineCapture(capture);
+        RenewalSettlementResult replay = renewalSettlementService.settleVerifiedOnlineCapture(capture);
+
+        assertEquals(RenewalSettlementResult.Outcome.APPLIED, first.outcome());
+        assertEquals(RenewalSettlementResult.Outcome.ALREADY_APPLIED, replay.outcome());
+        assertEquals(2, memberships.findByMemberId(member.getId()).size());
+        assertEquals(false, memberships.findById(first.membershipId()).orElseThrow().getAutoRenew());
+    }
+
+    @Test
+    void winningAttemptFlaggedForReconciliationStillReturnsAppliedMembershipOnExactReplay() {
+        RenewalFixture fixture = renewalFixture(PaymentMethod.ONLINE, false, true);
+        VerifiedRenewalCapture capture = new VerifiedRenewalCapture(fixture.attempt().getTransactionReference(),
+                "provider-flagged-replay", fixture.payment().getAmount(), "00");
+        RenewalSettlementResult first = renewalSettlementService.settleVerifiedOnlineCapture(capture);
+
+        PaymentCheckoutAttempt winning = checkoutAttempts.findById(fixture.attempt().getId()).orElseThrow();
+        winning.setStatus(CheckoutAttemptStatus.RECONCILIATION_REQUIRED);
+        winning.setReconciliationReason("Manual investigation flag retained for replay regression");
+        checkoutAttempts.saveAndFlush(winning);
+
+        RenewalSettlementResult replay = renewalSettlementService.settleVerifiedOnlineCapture(capture);
+
+        assertEquals(RenewalSettlementResult.Outcome.APPLIED, first.outcome());
+        assertEquals(RenewalSettlementResult.Outcome.ALREADY_APPLIED, replay.outcome());
+        assertEquals(first.membershipId(), replay.membershipId());
+        PaymentCheckoutAttempt persisted = checkoutAttempts.findById(fixture.attempt().getId()).orElseThrow();
+        assertEquals(CheckoutAttemptStatus.RECONCILIATION_REQUIRED, persisted.getStatus());
+        assertEquals("Manual investigation flag retained for replay regression", persisted.getReconciliationReason());
+        assertEquals(PaymentStatus.SUCCESS, payments.findById(fixture.payment().getId()).orElseThrow().getStatus());
+        assertEquals(2, memberships.findByMemberId(member.getId()).size());
+    }
+
+    @Test
+    void conflictingVerifiedEvidenceFlagsWinningAttemptWithoutReplacingEvidenceOrDowngradingPayment() {
+        RenewalFixture fixture = renewalFixture(PaymentMethod.ONLINE, true, true);
+        VerifiedRenewalCapture original = new VerifiedRenewalCapture(fixture.attempt().getTransactionReference(),
+                "provider-original", fixture.payment().getAmount(), "00");
+        RenewalSettlementResult first = renewalSettlementService.settleVerifiedOnlineCapture(original);
+
+        RenewalSettlementResult conflict = renewalSettlementService.settleVerifiedOnlineCapture(
+                new VerifiedRenewalCapture(fixture.attempt().getTransactionReference(), "provider-conflict",
+                        fixture.payment().getAmount().subtract(new BigDecimal("1.00")), "00"));
+
+        PaymentCheckoutAttempt persisted = checkoutAttempts.findById(fixture.attempt().getId()).orElseThrow();
+        assertEquals(RenewalSettlementResult.Outcome.APPLIED, first.outcome());
+        assertEquals(RenewalSettlementResult.Outcome.RECONCILIATION_REQUIRED, conflict.outcome());
+        assertEquals(first.membershipId(), conflict.membershipId());
+        assertEquals(CheckoutAttemptStatus.RECONCILIATION_REQUIRED, persisted.getStatus());
+        assertEquals("provider-original", persisted.getProviderTransactionId());
+        assertEquals(fixture.payment().getAmount(), persisted.getProviderAmount());
+        assertEquals("Repeated verified callback reported conflicting provider evidence",
+                persisted.getReconciliationReason());
+        assertEquals(PaymentStatus.SUCCESS, payments.findById(fixture.payment().getId()).orElseThrow().getStatus());
+        assertEquals(2, memberships.findByMemberId(member.getId()).size());
+    }
+
+    @Test
+    void exactExclusiveEndDateBoundaryRequiresReconciliation() {
+        RenewalFixture fixture = renewalFixture(PaymentMethod.ONLINE, true, true);
+        clock.setInstant(fixture.source().getEndDate().atStartOfDay(BUSINESS_ZONE).toInstant());
+
+        RenewalSettlementResult result = renewalSettlementService.settleVerifiedOnlineCapture(
+                new VerifiedRenewalCapture(fixture.attempt().getTransactionReference(), "provider-late",
+                        fixture.payment().getAmount(), "00"));
+
+        assertEquals(RenewalSettlementResult.Outcome.RECONCILIATION_REQUIRED, result.outcome());
+        assertEquals(PaymentStatus.REFUND_REQUIRED, payments.findById(fixture.payment().getId()).orElseThrow().getStatus());
+        assertEquals(CheckoutAttemptStatus.RECONCILIATION_REQUIRED,
+                checkoutAttempts.findById(fixture.attempt().getId()).orElseThrow().getStatus());
+        assertEquals(1, memberships.findByMemberId(member.getId()).size());
+    }
+
+    @Test
+    void providerAmountMismatchIsDurablyRecordedWithoutMembershipActivation() {
+        RenewalFixture fixture = renewalFixture(PaymentMethod.ONLINE, true, true);
+
+        RenewalSettlementResult result = renewalSettlementService.settleVerifiedOnlineCapture(
+                new VerifiedRenewalCapture(fixture.attempt().getTransactionReference(), "provider-mismatch",
+                        fixture.payment().getAmount().subtract(new BigDecimal("1.00")), "00"));
+
+        assertEquals(RenewalSettlementResult.Outcome.RECONCILIATION_REQUIRED, result.outcome());
+        PaymentCheckoutAttempt recorded = checkoutAttempts.findById(fixture.attempt().getId()).orElseThrow();
+        assertEquals(new BigDecimal("299999.00"), recorded.getProviderAmount());
+        assertEquals("provider-mismatch", recorded.getProviderTransactionId());
+        assertEquals("00", recorded.getProviderResponseCode());
+        assertTrue(recorded.getVerifiedAt() != null);
+        assertEquals(PaymentStatus.REFUND_REQUIRED, payments.findById(fixture.payment().getId()).orElseThrow().getStatus());
+        assertEquals(1, memberships.findByMemberId(member.getId()).size());
+    }
+
+    @Test
+    void secondCapturedAttemptIsReconciledWithoutDowngradingWinningPayment() {
+        RenewalFixture fixture = renewalFixture(PaymentMethod.ONLINE, true, true);
+        PaymentCheckoutAttempt secondAttempt = checkoutAttempt(fixture.payment(), now().plusSeconds(1),
+                "RNL" + java.util.UUID.randomUUID().toString().replace("-", ""));
+        secondAttempt = checkoutAttempts.saveAndFlush(secondAttempt);
+
+        RenewalSettlementResult winner = renewalSettlementService.settleVerifiedOnlineCapture(
+                new VerifiedRenewalCapture(fixture.attempt().getTransactionReference(), "provider-win",
+                        fixture.payment().getAmount(), "00"));
+        RenewalSettlementResult duplicateCapture = renewalSettlementService.settleVerifiedOnlineCapture(
+                new VerifiedRenewalCapture(secondAttempt.getTransactionReference(), "provider-second",
+                        fixture.payment().getAmount(), "00"));
+
+        assertEquals(RenewalSettlementResult.Outcome.APPLIED, winner.outcome());
+        assertEquals(RenewalSettlementResult.Outcome.RECONCILIATION_REQUIRED, duplicateCapture.outcome());
+        assertEquals(PaymentStatus.SUCCESS, payments.findById(fixture.payment().getId()).orElseThrow().getStatus());
+        assertEquals(CheckoutAttemptStatus.RECONCILIATION_REQUIRED,
+                checkoutAttempts.findById(secondAttempt.getId()).orElseThrow().getStatus());
+        assertEquals(winner.membershipId(), checkoutAttempts.findById(fixture.attempt().getId()).orElseThrow()
+                .getAppliedMembership().getId());
+        assertEquals(2, memberships.findByMemberId(member.getId()).size());
+    }
+
+    @Test
+    void cancelledRenewalCaptureIsReconciledAndCannotCreateMembership() {
+        RenewalFixture fixture = renewalFixture(PaymentMethod.ONLINE, true, true);
+        Payment cancelled = payments.findById(fixture.payment().getId()).orElseThrow();
+        cancelled.setStatus(PaymentStatus.CANCELLED);
+        cancelled.setNote("Cancelled before provider capture was reported");
+        payments.saveAndFlush(cancelled);
+
+        RenewalSettlementResult result = renewalSettlementService.settleVerifiedOnlineCapture(
+                new VerifiedRenewalCapture(fixture.attempt().getTransactionReference(), "provider-after-cancel",
+                        fixture.payment().getAmount(), "00"));
+
+        assertEquals(RenewalSettlementResult.Outcome.RECONCILIATION_REQUIRED, result.outcome());
+        assertEquals(PaymentStatus.REFUND_REQUIRED, payments.findById(fixture.payment().getId()).orElseThrow().getStatus());
+        assertEquals(1, memberships.findByMemberId(member.getId()).size());
+        assertEquals("provider-after-cancel", checkoutAttempts.findById(fixture.attempt().getId()).orElseThrow()
+                .getProviderTransactionId());
+    }
+
+    @Test
+    void missingExplicitNextPeriodChoiceRequiresReconciliation() {
+        RenewalFixture fixture = renewalFixture(PaymentMethod.ONLINE, null, true);
+
+        RenewalSettlementResult result = renewalSettlementService.settleVerifiedOnlineCapture(
+                new VerifiedRenewalCapture(fixture.attempt().getTransactionReference(), "provider-no-choice",
+                        fixture.payment().getAmount(), "00"));
+
+        assertEquals(RenewalSettlementResult.Outcome.RECONCILIATION_REQUIRED, result.outcome());
+        assertEquals(1, memberships.findByMemberId(member.getId()).size());
+    }
+
+    @Test
+    void verifiedOnlineCaptureBeforeMethodSelectionRemainsRecordedWithoutViolatingNullMethodCheck() {
+        RenewalFixture fixture = renewalFixture(null, true, true);
+
+        RenewalSettlementResult result = renewalSettlementService.settleVerifiedOnlineCapture(
+                new VerifiedRenewalCapture(fixture.attempt().getTransactionReference(), "provider-neutral",
+                        fixture.payment().getAmount(), "00"));
+
+        assertEquals(RenewalSettlementResult.Outcome.RECONCILIATION_REQUIRED, result.outcome());
+        Payment persisted = payments.findById(fixture.payment().getId()).orElseThrow();
+        assertEquals(PaymentStatus.CANCELLED, persisted.getStatus());
+        assertNull(persisted.getMethod());
+        assertEquals(CheckoutAttemptStatus.RECONCILIATION_REQUIRED,
+                checkoutAttempts.findById(fixture.attempt().getId()).orElseThrow().getStatus());
+        assertEquals(1, memberships.findByMemberId(member.getId()).size());
+    }
+
+    @Test
+    void confirmedCounterReceiptUsesServerTimeAndSameRenewalEngine() {
+        RenewalFixture fixture = renewalFixture(PaymentMethod.COUNTER, false, false);
+        LocalDateTime receivedAt = now();
+
+        RenewalSettlementResult result = renewalSettlementService.settleConfirmedCounterReceipt(
+                fixture.payment().getId(), receptionist.getId());
+        RenewalSettlementResult replay = renewalSettlementService.settleConfirmedCounterReceipt(
+                fixture.payment().getId(), receptionist.getId());
+
+        assertEquals(RenewalSettlementResult.Outcome.APPLIED, result.outcome());
+        assertEquals(RenewalSettlementResult.Outcome.ALREADY_APPLIED, replay.outcome());
+        Membership next = memberships.findById(result.membershipId()).orElseThrow();
+        assertEquals(fixture.source().getEndDate(), next.getStartDate());
+        assertEquals(fixture.source().getEndDate().plusMonths(1), next.getEndDate());
+        assertEquals(false, next.getAutoRenew());
+        assertEquals(receivedAt, payments.findById(fixture.payment().getId()).orElseThrow().getPaidAt());
+    }
+
+    @Test
+    void counterReceiptForCancelledRenewalIsRecordedButNeverApplied() {
+        RenewalFixture fixture = renewalFixture(PaymentMethod.COUNTER, true, false);
+        Payment cancelled = payments.findById(fixture.payment().getId()).orElseThrow();
+        cancelled.setStatus(PaymentStatus.CANCELLED);
+        payments.saveAndFlush(cancelled);
+
+        RenewalSettlementResult result = renewalSettlementService.settleConfirmedCounterReceipt(
+                fixture.payment().getId(), receptionist.getId());
+
+        Payment reconciled = payments.findById(fixture.payment().getId()).orElseThrow();
+        assertEquals(RenewalSettlementResult.Outcome.RECONCILIATION_REQUIRED, result.outcome());
+        assertEquals(PaymentStatus.REFUND_REQUIRED, reconciled.getStatus());
+        assertTrue(reconciled.getPaidAt() != null);
+        assertEquals(1, memberships.findByMemberId(member.getId()).size());
+    }
+
+    @Test
+    void overlappingMembershipTimelineRequiresReconciliation() {
+        RenewalFixture fixture = renewalFixture(PaymentMethod.ONLINE, true, true);
+        Membership conflicting = new Membership();
+        conflicting.setMember(member);
+        conflicting.setPlan(plan);
+        conflicting.setAutoRenew(false);
+        conflicting.setStartDate(fixture.source().getEndDate().plusDays(5));
+        conflicting.setEndDate(fixture.source().getEndDate().plusMonths(1).plusDays(5));
+        conflicting.setStatus("ACTIVE");
+        memberships.saveAndFlush(conflicting);
+
+        RenewalSettlementResult result = renewalSettlementService.settleVerifiedOnlineCapture(
+                new VerifiedRenewalCapture(fixture.attempt().getTransactionReference(), "provider-overlap",
+                        fixture.payment().getAmount(), "00"));
+
+        assertEquals(RenewalSettlementResult.Outcome.RECONCILIATION_REQUIRED, result.outcome());
+        assertEquals(PaymentStatus.REFUND_REQUIRED, payments.findById(fixture.payment().getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void concurrentRenewalSettlementCreatesOnlyOnePeriod() throws Exception {
+        RenewalFixture fixture = renewalFixture(PaymentMethod.ONLINE, true, true);
+        VerifiedRenewalCapture capture = new VerifiedRenewalCapture(fixture.attempt().getTransactionReference(),
+                "provider-concurrent", fixture.payment().getAmount(), "00");
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<RenewalSettlementResult> first = pool.submit(() -> { start.await(); return renewalSettlementService.settleVerifiedOnlineCapture(capture); });
+            Future<RenewalSettlementResult> second = pool.submit(() -> { start.await(); return renewalSettlementService.settleVerifiedOnlineCapture(capture); });
+            start.countDown();
+            List<RenewalSettlementResult> results = List.of(
+                    first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS));
+            List<RenewalSettlementResult.Outcome> outcomes = results.stream().map(RenewalSettlementResult::outcome).toList();
+            assertTrue(outcomes.contains(RenewalSettlementResult.Outcome.APPLIED), results.toString());
+            assertTrue(outcomes.contains(RenewalSettlementResult.Outcome.ALREADY_APPLIED), results.toString());
+            assertEquals(2, memberships.findByMemberId(member.getId()).size());
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    void newMembershipPaymentDefaultsToOneMonthAndUsesServerPriceSnapshot() {
+        CreatePaymentRequest request = request(PaymentPurpose.MEMBERSHIP, plan.getId(), PaymentMethod.COUNTER);
+        request.setPurchasedMonths(null);
+        PaymentResponse payment = service.createPayment(request, jwt(member));
+
+        assertEquals(new BigDecimal("300000.00"), payment.getAmount());
+        assertEquals(1, payment.getPurchasedMonths());
+        Payment persisted = payments.findById(payment.getId()).orElseThrow();
+        assertEquals(1, persisted.getPurchasedMonths());
+        assertEquals(new BigDecimal("300000.00"), persisted.getMonthlyPriceSnapshot());
+        assertNull(persisted.getRenewalMembership());
+        assertTrue(memberships.findByMemberId(member.getId()).isEmpty());
+
+        service.processAtCounter(payment.getId(), counter(true), jwt(receptionist));
+        Membership created = memberships.findByMemberId(member.getId()).stream()
+                .filter(value -> value.getSourcePayment().getId().equals(payment.getId()))
+                .findFirst().orElseThrow();
+        assertEquals(1, created.getPurchasedMonths());
+        assertEquals(new BigDecimal("300000.00"), created.getPaidAmount());
+        assertEquals(created.getStartDate().plusMonths(1), created.getEndDate());
+    }
+
+    @Test
+    void creatingOneMonthPurchaseLeavesHistoricalMembershipSnapshotAndDatesUnchanged() {
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        Membership historical = new Membership();
+        historical.setMember(member);
+        historical.setPlan(plan);
+        historical.setStartDate(today.minusMonths(3));
+        historical.setEndDate(today.plusMonths(3));
+        historical.setAutoRenew(false);
+        historical.setStatus("ACTIVE");
+        historical.setPurchasedMonths(6);
+        historical.setPaidAmount(new BigDecimal("1800000.00"));
+        historical = memberships.saveAndFlush(historical);
+        Integer historicalId = historical.getId();
+
+        PaymentResponse created = service.createPayment(
+                request(PaymentPurpose.MEMBERSHIP, plan.getId(), PaymentMethod.COUNTER), jwt(member));
+
+        Membership unchanged = memberships.findById(historicalId).orElseThrow();
+        assertEquals(today.minusMonths(3), unchanged.getStartDate());
+        assertEquals(today.plusMonths(3), unchanged.getEndDate());
+        assertEquals(6, unchanged.getPurchasedMonths());
+        assertEquals(new BigDecimal("1800000.00"), unchanged.getPaidAmount());
+        assertNull(unchanged.getSourcePayment());
+        assertEquals(1, created.getPurchasedMonths());
+        assertEquals(new BigDecimal("300000.00"), created.getAmount());
+    }
+
+    @Test
+    void unsupportedMembershipDurationIsRejectedBeforePaymentCreation() {
+        for (int months : List.of(3, 6, 12)) {
+            CreatePaymentRequest unsupported = request(PaymentPurpose.MEMBERSHIP, plan.getId(), PaymentMethod.COUNTER);
+            unsupported.setPurchasedMonths(months);
+            assertThrows(IllegalArgumentException.class, () -> service.createPayment(unsupported, jwt(member)));
+        }
+        assertTrue(payments.findByMemberIdOrderByCreatedAtDesc(member.getId()).isEmpty());
+        assertTrue(memberships.findByMemberId(member.getId()).isEmpty());
+    }
+
+    @Test
+    void unsuccessfulMembershipCounterPaymentDoesNotActivateMembership() {
+        PaymentResponse payment = service.createPayment(
+                request(PaymentPurpose.MEMBERSHIP, plan.getId(), PaymentMethod.COUNTER), jwt(member));
+
+        PaymentResponse cancelled = service.processAtCounter(payment.getId(), counter(false), jwt(receptionist));
+
+        assertEquals("CANCELLED", cancelled.getStatus());
+        assertTrue(memberships.findByMemberId(member.getId()).isEmpty());
+    }
+
+    @Test
+    void legacyPendingMembershipPaymentKeepsItsRecordedAmountAndLegacyTerm() {
+        plan.setDurationMonths(2);
+        plan.setPrice(new BigDecimal("500000.00"));
+        plans.saveAndFlush(plan);
+        Payment legacy = new Payment();
+        legacy.setMember(member);
+        legacy.setAmount(new BigDecimal("500000.00"));
+        legacy.setMethod(PaymentMethod.COUNTER);
+        legacy.setPurpose(PaymentPurpose.MEMBERSHIP);
+        legacy.setReferenceId(plan.getId());
+        legacy.setStatus(PaymentStatus.PENDING);
+        legacy.setTransactionCode("LEGACY-" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 32));
+        legacy = payments.saveAndFlush(legacy);
+
+        PaymentResponse settled = service.processAtCounter(legacy.getId(), counter(true), jwt(receptionist));
+
+        Membership created = memberships.findByMemberId(member.getId()).get(0);
+        assertEquals("SUCCESS", settled.getStatus());
+        assertEquals(0, new BigDecimal("500000.00").compareTo(created.getPaidAmount()));
+        assertNull(created.getPurchasedMonths());
+        assertEquals(created.getStartDate().plusMonths(2), created.getEndDate());
+        assertEquals(legacy.getId(), created.getSourcePayment().getId());
+    }
+
+    @Test
+    void existingPendingMultiMonthSnapshotIsNotReinterpretedAsNewOneMonthPurchase() {
+        Payment pending = new Payment();
+        pending.setMember(member);
+        pending.setAmount(new BigDecimal("1500000.00"));
+        pending.setMethod(PaymentMethod.COUNTER);
+        pending.setPurpose(PaymentPurpose.MEMBERSHIP);
+        pending.setReferenceId(plan.getId());
+        pending.setPurchasedMonths(3);
+        pending.setMonthlyPriceSnapshot(new BigDecimal("500000.00"));
+        pending.setStatus(PaymentStatus.PENDING);
+        pending.setTransactionCode("PENDING-" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 30));
+        pending = payments.saveAndFlush(pending);
+        Integer paymentId = pending.getId();
+
+        assertThrows(ResponseStatusException.class, () -> service.createPayment(
+                request(PaymentPurpose.MEMBERSHIP, plan.getId(), PaymentMethod.COUNTER), jwt(member)));
+        PaymentResponse settled = service.processAtCounter(paymentId, counter(true), jwt(receptionist));
+        Membership created = memberships.findByMemberId(member.getId()).get(0);
+        assertEquals("SUCCESS", settled.getStatus());
+        assertEquals(new BigDecimal("1500000.00"), settled.getAmount());
+        assertEquals(3, created.getPurchasedMonths());
+        assertEquals(new BigDecimal("1500000.00"), created.getPaidAmount());
+        assertEquals(created.getStartDate().plusMonths(3), created.getEndDate());
+        assertEquals(paymentId, created.getSourcePayment().getId());
+    }
+
+    @Test
     void forgedCallbackSignatureIsRejected() throws Exception {
         PaymentResponse payment = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
                 PaymentMethod.ONLINE), jwt(member));
@@ -215,10 +1014,35 @@ class PaymentIntegrationTest {
     }
 
     @Test
+    void adminFreeAssignmentDefaultsAutoRenewOffAndWritesAuditWithoutPayment() throws Exception {
+        String body = "{\"memberId\":" + member.getId() + ",\"planId\":" + plan.getId()
+                + ",\"startDate\":\"" + LocalDate.now(clock.withZone(BUSINESS_ZONE)) + "\"}";
+        var response = mvc.perform(post("/api/memberships").header("Authorization", bearer(admin))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.autoRenew").value(false))
+                .andReturn();
+        Integer membershipId = com.jayway.jsonpath.JsonPath.read(response.getResponse().getContentAsString(), "$.id");
+
+        assertTrue(payments.findByMemberIdOrderByCreatedAtDesc(member.getId()).stream()
+                .noneMatch(payment -> payment.getPurpose() == PaymentPurpose.MEMBERSHIP
+                        && payment.getStatus() == PaymentStatus.SUCCESS));
+        assertEquals(1, jdbc.queryForObject("select count(*) from audit_log where actor_user_id = ? "
+                + "and action = ? and entity_type = ? and entity_id = ?", Integer.class,
+                admin.getId(), "ADMIN_ASSIGN_MEMBERSHIP", "MEMBERSHIP", membershipId.toString()));
+        String auditDescription = jdbc.queryForObject("select description from audit_log where actor_user_id = ? "
+                + "and action = ? and entity_type = ? and entity_id = ?", String.class,
+                admin.getId(), "ADMIN_ASSIGN_MEMBERSHIP", "MEMBERSHIP", membershipId.toString());
+        assertTrue(auditDescription.contains("targetMemberId=" + member.getId()));
+        assertTrue(auditDescription.contains("planId=" + plan.getId()));
+        assertTrue(auditDescription.contains("reason=manual administrative assignment"));
+    }
+
+    @Test
     void receptionistMembershipSaleActivatesOnlyAfterCounterPaymentConfirmation() throws Exception {
         String paymentBody = "{\"memberId\":" + member.getId()
                 + ",\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"referenceId\":" + plan.getId()
-                + ",\"autoRenew\":false}";
+                + ",\"autoRenew\":false,\"purchasedMonths\":1}";
 
         var created = mvc.perform(post("/api/payments").header("Authorization", bearer(receptionist))
                         .contentType("application/json").content(paymentBody))
@@ -242,7 +1066,7 @@ class PaymentIntegrationTest {
     @Test
     void memberSelfServicePurchaseUsesJwtAndPreventsRepeatedPendingPlanRequests() throws Exception {
         String body = "{\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"referenceId\":"
-                + plan.getId() + ",\"autoRenew\":false}";
+                + plan.getId() + ",\"autoRenew\":false,\"purchasedMonths\":1}";
         var created = mvc.perform(post("/api/payments").header("Authorization", bearer(member))
                         .contentType("application/json").content(body))
                 .andExpect(status().isCreated())
@@ -262,7 +1086,7 @@ class PaymentIntegrationTest {
                         .contentType("application/json")
                         .content("{\"memberId\":" + otherMember.getId()
                                 + ",\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"referenceId\":"
-                                + plan.getId() + "}"))
+                                + plan.getId() + ",\"purchasedMonths\":1}"))
                 .andExpect(status().isForbidden());
 
         mvc.perform(post("/api/payments").header("Authorization", bearer(member))
@@ -279,7 +1103,7 @@ class PaymentIntegrationTest {
         mvc.perform(post("/api/payments").header("Authorization", bearer(member))
                         .contentType("application/json")
                         .content("{\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"referenceId\":"
-                                + plan.getId() + "}"))
+                                + plan.getId() + ",\"purchasedMonths\":1}"))
                 .andExpect(status().isConflict());
         assertTrue(payments.findByMemberIdOrderByCreatedAtDesc(member.getId()).isEmpty());
         assertTrue(memberships.findByMemberId(member.getId()).isEmpty());
@@ -560,7 +1384,46 @@ class PaymentIntegrationTest {
         assertEquals(0, notifications.count());
 
         LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
-        assertEquals(0, BigDecimal.ZERO.compareTo(reports.revenueReport(today, today, jwt(admin)).getTotalRevenue()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(reports.revenueReport(today, today, RevenueGrouping.MONTH, jwt(admin)).getTotalRevenue()));
+    }
+
+    @Test
+    void revenueReportGroupsSuccessfulSettlementByDayMonthAndYearAndFillsZeroPeriods() {
+        reportPayment(PaymentPurpose.MEMBERSHIP, PaymentStatus.SUCCESS, "100.00", "2026-10-01T09:00:00");
+        reportPayment(PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.SUCCESS, "200.00", "2026-10-31T23:59:59");
+        reportPayment(PaymentPurpose.PT_BOOKING, PaymentStatus.SUCCESS, "300.00", "2026-11-01T23:59:59");
+        reportPayment(PaymentPurpose.MEMBERSHIP, PaymentStatus.SUCCESS, "40.00", "2027-01-01T12:00:00");
+        reportPayment(PaymentPurpose.MEMBERSHIP, PaymentStatus.PENDING, "900.00", "2026-10-15T12:00:00");
+        reportPayment(PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.CANCELLED, "800.00", "2026-10-20T12:00:00");
+        reportPayment(PaymentPurpose.PT_BOOKING, PaymentStatus.REFUND_REQUIRED, "700.00", "2026-10-25T12:00:00");
+
+        var daily = reports.revenueReport(LocalDate.parse("2026-10-31"), LocalDate.parse("2026-11-02"),
+                RevenueGrouping.DAY, jwt(admin));
+        assertEquals(new BigDecimal("500.00"), daily.getTotalRevenue());
+        assertEquals(3, daily.getPeriods().size());
+        assertEquals(LocalDate.parse("2026-10-31"), daily.getPeriods().get(0).periodStart());
+        assertEquals(new BigDecimal("200.00"), daily.getPeriods().get(0).totalRevenue());
+        assertEquals(new BigDecimal("300.00"), daily.getPeriods().get(1).revenueByPurpose().get("PT_BOOKING"));
+        assertEquals(BigDecimal.ZERO, daily.getPeriods().get(2).totalRevenue());
+        assertEquals(BigDecimal.ZERO, daily.getPeriods().get(0).revenueByPurpose().get("MEMBERSHIP"));
+
+        var monthly = reports.revenueReport(LocalDate.parse("2026-10-01"), LocalDate.parse("2026-12-01"),
+                RevenueGrouping.MONTH, jwt(admin));
+        assertEquals(3, monthly.getPeriods().size());
+        assertEquals(new BigDecimal("300.00"), monthly.getPeriods().get(0).totalRevenue());
+        assertEquals(new BigDecimal("300.00"), monthly.getPeriods().get(1).totalRevenue());
+        assertEquals(BigDecimal.ZERO, monthly.getPeriods().get(2).totalRevenue());
+        assertEquals(new BigDecimal("600.00"), monthly.getTotalRevenue());
+        assertEquals(new BigDecimal("100.00"), monthly.getRevenueByPurpose().get("MEMBERSHIP"));
+        assertEquals(new BigDecimal("200.00"), monthly.getRevenueByPurpose().get("COURSE_REGISTRATION"));
+        assertEquals(new BigDecimal("300.00"), monthly.getRevenueByPurpose().get("PT_BOOKING"));
+
+        var yearly = reports.revenueReport(LocalDate.parse("2026-10-01"), LocalDate.parse("2027-01-01"),
+                RevenueGrouping.YEAR, jwt(admin));
+        assertEquals(2, yearly.getPeriods().size());
+        assertEquals(new BigDecimal("600.00"), yearly.getPeriods().get(0).totalRevenue());
+        assertEquals(new BigDecimal("40.00"), yearly.getPeriods().get(1).totalRevenue());
+        assertEquals(new BigDecimal("640.00"), yearly.getTotalRevenue());
     }
 
     @Test
@@ -602,13 +1465,13 @@ class PaymentIntegrationTest {
                 .andExpect(status().isOk());
         mvc.perform(post("/api/payments").header("Authorization", bearer(member)).contentType("application/json")
                         .content("{\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"referenceId\":" + plan.getId()
-                                + ",\"amount\":1}"))
+                                + ",\"purchasedMonths\":1,\"amount\":1}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.amount").value(300000.0));
         mvc.perform(post("/api/payments").header("Authorization", bearer(coach.getUser()))
                         .contentType("application/json")
                         .content("{\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"memberId\":"
-                                + member.getId() + ",\"referenceId\":" + plan.getId() + "}"))
+                                + member.getId() + ",\"referenceId\":" + plan.getId() + ",\"purchasedMonths\":1}"))
                 .andExpect(status().isForbidden());
     }
 
@@ -898,6 +1761,72 @@ class PaymentIntegrationTest {
         return payments.save(payment);
     }
 
+    private Payment methodNeutralPayment(Membership renewalSource, PaymentStatus status, PaymentMethod method) {
+        Payment payment = new Payment();
+        payment.setMember(member);
+        payment.setAmount(plan.getMonthlyPrice());
+        payment.setMethod(method);
+        payment.setPurpose(PaymentPurpose.MEMBERSHIP);
+        payment.setReferenceId(plan.getId());
+        payment.setRenewalMembership(renewalSource);
+        payment.setPurchasedMonths(1);
+        payment.setMonthlyPriceSnapshot(plan.getMonthlyPrice());
+        payment.setStatus(status);
+        payment.setTransactionCode("NULL-METHOD-" + java.util.UUID.randomUUID().toString().substring(0, 20));
+        return payment;
+    }
+
+    private PaymentCheckoutAttempt checkoutAttempt(Payment payment, LocalDateTime createdAt, String reference) {
+        PaymentCheckoutAttempt attempt = new PaymentCheckoutAttempt();
+        attempt.setPayment(payment);
+        attempt.setProvider(CheckoutProvider.VNPAY);
+        attempt.setTransactionReference(reference);
+        attempt.setAmount(payment.getAmount());
+        attempt.setCreatedAt(createdAt);
+        attempt.setExpiresAt(createdAt.plusMinutes(15));
+        attempt.setStatus(CheckoutAttemptStatus.URL_ISSUED);
+        return attempt;
+    }
+
+    private RenewalFixture renewalFixture(PaymentMethod selectedMethod, Boolean nextAutoRenew, boolean includeAttempt) {
+        PaymentResponse original = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        service.processAtCounter(original.getId(), counter(true), jwt(receptionist));
+        Membership source = memberships.findByMemberId(member.getId()).stream()
+                .filter(value -> value.getSourcePayment().getId().equals(original.getId())).findFirst().orElseThrow();
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        source.setStartDate(today.minusMonths(1));
+        source.setEndDate(today.plusDays(2));
+        source.setAutoRenew(true);
+        memberships.saveAndFlush(source);
+        assertEquals(1, renewalService.createDueRenewalRequests());
+        Payment renewal = payments.findByRenewalMembership_Id(source.getId()).orElseThrow();
+        renewal.setMethod(selectedMethod);
+        renewal.setRenewalAutoRenewChoice(nextAutoRenew);
+        payments.saveAndFlush(renewal);
+        PaymentCheckoutAttempt attempt = null;
+        if (includeAttempt) {
+            attempt = checkoutAttempts.saveAndFlush(checkoutAttempt(renewal, now(),
+                    "RNL" + java.util.UUID.randomUUID().toString().replace("-", "")));
+        }
+        return new RenewalFixture(source, renewal, attempt);
+    }
+
+    private record RenewalFixture(Membership source, Payment payment, PaymentCheckoutAttempt attempt) { }
+
+    private Payment reportPayment(PaymentPurpose purpose, PaymentStatus status, String amount, String paidAt) {
+        Payment payment = new Payment();
+        payment.setMember(member);
+        payment.setAmount(new BigDecimal(amount));
+        payment.setMethod(PaymentMethod.COUNTER);
+        payment.setPurpose(purpose);
+        payment.setReferenceId(999);
+        payment.setStatus(status);
+        payment.setTransactionCode("REPORT-" + java.util.UUID.randomUUID().toString().substring(0, 24));
+        payment.setPaidAt(LocalDateTime.parse(paidAt));
+        return payments.saveAndFlush(payment);
+    }
+
     // ---------------------------------------------------------------- fixtures
 
     /**
@@ -907,6 +1836,15 @@ class PaymentIntegrationTest {
     private void cleanDatabase() {
         jdbc.update("delete from audit_log");
         notifications.deleteAllInBatch();
+        checkoutAttempts.deleteAllInBatch();
+        // Stage A adds references in both directions: renewal requests point to their source
+        // membership while purchased memberships point to their originating payment.
+        // The method-neutral CHECK requires a renewal link while method is NULL. Give test-only
+        // rows a valid method before breaking the FK cycle used by fixture cleanup.
+        jdbc.update("update Payment set method = 'COUNTER' where renewal_membership_id is not null and method is null");
+        jdbc.update("update Payment set renewal_membership_id = null");
+        jdbc.update("update Membership set source_payment_id = null");
+        memberships.deleteAll();
         payments.deleteAll();
         bookings.deleteAll();
         classSessions.deleteAll();
@@ -914,7 +1852,6 @@ class PaymentIntegrationTest {
         classes.deleteAll();
         offerings.deleteAll();
         courses.deleteAll();
-        memberships.deleteAll();
         plans.deleteAll();
         List<User> ownUsers = users.findAll().stream().filter(u -> u.getEmail().endsWith(EMAIL_DOMAIN)).toList();
         var ownUserIds = ownUsers.stream().map(User::getId).toList();
@@ -984,6 +1921,7 @@ class PaymentIntegrationTest {
         request.setPurpose(purpose);
         request.setReferenceId(referenceId);
         request.setMethod(method);
+        if (purpose == PaymentPurpose.MEMBERSHIP) request.setPurchasedMonths(1);
         return request;
     }
 

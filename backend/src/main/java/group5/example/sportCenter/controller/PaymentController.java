@@ -25,6 +25,7 @@ import group5.example.sportCenter.dto.CounterPaymentRequest;
 import group5.example.sportCenter.dto.CreatePaymentRequest;
 import group5.example.sportCenter.dto.PaymentResponse;
 import group5.example.sportCenter.dto.PendingCoursePaymentResponse;
+import group5.example.sportCenter.dto.SelectRenewalPaymentMethodRequest;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.payment.OnlineCallbackResult;
 import group5.example.sportCenter.service.PaymentService;
@@ -65,6 +66,13 @@ public class PaymentController {
     @PatchMapping("/{id}/cancel")
     public PaymentResponse cancel(@PathVariable Integer id, @AuthenticationPrincipal Jwt jwt) {
         return paymentService.cancelPayment(id, jwt);
+    }
+
+    @PatchMapping("/{id}/renewal-method")
+    public PaymentResponse selectRenewalMethod(@PathVariable Integer id,
+            @Valid @RequestBody SelectRenewalPaymentMethodRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        return paymentService.selectRenewalPaymentMethod(id, request, jwt);
     }
 
     /** Callback của mock gateway. Public (permitAll) nhưng bắt buộc có chữ ký hợp lệ. */

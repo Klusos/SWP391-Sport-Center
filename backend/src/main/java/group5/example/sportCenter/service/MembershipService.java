@@ -17,10 +17,14 @@ import group5.example.sportCenter.dto.CreateMembershipRequest;
 import group5.example.sportCenter.dto.MembershipResponse;
 import group5.example.sportCenter.entity.Membership;
 import group5.example.sportCenter.entity.MembershipPlan;
+import group5.example.sportCenter.entity.Payment;
 import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.MembershipPlanRepository;
 import group5.example.sportCenter.repository.MembershipRepository;
+import group5.example.sportCenter.repository.PaymentCheckoutAttemptRepository;
+import group5.example.sportCenter.repository.PaymentRepository;
+import group5.example.sportCenter.entity.PaymentStatus;
 import group5.example.sportCenter.repository.UserRepository;
 
 @Service
@@ -31,16 +35,28 @@ public class MembershipService {
     private final MembershipRepository membershipRepository;
     private final UserRepository userRepository;
     private final MembershipPlanRepository membershipPlanRepository;
+    private final AuditLogService auditLogService;
+    private final PaymentRepository paymentRepository;
+    private final PaymentCheckoutAttemptRepository paymentCheckoutAttemptRepository;
+    private final MembershipRenewalService membershipRenewalService;
     private final Clock clock;
 
     public MembershipService(
             MembershipRepository membershipRepository,
             UserRepository userRepository,
             MembershipPlanRepository membershipPlanRepository,
+            AuditLogService auditLogService,
+            PaymentRepository paymentRepository,
+            PaymentCheckoutAttemptRepository paymentCheckoutAttemptRepository,
+            MembershipRenewalService membershipRenewalService,
             Clock clock) {
         this.membershipRepository = membershipRepository;
         this.userRepository = userRepository;
         this.membershipPlanRepository = membershipPlanRepository;
+        this.auditLogService = auditLogService;
+        this.paymentRepository = paymentRepository;
+        this.paymentCheckoutAttemptRepository = paymentCheckoutAttemptRepository;
+        this.membershipRenewalService = membershipRenewalService;
         this.clock = clock;
     }
 
@@ -106,10 +122,14 @@ public class MembershipService {
         membership.setPlan(plan);
         membership.setStartDate(request.getStartDate());
         membership.setEndDate(endDate);
-        membership.setAutoRenew(request.getAutoRenew());
+        membership.setAutoRenew(Boolean.TRUE.equals(request.getAutoRenew()));
         membership.setStatus("ACTIVE");
-
-        return toResponse(membershipRepository.save(membership));
+        Membership saved = membershipRepository.save(membership);
+        auditLogService.record("ADMIN_ASSIGN_MEMBERSHIP", "MEMBERSHIP", saved.getId(),
+                "Admin assigned no-charge membership; targetMemberId=" + member.getId()
+                        + ", planId=" + plan.getId() + ", startDate=" + saved.getStartDate()
+                        + ", endDate=" + saved.getEndDate() + ", reason=manual administrative assignment");
+        return toResponse(saved);
     }
 
     /**
@@ -118,12 +138,20 @@ public class MembershipService {
      * bắt đầu đúng ngày gói hiện tại kết thúc (endDate là mốc loại trừ), không sửa gói cũ.
      */
     @Transactional
-    public Membership activateOrRenewFromPayment(Integer memberId, Integer planId, boolean autoRenew) {
+    public Membership activateOrRenewFromPayment(Payment payment) {
+        Integer memberId = payment.getMember().getId();
+        Integer planId = payment.getReferenceId();
         // Khoá dòng user để hai lần gia hạn song song không cùng tính từ một endDate.
         User member = userRepository.findByIdForBookingUpdate(memberId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + memberId));
         MembershipPlan plan = membershipPlanRepository.findById(planId)
                 .orElseThrow(() -> new ResourceNotFoundException("Membership plan not found with id: " + planId));
+
+        // Null purchasedMonths is a pre-9.2A pending payment: preserve its captured amount and
+        // legacy fixed plan duration. New payments always carry the selected month snapshot.
+        int purchasedMonths = payment.getPurchasedMonths() == null
+                ? plan.getDurationMonths() : payment.getPurchasedMonths();
+        if (purchasedMonths <= 0) throw new IllegalArgumentException("Membership payment duration is invalid");
 
         LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
         LocalDate startDate = membershipRepository
@@ -136,9 +164,12 @@ public class MembershipService {
         membership.setMember(member);
         membership.setPlan(plan);
         membership.setStartDate(startDate);
-        membership.setEndDate(startDate.plusMonths(plan.getDurationMonths()));
-        membership.setAutoRenew(autoRenew);
+        membership.setEndDate(startDate.plusMonths(purchasedMonths));
+        membership.setAutoRenew(Boolean.TRUE.equals(payment.getAutoRenew()));
         membership.setStatus("ACTIVE");
+        membership.setPurchasedMonths(payment.getPurchasedMonths());
+        membership.setPaidAmount(payment.getAmount());
+        membership.setSourcePayment(payment);
         return membershipRepository.save(membership);
     }
 
@@ -154,12 +185,72 @@ public class MembershipService {
 
     private MembershipResponse updateAutoRenew(Integer id, boolean enabled, Jwt callerJwt) {
         User actor = currentActor(callerJwt);
-        Membership membership = membershipRepository.findById(id)
+        Membership snapshot = membershipRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Membership not found with id: " + id));
+        Integer memberId = snapshot.getMember().getId();
+        userRepository.findByIdForBookingUpdate(memberId)
+                .orElseThrow(() -> new ResourceNotFoundException("Member not found with id: " + memberId));
+        Membership membership = membershipRepository.findByIdForRenewalUpdate(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Membership not found with id: " + id));
         requireOwnMembershipOrStaff(actor, membership.getMember().getId());
         validateActiveMembership(membership);
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        if (enabled) {
+            if (membership.getStartDate().isAfter(today) || !membership.getEndDate().isAfter(today)
+                    || membership.getSourcePayment() == null
+                    || membership.getSourcePayment().getStatus() != PaymentStatus.SUCCESS) {
+                throw new IllegalArgumentException("Auto Renew can only be enabled for a current paid membership period");
+            }
+            if (!isFinalPaidRenewalPeriod(membership)) {
+                throw new IllegalArgumentException("Auto Renew is available only for the member's final paid membership period");
+            }
+            Payment existing = paymentRepository.findRenewalByMembershipIdForUpdate(id).orElse(null);
+            if (existing != null) {
+                paymentCheckoutAttemptRepository.findByPaymentIdForUpdateOrderByCreatedAtAscIdAsc(existing.getId());
+            }
+            if (existing != null && existing.getStatus() != PaymentStatus.PENDING) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "This membership period already has a terminal renewal payment attempt and cannot be retried");
+            }
+        }
         membership.setAutoRenew(enabled);
-        return toResponse(membershipRepository.save(membership));
+        if (!enabled) {
+            Payment renewal = paymentRepository.findRenewalByMembershipIdForUpdate(id).orElse(null);
+            List<group5.example.sportCenter.entity.PaymentCheckoutAttempt> attempts = renewal == null ? List.of()
+                    : paymentCheckoutAttemptRepository.findByPaymentIdForUpdateOrderByCreatedAtAscIdAsc(renewal.getId());
+            if (renewal != null && renewal.getStatus() == PaymentStatus.PENDING) {
+                var captured = attempts.stream().filter(a -> a.getVerifiedAt() != null).findFirst().orElse(null);
+                if (captured != null) {
+                    renewal.setStatus(renewal.getMethod() == null ? PaymentStatus.CANCELLED : PaymentStatus.REFUND_REQUIRED);
+                    renewal.setPaidAt(captured.getVerifiedAt());
+                    renewal.setNote("Verified renewal capture exists while Auto Renew was disabled; manual reconciliation required");
+                } else {
+                    renewal.setStatus(PaymentStatus.CANCELLED);
+                    renewal.setNote("Renewal request cancelled because Auto Renew was disabled");
+                }
+                paymentRepository.save(renewal);
+            }
+        }
+        Membership saved = membershipRepository.save(membership);
+        if (enabled) {
+            membershipRenewalService.createRenewalRequestIfDue(saved.getId());
+        }
+        return toResponse(saved);
+    }
+
+    @Transactional
+    public Membership lockRenewalSource(Integer id) {
+        return membershipRepository.findByIdForRenewalUpdate(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Membership not found with id: " + id));
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isFinalPaidRenewalPeriod(Membership membership) {
+        if (membership.getSourcePayment() == null
+                || membership.getSourcePayment().getStatus() != PaymentStatus.SUCCESS) return false;
+        List<Membership> paidPeriods = membershipRepository
+                .findSuccessfulPaidPeriods(membership.getMember().getId());
+        return !paidPeriods.isEmpty() && paidPeriods.get(0).getId().equals(membership.getId());
     }
 
     private void validateActiveMembership(Membership membership) {
@@ -169,6 +260,7 @@ public class MembershipService {
     }
 
     /** Endpoint-only guard; the scheduler continues to call the existing no-argument method. */
+    @Transactional
     public int expireMemberships(Jwt callerJwt) {
         User actor = currentActor(callerJwt);
         if (!"ADMIN".equalsIgnoreCase(actor.getRole())) {
@@ -177,14 +269,37 @@ public class MembershipService {
         return expireMemberships();
     }
 
+    @Transactional
     public int expireMemberships() {
         LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
-        List<Membership> expiredCandidates = membershipRepository.findByStatusAndEndDateLessThanEqual("ACTIVE", today);
+        List<Integer> expiredCandidateIds = membershipRepository.findExpiredCandidateIds(today);
         int expiredCount = 0;
 
-        for (Membership membership : expiredCandidates) {
+        for (Integer candidateId : expiredCandidateIds) {
+            Membership snapshot = membershipRepository.findById(candidateId).orElse(null);
+            if (snapshot == null) continue;
+            Integer memberId = snapshot.getMember().getId();
+            if (userRepository.findByIdForBookingUpdate(memberId).isEmpty()) continue;
+            Membership membership = membershipRepository.findByIdForRenewalUpdate(candidateId).orElse(null);
+            if (membership == null || !"ACTIVE".equalsIgnoreCase(membership.getStatus())
+                    || membership.getEndDate().isAfter(today)) continue;
+            Payment renewal = paymentRepository.findRenewalByMembershipIdForUpdate(membership.getId()).orElse(null);
+            List<group5.example.sportCenter.entity.PaymentCheckoutAttempt> attempts = renewal == null ? List.of()
+                    : paymentCheckoutAttemptRepository.findByPaymentIdForUpdateOrderByCreatedAtAscIdAsc(renewal.getId());
             membership.setStatus("EXPIRED");
             membershipRepository.save(membership);
+            if (renewal != null && renewal.getStatus() == PaymentStatus.PENDING) {
+                var captured = attempts.stream().filter(a -> a.getVerifiedAt() != null).findFirst().orElse(null);
+                if (captured != null) {
+                    renewal.setStatus(renewal.getMethod() == null ? PaymentStatus.CANCELLED : PaymentStatus.REFUND_REQUIRED);
+                    renewal.setPaidAt(captured.getVerifiedAt());
+                    renewal.setNote("Verified renewal capture exists after source membership expiry; manual reconciliation required");
+                } else {
+                    renewal.setStatus(PaymentStatus.CANCELLED);
+                    renewal.setNote("Renewal request expired with its source membership period");
+                }
+                paymentRepository.save(renewal);
+            }
             expiredCount++;
         }
         return expiredCount;
@@ -234,6 +349,9 @@ public class MembershipService {
                 membership.getStartDate(),
                 membership.getEndDate(),
                 membership.getAutoRenew(),
-                membership.getStatus());
+                membership.getStatus(),
+                membership.getPurchasedMonths(),
+                membership.getPaidAmount(),
+                membership.getSourcePayment() == null ? null : membership.getSourcePayment().getId());
     }
 }

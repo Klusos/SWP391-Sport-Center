@@ -23,16 +23,6 @@ function formatPrice(value) {
     .format(Number(value || 0))
 }
 
-function formatDuration(months) {
-  const duration = Number(months)
-  if (!Number.isFinite(duration) || duration <= 0) return ''
-  const years = Math.floor(duration / 12)
-  const remainingMonths = duration % 12
-  return [years ? `${years} năm` : '', remainingMonths ? `${remainingMonths} tháng` : '']
-    .filter(Boolean)
-    .join(' ')
-}
-
 function planBenefits(plan) {
   const benefits = []
   if (Number(plan.courseDiscountPercent) > 0) {
@@ -133,7 +123,7 @@ export default function Admission() {
                     <h3>{plan.name?.toUpperCase()}</h3>
                     <p className="plan-desc">{plan.description || 'Gói hội viên tại Sport Center.'}</p>
                     <h6>GIÁ GÓI</h6>
-                    <p className="mb-3"><strong>{formatPrice(plan.price)}</strong> / {formatDuration(plan.durationMonths)}</p>
+                    <p className="mb-3"><strong>{formatPrice(plan.monthlyPrice)}</strong> / tháng</p>
                     <ul className="list-unstyled">
                       {(benefits.length ? benefits : ['Quyền lợi chi tiết vui lòng liên hệ lễ tân.']).map((benefit, index) => (
                         <li key={`${plan.id}-benefit-${index}`}><span className="perk-n">{index + 1}</span>{benefit}</li>

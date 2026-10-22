@@ -89,14 +89,14 @@ class MembershipPlanIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(inactive.getId()));
 
-        String createBody = planBody("New Demo Plan", "0.00", 6, "0", "100");
+        String createBody = planBody("New Demo Plan", "10.00", 6, "0", "100");
         String response = mvc.perform(post("/api/membership-plans")
                         .header("Authorization", adminToken)
                         .contentType("application/json")
                         .content(createBody))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
-                .andExpect(jsonPath("$.price").value(0.00))
+                .andExpect(jsonPath("$.monthlyPrice").value(10.00))
                 .andReturn().getResponse().getContentAsString();
         int createdId = objectMapper.readTree(response).get("id").intValue();
 
@@ -133,7 +133,7 @@ class MembershipPlanIntegrationTest {
         String adminToken = bearer(user("ADMIN"));
         String[] invalidBodies = {
                 planBody("Negative Price", "-0.01", 1, "0", "0"),
-                planBody("Zero Duration", "10.00", 0, "0", "0"),
+                planBody("Zero Monthly Price", "0.00", 12, "0", "0"),
                 planBody("Large Discount", "10.00", 1, "100.01", "0"),
                 planBody("Too Many Decimals", "10.001", 1, "0", "0")
         };
@@ -151,6 +151,41 @@ class MembershipPlanIntegrationTest {
                         .contentType("application/json")
                         .content("{\"status\":\"ARCHIVED\"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void upgradeRelationshipsAreDirectionalUniqueAndAcyclic() throws Exception {
+        String adminToken = bearer(user("ADMIN"));
+        String firstResponse = mvc.perform(post("/api/membership-plans").header("Authorization", adminToken)
+                        .contentType("application/json").content(planBody("Source plan", "100.00", 1, "0", "0")))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        int sourceId = objectMapper.readTree(firstResponse).get("id").intValue();
+
+        String targetBody = planBody("Target plan", "200.00", 1, "0", "0")
+                .replace("\"upgradeFromPlanIds\":[]", "\"upgradeFromPlanIds\":[" + sourceId + "]");
+        String targetResponse = mvc.perform(post("/api/membership-plans").header("Authorization", adminToken)
+                        .contentType("application/json").content(targetBody))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.upgradeFromPlanIds[0]").value(sourceId))
+                .andReturn().getResponse().getContentAsString();
+        int targetId = objectMapper.readTree(targetResponse).get("id").intValue();
+
+        String preserveLinksBody = updateBody("Target plan", "200.00", 1, "0", "0", "ACTIVE")
+                .replace("\"upgradeFromPlanIds\":[],", "");
+        mvc.perform(put("/api/membership-plans/{id}", targetId).header("Authorization", adminToken)
+                        .contentType("application/json").content(preserveLinksBody))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.upgradeFromPlanIds[0]").value(sourceId));
+
+        String cycleBody = updateBody("Source plan", "100.00", 1, "0", "0", "ACTIVE")
+                .replace("\"upgradeFromPlanIds\":[]", "\"upgradeFromPlanIds\":[" + targetId + "]");
+        mvc.perform(put("/api/membership-plans/{id}", sourceId).header("Authorization", adminToken)
+                        .contentType("application/json").content(cycleBody))
+                .andExpect(status().isConflict());
+
+        String duplicateBody = planBody("Duplicate edge", "300.00", 1, "0", "0")
+                .replace("\"upgradeFromPlanIds\":[]", "\"upgradeFromPlanIds\":[" + sourceId + "," + sourceId + "]");
+        mvc.perform(post("/api/membership-plans").header("Authorization", adminToken)
+                        .contentType("application/json").content(duplicateBody))
+                .andExpect(status().isConflict());
     }
 
     @Test
@@ -211,6 +246,7 @@ class MembershipPlanIntegrationTest {
         plan.setName("Test plan " + UUID.randomUUID());
         plan.setDescription("A membership plan used for integration tests.");
         plan.setPrice(new BigDecimal("25.00"));
+        plan.setMonthlyPrice(new BigDecimal("25.00"));
         plan.setDurationMonths(3);
         plan.setCourseDiscountPercent(new BigDecimal("5.00"));
         plan.setPersonalTrainingDiscountPercent(new BigDecimal("10.00"));
@@ -235,8 +271,8 @@ class MembershipPlanIntegrationTest {
     }
 
     private String planBody(String name, String price, int months, String courseDiscount, String trainingDiscount) {
-        return "{\"name\":\"" + name + "\",\"description\":\"Test plan\",\"price\":" + price
-                + ",\"durationMonths\":" + months + ",\"courseDiscountPercent\":" + courseDiscount
+        return "{\"name\":\"" + name + "\",\"description\":\"Test plan\",\"monthlyPrice\":" + price
+                + ",\"upgradeFromPlanIds\":[],\"courseDiscountPercent\":" + courseDiscount
                 + ",\"personalTrainingDiscountPercent\":" + trainingDiscount
                 + ",\"allowPersonalTrainingPlan\":true,\"allowOneOnOneCoaching\":false}";
     }

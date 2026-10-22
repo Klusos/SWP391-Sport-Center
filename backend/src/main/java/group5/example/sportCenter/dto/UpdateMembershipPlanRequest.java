@@ -23,14 +23,12 @@ public class UpdateMembershipPlanRequest {
 
     private String description;
 
-    @NotNull(message = "Price is required")
-    @DecimalMin(value = "0.00", message = "Price cannot be negative")
-    @Digits(integer = 10, fraction = 2, message = "Price must have at most 10 integer and 2 decimal digits")
-    private BigDecimal price;
+    @NotNull(message = "Monthly price is required")
+    @DecimalMin(value = "0.01", message = "Monthly price must be greater than zero")
+    @Digits(integer = 10, fraction = 2, message = "Monthly price must have at most 10 integer and 2 decimal digits")
+    private BigDecimal monthlyPrice;
 
-    @NotNull(message = "Duration is required")
-    @Positive(message = "Duration must be greater than 0")
-    private Integer durationMonths;
+    private java.util.List<@Positive Integer> upgradeFromPlanIds;
 
     @NotNull(message = "Course discount is required")
     @DecimalMin(value = "0.0")

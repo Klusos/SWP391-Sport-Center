@@ -3,6 +3,7 @@ package group5.example.sportCenter.dto;
 import group5.example.sportCenter.entity.PaymentMethod;
 import group5.example.sportCenter.entity.PaymentPurpose;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -25,4 +26,8 @@ public class CreatePaymentRequest {
 
     /** Dùng khi purpose = MEMBERSHIP; mặc định false. */
     private Boolean autoRenew;
+
+    /** Optional for compatibility; omitted means one month. Explicit values other than 1 are rejected. */
+    @Positive
+    private Integer purchasedMonths;
 }

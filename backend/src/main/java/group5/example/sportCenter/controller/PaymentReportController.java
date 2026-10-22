@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import group5.example.sportCenter.dto.PaymentReportRow;
 import group5.example.sportCenter.dto.RevenueReportResponse;
+import group5.example.sportCenter.dto.RevenueGrouping;
 import group5.example.sportCenter.service.PaymentReportService;
 
 @RestController
@@ -29,8 +30,9 @@ public class PaymentReportController {
     public RevenueReportResponse revenue(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(defaultValue = "MONTH") RevenueGrouping groupBy,
             @AuthenticationPrincipal Jwt jwt) {
-        return reportService.revenueReport(from, to, jwt);
+        return reportService.revenueReport(from, to, groupBy, jwt);
     }
 
     @GetMapping("/members")

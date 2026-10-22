@@ -4,6 +4,8 @@ package group5.example.sportCenter.repository;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.jpa.repository.Lock;
+import jakarta.persistence.LockModeType;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -36,4 +38,27 @@ public interface MembershipRepository extends JpaRepository<Membership, Integer>
     
     // Các gói đã qua ngày hết hạn    
     List<Membership> findByStatusAndEndDateLessThanEqual(String status, LocalDate date);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select m from Membership m where m.id = :id")
+    Optional<Membership> findByIdForRenewalUpdate(@Param("id") Integer id);
+
+    @Query("select m.id from Membership m where upper(m.status) = 'ACTIVE' and m.autoRenew = true "
+            + "and m.sourcePayment.status = 'SUCCESS' and m.startDate <= :today and m.endDate > :today "
+            + "and m.endDate <= :latestEndDate order by m.id")
+    List<Integer> findRenewalCandidateIds(@Param("today") LocalDate today,
+            @Param("latestEndDate") LocalDate latestEndDate);
+
+    @Query("select m from Membership m where m.member.id = :memberId and m.sourcePayment.status = 'SUCCESS' "
+            + "order by m.startDate desc, m.id desc")
+    List<Membership> findSuccessfulPaidPeriods(@Param("memberId") Integer memberId);
+
+    @Query("select case when count(m) > 0 then true else false end from Membership m "
+            + "where m.member.id = :memberId and m.id <> :excludedId "
+            + "and m.startDate < :periodEnd and m.endDate > :periodStart")
+    boolean existsTimelineOverlap(@Param("memberId") Integer memberId, @Param("excludedId") Integer excludedId,
+            @Param("periodStart") LocalDate periodStart, @Param("periodEnd") LocalDate periodEnd);
+
+    @Query("select m.id from Membership m where upper(m.status) = 'ACTIVE' and m.endDate <= :today order by m.id")
+    List<Integer> findExpiredCandidateIds(@Param("today") LocalDate today);
 }

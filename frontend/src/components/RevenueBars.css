@@ -1,0 +1,8 @@
+.revenue-bars-scroll{width:100%;overflow-x:auto;padding:12px 2px 4px}
+.revenue-bars{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(58px,1fr);align-items:end;gap:10px;min-width:max-content;height:260px}
+.revenue-bar-column{height:100%;display:grid;grid-template-rows:auto 1fr auto;align-items:end;gap:8px;text-align:center;color:#71849c;font-size:11px}
+.revenue-bar-value{font-size:10px;white-space:nowrap;color:#62758a}
+.revenue-bar-track{height:100%;width:100%;display:flex;align-items:flex-end;justify-content:center;border-bottom:1px solid #dce5f0}
+.revenue-bar{width:min(34px,75%);min-height:2px;border-radius:6px 6px 2px 2px;background:#1263f1;transition:height .2s ease}
+.revenue-bars-scroll.compact .revenue-bars{height:190px;grid-auto-columns:minmax(48px,1fr);gap:6px}
+.revenue-bars-scroll.compact .revenue-bar{width:min(28px,75%)}

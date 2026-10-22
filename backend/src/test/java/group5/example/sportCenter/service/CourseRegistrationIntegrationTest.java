@@ -776,6 +776,7 @@ class CourseRegistrationIntegrationTest {
         MembershipPlan result = new MembershipPlan();
         result.setName("Plan-" + UUID.randomUUID());
         result.setPrice(new BigDecimal("20.00"));
+        result.setMonthlyPrice(new BigDecimal("20.00"));
         result.setDurationMonths(1);
         result.setCourseDiscountPercent(new BigDecimal(discountPercent));
         result.setPersonalTrainingDiscountPercent(BigDecimal.ZERO);

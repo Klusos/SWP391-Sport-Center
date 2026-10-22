@@ -331,7 +331,7 @@ class CourseRegistrationSqlServerE2EIT {
     private int createMembershipPlan() throws Exception {
         JsonNode response = postJson("/api/membership-plans", tokens.get("admin"),
                 Map.of("name", runId + " discount plan", "description", "E2E fixture",
-                        "price", new BigDecimal("100.00"), "durationMonths", 1,
+                        "monthlyPrice", new BigDecimal("100.00"), "upgradeFromPlanIds", List.of(),
                         "courseDiscountPercent", new BigDecimal("25.5"),
                         "personalTrainingDiscountPercent", BigDecimal.ZERO,
                         "allowPersonalTrainingPlan", false, "allowOneOnOneCoaching", false), 201);
