@@ -1,0 +1,327 @@
+/* Membership Plans — polished Sports Center admin page */
+.membership-layout {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-height: 100vh;
+  background: #f3f6fb;
+  color: #142b49;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.membership-layout .membership-main {
+  box-sizing: border-box;
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  margin-left: 0;
+  padding: 38px clamp(22px, 3.3vw, 58px) 56px;
+}
+.membership-main h1 {
+  margin: 0;
+  color: #102a4c;
+  font-size: clamp(27px, 2vw, 34px);
+  font-weight: 800;
+  letter-spacing: -0.8px;
+  line-height: 1.25;
+}
+.membership-main .subtitle {
+  margin: 9px 0 30px;
+  color: #718198;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.membership-main .banner {
+  margin: 0 0 18px;
+  padding: 13px 16px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font-size: 14px;
+}
+.membership-main .banner.success { color: #087443; background: #eaf8f0; border-color: #bcebd0; }
+.membership-main .banner.error { color: #b42318; background: #fff0ef; border-color: #ffd1cc; }
+.membership-main .member-list-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 16px;
+}
+.membership-main .member-list-toolbar > span {
+  margin-right: auto;
+  color: #263d5b;
+  font-size: 15px;
+  font-weight: 700;
+}
+.membership-main button {
+  min-height: 40px;
+  padding: 9px 15px;
+  border: 1px solid #d3deed;
+  border-radius: 10px;
+  background: #fff;
+  color: #23476f;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background .18s ease, border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+.membership-main button:hover:not(:disabled) {
+  border-color: #8fb7eb;
+  background: #f3f8ff;
+  box-shadow: 0 3px 10px rgba(31, 92, 160, .08);
+}
+.membership-main button:active:not(:disabled) { transform: translateY(1px); }
+.membership-main button:disabled { cursor: not-allowed; opacity: .6; }
+.membership-main .member-list-toolbar button:last-child {
+  border-color: #1767d2;
+  background: #1767d2;
+  color: #fff;
+  box-shadow: 0 5px 12px rgba(23, 103, 210, .18);
+}
+.membership-main .member-list-toolbar button:last-child:hover:not(:disabled) { background: #1059bb; }
+.membership-main .form-card {
+  margin: 0 0 22px;
+  padding: clamp(18px, 2.5vw, 28px);
+  border: 1px solid #e0e8f2;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(24, 54, 91, .06);
+}
+.membership-main .form-card h2 {
+  margin: 0 0 22px;
+  color: #132e50;
+  font-size: 20px;
+  font-weight: 750;
+}
+.membership-main .form-label, .membership-main .form-check-label {
+  color: #405572;
+  font-size: 13px;
+  font-weight: 650;
+}
+.membership-main .form-control {
+  min-height: 43px;
+  border: 1px solid #d7e1ed;
+  border-radius: 10px;
+  background-color: #fbfdff;
+  color: #172f4d;
+  box-shadow: none;
+}
+.membership-main .form-control:focus {
+  border-color: #5d9ce9;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(36, 117, 220, .12);
+}
+.membership-main textarea.form-control { min-height: 94px; }
+.membership-main .form-check { padding: 10px 12px 10px 34px; border: 1px solid #e6edf5; border-radius: 10px; }
+.membership-main .form-check-input { margin-top: .2em; }
+.membership-main .form-card .d-flex button[type="submit"] {
+  border-color: #1767d2;
+  background: #1767d2;
+  color: #fff;
+}
+.membership-main .queue-table-wrap {
+  overflow: auto;
+  border: 1px solid #dce6f1;
+  border-radius: 17px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(20, 48, 82, .055);
+}
+.membership-main .queue-table {
+  width: 100%;
+  min-width: 760px;
+  margin: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: #263c59;
+  font-size: 13px;
+}
+.membership-main .queue-table thead th {
+  padding: 17px 18px;
+  border-bottom: 1px solid #e1eaf4;
+  background: #f7faff;
+  color: #61738d;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .65px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.membership-main .queue-table thead th:first-child { padding-left: 22px; }
+.membership-main .queue-table tbody td {
+  padding: 17px 18px;
+  border-bottom: 1px solid #e8eef5;
+  background: #fff;
+  vertical-align: middle;
+  line-height: 1.65;
+}
+.membership-main .queue-table tbody tr:last-child td { border-bottom: 0; }
+.membership-main .queue-table tbody tr { transition: background .16s ease; }
+.membership-main .queue-table tbody tr:hover td { background: #fbfdff; }
+.membership-main .queue-table tbody td:first-child { padding-left: 22px; min-width: 170px; }
+.membership-main .queue-table td strong { color: #16365d; font-size: 13px; font-weight: 800; }
+.membership-main .queue-table td small { display: inline-block; margin-top: 3px; color: #8795a8; font-size: 11px; }
+.membership-main .queue-table td:nth-child(2) { color: #173c69; font-weight: 750; white-space: nowrap; }
+.membership-main .queue-table td:last-child .d-flex { gap: 7px !important; }
+.membership-main .status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .25px;
+  white-space: nowrap;
+}
+.membership-main .status-pill::before { width: 6px; height: 6px; border-radius: 50%; background: currentColor; content: ""; }
+.membership-main .status-active { color: #08794e; background: #eaf8f0; border-color: #c6eed7; }
+.membership-main .status-inactive { color: #c03932; background: #fff0ef; border-color: #ffd4d0; }
+.membership-main > p[role="status"], .membership-main > p:not(.subtitle) {
+  padding: 24px;
+  border: 1px solid #e0e8f2;
+  border-radius: 14px;
+  background: #fff;
+  color: #718198;
+}
+@media (max-width: 1000px) {
+  .membership-layout .membership-main { flex: 1 1 0; width: auto; margin-left: 0; padding: 28px 22px 40px; }
+  .membership-main .queue-table thead th, .membership-main .queue-table tbody td { padding-right: 14px; padding-left: 14px; }
+}
+@media (max-width: 720px) {
+  .membership-layout .membership-main { flex: 1 1 0; width: 100%; margin-left: 0; padding: 25px 16px 36px; }
+  .membership-main .subtitle { margin-bottom: 24px; }
+  .membership-main .member-list-toolbar { flex-wrap: wrap; }
+  .membership-main .member-list-toolbar > span { flex-basis: 100%; margin-bottom: 3px; }
+  .membership-main .member-list-toolbar button { flex: 1; }
+  .membership-main .form-card { border-radius: 14px; }
+}
+
+/* Form tạo / chỉnh sửa gói hội viên */
+.membership-main .form-card {
+  position: relative;
+  margin: 8px 0 26px;
+  padding: 0 28px 26px;
+  overflow: hidden;
+  border: 1px solid #d8e5f5;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 14px 34px rgba(20, 55, 100, .09);
+}
+.membership-main .form-card h2 {
+  margin: 0 -28px 24px;
+  padding: 22px 28px;
+  border-bottom: 1px solid #dce8f7;
+  background: linear-gradient(115deg, #eaf3ff 0%, #f8fbff 75%);
+  color: #123b6d;
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -.35px;
+}
+.membership-main .form-card h2::before {
+  display: inline-block;
+  width: 4px;
+  height: 23px;
+  margin: 0 11px -5px 0;
+  border-radius: 5px;
+  background: #1767d2;
+  content: "";
+}
+.membership-main .form-card .row.g-3 {
+  --bs-gutter-x: 22px;
+  --bs-gutter-y: 20px;
+}
+.membership-main .form-card .form-label {
+  display: block;
+  margin: 0 0 8px;
+  color: #344c6b;
+  font-size: 13px;
+  font-weight: 750;
+}
+.membership-main .form-card .form-control {
+  display: block;
+  width: 100%;
+  min-height: 46px;
+  padding: 11px 13px;
+  border: 1px solid #d5e0ef;
+  border-radius: 10px;
+  background: #f9fbfe;
+  color: #172f4d;
+  font-family: inherit;
+  font-size: 14px;
+  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+.membership-main .form-card .form-control:hover { border-color: #a9c4e7; }
+.membership-main .form-card .form-control:focus {
+  border-color: #2879dc;
+  outline: none;
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(40, 121, 220, .12);
+}
+.membership-main .form-card textarea.form-control {
+  min-height: 104px;
+  resize: vertical;
+}
+.membership-main .form-card .form-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  margin: 0;
+  padding: 13px 15px 13px 15px;
+  border: 1px solid #dfe8f4;
+  border-radius: 11px;
+  background: #f8fbff;
+  transition: border-color .18s ease, background .18s ease;
+}
+.membership-main .form-card .form-check:has(.form-check-input:checked) {
+  border-color: #9dc5f6;
+  background: #eef6ff;
+}
+.membership-main .form-card .form-check-input {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: #1767d2;
+  cursor: pointer;
+}
+.membership-main .form-card .form-check-label {
+  color: #354e6d;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.membership-main .form-card .d-flex.gap-2 {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px !important;
+  margin-top: 24px !important;
+  padding-top: 20px;
+  border-top: 1px solid #edf1f7;
+}
+.membership-main .form-card .d-flex button[type="submit"] {
+  min-width: 125px;
+  border: 1px solid #1767d2;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #2478e0, #145bc0);
+  color: #fff;
+  box-shadow: 0 5px 12px rgba(23, 103, 210, .18);
+}
+.membership-main .form-card .d-flex button[type="submit"]:hover:not(:disabled) {
+  background: #104fa9;
+  box-shadow: 0 7px 16px rgba(23, 103, 210, .23);
+}
+.membership-main .form-card .d-flex button[type="button"] {
+  min-width: 90px;
+  border-color: #d7e1ed;
+  background: #fff;
+  color: #53657d;
+}
+@media (max-width: 720px) {
+  .membership-main .form-card { padding: 0 17px 20px; }
+  .membership-main .form-card h2 { margin: 0 -17px 20px; padding: 19px 17px; font-size: 18px; }
+  .membership-main .form-card .row.g-3 { --bs-gutter-x: 0; --bs-gutter-y: 16px; }
+  .membership-main .form-card .d-flex.gap-2 { justify-content: stretch; }
+  .membership-main .form-card .d-flex.gap-2 button { flex: 1; }
+}

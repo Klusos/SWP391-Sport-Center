@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
+import "./MembershipPlans.css";
 import {
   createMembershipPlanApi,
   getMembershipPlansApi,
@@ -155,9 +156,9 @@ export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
   }
 
   return (
-    <div className="layout">
+    <div className="layout membership-layout">
       <Sidebar role={role} activePage="membership-plans" onNavigate={onNavigate} onLogout={onLogout} />
-      <main className="main">
+      <main className="main membership-main">
         <h1>Gói hội viên</h1>
         <p className="subtitle">{admin
           ? "Tạo, chỉnh sửa, kích hoạt và tắt các gói hội viên."
