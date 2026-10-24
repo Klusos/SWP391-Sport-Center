@@ -1,4 +1,4 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+export const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || "http://localhost:8080";
 const API_BASE = API_BASE_URL.replace(/\/$/, "");
 let unauthorizedHandler = null;
 
@@ -299,6 +299,18 @@ export function createCourseRegistrationApi(token, classId) {
   });
 }
 
+export function createStaffCourseRegistrationApi(token, memberId, classId) {
+  return request("/api/course-registrations/staff", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ memberId, classId }),
+  });
+}
+
+export function getAllCourseRegistrationsApi(token) {
+  return request("/api/course-registrations", { headers: authenticatedHeaders(token) });
+}
+
 export function cancelCourseRegistrationApi(token, registrationId) {
   return request(`/api/course-registrations/${encodeURIComponent(registrationId)}/cancel`, {
     method: "POST",
@@ -549,9 +561,22 @@ export function getMembershipsByMemberApi(token, memberId) {
   });
 }
 
+export function getCoursesApi(token) {
+  return request("/api/courses", { headers: authenticatedHeaders(token) });
+}
+
+export function getCourseApi(token, courseId) {
+  return request("/api/courses/" + encodeURIComponent(courseId), { headers: authenticatedHeaders(token) });
+}
+
 // Course administration endpoints. Server authorization remains ADMIN-only.
 export function getCoursesBySportApi(token, sportId) {
   return request("/api/courses/sport/" + encodeURIComponent(sportId), { headers: authenticatedHeaders(token) });
+}
+
+export function getPendingCoursePaymentsApi(token, page = 0, size = 20) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  return request("/api/payments/pending-courses?" + params.toString(), { headers: authenticatedHeaders(token) });
 }
 
 export function saveCourseApi(token, courseId, payload) {
@@ -668,5 +693,57 @@ export function getAdminAuditLogsApi(token, { page = 0, size = 20, actorUserId, 
   return request("/api/admin/audit-logs?" + params.toString(), {
     headers: authenticatedHeaders(token),
     signal,
+  });
+}
+
+export function getAdminRevenueReportApi(token, { from, to, groupBy = "MONTH" }, signal) {
+  const params = new URLSearchParams({ from, to, groupBy });
+  return request("/api/reports/revenue?" + params.toString(), {
+    headers: authenticatedHeaders(token),
+    signal,
+  });
+}
+
+export function getMySupportTicketsApi(token, { page = 0, size = 20 } = {}, signal) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  return request("/api/support-tickets/me?" + params.toString(), { headers: authenticatedHeaders(token), signal });
+}
+
+export function getStaffSupportTicketsApi(token, { page = 0, size = 20, status = "", category = "", search = "" } = {}, signal) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  if (status) params.set("status", status);
+  if (category) params.set("category", category);
+  if (search.trim()) params.set("search", search.trim());
+  return request("/api/support-tickets?" + params.toString(), { headers: authenticatedHeaders(token), signal });
+}
+
+export function getSupportTicketApi(token, ticketId, signal) {
+  return request("/api/support-tickets/" + encodeURIComponent(ticketId), { headers: authenticatedHeaders(token), signal });
+}
+
+export function createSupportTicketApi(token, payload) {
+  return request("/api/support-tickets", {
+    method: "POST", headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function replySupportTicketApi(token, ticketId, message) {
+  return request("/api/support-tickets/" + encodeURIComponent(ticketId) + "/messages", {
+    method: "POST", headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
+}
+
+export function updateSupportTicketStatusApi(token, ticketId, status) {
+  return request("/api/support-tickets/" + encodeURIComponent(ticketId) + "/status", {
+    method: "PATCH", headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+}
+
+export function assignSupportTicketToMeApi(token, ticketId) {
+  return request("/api/support-tickets/" + encodeURIComponent(ticketId) + "/assign-to-me", {
+    method: "PATCH", headers: authenticatedHeaders(token),
   });
 }

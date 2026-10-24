@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -28,11 +29,15 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.web.FilterChainProxy;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.context.annotation.Import;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
@@ -41,6 +46,7 @@ import org.springframework.web.server.ResponseStatusException;
 import group5.example.sportCenter.dto.CounterPaymentRequest;
 import group5.example.sportCenter.dto.CreatePaymentRequest;
 import group5.example.sportCenter.dto.PaymentResponse;
+import group5.example.sportCenter.dto.RevenueGrouping;
 import group5.example.sportCenter.entity.Coach;
 import group5.example.sportCenter.entity.Course;
 import group5.example.sportCenter.entity.CourseClass;
@@ -75,6 +81,7 @@ import group5.example.sportCenter.security.JwtService;
 
 @SpringBootTest
 @ActiveProfiles("phase1")
+@Import(PaymentIntegrationTest.TestClockConfiguration.class)
 class PaymentIntegrationTest {
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final String EMAIL_DOMAIN = "@payment.example.test";
@@ -97,7 +104,7 @@ class PaymentIntegrationTest {
     @Autowired CourseClassRepository classes;
     @Autowired CourseOfferingRepository offerings;
     @Autowired CourseRepository courses;
-    @Autowired Clock clock;
+    @Autowired TestClock clock;
     @Autowired JwtService tokens;
     @Autowired WebApplicationContext context;
     @Autowired FilterChainProxy security;
@@ -113,6 +120,7 @@ class PaymentIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        clock.setInstant(Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS));
         mvc = MockMvcBuilders.webAppContextSetup(context).addFilters(security).build();
         cleanDatabase();
 
@@ -349,18 +357,78 @@ class PaymentIntegrationTest {
     }
 
     @Test
+    void paymentJustBeforeTheRegistrationDeadlineConfirmsTheHold() {
+        CourseRegistration registration = registration(member, "200000.00", "0.00");
+        PaymentResponse payment = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                registration.getId(), PaymentMethod.COUNTER), jwt(member));
+        setDeadline(registration, now().plusNanos(100_000_000));
+
+        assertEquals("SUCCESS",
+                service.processAtCounter(payment.getId(), counter(true), jwt(receptionist)).getStatus());
+        assertEquals(CourseRegistrationStatus.CONFIRMED,
+                registrations.findById(registration.getId()).orElseThrow().getStatus());
+        assertEquals(1L, occupiedSeats(registration));
+    }
+
+    @Test
     void paymentAtTheRegistrationDeadlineCannotReclaimExpiredSeat() {
         CourseRegistration registration = registration(member, "200000.00", "0.00");
         PaymentResponse payment = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
                 registration.getId(), PaymentMethod.COUNTER), jwt(member));
-        CourseRegistration persisted = registrations.findById(registration.getId()).orElseThrow();
-        persisted.setPaymentDeadline(now());
-        registrations.saveAndFlush(persisted);
+        setDeadline(registration, now());
+
+        assertEquals(PaymentStatus.PENDING, payments.findById(payment.getId()).orElseThrow().getStatus());
+        assertEquals("REFUND_REQUIRED",
+                service.processAtCounter(payment.getId(), counter(true), jwt(receptionist)).getStatus());
+        assertEquals(CourseRegistrationStatus.EXPIRED,
+                registrations.findById(registration.getId()).orElseThrow().getStatus());
+        assertEquals(0L, occupiedSeats(registration), "late settlement must not reclaim an expired seat");
+    }
+
+    @Test
+    void paymentJustAfterTheRegistrationDeadlineCannotReviveTheHold() {
+        CourseRegistration registration = registration(member, "200000.00", "0.00");
+        PaymentResponse payment = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                registration.getId(), PaymentMethod.COUNTER), jwt(member));
+        setDeadline(registration, now().minusNanos(100_000_000));
 
         assertEquals("REFUND_REQUIRED",
                 service.processAtCounter(payment.getId(), counter(true), jwt(receptionist)).getStatus());
         assertEquals(CourseRegistrationStatus.EXPIRED,
                 registrations.findById(registration.getId()).orElseThrow().getStatus());
+        assertEquals(0L, occupiedSeats(registration), "late settlement must not reclaim an expired seat");
+    }
+
+    @Test
+    void expirationSweepLeavesUnpaidPendingPaymentPendingUntilReceiptIsConfirmed() {
+        CourseRegistration registration = registration(member, "200000.00", "0.00");
+        PaymentResponse payment = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                registration.getId(), PaymentMethod.COUNTER), jwt(member));
+        setDeadline(registration, now().minusNanos(100_000_000));
+
+        assertEquals(1, registrationExpiration.expireDueRegistrations());
+        assertEquals(CourseRegistrationStatus.EXPIRED,
+                registrations.findById(registration.getId()).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.PENDING, payments.findById(payment.getId()).orElseThrow().getStatus(),
+                "expiration alone is not evidence that money was received");
+        assertEquals(0L, occupiedSeats(registration));
+
+        assertEquals("REFUND_REQUIRED",
+                service.processAtCounter(payment.getId(), counter(true), jwt(receptionist)).getStatus());
+        assertEquals(CourseRegistrationStatus.EXPIRED,
+                registrations.findById(registration.getId()).orElseThrow().getStatus());
+        assertEquals(0L, occupiedSeats(registration));
+    }
+
+    private void setDeadline(CourseRegistration registration, LocalDateTime deadline) {
+        CourseRegistration persisted = registrations.findById(registration.getId()).orElseThrow();
+        persisted.setPaymentDeadline(deadline);
+        registrations.saveAndFlush(persisted);
+    }
+
+    private long occupiedSeats(CourseRegistration registration) {
+        return registrations.countOccupiedSeats(registration.getCourseClass().getId(),
+                CourseRegistrationStatus.CONFIRMED, CourseRegistrationStatus.PENDING_PAYMENT, now());
     }
 
     @Test
@@ -493,7 +561,39 @@ class PaymentIntegrationTest {
         assertEquals(0, notifications.count());
 
         LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
-        assertEquals(0, BigDecimal.ZERO.compareTo(reports.revenueReport(today, today, jwt(admin)).getTotalRevenue()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(reports.revenueReport(today, today, RevenueGrouping.MONTH, jwt(admin)).getTotalRevenue()));
+    }
+
+    @Test
+    void revenueReportGroupsSupportedPaymentPurposesBySettlementDate() {
+        reportPayment(PaymentPurpose.MEMBERSHIP, PaymentStatus.SUCCESS, "100.00", "2026-10-01T09:00:00");
+        reportPayment(PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.SUCCESS, "200.00", "2026-10-31T23:59:59");
+        reportPayment(PaymentPurpose.PT_BOOKING, PaymentStatus.SUCCESS, "300.00", "2026-11-01T23:59:59");
+        reportPayment(PaymentPurpose.MEMBERSHIP, PaymentStatus.SUCCESS, "40.00", "2027-01-01T12:00:00");
+        reportPayment(PaymentPurpose.MEMBERSHIP, PaymentStatus.PENDING, "900.00", "2026-10-15T12:00:00");
+        reportPayment(PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.CANCELLED, "800.00", "2026-10-20T12:00:00");
+        reportPayment(PaymentPurpose.PT_BOOKING, PaymentStatus.REFUND_REQUIRED, "700.00", "2026-10-25T12:00:00");
+
+        var daily = reports.revenueReport(LocalDate.parse("2026-10-31"), LocalDate.parse("2026-11-02"),
+                RevenueGrouping.DAY, jwt(admin));
+        assertEquals(new BigDecimal("500.00"), daily.getTotalRevenue());
+        assertEquals(3, daily.getPeriods().size());
+        assertEquals(LocalDate.parse("2026-10-31"), daily.getPeriods().get(0).periodStart());
+        assertEquals(new BigDecimal("200.00"), daily.getPeriods().get(0).totalRevenue());
+        assertEquals(BigDecimal.ZERO, daily.getPeriods().get(2).totalRevenue());
+
+        var monthly = reports.revenueReport(LocalDate.parse("2026-10-01"), LocalDate.parse("2026-12-01"),
+                RevenueGrouping.MONTH, jwt(admin));
+        assertEquals(3, monthly.getPeriods().size());
+        assertEquals(new BigDecimal("600.00"), monthly.getTotalRevenue());
+        assertEquals(new BigDecimal("100.00"), monthly.getRevenueByPurpose().get("MEMBERSHIP"));
+        assertEquals(new BigDecimal("200.00"), monthly.getRevenueByPurpose().get("COURSE_REGISTRATION"));
+        assertEquals(new BigDecimal("300.00"), monthly.getRevenueByPurpose().get("PT_BOOKING"));
+
+        var yearly = reports.revenueReport(LocalDate.parse("2026-10-01"), LocalDate.parse("2027-01-01"),
+                RevenueGrouping.YEAR, jwt(admin));
+        assertEquals(2, yearly.getPeriods().size());
+        assertEquals(new BigDecimal("640.00"), yearly.getTotalRevenue());
     }
 
     @Test
@@ -638,6 +738,186 @@ class PaymentIntegrationTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0));
     }
 
+    @Test
+    void pendingCourseQueueRequiresActiveStaffAndValidPagination() throws Exception {
+        String path = "/api/payments/pending-courses";
+        for (User staff : List.of(admin, receptionist)) {
+            mvc.perform(get(path).header("Authorization", bearer(staff)))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.content").isArray());
+        }
+        for (User forbidden : List.of(member, coach.getUser())) {
+            mvc.perform(get(path).header("Authorization", bearer(forbidden))).andExpect(status().isForbidden());
+            assertThrows(ResponseStatusException.class, () -> service.getPendingCourseCounterPayments(0, 20, jwt(forbidden)));
+        }
+        mvc.perform(get(path)).andExpect(status().isUnauthorized());
+        for (String query : List.of("page=-1", "size=0", "size=101", "page=abc")) {
+            mvc.perform(get(path + "?" + query).header("Authorization", bearer(admin)))
+                    .andExpect(status().isBadRequest());
+        }
+        receptionist.setStatus("INACTIVE");
+        users.saveAndFlush(receptionist);
+        mvc.perform(get(path).header("Authorization", bearer(receptionist))).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void pendingCourseQueueReturnsOnlyActionableCounterHoldsAndSafeDetails() throws Exception {
+        CourseRegistration hold = registration(member, "500000.00", "50000.00");
+        var included = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION, hold.getId(), PaymentMethod.COUNTER), jwt(member));
+        courseQueueFixture(hold, PaymentMethod.ONLINE, PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.PENDING);
+        for (PaymentPurpose purpose : List.of(PaymentPurpose.MEMBERSHIP, PaymentPurpose.PT_BOOKING)) {
+            courseQueueFixture(hold, PaymentMethod.COUNTER, purpose, PaymentStatus.PENDING);
+        }
+        for (PaymentStatus state : List.of(PaymentStatus.SUCCESS, PaymentStatus.CANCELLED, PaymentStatus.REFUND_REQUIRED)) {
+            courseQueueFixture(hold, PaymentMethod.COUNTER, PaymentPurpose.COURSE_REGISTRATION, state);
+        }
+        for (CourseRegistrationStatus state : List.of(CourseRegistrationStatus.EXPIRED,
+                CourseRegistrationStatus.CANCELLED, CourseRegistrationStatus.CONFIRMED)) {
+            var inactive = registration(otherMember, "500000.00", "0.00");
+            inactive.setStatus(state);
+            registrations.saveAndFlush(inactive);
+            courseQueueFixture(inactive, PaymentMethod.COUNTER, PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.PENDING);
+        }
+        var stale = registration(otherMember, "500000.00", "0.00");
+        stale.setPaymentDeadline(now().minusMinutes(1));
+        registrations.saveAndFlush(stale);
+        var stalePayment = courseQueueFixture(stale, PaymentMethod.COUNTER, PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.PENDING);
+        var missingDeadline = registration(otherMember, "500000.00", "0.00");
+        missingDeadline.setPaymentDeadline(null);
+        registrations.saveAndFlush(missingDeadline);
+        courseQueueFixture(missingDeadline, PaymentMethod.COUNTER, PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.PENDING);
+        // Corrupt/missing purpose-scoped references must not produce a misleading staff row.
+        var mismatch = courseQueueFixture(hold, PaymentMethod.COUNTER, PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.PENDING);
+        mismatch.setMember(otherMember);
+        payments.saveAndFlush(mismatch);
+        var orphan = courseQueueFixture(hold, PaymentMethod.COUNTER, PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.PENDING);
+        orphan.setReferenceId(Integer.MAX_VALUE);
+        payments.saveAndFlush(orphan);
+
+        mvc.perform(get("/api/payments/pending-courses").header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].paymentId").value(included.getId()))
+                .andExpect(jsonPath("$.content[0].memberId").value(member.getId()))
+                .andExpect(jsonPath("$.content[0].memberName").value(member.getName()))
+                .andExpect(jsonPath("$.content[0].registrationId").value(hold.getId()))
+                .andExpect(jsonPath("$.content[0].courseId").isNumber())
+                .andExpect(jsonPath("$.content[0].courseName").isString())
+                .andExpect(jsonPath("$.content[0].classId").isNumber())
+                .andExpect(jsonPath("$.content[0].className").value("Pay class"))
+                .andExpect(jsonPath("$.content[0].amount").value(450000))
+                .andExpect(jsonPath("$.content[0].paymentStatus").value("PENDING"))
+                .andExpect(jsonPath("$.content[0].registrationStatus").value("PENDING_PAYMENT"))
+                .andExpect(jsonPath("$.content[0].paymentDeadline").isString())
+                .andExpect(jsonPath("$.content[0].paymentCreatedAt").isString())
+                .andExpect(jsonPath("$.content[0].passwordHash").doesNotExist())
+                .andExpect(jsonPath("$.content[0].email").doesNotExist())
+                .andExpect(jsonPath("$.content[0].transactionCode").doesNotExist());
+        Payment untouched = payments.findById(stalePayment.getId()).orElseThrow();
+        assertEquals(PaymentStatus.PENDING, untouched.getStatus());
+        assertNull(untouched.getPaidAt());
+    }
+
+    @Test
+    void pendingCourseQueueUsesStrictDeadlineComparisonIncludingEquality() {
+        var hold = registration(member, "200000.00", "0.00");
+        LocalDateTime boundary = now().withNano(0);
+        hold.setPaymentDeadline(boundary);
+        registrations.saveAndFlush(hold);
+        courseQueueFixture(hold, PaymentMethod.COUNTER, PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.PENDING);
+        var page = org.springframework.data.domain.PageRequest.of(0, 20);
+        assertEquals(1, payments.findPendingCoursePayments(boundary.minusSeconds(1), page).getTotalElements());
+        assertEquals(0, payments.findPendingCoursePayments(boundary, page).getTotalElements());
+        assertEquals(0, payments.findPendingCoursePayments(boundary.plusSeconds(1), page).getTotalElements());
+        assertEquals(0, service.getPendingCourseCounterPayments(0, 20, jwt(admin)).getTotalElements());
+    }
+
+    @Test
+    void pendingCourseQueuePaginatesOldestFirstWithStableIdTies() throws Exception {
+        var hold = registration(member, "200000.00", "0.00");
+        var newer = courseQueueFixture(hold, PaymentMethod.COUNTER, PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.PENDING);
+        var first = courseQueueFixture(hold, PaymentMethod.COUNTER, PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.PENDING);
+        var second = courseQueueFixture(hold, PaymentMethod.COUNTER, PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.PENDING);
+        jdbc.update("update Payment set created_at = ? where id = ?", now().minusHours(1), newer.getId());
+        LocalDateTime sameTime = now().minusHours(2).withNano(0);
+        jdbc.update("update Payment set created_at = ? where id = ?", sameTime, first.getId());
+        jdbc.update("update Payment set created_at = ? where id = ?", sameTime, second.getId());
+        mvc.perform(get("/api/payments/pending-courses?size=2").header("Authorization", bearer(admin)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.totalPages").value(2)).andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.content[0].paymentId").value(first.getId()))
+                .andExpect(jsonPath("$.content[1].paymentId").value(second.getId()));
+        mvc.perform(get("/api/payments/pending-courses?size=2&page=1").header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].paymentId").value(newer.getId()));
+        mvc.perform(get("/api/payments/pending-courses?size=2&page=2").header("Authorization", bearer(admin)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.content.length()").value(0));
+    }
+
+    @Test
+    void courseQueueDoesNotBroadenMemberPaymentHistoryAccess() throws Exception {
+        var own = registration(member, "200000.00", "0.00");
+        var others = registration(otherMember, "300000.00", "0.00");
+        var ownPayment = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION, own.getId(), PaymentMethod.COUNTER), jwt(member));
+        service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION, others.getId(), PaymentMethod.COUNTER), jwt(otherMember));
+        mvc.perform(get("/api/payments/me").header("Authorization", bearer(member)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(ownPayment.getId()))
+                .andExpect(jsonPath("$[0].memberId").value(member.getId()));
+        mvc.perform(get("/api/payments/member/" + otherMember.getId()).header("Authorization", bearer(member)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void courseQueueSettlementConfirmsOnlyOnceAndRemovesAllAttemptsForThatHold() throws Exception {
+        var hold = registration(member, "200000.00", "0.00");
+        var payment = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION, hold.getId(), PaymentMethod.COUNTER), jwt(member));
+        var second = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION, hold.getId(), PaymentMethod.COUNTER), jwt(member));
+        mvc.perform(patch("/api/payments/" + payment.getId() + "/counter").header("Authorization", bearer(receptionist))
+                        .contentType("application/json").content("{\"success\":true}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("SUCCESS"));
+        assertEquals(CourseRegistrationStatus.CONFIRMED, registrations.findById(hold.getId()).orElseThrow().getStatus());
+        mvc.perform(get("/api/payments/pending-courses").header("Authorization", bearer(admin)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0));
+        mvc.perform(patch("/api/payments/" + payment.getId() + "/counter").header("Authorization", bearer(admin))
+                        .contentType("application/json").content("{\"success\":true}"))
+                .andExpect(status().isConflict());
+        assertEquals("REFUND_REQUIRED", service.processAtCounter(second.getId(), counter(true), jwt(receptionist)).getStatus());
+        assertEquals(1, registrations.count());
+        assertEquals(CourseRegistrationStatus.CONFIRMED, registrations.findById(hold.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void selectedCoursePaymentRechecksDeadlineAndLateReceiptNeverReclaimsSeat() throws Exception {
+        var hold = registration(member, "200000.00", "0.00");
+        var payment = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION, hold.getId(), PaymentMethod.COUNTER), jwt(member));
+        assertEquals(1, service.getPendingCourseCounterPayments(0, 20, jwt(receptionist)).getTotalElements());
+        hold.setPaymentDeadline(now().minusSeconds(1));
+        registrations.saveAndFlush(hold);
+        assertEquals(0, service.getPendingCourseCounterPayments(0, 20, jwt(receptionist)).getTotalElements());
+        assertEquals(PaymentStatus.PENDING, payments.findById(payment.getId()).orElseThrow().getStatus());
+        mvc.perform(patch("/api/payments/" + payment.getId() + "/counter").header("Authorization", bearer(receptionist))
+                        .contentType("application/json").content("{\"success\":true}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("REFUND_REQUIRED"));
+        assertEquals(CourseRegistrationStatus.EXPIRED, registrations.findById(hold.getId()).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.REFUND_REQUIRED, payments.findById(payment.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void canceledCourseHoldIsNeverRevivedByExplicitReceipt() {
+        var hold = registration(member, "200000.00", "0.00");
+        var payment = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION, hold.getId(), PaymentMethod.COUNTER), jwt(member));
+        hold.setStatus(CourseRegistrationStatus.CANCELLED);
+        registrations.saveAndFlush(hold);
+        assertEquals(0, service.getPendingCourseCounterPayments(0, 20, jwt(admin)).getTotalElements());
+        assertEquals("REFUND_REQUIRED", service.processAtCounter(payment.getId(), counter(true), jwt(receptionist)).getStatus());
+        assertEquals(CourseRegistrationStatus.CANCELLED, registrations.findById(hold.getId()).orElseThrow().getStatus());
+    }
+
+    private Payment courseQueueFixture(CourseRegistration registration, PaymentMethod method, PaymentPurpose purpose, PaymentStatus state) {
+        var payment = queueFixture(registration.getMember(), method, purpose, state);
+        payment.setReferenceId(registration.getId());
+        return payments.saveAndFlush(payment);
+    }
+
     private Payment queueFixture(User owner, PaymentMethod method,
             PaymentPurpose purpose, PaymentStatus state) {
         var payment = new Payment();
@@ -675,6 +955,19 @@ class PaymentIntegrationTest {
                 .filter(c -> ownUserIds.contains(c.getUser().getId())).toList());
         sports.deleteAll(sports.findAll().stream().filter(s -> s.getName().startsWith("Pay Sport")).toList());
         users.deleteAll(ownUsers);
+    }
+
+    private Payment reportPayment(PaymentPurpose purpose, PaymentStatus status, String amount, String paidAt) {
+        Payment payment = new Payment();
+        payment.setMember(member);
+        payment.setAmount(new BigDecimal(amount));
+        payment.setMethod(PaymentMethod.COUNTER);
+        payment.setPurpose(purpose);
+        payment.setReferenceId(999);
+        payment.setStatus(status);
+        payment.setTransactionCode("REPORT-" + java.util.UUID.randomUUID().toString().substring(0, 24));
+        payment.setPaidAt(LocalDateTime.parse(paidAt));
+        return payments.saveAndFlush(payment);
     }
 
     private CourseRegistration registration(User owner, String originalPrice, String discount) {
@@ -748,6 +1041,48 @@ class PaymentIntegrationTest {
 
     private String callbackPath(String paymentUrl) {
         return paymentUrl.substring(paymentUrl.indexOf("/api/payments/online/callback"));
+    }
+
+    @TestConfiguration
+    static class TestClockConfiguration {
+        @Bean
+        @Primary
+        TestClock paymentIntegrationTestClock() {
+            return new TestClock();
+        }
+    }
+
+    static final class TestClock extends Clock {
+        private final AtomicReference<Instant> current;
+        private final ZoneId zone;
+
+        TestClock() {
+            this(new AtomicReference<>(Instant.EPOCH), ZoneId.systemDefault());
+        }
+
+        private TestClock(AtomicReference<Instant> current, ZoneId zone) {
+            this.current = current;
+            this.zone = zone;
+        }
+
+        void setInstant(Instant instant) {
+            current.set(instant);
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return zone;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return new TestClock(current, zone);
+        }
+
+        @Override
+        public Instant instant() {
+            return current.get();
+        }
     }
 
     private LocalDateTime now() {

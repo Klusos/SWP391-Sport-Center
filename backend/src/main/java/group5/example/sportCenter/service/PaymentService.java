@@ -22,6 +22,7 @@ import org.springframework.web.server.ResponseStatusException;
 import group5.example.sportCenter.dto.CounterPaymentRequest;
 import group5.example.sportCenter.dto.CreatePaymentRequest;
 import group5.example.sportCenter.dto.PaymentResponse;
+import group5.example.sportCenter.dto.PendingCoursePaymentResponse;
 import group5.example.sportCenter.entity.MembershipPlan;
 import group5.example.sportCenter.entity.Payment;
 import group5.example.sportCenter.entity.PaymentMethod;
@@ -263,6 +264,16 @@ public class PaymentService {
                 PaymentStatus.PENDING, PaymentMethod.COUNTER, PaymentPurpose.MEMBERSHIP,
                 PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt", "id")))
                 .map(payment -> toResponse(payment, null));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PendingCoursePaymentResponse> getPendingCourseCounterPayments(int page, int size, Jwt jwt) {
+        requireStaff(currentActor(jwt));
+        if (page < 0 || size < 1 || size > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must be nonnegative and size between 1 and 100");
+        }
+        // Read eligibility only: an expired hold does not prove that money was received.
+        return paymentRepository.findPendingCoursePayments(now(), PageRequest.of(page, size));
     }
 
     // ---------------------------------------------------------------- helpers

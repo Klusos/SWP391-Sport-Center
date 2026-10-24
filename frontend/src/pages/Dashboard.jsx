@@ -1,12 +1,15 @@
 ﻿import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
+import RevenueBars from "../components/RevenueBars";
+import { defaultRevenueRange, formatVnd } from "../revenueReport";
 import "./Dashboard.css";
 import {
   getUsersApi, getSportsApi, getCoachesApi, getConsultationRequestsApi,
   getPublicMembershipPlansApi, getAssignedPtBookingsApi, getMySkillAssessmentAssignmentsApi,
   getMyPtBookingsApi, getMyMemberSportLevelsApi, getMySkillAssessmentsApi,
   getMyConsultationRequestsApi,
+  getAdminRevenueReportApi,
 } from "../api";
 
 /* ---------- helpers ---------- */
@@ -76,12 +79,36 @@ function Card({ title, note, className = "", children }) {
 const Empty = ({ children }) => <p className="dash-empty">{children}</p>;
 
 /* ---------- role views ---------- */
-function Admin({ d }) {
+function AdminRevenueCard({ token }) {
+  const [state, setState] = useState({ loading: true, report: null, error: "" });
+  useEffect(() => {
+    const controller = new AbortController();
+    const range = defaultRevenueRange();
+    getAdminRevenueReportApi(token, { ...range, groupBy: "MONTH" }, controller.signal)
+      .then((report) => { if (!controller.signal.aborted) setState({ loading: false, report, error: "" }); })
+      .catch((error) => {
+        if (!controller.signal.aborted) setState({ loading: false, report: null, error: error.message || "Không thể tải doanh thu." });
+      });
+    return () => controller.abort();
+  }, [token]);
+  return (
+    <Card title="Doanh thu theo thời gian" note={state.loading ? "Đang tải" : "Giao dịch SUCCESS"}>
+      {state.loading ? <Empty>Đang tải dữ liệu doanh thu…</Empty> : state.error ? <Empty>{state.error}</Empty> : (
+        <>
+          <p className="admin-revenue-total">Tổng 8 tháng gần nhất: <strong>{formatVnd(state.report?.totalRevenue)}</strong></p>
+          <RevenueBars periods={state.report?.periods || []} groupBy="MONTH" compact />
+          <Link className="admin-revenue-link" to="/admin/reports">Mở báo cáo doanh thu</Link>
+        </>
+      )}
+    </Card>
+  );
+}
+
+function Admin({ d, token }) {
   const reqs = list(d.requests);
   const by = (s) => reqs.filter((r) => r.status === s).length;
   const rows = [["Chờ xử lý", by("PENDING"), "orange"], ["Đang xử lý", by("IN_PROGRESS"), "blue"], ["Hoàn thành", by("COMPLETED"), "green"]];
   const sum = rows.reduce((a, r) => a + r[1], 0) || 1;
-  const months = [28, 38, 50, 58, 68, 78, 88, 100];
   return (<>
     <Stats items={[
       { label: "Tổng thành viên", value: total(d.members), color: "blue" },
@@ -90,11 +117,7 @@ function Admin({ d }) {
       { label: "Tổng HLV", value: total(d.coaches), color: "blue" },
     ]} />
     <div className="dash-grid wide">
-      <Card title="Doanh thu theo thời gian" note="Dữ liệu mẫu">
-        <div className="dash-bars" role="img" aria-label="Biểu đồ doanh thu mẫu">
-          {months.map((h, i) => <span key={i} style={{ height: h + "%" }} />)}
-        </div>
-      </Card>
+      <AdminRevenueCard token={token} />
       <Card title="Yêu cầu tư vấn">
         <ul className="dash-rows">
           {rows.map(([n, v, c]) => (
@@ -237,7 +260,7 @@ export default function Dashboard({ token, role, onLogout, onNavigate }) {
       <main className="main dash-main">
         <h1>{title}</h1>
         <p className="subtitle">{sub || "Hôm nay: " + today}</p>
-        {loading ? <div className="queue-state">Đang tải dữ liệu…</div> : <View d={data} onNavigate={onNavigate} />}
+        {loading ? <div className="queue-state">Đang tải dữ liệu…</div> : <View d={data} onNavigate={onNavigate} token={token} />}
       </main>
     </div>
   );
