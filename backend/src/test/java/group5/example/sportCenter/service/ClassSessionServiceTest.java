@@ -75,8 +75,8 @@ class ClassSessionServiceTest {
         offering = new CourseOffering();
         offering.setId(8);
         offering.setCourse(course);
-        offering.setStartDate(LocalDate.now().minusDays(10));
-        offering.setEndDate(LocalDate.now().plusDays(10));
+        offering.setStartDate(NOW.toLocalDate().minusDays(10));
+        offering.setEndDate(NOW.toLocalDate().plusDays(10));
         offering.setPlannedSessions(10);
         offering.setSessionDuration(60);
 
@@ -111,7 +111,7 @@ class ClassSessionServiceTest {
         when(classSessionRepository.countByCourseClassIdAndStatusNot(3, "CANCELLED")).thenReturn(1L);
 
         ClassSessionResponse response = service.create(request(null, null,
-                LocalDateTime.now().plusDays(2), LocalDateTime.now().plusDays(2).plusHours(1)));
+                NOW.plusDays(2), NOW.plusDays(2).plusHours(1)));
 
         assertEquals("SCHEDULED", response.status());
         assertTrue(response.warnings().isEmpty());
@@ -129,7 +129,7 @@ class ClassSessionServiceTest {
         when(classSessionRepository.countByCourseClassIdAndStatusNot(3, "CANCELLED")).thenReturn(1L);
 
         ClassSessionResponse response = service.create(request(6, null,
-                LocalDateTime.now().plusDays(2), LocalDateTime.now().plusDays(2).plusHours(1)));
+                NOW.plusDays(2), NOW.plusDays(2).plusHours(1)));
 
         assertEquals(6, response.facilityId());
         verify(classSessionRepository).existsByFacilityIdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThan(
@@ -145,7 +145,7 @@ class ClassSessionServiceTest {
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
                 () -> service.create(request(6, null,
-                        LocalDateTime.now().plusDays(2), LocalDateTime.now().plusDays(2).plusHours(1))));
+                        NOW.plusDays(2), NOW.plusDays(2).plusHours(1))));
 
         assertTrue(exception.getMessage().contains("ACTIVE"));
     }
@@ -158,7 +158,7 @@ class ClassSessionServiceTest {
         when(classSessionRepository.countByCourseClassIdAndStatusNot(3, "CANCELLED")).thenReturn(1L);
 
         ClassSessionResponse response = service.create(request(null, null,
-                LocalDateTime.now().plusDays(2), LocalDateTime.now().plusDays(2).plusHours(1)));
+                NOW.plusDays(2), NOW.plusDays(2).plusHours(1)));
 
         assertEquals(null, response.facilityId());
     }
@@ -169,7 +169,7 @@ class ClassSessionServiceTest {
         when(facilityRepository.findById(77)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class, () -> service.create(request(77, null,
-                LocalDateTime.now().plusDays(2), LocalDateTime.now().plusDays(2).plusHours(1))));
+                NOW.plusDays(2), NOW.plusDays(2).plusHours(1))));
     }
 
     @Test
@@ -237,7 +237,7 @@ class ClassSessionServiceTest {
     @Test
     void rejectsSessionWhoseDurationDiffersFromOfferingOnCreateAndUpdate() {
         stubAvailableClass();
-        LocalDateTime start = LocalDateTime.now().plusDays(2).withNano(0);
+        LocalDateTime start = NOW.plusDays(2).withNano(0);
         ResponseStatusException createError = assertThrows(ResponseStatusException.class,
                 () -> service.create(request(null, null, start, start.plusMinutes(59))));
         assertEquals(400, createError.getStatusCode().value());
@@ -322,8 +322,8 @@ class ClassSessionServiceTest {
 
         UpdateClassSessionRequest request = new UpdateClassSessionRequest();
         request.setClassId(77);
-        request.setStartTime(LocalDateTime.now().plusDays(1));
-        request.setEndTime(LocalDateTime.now().plusDays(1).plusHours(1));
+        request.setStartTime(NOW.plusDays(1));
+        request.setEndTime(NOW.plusDays(1).plusHours(1));
 
         assertThrows(ResourceNotFoundException.class, () -> service.update(12, request));
     }
@@ -336,7 +336,7 @@ class ClassSessionServiceTest {
         when(facilityRepository.findById(6)).thenReturn(Optional.of(inactiveFacility));
 
         UpdateClassSessionRequest request = updateRequest(3, 6,
-                LocalDateTime.now().plusDays(2).withNano(0), LocalDateTime.now().plusDays(2).withNano(0).plusHours(1));
+                NOW.plusDays(2).withNano(0), NOW.plusDays(2).withNano(0).plusHours(1));
 
         assertThrows(IllegalArgumentException.class, () -> service.update(12, request));
     }
@@ -348,7 +348,7 @@ class ClassSessionServiceTest {
         when(classSessionRepository.findById(12)).thenReturn(Optional.of(existing));
         when(facilityRepository.findById(6)).thenReturn(Optional.of(inactiveFacility));
 
-        LocalDateTime start = LocalDateTime.now().plusDays(2).withNano(0);
+        LocalDateTime start = NOW.plusDays(2).withNano(0);
         UpdateClassSessionRequest request = updateRequest(3, 6, start, start.plusHours(1));
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
@@ -361,8 +361,8 @@ class ClassSessionServiceTest {
     void canReadHistoricalSessionWithInactiveFacility() {
         Facility inactiveFacility = facilityWithId(6, "INACTIVE");
         ClassSession historical = scheduledSession(12, inactiveFacility);
-        historical.setStartTime(LocalDateTime.now().minusDays(2));
-        historical.setEndTime(LocalDateTime.now().minusDays(2).plusHours(1));
+        historical.setStartTime(NOW.minusDays(2));
+        historical.setEndTime(NOW.minusDays(2).plusHours(1));
         historical.setStatus("COMPLETED");
         when(classSessionRepository.findById(12)).thenReturn(Optional.of(historical));
         when(classSessionRepository.countByCourseClassIdAndStatusNot(3, "CANCELLED")).thenReturn(1L);
@@ -397,7 +397,7 @@ class ClassSessionServiceTest {
         ClassSession existing = new ClassSession();
         existing.setId(12);
         existing.setStatus("COMPLETED");
-        existing.setEndTime(LocalDateTime.now().minusHours(1));
+        existing.setEndTime(NOW.minusHours(1));
         when(classSessionRepository.findById(12)).thenReturn(Optional.of(existing));
 
         assertThrows(IllegalArgumentException.class, () -> service.updateStatus(12, statusRequest("CANCELLED")));
@@ -558,7 +558,7 @@ class ClassSessionServiceTest {
         session.setId(id);
         session.setCourseClass(courseClass);
         session.setFacility(assignedFacility);
-        session.setStartTime(LocalDateTime.now().plusDays(2).withNano(0));
+        session.setStartTime(NOW.plusDays(2).withNano(0));
         session.setEndTime(session.getStartTime().plusHours(1));
         session.setStatus("SCHEDULED");
         return session;
