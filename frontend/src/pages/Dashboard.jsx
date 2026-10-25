@@ -2,7 +2,7 @@
 import { Link } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import "./Dashboard.css";
-import "./MemberTheme.css";
+import "./Membertheme.css";
 import {
   getUsersApi, getSportsApi, getCoachesApi, getConsultationRequestsApi,
   getPublicMembershipPlansApi, getAssignedPtBookingsApi, getMySkillAssessmentAssignmentsApi,

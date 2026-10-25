@@ -633,32 +633,10 @@ export function getMyClassSessionsApi(token) {
 // Nếu báo "has already been declared" ở hàm nào thì xóa bản trùng của hàm đó.
 
 // --- Thanh toán / hóa đơn ---
-export function getMyPaymentsApi(token) {
-  return request("/api/payments/me", { headers: authenticatedHeaders(token) });
-}
-
 export function getPaymentsByMemberApi(token, memberId) {
   return request("/api/payments/member/" + encodeURIComponent(memberId), { headers: authenticatedHeaders(token) });
 }
 
-export function createPaymentApi(token, payload) {
-  return request("/api/payments", {
-    method: "POST",
-    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-}
-
-export function processCounterPaymentApi(token, paymentId, payload) {
-  return request("/api/payments/" + encodeURIComponent(paymentId) + "/counter", {
-    method: "PATCH",
-    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-}
-
-export function cancelPaymentApi(token, paymentId) {
-  return request("/api/payments/" + encodeURIComponent(paymentId) + "/cancel", {
 export function getNotificationsApi(token, page = 0, size = 20) {
   const query = new URLSearchParams({ page: String(page), size: String(size) });
   return request("/api/notifications?" + query.toString(), { headers: authenticatedHeaders(token) });
