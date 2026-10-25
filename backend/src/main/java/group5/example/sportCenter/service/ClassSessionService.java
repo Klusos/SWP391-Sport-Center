@@ -343,7 +343,7 @@ public class ClassSessionService {
         boolean keepingSameFacility = currentFacility != null
                 && currentFacility.getId().equals(requestedFacility.getId());
         boolean futureScheduledSession = SCHEDULED.equalsIgnoreCase(session.getStatus())
-                && requestedStartTime.isAfter(LocalDateTime.now());
+                && requestedStartTime.isAfter(LocalDateTime.now(clock));
 
         if (keepingSameFacility && futureScheduledSession) {
             throw new IllegalArgumentException(
