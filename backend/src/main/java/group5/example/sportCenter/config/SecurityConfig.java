@@ -118,6 +118,22 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/attendance/*/history").authenticated()
                 .requestMatchers("/api/attendance", "/api/attendance/**").denyAll()
 
+                // Flow 4 training: the service further limits writes to the assigned Coach or ADMIN.
+                .requestMatchers(HttpMethod.GET, "/api/training/me").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/training/classes/*/plan")
+                    .hasAnyRole("ADMIN", "RECEPTIONIST", "COACH", "MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/training/classes", "/api/training/classes/*/sessions",
+                        "/api/training/classes/*/progress", "/api/training/sessions/*/results")
+                    .hasAnyRole("ADMIN", "RECEPTIONIST", "COACH")
+                .requestMatchers(HttpMethod.PUT, "/api/training/classes/*/plan", "/api/training/exercises/*",
+                        "/api/training/sessions/*/results/*")
+                    .hasAnyRole("ADMIN", "COACH")
+                .requestMatchers(HttpMethod.POST, "/api/training/classes/*/plan/exercises",
+                        "/api/training/sessions/*/complete", "/api/training/classes/*/members/*/evaluations")
+                    .hasAnyRole("ADMIN", "COACH")
+                .requestMatchers(HttpMethod.DELETE, "/api/training/exercises/*").hasAnyRole("ADMIN", "COACH")
+                .requestMatchers("/api/training", "/api/training/**").denyAll()
+
                 .requestMatchers(HttpMethod.GET, "/api/pt-bookings/eligible-coaches", "/api/pt-bookings/me").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.POST, "/api/pt-bookings").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/pt-bookings/assigned").hasRole("COACH")
