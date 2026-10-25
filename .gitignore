@@ -31,3 +31,13 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Local secrets and generated artifacts
+.env
+.env.*
+!.env.example
+*DemoCredentials*.txt
+*.log
+*.log.*
+*.tmp
+*.bak
