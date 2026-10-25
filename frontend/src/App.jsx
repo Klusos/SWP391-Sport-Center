@@ -25,6 +25,8 @@ import PtBooking from "./pages/PtBooking";
 import CoachPtSessions from "./pages/CoachPtSessions";
 import CoachSkillAssessments from "./pages/CoachSkillAssessments";
 import CoachAttendance from "./pages/CoachAttendance";
+import CoachTraining from "./pages/CoachTraining";
+import MemberTraining from "./pages/MemberTraining";
 import StaffAttendance from "./pages/StaffAttendance";
 import MemberAttendance from "./pages/MemberAttendance";
 import MemberLevelsAssessments from "./pages/MemberLevelsAssessments";
@@ -268,6 +270,7 @@ export default function App() {
           "coach-pt-sessions": "/coach/pt-sessions",
           "coach-assessments": "/coach/skill-assessments",
           "coach-attendance": "/coach/attendance",
+          "coach-training": "/coach/training",
         }[page] || "/coach/dashboard"
       ),
   };
@@ -286,6 +289,7 @@ export default function App() {
           "member-profile": "/member/profile",
           "member-levels": "/member/levels-assessments",
           "member-attendance": "/member/attendance",
+          "member-training": "/member/training",
           "member-pt-booking": "/member/pt-booking",
           "member-classes": "/member/classes",
         }[page] || "/member/dashboard"
@@ -496,6 +500,11 @@ export default function App() {
           />
 
           <Route
+            path="/member/training"
+            element={<MemberTraining {...member} />}
+          />
+
+          <Route
             path="/member/pt-booking"
             element={
               <PtBooking
@@ -580,6 +589,11 @@ export default function App() {
           <Route
             path="/coach/attendance"
             element={<CoachAttendance {...coach} />}
+          />
+
+          <Route
+            path="/coach/training"
+            element={<CoachTraining {...coach} />}
           />
         </Route>
 

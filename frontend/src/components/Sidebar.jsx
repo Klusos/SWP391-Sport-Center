@@ -19,6 +19,7 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
     ["member-schedule", "Lịch trình"],
     ["member-levels", "Trình độ & đánh giá"],
     ["member-attendance", "Lịch sử điểm danh"],
+    ["member-training", "Kết quả tập luyện"],
     ["member-pt-booking", "Đặt buổi huấn luyện"],
     ["member-profile", "Hồ sơ cá nhân"],
   ];
@@ -28,6 +29,7 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
     ["coach-pt-sessions", "Buổi huấn luyện cá nhân"],
     ["coach-assessments", "Đánh giá kỹ năng"],
     ["coach-attendance", "Điểm danh"],
+    ["coach-training", "Giáo án & kết quả"],
   ];
   const receptionistLinks = [
     ["dashboard", "Tổng quan"],
