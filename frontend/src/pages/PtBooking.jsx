@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
-import { createPtBookingApi, getMyPtBookingsApi, getPublicSportsApi, getPtEligibleCoachesApi } from "../api";
+import { createPaymentApi, createPtBookingApi, getMyPtBookingsApi, getPublicSportsApi, getPtEligibleCoachesApi } from "../api";
+import { validVnpayUrl } from "../courseCheckout";
 import "./PtBooking.css";
 
 const rows = (value) => Array.isArray(value) ? value : value?.content ?? [];
@@ -22,6 +23,7 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
   const [error, setError] = useState(""), [notice, setNotice] = useState("");
   const action = useRef(false);
   const lifecycle = useRef(0);
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     const version = ++lifecycle.current;
@@ -81,6 +83,26 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
     finally { action.current = false; if (lifecycle.current === version) setBusy(false); }
   }
 
+  const holdActive = (booking) => booking.status === "PENDING_PAYMENT" && booking.paymentExpiresAt
+    && new Date(/[zZ]|[+-]\d\d:\d\d$/.test(booking.paymentExpiresAt) ? booking.paymentExpiresAt : booking.paymentExpiresAt + "+07:00") > new Date();
+
+  async function payOnline(booking) {
+    if (action.current || loading) return;
+    action.current = true; setBusy(true); setError(""); setNotice("");
+    try {
+      // The hold lasts 15 minutes, so PT bookings are paid online only (no counter queue for PT).
+      const payment = await createPaymentApi(token, { method: "ONLINE", purpose: "PT_BOOKING", referenceId: booking.id });
+      if (!validVnpayUrl(payment.paymentUrl)) throw new Error("Could not open a valid VNPay Sandbox URL. Check your payment history before retrying.");
+      window.location.assign(payment.paymentUrl);
+    } catch (requestError) {
+      setError(requestError.message || "Could not start the VNPay payment.");
+      action.current = false; setBusy(false);
+    }
+  }
+
+  const returnedStatus = searchParams.get("paymentStatus");
+  const returnedPaymentId = searchParams.get("paymentId");
+
 return (
 <div className="layout pt-booking-layout">
 <Sidebar
@@ -113,6 +135,16 @@ onLogout={onLogout}
           </Link>
         </div>
       </header>
+
+      {returnedStatus && (
+        <p className={"pt-alert " + (returnedStatus === "SUCCESS" ? "pt-success" : "pt-error")} role="status">
+          {returnedStatus === "SUCCESS"
+            ? `Payment #${returnedPaymentId} succeeded via VNPay. Your PT session is confirmed.`
+            : returnedStatus === "REFUND_REQUIRED"
+              ? `Payment #${returnedPaymentId} was received after the hold expired; the center will arrange a refund.`
+              : `Payment ${returnedPaymentId ? "#" + returnedPaymentId + " " : ""}was not completed (${returnedStatus}). You can retry while the hold is active.`}
+        </p>
+      )}
 
       {error && (
         <p className="pt-alert pt-error" role="alert">
@@ -361,6 +393,12 @@ onLogout={onLogout}
                       ? "Payment pending"
                       : booking.status}
                   </span>
+
+                  {holdActive(booking) && (
+                    <button type="button" disabled={busy} onClick={() => void payOnline(booking)}>
+                      Pay with VNPay
+                    </button>
+                  )}
                 </div>
               </article>
             ))}
