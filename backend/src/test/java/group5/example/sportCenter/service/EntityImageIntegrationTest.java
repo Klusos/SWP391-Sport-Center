@@ -92,6 +92,7 @@ class EntityImageIntegrationTest {
 
         Facility facility = new Facility();
         facility.setSport(sport);
+        facility.setSports(new java.util.LinkedHashSet<>(List.of(sport)));
         facility.setName("Image Facility " + UUID.randomUUID());
         facility.setType("STUDIO");
         facility.setStatus("ACTIVE");

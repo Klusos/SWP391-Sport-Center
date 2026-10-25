@@ -48,6 +48,7 @@ import group5.example.sportCenter.entity.Coach;
 import group5.example.sportCenter.entity.Course;
 import group5.example.sportCenter.entity.CourseClass;
 import group5.example.sportCenter.entity.CourseOffering;
+import group5.example.sportCenter.entity.CourseRegistration;
 import group5.example.sportCenter.entity.CourseRegistrationStatus;
 import group5.example.sportCenter.entity.MemberSportLevel;
 import group5.example.sportCenter.entity.Membership;
@@ -85,6 +86,7 @@ class CourseRegistrationIntegrationTest {
     }
 
     @Autowired CourseRegistrationService service;
+    @Autowired CourseRegistrationExpirationService registrationExpiration;
     @Autowired MembershipService membershipService;
     @Autowired CourseRegistrationRepository registrations;
     @Autowired CourseRepository courses;
@@ -133,6 +135,7 @@ class CourseRegistrationIntegrationTest {
         CourseClass selected = courseClass(offering, "ACTIVE", 5);
         CourseClass sibling = courseClass(offering, "ACTIVE", 5);
         session(selected, now.plusDays(2), now.plusDays(2).plusHours(1), "SCHEDULED");
+        session(selected, now.plusDays(4), now.plusDays(4).plusHours(1), "CANCELLED");
         session(sibling, now.plusDays(3), now.plusDays(3).plusHours(1), "SCHEDULED");
 
         var response = service.register(request(selected), jwt(member));
@@ -140,7 +143,11 @@ class CourseRegistrationIntegrationTest {
         assertEquals(course.getId(), response.courseId());
         assertEquals(offering.getId(), response.courseOfferingId());
         assertEquals(selected.getId(), response.classId());
-        assertEquals("CONFIRMED", response.status());
+        assertEquals("PENDING_PAYMENT", response.status());
+        assertEquals(0, service.myCourseSessions(jwt(member)).size());
+        CourseRegistration saved = registrations.findById(response.id()).orElseThrow();
+        saved.setStatus(CourseRegistrationStatus.CONFIRMED);
+        registrations.saveAndFlush(saved);
         assertEquals(1, service.myCourseSessions(jwt(member)).size());
         assertEquals(selected.getId(), service.myCourseSessions(jwt(member)).get(0).classId());
     }
@@ -150,12 +157,12 @@ class CourseRegistrationIntegrationTest {
         Course intermediate = course(sport, "INTERMEDIATE", "ACTIVE");
         CourseClass intermediateClass = classFor(intermediate, 5);
         verifyLevel(member, sport, SportLevel.INTERMEDIATE);
-        assertEquals("CONFIRMED", service.register(request(intermediateClass), jwt(member)).status());
+        assertEquals("PENDING_PAYMENT", service.register(request(intermediateClass), jwt(member)).status());
 
         User advancedMember = user("MEMBER", "ACTIVE");
         verifyLevel(advancedMember, sport, SportLevel.ADVANCED);
         Course lower = course(sport, "BEGINNER", "ACTIVE");
-        assertEquals("CONFIRMED", service.register(request(classFor(lower, 5)), jwt(advancedMember)).status());
+        assertEquals("PENDING_PAYMENT", service.register(request(classFor(lower, 5)), jwt(advancedMember)).status());
 
         Course advanced = course(sport, "ADVANCED", "ACTIVE");
         assertEquals(409, assertThrows(ResponseStatusException.class,
@@ -197,7 +204,7 @@ class CourseRegistrationIntegrationTest {
         ageEligible.setTargetAgeMin(18);
         ageEligible.setTargetAgeMax(40);
         courses.saveAndFlush(ageEligible);
-        assertEquals("CONFIRMED", service.register(request(classFor(ageEligible, 5)), jwt(member)).status());
+        assertEquals("PENDING_PAYMENT", service.register(request(classFor(ageEligible, 5)), jwt(member)).status());
 
         Course ageIneligible = course(sport, "BEGINNER", "ACTIVE");
         ageIneligible.setTargetAgeMin(30);
@@ -223,7 +230,7 @@ class CourseRegistrationIntegrationTest {
         Course course = course(sport, "BEGINNER", "ACTIVE");
         // SQL Server DATETIME2(6) and the H2 profile persist microsecond precision; use a full
         // second before the cutoff so this case remains distinct after database round-tripping.
-        assertEquals("CONFIRMED", service.register(request(classFor(course, now.plusSeconds(1), 5)), jwt(member)).status());
+        assertEquals("PENDING_PAYMENT", service.register(request(classFor(course, now.plusSeconds(1), 5)), jwt(member)).status());
         Course afterDeadlineCourse = course(sport, "BEGINNER", "ACTIVE");
         assertEquals(409, assertThrows(ResponseStatusException.class,
                 () -> service.register(request(classFor(afterDeadlineCourse, now.minusSeconds(1), 5)), jwt(member)))
@@ -249,7 +256,7 @@ class CourseRegistrationIntegrationTest {
         CourseOffering exactOffering = offering(exactCourse, "OPEN", now.plusHours(1));
         exactOffering.setStartDate(registrationDate.plusDays(30));
         offerings.saveAndFlush(exactOffering);
-        assertEquals("CONFIRMED", service.register(
+        assertEquals("PENDING_PAYMENT", service.register(
                 request(courseClass(exactOffering, "ACTIVE", 3)), jwt(member)).status());
 
         Course insideCourse = course(sport, "BEGINNER", "ACTIVE");
@@ -258,7 +265,7 @@ class CourseRegistrationIntegrationTest {
         offerings.saveAndFlush(insideOffering);
         assertEquals(registrationDate.plusDays(20),
                 offerings.findById(insideOffering.getId()).orElseThrow().getStartDate());
-        assertEquals("CONFIRMED", service.register(
+        assertEquals("PENDING_PAYMENT", service.register(
                 request(courseClass(insideOffering, "ACTIVE", 3)), jwt(user("MEMBER", "ACTIVE"))).status());
     }
 
@@ -469,6 +476,49 @@ class CourseRegistrationIntegrationTest {
     }
 
     @Test
+    void pendingHoldUsesEarlierDeadlineAndExpirationReleasesSeatIdempotently() {
+        Course course = course(sport, "BEGINNER", "ACTIVE");
+        CourseOffering offering = offering(course, "OPEN", now.plusHours(12));
+        CourseClass selected = courseClass(offering, "ACTIVE", 1);
+        var hold = service.register(request(selected), jwt(member));
+        assertEquals("PENDING_PAYMENT", hold.status());
+        assertEquals(offering.getRegistrationDeadline(), hold.paymentDeadline());
+
+        CourseRegistration saved = registrations.findById(hold.id()).orElseThrow();
+        saved.setPaymentDeadline(now);
+        registrations.saveAndFlush(saved);
+        assertEquals(1, registrationExpiration.expireDueRegistrations());
+        assertEquals(0, registrationExpiration.expireDueRegistrations());
+        assertEquals(CourseRegistrationStatus.EXPIRED, registrations.findById(hold.id()).orElseThrow().getStatus());
+
+        User secondMember = user("MEMBER", "ACTIVE");
+        assertEquals("PENDING_PAYMENT", service.register(request(selected), jwt(secondMember)).status());
+    }
+
+    @Test
+    void pendingHoldUsesTwentyFourHoursWhenRegistrationDeadlineIsLaterAndCanBeCancelled() {
+        Course course = course(sport, "BEGINNER", "ACTIVE");
+        CourseClass selected = courseClass(offering(course, "OPEN", now.plusDays(3)), "ACTIVE", 1);
+        var response = service.register(request(selected), jwt(member));
+        assertEquals(now.plusHours(24), response.paymentDeadline());
+        assertEquals("CANCELLED", service.cancel(response.id(), jwt(member)).status());
+        assertEquals(0, registrations.countOccupiedSeats(selected.getId(), CourseRegistrationStatus.CONFIRMED,
+                CourseRegistrationStatus.PENDING_PAYMENT, now));
+    }
+
+    @Test
+    void pendingCancellationReleasesTheHoldAndEnforcesMemberOwnership() {
+        CourseClass selected = classFor(course(sport, "BEGINNER", "ACTIVE"), 1);
+        var response = service.register(request(selected), jwt(member));
+        User other = user("MEMBER", "ACTIVE");
+        assertEquals(403, assertThrows(ResponseStatusException.class,
+                () -> service.cancel(response.id(), jwt(other))).getStatusCode().value());
+        assertEquals("CANCELLED", service.cancel(response.id(), jwt(member)).status());
+        assertEquals(0, registrations.countOccupiedSeats(selected.getId(), CourseRegistrationStatus.CONFIRMED,
+                CourseRegistrationStatus.PENDING_PAYMENT, now));
+    }
+
+    @Test
     void concurrentMembersCompetingForLastSeatHaveOneWinner() throws Exception {
         Course course = course(sport, "BEGINNER", "ACTIVE");
         CourseClass selected = classFor(course, 1);
@@ -484,7 +534,7 @@ class CourseRegistrationIntegrationTest {
             List<String> results = List.of(first.get(15, TimeUnit.SECONDS), second.get(15, TimeUnit.SECONDS));
             assertEquals(1, results.stream().filter("201"::equals).count(), results.toString());
             assertEquals(1, results.stream().filter("409"::equals).count(), results.toString());
-            assertEquals(1, registrations.countByClassIdAndStatus(selected.getId(), CourseRegistrationStatus.CONFIRMED));
+            assertEquals(1, registrations.countByClassIdAndStatus(selected.getId(), CourseRegistrationStatus.PENDING_PAYMENT));
         } finally {
             pool.shutdownNow();
         }
@@ -522,7 +572,7 @@ class CourseRegistrationIntegrationTest {
 
         CourseClass touching = classFor(course(sport, "BEGINNER", "ACTIVE"), 5);
         session(touching, start.plusHours(1), start.plusHours(2), "SCHEDULED");
-        assertEquals("CONFIRMED", service.register(request(touching), jwt(member)).status());
+        assertEquals("PENDING_PAYMENT", service.register(request(touching), jwt(member)).status());
     }
 
     @Test
@@ -542,7 +592,8 @@ class CourseRegistrationIntegrationTest {
                 .contentType("application/json").content("{\"classId\":" + selected.getId()
                         + ",\"memberId\":" + otherMember.getId()
                         + ",\"originalPrice\":0,\"membershipDiscount\":0,\"finalPrice\":0}"))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.memberId").value(member.getId()))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.status").value("PENDING_PAYMENT"))
+                .andExpect(jsonPath("$.paymentDeadline").exists()).andExpect(jsonPath("$.memberId").value(member.getId()))
                 .andExpect(jsonPath("$.originalPrice").value(100.0))
                 .andExpect(jsonPath("$.membershipDiscount").value(0.0))
                 .andExpect(jsonPath("$.finalPrice").value(100.0));
@@ -564,7 +615,7 @@ class CourseRegistrationIntegrationTest {
         doThrow(new DataIntegrityViolationException("simulated persistence failure"))
                 .when(registrationSpy).saveAndFlush(any());
         assertThrows(DataIntegrityViolationException.class, () -> service.register(request(selected), jwt(member)));
-        assertEquals(0, registrations.countByClassIdAndStatus(selected.getId(), CourseRegistrationStatus.CONFIRMED));
+        assertEquals(0, registrations.countByClassIdAndStatus(selected.getId(), CourseRegistrationStatus.PENDING_PAYMENT));
     }
 
     private String raceRegister(User user, CourseClass selected, CountDownLatch ready, CountDownLatch start) throws Exception {

@@ -9,6 +9,7 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -42,7 +43,8 @@ import static group5.example.sportCenter.service.AssessmentAccess.error;
 @Transactional(readOnly = true)
 public class CourseRegistrationService {
 
-    private static final CourseRegistrationStatus ACTIVE_REGISTRATION = CourseRegistrationStatus.CONFIRMED;
+    private static final CourseRegistrationStatus PENDING = CourseRegistrationStatus.PENDING_PAYMENT;
+    private static final CourseRegistrationStatus CONFIRMED = CourseRegistrationStatus.CONFIRMED;
     private static final String SCHEDULED = "SCHEDULED";
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final BigDecimal ONE_HUNDRED = new BigDecimal("100");
@@ -56,10 +58,12 @@ public class CourseRegistrationService {
     private final ClassSessionRepository classSessions;
     private final AssessmentAccess access;
     private final Clock clock;
+    private final CourseRegistrationExpirationService expiration;
 
     public CourseRegistrationService(CourseRegistrationRepository registrations, CourseClassRepository courseClasses,
             UserRepository users, MemberSportLevelRepository levels, ClassSessionRepository classSessions,
-            MembershipRepository memberships, AssessmentAccess access, Clock clock) {
+            MembershipRepository memberships, AssessmentAccess access, Clock clock,
+            CourseRegistrationExpirationService expiration) {
         this.registrations = registrations;
         this.courseClasses = courseClasses;
         this.users = users;
@@ -68,6 +72,7 @@ public class CourseRegistrationService {
         this.classSessions = classSessions;
         this.access = access;
         this.clock = clock;
+        this.expiration = expiration;
     }
 
     @Transactional
@@ -106,25 +111,39 @@ public class CourseRegistrationService {
         LocalDate registrationDate = now.toLocalDate();
         validateRegistrationWindow(offering, registrationDate);
         validateRegistrationDeadline(offering, now);
+        LocalDateTime paymentDeadline = now.plusHours(24);
+        if (offering.getRegistrationDeadline().isBefore(paymentDeadline)) {
+            paymentDeadline = offering.getRegistrationDeadline();
+        }
+        if (!paymentDeadline.isAfter(now)) {
+            throw error(HttpStatus.CONFLICT, "CourseOffering registration deadline has passed");
+        }
         validateAgeEligibility(member, course);
         validateSportLevel(member, course);
 
-        if (registrations.existsByMemberIdAndCourseClassIdAndStatus(
-                member.getId(), courseClass.getId(), ACTIVE_REGISTRATION)) {
+        expiration.expireForMember(member.getId(), now);
+        expiration.expireForClass(courseClass.getId(), now);
+        if (hasActiveRegistration(member.getId(), courseClass.getId())) {
             throw error(HttpStatus.CONFLICT, "Member is already registered for this CourseClass");
         }
         if (registrations.existsByMemberIdAndCourseClass_CourseOffering_IdAndStatus(
-                member.getId(), offering.getId(), ACTIVE_REGISTRATION)) {
+                    member.getId(), offering.getId(), CONFIRMED)
+                || registrations.existsByMemberIdAndCourseClass_CourseOffering_IdAndStatus(
+                    member.getId(), offering.getId(), PENDING)) {
             throw error(HttpStatus.CONFLICT, "Member may register for only one CourseClass in this CourseOffering");
         }
 
-        long confirmedCount = registrations.countByClassIdAndStatus(courseClass.getId(), ACTIVE_REGISTRATION);
-        if (confirmedCount >= courseClass.getCapacity()) {
+        long occupiedCount = registrations.countOccupiedSeats(courseClass.getId(), CONFIRMED, PENDING, now);
+        if (occupiedCount >= courseClass.getCapacity()) {
             throw error(HttpStatus.CONFLICT, "CourseClass has reached its registration capacity");
         }
 
         List<CourseRegistration> existingRegistrations = registrations
-                .findByMemberIdAndStatusOrderByRegisteredAtDescIdDesc(member.getId(), ACTIVE_REGISTRATION);
+                .findByMemberIdAndStatusOrderByRegisteredAtDescIdDesc(member.getId(), CONFIRMED);
+        existingRegistrations = new ArrayList<>(existingRegistrations);
+        existingRegistrations.addAll(registrations.findByMemberIdAndStatusOrderByRegisteredAtDescIdDesc(member.getId(), PENDING)
+                .stream().filter(existing -> existing.getPaymentDeadline() != null
+                        && existing.getPaymentDeadline().isAfter(now)).toList());
         List<Integer> existingClassIds = existingRegistrations.stream()
                 .map(registration -> registration.getCourseClass().getId()).distinct().toList();
         validateSchedule(existingClassIds, courseClass.getId(), now);
@@ -132,7 +151,9 @@ public class CourseRegistrationService {
         CourseRegistration registration = new CourseRegistration();
         registration.setMember(member);
         registration.setCourseClass(courseClass);
-        registration.setStatus(ACTIVE_REGISTRATION);
+        registration.setStatus(PENDING);
+        registration.setRegisteredAt(now);
+        registration.setPaymentDeadline(paymentDeadline);
         BigDecimal originalPrice = offering.getPrice().setScale(2, RoundingMode.HALF_UP);
         if (originalPrice.signum() < 0) {
             throw error(HttpStatus.CONFLICT, "CourseOffering price is invalid for registration");
@@ -156,11 +177,13 @@ public class CourseRegistrationService {
         return response(registrations.saveAndFlush(registration));
     }
 
+    @Transactional
     public List<CourseRegistrationResponse> mine(Jwt jwt) {
         User actor = access.actor(jwt);
         access.requireMember(actor);
-        return registrations.findByMemberIdAndStatusOrderByRegisteredAtDescIdDesc(
-                actor.getId(), ACTIVE_REGISTRATION).stream().map(this::response).toList();
+        expiration.expireForMember(actor.getId(), LocalDateTime.now(clock.withZone(BUSINESS_ZONE)));
+        return registrations.findByMemberIdOrderByRegisteredAtDescIdDesc(actor.getId()).stream()
+                .map(this::response).toList();
     }
 
     public List<CourseRegistrationResponse> all(Jwt jwt) {
@@ -172,10 +195,46 @@ public class CourseRegistrationService {
         User actor = access.actor(jwt);
         access.requireMember(actor);
         List<Integer> classIds = registrations
-                .findByMemberIdAndStatusOrderByRegisteredAtDescIdDesc(actor.getId(), ACTIVE_REGISTRATION)
+                .findByMemberIdAndStatusOrderByRegisteredAtDescIdDesc(actor.getId(), CONFIRMED)
                 .stream().map(registration -> registration.getCourseClass().getId()).distinct().toList();
         if (classIds.isEmpty()) return List.of();
-        return classSessions.findByClassIds(classIds).stream().map(this::sessionResponse).toList();
+        return classSessions.findByClassIds(classIds).stream()
+                .filter(session -> !"CANCELLED".equalsIgnoreCase(session.getStatus()))
+                .map(this::sessionResponse).toList();
+    }
+
+    @Transactional
+    public CourseRegistrationResponse cancel(Integer id, Jwt jwt) {
+        User actor = access.actor(jwt);
+        access.requireMember(actor);
+        CourseRegistration registration = registrations.findByIdForUpdate(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Course registration not found with id: " + id));
+        if (!Objects.equals(registration.getMember().getId(), actor.getId())) {
+            throw error(HttpStatus.FORBIDDEN, "You can only cancel your own CourseRegistration");
+        }
+        LocalDateTime now = LocalDateTime.now(clock.withZone(BUSINESS_ZONE));
+        if (expireIfDue(registration, now)) return response(registration);
+        if (registration.getStatus() == PENDING) {
+            registration.setStatus(CourseRegistrationStatus.CANCELLED);
+            registration.setCancelledAt(now);
+        } else {
+            throw error(HttpStatus.CONFLICT, "Only unpaid pending course registrations can be cancelled");
+        }
+        return response(registrations.save(registration));
+    }
+
+    private boolean hasActiveRegistration(Integer memberId, Integer classId) {
+        return registrations.existsByMemberIdAndCourseClassIdAndStatus(memberId, classId, CONFIRMED)
+                || registrations.existsByMemberIdAndCourseClassIdAndStatus(memberId, classId, PENDING);
+    }
+
+    private boolean expireIfDue(CourseRegistration registration, LocalDateTime now) {
+        if (registration.getStatus() == PENDING && registration.getPaymentDeadline() != null
+                && !registration.getPaymentDeadline().isAfter(now)) {
+            registration.setStatus(CourseRegistrationStatus.EXPIRED);
+            return true;
+        }
+        return false;
     }
 
     private void validateRegistrationDeadline(CourseOffering offering, LocalDateTime now) {
@@ -259,7 +318,7 @@ public class CourseRegistrationService {
         return new CourseRegistrationResponse(registration.getId(), registration.getMember().getId(), course.getId(),
                 course.getName(), offering.getId(), offering.getName(), courseClass.getId(), courseClass.getName(),
                 course.getSport().getId(), course.getLevel(), registration.getStatus().name(),
-                registration.getRegisteredAt(), registration.getCancelledAt(), registration.getOriginalPrice(),
+                registration.getRegisteredAt(), registration.getPaymentDeadline(), registration.getCancelledAt(), registration.getOriginalPrice(),
                 registration.getMembershipDiscount(), registration.getFinalPrice());
     }
 

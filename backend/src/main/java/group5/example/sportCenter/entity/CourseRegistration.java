@@ -45,6 +45,8 @@ public class CourseRegistration {
     @Column(nullable = false, updatable = false)
     private LocalDateTime registeredAt;
 
+    private LocalDateTime paymentDeadline;
+
     private LocalDateTime cancelledAt;
 
     @Column(nullable = false, precision = 12, scale = 2)
@@ -59,6 +61,6 @@ public class CourseRegistration {
     @PrePersist
     void onCreate() {
         if (registeredAt == null) registeredAt = LocalDateTime.now();
-        if (status == null) status = CourseRegistrationStatus.CONFIRMED;
+        if (status == null) status = CourseRegistrationStatus.PENDING_PAYMENT;
     }
 }

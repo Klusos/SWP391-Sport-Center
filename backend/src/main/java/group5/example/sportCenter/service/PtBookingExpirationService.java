@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,10 +23,13 @@ public class PtBookingExpirationService {
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private final PersonalTrainingBookingRepository bookings;
     private final Clock clock;
+    private final ApplicationEventPublisher events;
 
-    public PtBookingExpirationService(PersonalTrainingBookingRepository bookings, Clock clock) {
+    public PtBookingExpirationService(
+            PersonalTrainingBookingRepository bookings, Clock clock, ApplicationEventPublisher events) {
         this.bookings = bookings;
         this.clock = clock;
+        this.events = events;
     }
 
     @Scheduled(fixedDelayString = "${app.pt.expiration-sweep-interval-ms:60000}")
@@ -63,6 +67,7 @@ public class PtBookingExpirationService {
         }
 
         booking.setStatus(PersonalTrainingBookingStatus.CONFIRMED);
+        events.publishEvent(new NotificationBusinessEvents.PtBookingConfirmed(booking.getId()));
         return true;
     }
 

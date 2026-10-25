@@ -1,7 +1,23 @@
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 const API_BASE = API_BASE_URL.replace(/\/$/, "");
+let unauthorizedHandler = null;
+
+export function setUnauthorizedHandler(handler) {
+  unauthorizedHandler = typeof handler === "function" ? handler : null;
+}
+
+function getBearerToken(headers) {
+  const authorization = headers instanceof Headers
+    ? headers.get("Authorization")
+    : headers?.Authorization ?? headers?.authorization;
+  const match = typeof authorization === "string"
+    ? authorization.match(/^Bearer\s+(.+)$/i)
+    : null;
+  return match?.[1] || null;
+}
 
 async function request(path, options = {}) {
+  const requestToken = getBearerToken(options.headers);
   const response = await fetch(API_BASE + path, options);
   const text = await response.text();
   let data = {};
@@ -9,6 +25,9 @@ async function request(path, options = {}) {
     try { data = JSON.parse(text); } catch { data = {}; }
   }
   if (!response.ok) {
+    if (response.status === 401 && requestToken) {
+      unauthorizedHandler?.(requestToken);
+    }
     const error = new Error(data.message || data.detail || ("Request failed (" + response.status + ")"));
     error.status = response.status;
     throw error;
@@ -266,11 +285,24 @@ export function getClassesByOfferingApi(token, offeringId) {
   });
 }
 
+export function getClassSessionsByClassApi(token, classId) {
+  return request("/api/class-sessions/class/" + encodeURIComponent(classId), {
+    headers: authenticatedHeaders(token),
+  });
+}
+
 export function createCourseRegistrationApi(token, classId) {
   return request("/api/course-registrations", {
     method: "POST",
     headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify({ classId }),
+  });
+}
+
+export function cancelCourseRegistrationApi(token, registrationId) {
+  return request(`/api/course-registrations/${encodeURIComponent(registrationId)}/cancel`, {
+    method: "POST",
+    headers: authenticatedHeaders(token),
   });
 }
 
@@ -379,6 +411,45 @@ export function getPublicMembershipPlansApi() {
 
 export function getMembershipPlansApi(token) {
   return request("/api/membership-plans", { headers: authenticatedHeaders(token) });
+}
+
+export function createPaymentApi(token, payload) {
+  return request("/api/payments", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function processCounterPaymentApi(token, paymentId, success, note = null) {
+  return request("/api/payments/" + encodeURIComponent(paymentId) + "/counter", {
+    method: "PATCH",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ success, note }),
+  });
+}
+
+export function getPendingMembershipPaymentsApi(token, page = 0, size = 20) {
+  return request(`/api/payments/pending-memberships?page=${page}&size=${size}`, {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function getMyPaymentsApi(token) {
+  return request("/api/payments/me", { headers: authenticatedHeaders(token) });
+}
+
+export function getMemberPaymentsApi(token, memberId) {
+  return request("/api/payments/member/" + encodeURIComponent(memberId), {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function cancelPaymentApi(token, paymentId) {
+  return request("/api/payments/" + encodeURIComponent(paymentId) + "/cancel", {
+    method: "PATCH",
+    headers: authenticatedHeaders(token),
+  });
 }
 
 export function createMembershipPlanApi(token, payload) {
@@ -535,6 +606,22 @@ export function setSessionStatusApi(token, sessionId, status) {
   });
 }
 
+export function previewClassSessionGenerationApi(token, payload) {
+  return request("/api/class-sessions/generation/preview", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function confirmClassSessionGenerationApi(token, payload) {
+  return request("/api/class-sessions/generation/confirm", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getMyRegistrationsApi(token) {
   return request("/api/course-registrations/me", { headers: authenticatedHeaders(token) });
 }
@@ -572,6 +659,24 @@ export function processCounterPaymentApi(token, paymentId, payload) {
 
 export function cancelPaymentApi(token, paymentId) {
   return request("/api/payments/" + encodeURIComponent(paymentId) + "/cancel", {
+export function getNotificationsApi(token, page = 0, size = 20) {
+  const query = new URLSearchParams({ page: String(page), size: String(size) });
+  return request("/api/notifications?" + query.toString(), { headers: authenticatedHeaders(token) });
+}
+
+export function getUnreadNotificationCountApi(token) {
+  return request("/api/notifications/unread-count", { headers: authenticatedHeaders(token) });
+}
+
+export function markNotificationReadApi(token, id) {
+  return request("/api/notifications/" + encodeURIComponent(id) + "/read", {
+    method: "PATCH",
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function markAllNotificationsReadApi(token) {
+  return request("/api/notifications/read-all", {
     method: "PATCH",
     headers: authenticatedHeaders(token),
   });
@@ -607,5 +712,23 @@ export function setAutoRenewApi(token, membershipId, enable) {
   return request("/api/memberships/" + encodeURIComponent(membershipId) + (enable ? "/enable-auto-renew" : "/cancel-renewal"), {
     method: "PATCH",
     headers: authenticatedHeaders(token),
+  });
+}
+export function broadcastNotificationsApi(token, payload) {
+  return request("/api/admin/notifications/broadcast", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getAdminAuditLogsApi(token, { page = 0, size = 20, actorUserId, action, entityType, entityId, from, to } = {}, signal) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  for (const [key, value] of Object.entries({ actorUserId, action, entityType, entityId, from, to })) {
+    if (value !== undefined && value !== null && String(value).trim() !== "") params.set(key, String(value).trim());
+  }
+  return request("/api/admin/audit-logs?" + params.toString(), {
+    headers: authenticatedHeaders(token),
+    signal,
   });
 }

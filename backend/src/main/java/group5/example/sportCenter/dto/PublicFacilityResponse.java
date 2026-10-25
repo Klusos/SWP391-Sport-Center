@@ -6,4 +6,5 @@ public record PublicFacilityResponse(
         String sportName,
         String name,
         String type,
-        String imageUrl) {}
+        String imageUrl,
+        java.util.List<FacilitySportResponse> sports) {}

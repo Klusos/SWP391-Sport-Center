@@ -5,7 +5,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -24,12 +23,11 @@ public class UpdateCourseOfferingRequest {
     @DecimalMin(value = "0.0", inclusive = true)
     private BigDecimal price;
 
-    @Min(value = 1)
-    private Integer plannedSessions;
+    // Numeric legacy values are checked by CourseOfferingService only when changed,
+    // so unrelated updates do not force historical rows to be rewritten.
+    private BigDecimal plannedSessions;
 
-    @NotNull(message = "Session duration is required")
-    @Min(value = 1, message = "Session duration must be at least 1 minute")
-    private Integer sessionDuration;
+    private BigDecimal sessionDuration;
 
     @NotNull
     private LocalDate startDate;

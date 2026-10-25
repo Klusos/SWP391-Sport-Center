@@ -62,6 +62,7 @@ import group5.example.sportCenter.entity.Sport;
 import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.repository.AttendanceHistoryRepository;
 import group5.example.sportCenter.repository.AttendanceRepository;
+import group5.example.sportCenter.repository.AuditLogRepository;
 import group5.example.sportCenter.repository.ClassSessionRepository;
 import group5.example.sportCenter.repository.CoachRepository;
 import group5.example.sportCenter.repository.CourseClassRepository;
@@ -103,6 +104,7 @@ class AttendanceIntegrationTest {
     @Autowired ClassSessionRepository sessions;
     @Autowired CourseRegistrationRepository registrations;
     @Autowired AttendanceRepository attendance;
+    @Autowired AuditLogRepository auditLogs;
     @Autowired AttendanceHistoryRepository histories;
     @MockitoSpyBean AttendanceHistoryRepository historySpy;
 
@@ -201,18 +203,19 @@ class AttendanceIntegrationTest {
     }
 
     @Test
-    void adminAndReceptionistCanMarkAndCorrectAttendanceWithTheirOwnActorIdentity() throws Exception {
+    void adminAndAssignedCoachCanMarkButReceptionistIsReadOnlyForAttendance() throws Exception {
         mvc.perform(put(markUrl(startedSession, member)).header("Authorization", bearer(admin))
                 .contentType("application/json").content("{\"status\":\"PRESENT\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.markedById").value(admin.getId()));
 
         mvc.perform(put(markUrl(startedSession, member)).header("Authorization", bearer(receptionist))
                 .contentType("application/json").content("{\"status\":\"EXCUSED\",\"reason\":\"Verified by reception\"}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("EXCUSED"))
-                .andExpect(jsonPath("$.markedById").value(receptionist.getId()));
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/attendance/sessions/" + startedSession.getId() + "/roster")
+                .header("Authorization", bearer(receptionist))).andExpect(status().isOk());
         mvc.perform(get("/api/attendance/" + attendance.findByClassSessionIdAndMemberId(startedSession.getId(), member.getId()).orElseThrow().getId()
                 + "/history").header("Authorization", bearer(admin)))
-                .andExpect(status().isOk()).andExpect(jsonPath("$[1].changedById").value(receptionist.getId()));
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].changedById").value(admin.getId()));
     }
 
     @Test
@@ -225,6 +228,8 @@ class AttendanceIntegrationTest {
 
         markAsAdmin(startedSession, member, "PRESENT");
         Attendance record = attendance.findByClassSessionIdAndMemberId(startedSession.getId(), member.getId()).orElseThrow();
+        assertEquals(1, auditCount(record.getId(), "MARK"));
+        assertEquals(0, auditCount(record.getId(), "CORRECT"));
         mvc.perform(get("/api/attendance/me").header("Authorization", bearer(member)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].attendanceId").value(record.getId()))
                 .andExpect(jsonPath("$[0].sportId").value(coachClass.getCourseOffering().getCourse().getSport().getId()))
@@ -286,12 +291,12 @@ class AttendanceIntegrationTest {
         markAsAdmin(startedSession, member, "PRESENT");
         Attendance record = attendance.findByClassSessionIdAndMemberId(startedSession.getId(), member.getId()).orElseThrow();
 
-        mvc.perform(put(markUrl(startedSession, member)).header("Authorization", bearer(receptionist))
+        mvc.perform(put(markUrl(startedSession, member)).header("Authorization", bearer(coachUser))
                 .contentType("application/json").content("{\"status\":\"ABSENT\"}"))
                 .andExpect(status().isBadRequest());
         assertEquals(1, histories.findByAttendanceIdOrderByChangedAtAscIdAsc(record.getId()).size());
 
-        mvc.perform(put(markUrl(startedSession, member)).header("Authorization", bearer(receptionist))
+        mvc.perform(put(markUrl(startedSession, member)).header("Authorization", bearer(coachUser))
                 .contentType("application/json").content("{\"status\":\"ABSENT\",\"reason\":\"Roster correction\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ABSENT"));
         mvc.perform(put(markUrl(startedSession, member)).header("Authorization", bearer(admin))
@@ -305,8 +310,10 @@ class AttendanceIntegrationTest {
         assertEquals(AttendanceStatus.PRESENT, events.get(1).getOldStatus());
         assertEquals(AttendanceStatus.ABSENT, events.get(1).getNewStatus());
         assertEquals("Roster correction", events.get(1).getReason());
+        assertEquals(1, auditCount(record.getId(), "MARK"));
+        assertEquals(1, auditCount(record.getId(), "CORRECT"));
         Attendance updated = attendance.findById(record.getId()).orElseThrow();
-        assertEquals(receptionist.getId(), updated.getMarkedBy().getId());
+        assertEquals(coachUser.getId(), updated.getMarkedBy().getId());
     }
 
     @Test
@@ -476,5 +483,12 @@ class AttendanceIntegrationTest {
 
     private String bearer(User user) {
         return "Bearer " + jwtService.generateToken(user);
+    }
+
+    private long auditCount(Integer attendanceId, String action) {
+        return auditLogs.count((root, query, cb) -> cb.and(
+                cb.equal(root.get("entityType"), "ATTENDANCE"),
+                cb.equal(root.get("entityId"), attendanceId.toString()),
+                cb.equal(root.get("action"), action)));
     }
 }

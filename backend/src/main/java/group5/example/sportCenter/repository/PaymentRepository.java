@@ -5,6 +5,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import group5.example.sportCenter.entity.PaymentMethod;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -16,6 +19,8 @@ import group5.example.sportCenter.entity.PaymentStatus;
 import jakarta.persistence.LockModeType;
 
 public interface PaymentRepository extends JpaRepository<Payment, Integer> {
+
+    Page<Payment> findByStatusAndMethodAndPurpose(PaymentStatus status, PaymentMethod method, PaymentPurpose purpose, Pageable pageable);
 
     List<Payment> findByMemberIdOrderByCreatedAtDesc(Integer memberId);
 
@@ -31,6 +36,9 @@ public interface PaymentRepository extends JpaRepository<Payment, Integer> {
     Optional<Payment> findByTransactionCodeForUpdate(@Param("transactionCode") String transactionCode);
 
     boolean existsByPurposeAndReferenceIdAndStatus(PaymentPurpose purpose, Integer referenceId, PaymentStatus status);
+
+    boolean existsByMember_IdAndPurposeAndReferenceIdAndStatus(
+            Integer memberId, PaymentPurpose purpose, Integer referenceId, PaymentStatus status);
 
     boolean existsByPurposeAndReferenceIdAndStatusAndIdNot(
             PaymentPurpose purpose, Integer referenceId, PaymentStatus status, Integer id);

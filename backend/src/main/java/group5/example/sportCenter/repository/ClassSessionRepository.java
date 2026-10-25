@@ -14,6 +14,14 @@ import group5.example.sportCenter.entity.ClassSession;
 
 public interface ClassSessionRepository extends JpaRepository<ClassSession, Integer> {
 
+    @Query("select case when count(s) > 0 then true else false end from ClassSession s "
+            + "where s.courseClass.courseOffering.id = :offeringId and "
+            + "(s.startTime < :rangeStart or s.startTime >= :rangeEndExclusive "
+            + "or s.endTime < :rangeStart or s.endTime >= :rangeEndExclusive)")
+    boolean existsOutsideOfferingRange(@Param("offeringId") Integer offeringId,
+            @Param("rangeStart") LocalDateTime rangeStart,
+            @Param("rangeEndExclusive") LocalDateTime rangeEndExclusive);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select s from ClassSession s where s.id = :id")
     Optional<ClassSession> findByIdForAttendanceUpdate(@Param("id") Integer id);
@@ -27,6 +35,8 @@ public interface ClassSessionRepository extends JpaRepository<ClassSession, Inte
     List<ClassSession> findByCourseClass_Coach_IdOrderByStartTimeAscIdAsc(Integer coachId);
 
     List<ClassSession> findByCourseClassId(Integer classId);
+
+    List<ClassSession> findByCourseClass_CourseOffering_Id(Integer offeringId);
 
     @Query("select distinct s from ClassSession s "
             + "join fetch s.courseClass courseClass "
@@ -44,6 +54,13 @@ public interface ClassSessionRepository extends JpaRepository<ClassSession, Inte
 
     boolean existsByFacilityIdAndStatusAndEndTimeAfter(
             Integer facilityId, String status, LocalDateTime endTime);
+
+    @Query("select case when count(s) > 0 then true else false end from ClassSession s "
+            + "where s.facility.id = :facilityId and s.courseClass.courseOffering.course.sport.id = :sportId "
+            + "and s.status <> :cancelled and s.endTime > :now")
+    boolean existsFutureNonCancelledByFacilityAndCourseSport(@Param("facilityId") Integer facilityId,
+            @Param("sportId") Integer sportId, @Param("cancelled") String cancelled,
+            @Param("now") LocalDateTime now);
 
     boolean existsByFacilityIdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThan(
             Integer facilityId, String excludedStatus, LocalDateTime endTime, LocalDateTime startTime);

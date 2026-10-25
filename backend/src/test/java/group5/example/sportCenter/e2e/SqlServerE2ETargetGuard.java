@@ -21,7 +21,7 @@ public final class SqlServerE2ETargetGuard
     private static final String EXPECTED_DATABASE = "SportCenterDB";
     private static final int EXPECTED_ADMIN_ID = 11;
     private static final Set<String> REQUIRED_COLUMNS = Set.of(
-            "id", "member_id", "class_id", "status", "registered_at", "cancelled_at",
+            "id", "member_id", "class_id", "status", "registered_at", "payment_deadline", "cancelled_at",
             "original_price", "membership_discount", "final_price");
 
     @Override

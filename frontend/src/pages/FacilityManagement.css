@@ -4,5 +4,9 @@
 .facility-admin-table th, .facility-admin-table td { white-space: normal; }
 .facility-admin-table td:nth-child(2), .facility-admin-table td:last-child { white-space: nowrap; }
 .facility-associated-sport { margin: 0 0 14px; padding: 10px 12px; border-radius: 8px; background: #f3f7fb; color: #29415b; }
+.facility-sport-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px 12px; margin: 0 0 8px; padding: 12px; border: 1px solid #c9d6e4; border-radius: 8px; }
+.facility-sport-options legend { padding: 0 5px; font-weight: 600; }
+.facility-sport-options label { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.facility-sport-options input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: #0877b9; }
 @media (max-width: 900px) { .facility-admin-grid { grid-template-columns: 1fr; } }
 @media (max-width: 520px) { .facility-toolbar-actions { width: 100%; } .facility-toolbar-actions button { flex: 1; } }

@@ -100,6 +100,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/member-sport-levels", "/api/member-sport-levels/**").denyAll()
 
                 .requestMatchers(HttpMethod.POST, "/api/course-registrations").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.POST, "/api/course-registrations/*/cancel").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/course-registrations/me",
                         "/api/course-registrations/me/class-sessions").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/course-registrations").hasAnyRole("ADMIN", "RECEPTIONIST")
@@ -112,7 +113,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/attendance/sessions/*/roster")
                     .hasAnyRole("ADMIN", "RECEPTIONIST", "COACH")
                 .requestMatchers(HttpMethod.PUT, "/api/attendance/sessions/*/members/*")
-                    .hasAnyRole("ADMIN", "RECEPTIONIST", "COACH")
+                    .hasAnyRole("ADMIN", "COACH")
                 .requestMatchers(HttpMethod.GET, "/api/attendance/*/history").authenticated()
                 .requestMatchers("/api/attendance", "/api/attendance/**").denyAll()
 
@@ -121,21 +122,30 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/pt-bookings/assigned").hasRole("COACH")
                 .requestMatchers("/api/pt-bookings", "/api/pt-bookings/**").denyAll()
 
-                .requestMatchers(HttpMethod.GET, "/api/payments/online/callback").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/payments/online/callback",
+                        "/api/payments/vnpay/return", "/api/payments/vnpay/ipn").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/payments").hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
                 .requestMatchers(HttpMethod.PATCH, "/api/payments/*/counter").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.PATCH, "/api/payments/*/cancel").hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/payments/pending-memberships").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.GET, "/api/payments/me").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/payments/member/*").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers("/api/payments", "/api/payments/**").denyAll()
                 .requestMatchers(HttpMethod.GET, "/api/reports/**").hasRole("ADMIN")
                 .requestMatchers("/api/reports", "/api/reports/**").denyAll()
 
+                .requestMatchers(HttpMethod.POST, "/api/admin/notifications/broadcast").hasRole("ADMIN")
+                .requestMatchers("/api/admin/notifications", "/api/admin/notifications/**").denyAll()
+                .requestMatchers(HttpMethod.GET, "/api/admin/audit-logs").hasRole("ADMIN")
+                .requestMatchers("/api/admin/audit-logs", "/api/admin/audit-logs/**").denyAll()
+                .requestMatchers("/api/notifications", "/api/notifications/**")
+                    .hasAnyRole("ADMIN", "RECEPTIONIST", "COACH", "MEMBER")
+
                 .requestMatchers(HttpMethod.GET, "/api/membership-plans", "/api/membership-plans/**").hasRole("ADMIN")
                 .requestMatchers("/api/membership-plans", "/api/membership-plans/**").hasRole("ADMIN")
 
                 .requestMatchers(HttpMethod.POST, "/api/memberships/expire").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.POST, "/api/memberships").hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers(HttpMethod.POST, "/api/memberships").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/memberships").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.GET, "/api/memberships/member/*", "/api/memberships/*")
                     .hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
@@ -158,6 +168,10 @@ public class SecurityConfig {
                         "/api/classes", "/api/classes/**",
                         "/api/facilities", "/api/facilities/**")
                     .authenticated()
+                .requestMatchers(HttpMethod.POST,
+                        "/api/class-sessions/generation/preview",
+                        "/api/class-sessions/generation/confirm")
+                    .hasRole("ADMIN")
                 .requestMatchers("/api/sports", "/api/sports/**",
                         "/api/courses", "/api/courses/**",
                         "/api/course-offerings", "/api/course-offerings/**",

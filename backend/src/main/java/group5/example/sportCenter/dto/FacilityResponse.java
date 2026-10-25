@@ -3,6 +3,7 @@ package group5.example.sportCenter.dto;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
+import java.util.List;
 
 @Getter
 @Setter
@@ -13,6 +14,7 @@ public class FacilityResponse {
 
     private Integer sportId;
     private String sportName;
+    private List<FacilitySportResponse> sports;
 
     private String name;
     private String type;

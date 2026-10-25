@@ -1,12 +1,31 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+/* =====================================================================
+   PART 1 - STAFF UI (login + .layout)
+   ===================================================================== */
 :root {
-  --navy: #091f38;
-  --blue: #0a61f2;
-  --blue-dark: #084fc9;
-  --bg: #f6f9fc;
-  --border: #dbe3f0;
-  --text-main: #141f2e;
-  --text-sub: #617085;
-  --text-sidebar-sub: #a6bfd9;
+  --navy: #0b2745;
+  --navy-deep: #071b32;
+  --blue: #1769d2;
+  --blue-dark: #1258b2;
+  --blue-soft: #eaf3ff;
+  --bg: #f3f7fc;
+  --surface: #ffffff;
+  --border: #d8e2ee;
+  --text-main: #172b43;
+  --text-sub: #5b6e82;
+  --text-sidebar-sub: #b6c9de;
+  --success: #176b43;
+  --success-bg: #e8f6ee;
+  --warning: #805b00;
+  --warning-bg: #fff5d9;
+  --danger: #a52b2b;
+  --danger-bg: #fff0ef;
+  --radius-sm: 9px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --shadow-card: 0 8px 24px rgba(21, 50, 82, 0.07);
+  --shadow-menu: 0 14px 34px rgba(4, 22, 43, 0.16);
 }
 
 * {
@@ -15,9 +34,12 @@
 
 body {
   margin: 0;
-  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
   color: var(--text-main);
+  background: var(--bg);
+  font-family: Inter, "Segoe UI", system-ui, sans-serif;
+  line-height: 1.5;
 }
 
 /* ---------- LOGIN ---------- */
@@ -78,7 +100,8 @@ body {
   box-shadow: 0 0 0 3px rgba(10, 97, 242, 0.15);
 }
 
-.btn-primary {
+.login-card .btn-primary,
+.layout .btn-primary {
   background: var(--blue);
   color: #fff;
   border: none;
@@ -90,11 +113,13 @@ body {
   cursor: pointer;
 }
 
-.btn-primary:hover {
+.login-card .btn-primary:hover,
+.layout .btn-primary:hover {
   background: var(--blue-dark);
 }
 
-.btn-primary:disabled {
+.login-card .btn-primary:disabled,
+.layout .btn-primary:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
@@ -112,7 +137,7 @@ body {
   min-height: 100vh;
 }
 
-.sidebar {
+.layout .sidebar {
   width: 238px;
   background: var(--navy);
   flex-shrink: 0;
@@ -121,26 +146,26 @@ body {
   padding: 28px 0;
 }
 
-.sidebar .brand {
+.layout .sidebar .brand {
   padding: 0 28px;
   margin-bottom: 34px;
 }
 
-.sidebar .brand strong {
+.layout .sidebar .brand strong {
   display: block;
   color: #fff;
   font-size: 18px;
   font-weight: 700;
 }
 
-.sidebar .brand span {
+.layout .sidebar .brand span {
   display: block;
   color: var(--text-sidebar-sub);
   font-size: 12px;
   margin-top: 4px;
 }
 
-.nav-item {
+.layout .nav-item {
   margin: 0 12px 10px;
   padding: 10px 16px;
   border-radius: 8px;
@@ -149,21 +174,21 @@ body {
   cursor: default;
 }
 
-.nav-item.active {
+.layout .nav-item.active {
   background: var(--blue);
   font-weight: 600;
 }
 
-.nav-item.clickable {
+.layout .nav-item.clickable {
   cursor: pointer;
 }
 
-.nav-footer {
+.layout .nav-footer {
   margin-top: auto;
   padding: 0 28px;
 }
 
-.nav-footer .nav-item {
+.layout .nav-footer .nav-item {
   margin: 0 0 8px;
   padding: 0;
 }
@@ -471,49 +496,17 @@ body {
 
 @media (max-width: 760px) {
   .main { padding: 24px 18px; }
-  .sidebar { width: 200px; }
+  .layout .sidebar { width: 200px; }
   .queue-pagination { align-items: flex-start; flex-direction: column; gap: 12px; }
 }
 
 /* ---------- STAFF UI SYSTEM ---------- */
-:root {
-  --navy: #0b2745;
-  --navy-deep: #071b32;
-  --blue: #1769d2;
-  --blue-dark: #1258b2;
-  --blue-soft: #eaf3ff;
-  --bg: #f3f7fc;
-  --surface: #ffffff;
-  --border: #d8e2ee;
-  --text-main: #172b43;
-  --text-sub: #5b6e82;
-  --text-sidebar-sub: #b6c9de;
-  --success: #176b43;
-  --success-bg: #e8f6ee;
-  --warning: #805b00;
-  --warning-bg: #fff5d9;
-  --danger: #a52b2b;
-  --danger-bg: #fff0ef;
-  --radius-sm: 9px;
-  --radius-md: 14px;
-  --radius-lg: 18px;
-  --shadow-card: 0 8px 24px rgba(21, 50, 82, 0.07);
-  --shadow-menu: 0 14px 34px rgba(4, 22, 43, 0.16);
-}
-
-body {
-  color: var(--text-main);
-  background: var(--bg);
-  font-family: Inter, "Segoe UI", system-ui, sans-serif;
-  line-height: 1.5;
-}
-
 .layout {
   align-items: stretch;
   min-height: 100vh;
 }
 
-.sidebar {
+.layout .sidebar {
   position: sticky;
   top: 0;
   width: 256px;
@@ -526,27 +519,27 @@ body {
   z-index: 10;
 }
 
-.sidebar .brand {
+.layout .sidebar .brand {
   padding: 0 24px;
   margin-bottom: 30px;
 }
 
-.sidebar .brand strong {
+.layout .sidebar .brand strong {
   font-size: 17px;
   letter-spacing: .08em;
 }
 
-.sidebar .brand span {
+.layout .sidebar .brand span {
   color: var(--text-sidebar-sub);
   font-size: 13px;
 }
 
-.sidebar nav {
+.layout .sidebar nav {
   display: grid;
   gap: 4px;
 }
 
-.sidebar .nav-item {
+.layout .sidebar .nav-item {
   display: block;
   width: auto;
   margin: 0 12px;
@@ -559,12 +552,12 @@ body {
   transition: background-color .16s ease, color .16s ease, transform .16s ease;
 }
 
-.sidebar nav > .nav-item:not(button) {
+.layout .sidebar nav > .nav-item:not(button) {
   color: var(--text-sidebar-sub);
   font-size: 13px;
 }
 
-.sidebar .nav-button {
+.layout .sidebar .nav-button {
   width: calc(100% - 24px);
   border: 1px solid transparent;
   background: transparent;
@@ -572,28 +565,28 @@ body {
   cursor: pointer;
 }
 
-.sidebar .nav-button:hover,
-.sidebar .nav-button:focus-visible {
+.layout .sidebar .nav-button:hover,
+.layout .sidebar .nav-button:focus-visible {
   background: rgba(255, 255, 255, .10);
 }
 
-.sidebar .nav-button.active,
-.sidebar .nav-button.active:hover {
+.layout .sidebar .nav-button.active,
+.layout .sidebar .nav-button.active:hover {
   color: #fff;
   background: var(--blue);
   box-shadow: 0 5px 14px rgba(23, 105, 210, .32);
 }
 
-.sidebar .nav-footer {
+.layout .sidebar .nav-footer {
   padding: 0 12px;
 }
 
-.sidebar .nav-footer .nav-item {
+.layout .sidebar .nav-footer .nav-item {
   margin: 0;
   padding: 10px 14px;
 }
 
-.sidebar .logout-button {
+.layout .sidebar .logout-button {
   width: 100%;
   color: #e4effa;
 }
@@ -699,7 +692,7 @@ body {
 }
 
 .main button:focus-visible,
-.sidebar button:focus-visible {
+.layout .sidebar button:focus-visible {
   outline: 3px solid rgba(104, 177, 255, .9);
   outline-offset: 2px;
 }
@@ -859,14 +852,14 @@ legend {
 }
 
 @media (max-width: 980px) {
-  .sidebar { width: 224px; }
+  .layout .sidebar { width: 224px; }
   .main { padding: 30px 26px 42px; }
   .member-edit-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 700px) {
   .layout { display: block; }
-  .sidebar {
+  .layout .sidebar {
     position: relative;
     width: 100%;
     height: auto;
@@ -874,15 +867,15 @@ legend {
     padding: 16px 12px;
     overflow: visible;
   }
-  .sidebar .brand { margin: 0 8px 14px; padding: 0 8px; }
-  .sidebar nav { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
-  .sidebar .nav-item,
-  .sidebar .nav-button,
-  .sidebar nav > .nav-item:not(button) { width: auto; margin: 0; padding: 10px 12px; font-size: 12px; }
-  .sidebar .nav-button { width: 100%; }
-  .sidebar .nav-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; padding: 0 4px; }
-  .sidebar .nav-footer .nav-item,
-  .sidebar .logout-button { width: auto; margin: 0; }
+  .layout .sidebar .brand { margin: 0 8px 14px; padding: 0 8px; }
+  .layout .sidebar nav { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+  .layout .sidebar .nav-item,
+  .layout .sidebar .nav-button,
+  .layout .sidebar nav > .nav-item:not(button) { width: auto; margin: 0; padding: 10px 12px; font-size: 12px; }
+  .layout .sidebar .nav-button { width: 100%; }
+  .layout .sidebar .nav-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; padding: 0 4px; }
+  .layout .sidebar .nav-footer .nav-item,
+  .layout .sidebar .logout-button { width: auto; margin: 0; }
   .main { padding: 25px 16px 36px; }
   .main .subtitle { margin-bottom: 20px; }
   .member-list-toolbar { grid-template-columns: 1fr; }
@@ -1142,3 +1135,163 @@ legend {
   .member-level-card { grid-template-columns: 1fr; }
   .member-levels-page .member-history-card { flex-direction: column; }
 }
+
+/* =====================================================================
+   PART 2 - APP SHELL (admin / member UI)
+   Tất cả selector được scope trong .app-shell để không xung đột
+   với .sidebar, .nav-item, .btn-primary... của phần STAFF (.layout)
+   ===================================================================== */
+.app-shell{min-height:100vh;color:#102b49;font-size:13px}
+.app-shell button,.app-shell input,.app-shell select{font:inherit}
+.app-shell button{cursor:pointer}
+
+/* ---------- Sidebar ---------- */
+.app-shell .sidebar{overflow-y:auto;width:233px;background:linear-gradient(180deg,#0d2a48,#061b30);color:#fff;position:fixed;inset:0 auto 0 0;display:flex;flex-direction:column;padding:27px 10px 18px;z-index:3}
+.app-shell .brand{padding:0 11px 28px}
+.app-shell .brand-name{font-weight:800;letter-spacing:1.4px;font-size:15px}
+.app-shell .brand-role{font-size:11px;color:#c5d9ed;margin-top:9px}
+.app-shell .side-nav{display:flex;flex-direction:column;gap:4px}
+.app-shell .nav-item{display:flex;align-items:center;gap:11px;text-decoration:none;color:#f4f8fd;padding:13px 14px;border-radius:9px;font-weight:500;min-height:40px}
+.app-shell .nav-item:hover{background:#173a60}
+.app-shell .nav-item.active{background:#1768d1;box-shadow:0 5px 14px #0002;font-weight:700}
+.app-shell .nav-icon{width:16px;text-align:center;font-size:16px}
+.app-shell .logout{margin-top:auto;background:transparent;border:0;color:white;text-align:left;padding:13px 14px}
+
+/* ---------- Main content ---------- */
+.app-shell .main-content{margin-left:233px;padding:32px clamp(22px,3.4vw,60px) 48px;min-height:100vh}
+.app-shell .page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
+.app-shell .page-header h1{font-size:27px;letter-spacing:-.7px;margin:0 0 8px;font-weight:800;color:#102d4d}
+.app-shell .page-header p,.app-shell .page-intro p,.app-shell .panel-head p{margin:0;color:#71849c;font-size:12px}
+.app-shell .avatar{height:42px;width:42px;border-radius:50%;background:#fff;border:1px solid #dce6f2;box-shadow:0 5px 18px #1c36551a;display:grid;place-items:center;font-weight:700;color:#1768d1}
+.app-shell .page-intro{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:5px 0 22px}
+.app-shell .page-intro h2{font-size:20px;margin:0 0 7px;color:#102d4d}
+
+/* ---------- Stats ---------- */
+.app-shell .stats-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:20px}
+.app-shell .stat-card{position:relative;background:#fff;border:1px solid #d7e3f1;border-radius:13px;padding:17px 17px 15px;min-height:85px}
+.app-shell .stat-card span{display:block;color:#6e829b;font-size:11px;margin-bottom:9px}
+.app-shell .stat-card strong{font-size:21px;color:#102b49}
+.app-shell .stat-dot{position:absolute;right:16px;top:15px;width:21px;height:21px;border-radius:7px}
+.app-shell .blue{background:#1263f1}
+.app-shell .green{background:#12ae78}
+.app-shell .orange{background:#ff9915}
+
+/* ---------- Panel / form controls / buttons ---------- */
+.app-shell .panel{background:#fff;border:1px solid #d7e3f1;border-radius:13px;padding:21px;margin-bottom:17px;min-width:0}
+.app-shell .panel h3{font-size:14px;margin:0 0 17px;color:#102b49}
+.app-shell .panel-head{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:18px}
+.app-shell .panel-head h3{margin:0 0 7px}
+.app-shell .search-input{height:38px;min-width:180px;border:1px solid #dce5f0;border-radius:8px;padding:0 12px;background:#fff;color:#173450;outline:none}
+.app-shell .search-input:focus,.app-shell input:focus,.app-shell select:focus{border-color:#3985e8;box-shadow:0 0 0 3px #1768d117}
+.app-shell .btn-primary,.app-shell .btn-light,.app-shell .btn-danger{border:0;border-radius:8px;padding:10px 14px;font-weight:600;white-space:nowrap}
+.app-shell .btn-primary{background:#1768d1;color:white}
+.app-shell .btn-primary:hover{background:#1059b7}
+.app-shell .btn-light{background:#eef4fb;color:#22527f}
+.app-shell .btn-danger{background:#fff0f0;color:#c93b42}
+
+/* ---------- Table ---------- */
+.app-shell .table-wrap{width:100%;overflow-x:auto}
+.app-shell table{width:100%;border-collapse:collapse;white-space:nowrap}
+.app-shell th{text-align:left;font-weight:600;font-size:11px;color:#6e829b;background:#f7f9fc;padding:13px 12px;border-bottom:1px solid #e6edf5}
+.app-shell td{padding:14px 12px;border-bottom:1px solid #edf1f6;color:#28425e}
+.app-shell tbody tr:last-child td{border-bottom:0}
+.app-shell tbody tr:hover{background:#fbfdff}
+.app-shell .actions{display:flex;align-items:center;gap:7px}
+.app-shell .actions button{padding:7px 10px}
+.app-shell .empty{text-align:center;color:#7c8fa5;padding:28px}
+.app-shell .status{display:inline-block;border-radius:20px;padding:5px 9px;font-size:11px;font-weight:600}
+.app-shell .status.success{background:#e7f8f0;color:#078858}
+.app-shell .status.warning{background:#fff4df;color:#bd7100}
+.app-shell .status.danger{background:#ffeded;color:#c83737}
+.app-shell .status.info{background:#eaf2ff;color:#1768d1}
+.app-shell .table-select{border:1px solid #dce5f0;border-radius:7px;padding:7px;color:#294661;background:#fff}
+.app-shell .filter-row{display:flex;gap:8px;flex-wrap:wrap}
+
+/* ---------- Modal ---------- */
+.app-shell .modal-backdrop{position:fixed;inset:0;background:#071b30a6;z-index:10;display:grid;place-items:center;padding:20px}
+.app-shell .modal-card{background:white;border-radius:15px;width:min(620px,100%);max-height:90vh;overflow:auto;padding:23px;box-shadow:0 20px 70px #061b3033}
+.app-shell .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}
+.app-shell .modal-head h3{margin:0;font-size:18px}
+.app-shell .close-btn{border:0;background:#f1f5fa;border-radius:8px;width:32px;height:32px;font-size:22px;color:#49627b}
+.app-shell .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:17px}
+.app-shell .form-grid label{display:flex;flex-direction:column;gap:8px;font-size:12px;font-weight:600;color:#425a73}
+.app-shell .form-grid input,.app-shell .form-grid select{width:100%;height:40px;border:1px solid #dce5f0;border-radius:8px;padding:0 11px;outline:none;color:#173450;background:white}
+.app-shell .modal-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:24px}
+.app-shell .date-chip{background:#fff;border:1px solid #dce6f2;color:#46617c;padding:9px 13px;border-radius:9px;font-size:12px}
+
+/* ---------- Report ---------- */
+.app-shell .report-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(270px,1fr);gap:16px}
+.app-shell .chart-panel{min-height:300px}
+.app-shell .bar-chart{height:190px;display:flex;align-items:flex-end;gap:clamp(10px,2vw,25px);padding:18px 5px 0}
+.app-shell .bar-column{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:9px;color:#71849c;font-size:11px}
+.app-shell .bar{width:min(100%,55px);background:#1263f1;border-radius:6px 6px 2px 2px;min-height:12px}
+.app-shell .report-line{display:flex;justify-content:space-between;padding:16px 0;border-bottom:1px solid #eaf0f6}
+.app-shell .report-line:last-child{border:0}
+.app-shell .orange-text{color:#e68a00}
+.app-shell .blue-text{color:#1263f1}
+.app-shell .green-text{color:#0aa875}
+.app-shell .notice{background:#f3f7fc;padding:15px;border-radius:9px;color:#6d829a}
+
+/* ---------- Member area ---------- */
+.app-shell .member-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:17px}
+.app-shell .member-card{background:white;border:1px solid #d7e3f1;border-radius:14px;padding:22px;display:flex;flex-direction:column;min-height:255px}
+.app-shell .member-card-icon{width:43px;height:43px;border-radius:12px;display:grid;place-items:center;font-size:22px;margin-bottom:17px}
+.app-shell .icon-0{background:#eaf2ff;color:#1768d1}
+.app-shell .icon-1{background:#e4f8f0;color:#0b9c69}
+.app-shell .icon-2{background:#fff2df;color:#db8700}
+.app-shell .category-label{font-size:11px;color:#1768d1;font-weight:700}
+.app-shell .member-card h3{font-size:17px;margin:8px 0;color:#102b49}
+.app-shell .member-card p{color:#70839a;line-height:1.7;flex:1}
+.app-shell .member-card-bottom{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:16px}
+.app-shell .member-card-bottom span{color:#6d829a;font-size:11px}
+.app-shell .member-card small{margin-top:10px;color:#0a9d6d}
+.app-shell .membership-card{background:linear-gradient(120deg,#102f52,#1768d1);border-radius:16px;padding:28px;color:white;margin-bottom:18px;max-width:900px}
+.app-shell .membership-label{font-size:11px;letter-spacing:1.5px;color:#d4e5ff}
+.app-shell .membership-card h2{font-size:28px;margin:12px 0}
+.app-shell .membership-card p{color:#dceaff}
+.app-shell .membership-details{display:flex;gap:50px;flex-wrap:wrap;margin:24px 0}
+.app-shell .membership-details div{display:flex;flex-direction:column;gap:8px}
+.app-shell .membership-details span{font-size:11px;color:#c5dbf7}
+.app-shell .membership-card .btn-primary{background:white;color:#1768d1}
+.app-shell .benefit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px}
+.app-shell .benefit{display:flex;align-items:center;gap:10px;background:#f7f9fc;border-radius:9px;padding:15px;color:#34516d}
+.app-shell .benefit span{color:#0aa875;font-weight:800}
+.app-shell .profile-panel{max-width:850px;padding:26px}
+.app-shell .profile-top{display:flex;align-items:center;gap:15px;margin-bottom:26px}
+.app-shell .profile-avatar{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;background:#eaf2ff;color:#1768d1;font-size:22px;font-weight:800}
+.app-shell .profile-top h3{margin:0 0 6px}
+.app-shell .profile-top p{margin:0;color:#71849c}
+.app-shell .success-message{color:#078858;margin-top:15px}
+.app-shell .not-found{margin:10vh auto;text-align:center}
+
+/* ---------- Responsive ---------- */
+@media(max-width:1100px){
+  .app-shell .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .app-shell .member-cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .app-shell .report-grid{grid-template-columns:1fr}
+  .app-shell .main-content{padding:25px}
+}
+@media(max-width:700px){
+  .app-shell .sidebar{position:static;width:100%;padding:14px;min-height:auto}
+  .app-shell .brand{padding:4px 8px 14px}
+  .app-shell .side-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .app-shell .nav-item{padding:10px;font-size:12px}
+  .app-shell .logout{margin-top:8px}
+  .app-shell .main-content{margin-left:0;padding:22px 14px}
+  .app-shell .page-header h1{font-size:23px}
+  .app-shell .stats-grid,.app-shell .member-cards,.app-shell .form-grid,.app-shell .benefit-grid{grid-template-columns:1fr}
+  .app-shell .page-intro,.app-shell .panel-head{align-items:flex-start;flex-direction:column}
+  .app-shell .search-input{width:100%}
+  .app-shell .filter-row{width:100%}
+  .app-shell .filter-row>*{flex:1;min-width:0}
+  .app-shell .membership-details{gap:22px}
+  .app-shell .panel{padding:15px}
+}
+@media print{
+  .app-shell .sidebar,.app-shell .avatar,.app-shell .btn-light,.app-shell .btn-primary{display:none!important}
+  .app-shell .main-content{margin:0;padding:0}
+  .app-shell .panel,.app-shell .stat-card{break-inside:avoid}
+}
+
+/* Layout dùng chung: .app-shell nằm trong .main nên không cần cao 100vh */
+.layout .app-shell{min-height:0}
