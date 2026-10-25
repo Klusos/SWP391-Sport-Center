@@ -796,3 +796,70 @@ export function assignSupportTicketToMeApi(token, ticketId) {
     method: "PATCH", headers: authenticatedHeaders(token),
   });
 }
+
+// ---- Flow 4: training plans, results and progress ----
+const trainingJson = (token, method, body) => ({
+  method,
+  headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+});
+
+export function getTrainingClassesApi(token) {
+  return request("/api/training/classes", { headers: authenticatedHeaders(token) });
+}
+
+export function getTrainingPlanApi(token, classId) {
+  return request(`/api/training/classes/${encodeURIComponent(classId)}/plan`, { headers: authenticatedHeaders(token) });
+}
+
+export function saveTrainingPlanApi(token, classId, payload) {
+  return request(`/api/training/classes/${encodeURIComponent(classId)}/plan`, trainingJson(token, "PUT", payload));
+}
+
+export function addTrainingExerciseApi(token, classId, payload) {
+  return request(`/api/training/classes/${encodeURIComponent(classId)}/plan/exercises`, trainingJson(token, "POST", payload));
+}
+
+export function updateTrainingExerciseApi(token, exerciseId, payload) {
+  return request(`/api/training/exercises/${encodeURIComponent(exerciseId)}`, trainingJson(token, "PUT", payload));
+}
+
+export function deleteTrainingExerciseApi(token, exerciseId) {
+  return request(`/api/training/exercises/${encodeURIComponent(exerciseId)}`, {
+    method: "DELETE",
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function getTrainingSessionsApi(token, classId) {
+  return request(`/api/training/classes/${encodeURIComponent(classId)}/sessions`, { headers: authenticatedHeaders(token) });
+}
+
+export function completeTrainingSessionApi(token, sessionId) {
+  return request(`/api/training/sessions/${encodeURIComponent(sessionId)}/complete`, {
+    method: "POST",
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function getTrainingResultSheetApi(token, sessionId) {
+  return request(`/api/training/sessions/${encodeURIComponent(sessionId)}/results`, { headers: authenticatedHeaders(token) });
+}
+
+export function recordTrainingResultApi(token, sessionId, memberId, payload) {
+  return request(`/api/training/sessions/${encodeURIComponent(sessionId)}/results/${encodeURIComponent(memberId)}`,
+    trainingJson(token, "PUT", payload));
+}
+
+export function getTrainingProgressApi(token, classId) {
+  return request(`/api/training/classes/${encodeURIComponent(classId)}/progress`, { headers: authenticatedHeaders(token) });
+}
+
+export function evaluateProgressApi(token, classId, memberId, payload) {
+  return request(`/api/training/classes/${encodeURIComponent(classId)}/members/${encodeURIComponent(memberId)}/evaluations`,
+    trainingJson(token, "POST", payload));
+}
+
+export function getMyTrainingApi(token) {
+  return request("/api/training/me", { headers: authenticatedHeaders(token) });
+}

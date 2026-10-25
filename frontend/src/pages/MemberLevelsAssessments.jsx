@@ -38,6 +38,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
   const [consultations, setConsultations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState({});
+  const [pickedSportId, setPickedSportId] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -74,46 +75,56 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
   const sportNames = useMemo(() => new Map(sports.map((sport) => [Number(sport.id), sport.name])), [sports]);
   const levelsBySport = useMemo(() => new Map(levels.map((item) => [Number(item.sportId), item])), [levels]);
 
+  // Mặc định chọn bộ môn đầu tiên khi chưa chọn gì
+  const selectedId = pickedSportId || (sports[0] ? String(sports[0].id) : "");
+  const selectedSport = sports.find((sport) => String(sport.id) === selectedId);
+  const level = levelsBySport.get(Number(selectedId));
+  const verified = level?.verifiedByCoachId != null && Boolean(level?.verifiedAt);
+  const levelsAvailable = !errors.levels;
+  const sportAssessments = assessments.filter((item) => String(item.sportId) === selectedId);
+
   return <div className="layout">
     <Sidebar role={role} activePage="member-levels" onNavigate={onNavigate} onLogout={onLogout} />
     <main className="main member-levels-page">
       <header className="page-header">
         <p className="eyebrow">SPORTCENTER / MEMBER</p>
         <h1>Trình độ &amp; lịch sử đánh giá</h1>
-        <p className="subtitle">Theo dõi trình độ riêng theo từng bộ môn và kết quả đánh giá của Coach.</p>
+        <p className="subtitle">Chọn một bộ môn để xem trình độ và kết quả đánh giá của Coach.</p>
       </header>
 
       {loading && <div className="queue-state" role="status">Đang tải thông tin của bạn…</div>}
 
       <section className="member-levels-section">
-        <h2>Trình độ theo bộ môn</h2>
         {errors.sports && <p className="banner error" role="alert">{errors.sports}</p>}
         {errors.levels && <p className="banner error" role="alert">{errors.levels}</p>}
         {!loading && !errors.sports && sports.length === 0 && <p className="queue-state">Hiện chưa có bộ môn đang hoạt động.</p>}
-        {!loading && sports.length > 0 && <div className="member-level-grid">
-          {sports.map((sport) => {
-            const level = levelsBySport.get(Number(sport.id));
-            const verified = level?.verifiedByCoachId != null && Boolean(level?.verifiedAt);
-            const levelsAvailable = !errors.levels;
-            return <article className="member-level-card" key={sport.id}>
-              <div><p className="eyebrow">BỘ MÔN #{sport.id}</p><h3>{sport.name}</h3></div>
-              <strong className="member-level-value">{!levelsAvailable ? "—" : verified ? level.level : "BEGINNER"}</strong>
-              {!levelsAvailable ? <p>Không thể xác định trình độ khi chưa tải được dữ liệu.</p>
-                : verified ? <p>Coach #{level.verifiedByCoachId} xác minh · {formatDate(level.verifiedAt)}</p>
-                  : <p>Beginner (mặc định; chưa có bản ghi trình độ đã xác minh cho bộ môn này).</p>}
-            </article>;
-          })}
-        </div>}
+
+        {!loading && sports.length > 0 && <>
+          <div className="field" style={{ maxWidth: 360 }}>
+            <label htmlFor="levelSportPicker">Bộ môn</label>
+            <select id="levelSportPicker" value={selectedId} onChange={(event) => setPickedSportId(event.target.value)}>
+              {sports.map((sport) => <option key={sport.id} value={sport.id}>{sport.name}</option>)}
+            </select>
+          </div>
+
+          {selectedSport && <article className="member-level-card" style={{ maxWidth: 520, marginTop: 8 }}>
+            <div><p className="eyebrow">TRÌNH ĐỘ HIỆN TẠI</p><h3>{selectedSport.name}</h3></div>
+            <strong className="member-level-value">{!levelsAvailable ? "—" : verified ? level.level : "BEGINNER"}</strong>
+            {!levelsAvailable ? <p>Không thể xác định trình độ khi chưa tải được dữ liệu.</p>
+              : verified ? <p>Coach #{level.verifiedByCoachId} xác minh · {formatDate(level.verifiedAt)}</p>
+                : <p>Beginner (mặc định; chưa có bản ghi trình độ đã xác minh cho bộ môn này).</p>}
+          </article>}
+        </>}
       </section>
 
-      <section className="member-levels-section">
-        <h2>Lịch sử Skill Assessment</h2>
+      {!loading && sports.length > 0 && <section className="member-levels-section">
+        <h2>Lịch sử đánh giá{selectedSport ? " – " + selectedSport.name : ""}</h2>
         {errors.assessments && <p className="banner error" role="alert">{errors.assessments}</p>}
-        {!loading && !errors.assessments && assessments.length === 0 && <p className="queue-state">Bạn chưa có assessment nào.</p>}
-        {!loading && assessments.length > 0 && <div className="member-history-list">
-          {assessments.map((item) => <article className="member-history-card" key={item.id}>
+        {!errors.assessments && sportAssessments.length === 0 && <p className="queue-state">Bạn chưa có đánh giá nào cho bộ môn này.</p>}
+        {sportAssessments.length > 0 && <div className="member-history-list">
+          {sportAssessments.map((item) => <article className="member-history-card" key={item.id}>
             <div className="member-history-heading">
-              <div><strong>Assessment #{item.id}</strong><span>{sportNames.get(Number(item.sportId)) || `Bộ môn #${item.sportId}`}</span></div>
+              <div><strong>Đánh giá #{item.id}</strong><span>{sportNames.get(Number(item.sportId)) || `Bộ môn #${item.sportId}`}</span></div>
               <span className={`coach-assessment-status status-${String(item.status).toLowerCase()}`}>
                 {ASSESSMENT_STATUS[item.status] || item.status}
               </span>
@@ -125,11 +136,11 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
               {item.assessedAt && <div><dt>Ngày hoàn tất</dt><dd>{formatDate(item.assessedAt)}</dd></div>}
               {item.status === "CANCELLED" && item.cancelledAt && <div><dt>Ngày hủy</dt><dd>{formatDate(item.cancelledAt)}</dd></div>}
             </dl>
-            {item.status === "PENDING" && <p>Assessment đang chờ Coach đánh giá.</p>}
+            {item.status === "PENDING" && <p>Đánh giá đang chờ Coach thực hiện.</p>}
             {item.notes && <p className="member-history-notes"><strong>Ghi chú:</strong> {item.notes}</p>}
           </article>)}
         </div>}
-      </section>
+      </section>}
 
       <section className="member-levels-section">
         <h2>Lịch sử yêu cầu tư vấn</h2>

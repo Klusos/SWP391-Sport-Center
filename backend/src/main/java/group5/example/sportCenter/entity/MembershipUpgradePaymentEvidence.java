@@ -16,6 +16,9 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.type.descriptor.jdbc.TimestampUtcAsJdbcTimestampJdbcType;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -79,11 +82,13 @@ public class MembershipUpgradePaymentEvidence {
     private LocalDate issuanceBusinessDate;
 
     /** UTC instant serialized to DATETIME2(6); timestamps remain absolute without storing local time. */
-    @Column(name = "created_at_utc", nullable = false, updatable = false)
+    @Column(name = "created_at_utc", nullable = false, updatable = false, columnDefinition = "datetime2(6)")
+    @JdbcType(TimestampUtcAsJdbcTimestampJdbcType.class)
     private Instant createdAtUtc;
 
     /** UTC instant serialized to DATETIME2(6); expiry is exclusive (expired at equality). */
-    @Column(name = "expires_at_utc", nullable = false, updatable = false)
+    @Column(name = "expires_at_utc", nullable = false, updatable = false, columnDefinition = "datetime2(6)")
+    @JdbcType(TimestampUtcAsJdbcTimestampJdbcType.class)
     private Instant expiresAtUtc;
 
     /** Set exactly once when this draft wins and creates its replacement Membership. */
@@ -91,6 +96,7 @@ public class MembershipUpgradePaymentEvidence {
     @JoinColumn(name = "applied_membership_id", foreignKey = @ForeignKey(name = "fk_upgrade_evidence_applied_membership"))
     private Membership appliedMembership;
 
-    @Column(name = "applied_at_utc")
+    @Column(name = "applied_at_utc", columnDefinition = "datetime2(6)")
+    @JdbcType(TimestampUtcAsJdbcTimestampJdbcType.class)
     private Instant appliedAtUtc;
 }

@@ -14,6 +14,9 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.type.descriptor.jdbc.TimestampUtcAsJdbcTimestampJdbcType;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -53,10 +56,12 @@ public class MembershipUpgradeCaptureEvidence {
     private BigDecimal reportedAmount;
 
     /** Null means provider capture time was not present/parseable; settlement must reconcile. */
-    @Column(name = "captured_at_utc", updatable = false)
+    @Column(name = "captured_at_utc", updatable = false, columnDefinition = "datetime2(6)")
+    @JdbcType(TimestampUtcAsJdbcTimestampJdbcType.class)
     private Instant capturedAtUtc;
 
-    @Column(name = "received_at_utc", nullable = false, updatable = false)
+    @Column(name = "received_at_utc", nullable = false, updatable = false, columnDefinition = "datetime2(6)")
+    @JdbcType(TimestampUtcAsJdbcTimestampJdbcType.class)
     private Instant receivedAtUtc;
 
     @Column(name = "outcome", nullable = false, length = 30)

@@ -16,6 +16,9 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.type.descriptor.jdbc.TimestampUtcAsJdbcTimestampJdbcType;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -45,10 +48,12 @@ public class MembershipUpgradeCheckoutAttempt {
     @Column(nullable = false, precision = 12, scale = 2, updatable = false)
     private BigDecimal amount;
 
-    @Column(name = "created_at_utc", nullable = false, updatable = false)
+    @Column(name = "created_at_utc", nullable = false, updatable = false, columnDefinition = "datetime2(6)")
+    @JdbcType(TimestampUtcAsJdbcTimestampJdbcType.class)
     private Instant createdAtUtc;
 
-    @Column(name = "expires_at_utc", nullable = false, updatable = false)
+    @Column(name = "expires_at_utc", nullable = false, updatable = false, columnDefinition = "datetime2(6)")
+    @JdbcType(TimestampUtcAsJdbcTimestampJdbcType.class)
     private Instant expiresAtUtc;
 
     @Enumerated(EnumType.STRING)
