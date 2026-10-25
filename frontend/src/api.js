@@ -629,6 +629,36 @@ export function getMyRegistrationsApi(token) {
 export function getMyClassSessionsApi(token) {
   return request("/api/course-registrations/me/class-sessions", { headers: authenticatedHeaders(token) });
 }
+// ===== DÁN VÀO CUỐI FILE api.js (một lần duy nhất) =====
+// Nếu báo "has already been declared" ở hàm nào thì xóa bản trùng của hàm đó.
+
+// --- Thanh toán / hóa đơn ---
+export function getMyPaymentsApi(token) {
+  return request("/api/payments/me", { headers: authenticatedHeaders(token) });
+}
+
+export function getPaymentsByMemberApi(token, memberId) {
+  return request("/api/payments/member/" + encodeURIComponent(memberId), { headers: authenticatedHeaders(token) });
+}
+
+export function createPaymentApi(token, payload) {
+  return request("/api/payments", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function processCounterPaymentApi(token, paymentId, payload) {
+  return request("/api/payments/" + encodeURIComponent(paymentId) + "/counter", {
+    method: "PATCH",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function cancelPaymentApi(token, paymentId) {
+  return request("/api/payments/" + encodeURIComponent(paymentId) + "/cancel", {
 export function getNotificationsApi(token, page = 0, size = 20) {
   const query = new URLSearchParams({ page: String(page), size: String(size) });
   return request("/api/notifications?" + query.toString(), { headers: authenticatedHeaders(token) });
@@ -652,6 +682,38 @@ export function markAllNotificationsReadApi(token) {
   });
 }
 
+// --- Báo cáo ---
+function reportQuery(from, to) {
+  return "?" + new URLSearchParams({ from, to }).toString();
+}
+
+export function getRevenueReportApi(token, from, to) {
+  return request("/api/reports/revenue" + reportQuery(from, to), { headers: authenticatedHeaders(token) });
+}
+
+export function getMemberReportApi(token, from, to) {
+  return request("/api/reports/members" + reportQuery(from, to), { headers: authenticatedHeaders(token) });
+}
+
+export function getClassRegReportApi(token, from, to) {
+  return request("/api/reports/class-registrations" + reportQuery(from, to), { headers: authenticatedHeaders(token) });
+}
+
+// --- Lớp học, gói thành viên ---
+export function getAllClassesApi(token) {
+  return request("/api/classes", { headers: authenticatedHeaders(token) });
+}
+
+export function getAllSessionsApi(token) {
+  return request("/api/class-sessions", { headers: authenticatedHeaders(token) });
+}
+
+export function setAutoRenewApi(token, membershipId, enable) {
+  return request("/api/memberships/" + encodeURIComponent(membershipId) + (enable ? "/enable-auto-renew" : "/cancel-renewal"), {
+    method: "PATCH",
+    headers: authenticatedHeaders(token),
+  });
+}
 export function broadcastNotificationsApi(token, payload) {
   return request("/api/admin/notifications/broadcast", {
     method: "POST",
