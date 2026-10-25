@@ -2,11 +2,13 @@
 import { Link } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import "./Dashboard.css";
+import "./MemberTheme.css";
 import {
   getUsersApi, getSportsApi, getCoachesApi, getConsultationRequestsApi,
   getPublicMembershipPlansApi, getAssignedPtBookingsApi, getMySkillAssessmentAssignmentsApi,
   getMyPtBookingsApi, getMyMemberSportLevelsApi, getMySkillAssessmentsApi,
-  getMyConsultationRequestsApi,
+  getMyConsultationRequestsApi, getCurrentUserApi, getMembershipsByMemberApi, getMyClassSessionsApi,
+  getMyRegistrationsApi, getMyAttendanceApi, getMyPaymentsApi,
 } from "../api";
 
 /* ---------- helpers ---------- */
@@ -32,8 +34,11 @@ const LOADERS = {
   },
   COACH: { bookings: getAssignedPtBookingsApi, assessments: getMySkillAssessmentAssignmentsApi },
   MEMBER: {
-    bookings: getMyPtBookingsApi, levels: getMyMemberSportLevelsApi,
-    assessments: getMySkillAssessmentsApi, requests: getMyConsultationRequestsApi,
+    bookings: getMyPtBookingsApi, sessions: getMyClassSessionsApi, regs: getMyRegistrationsApi,
+    levels: getMyMemberSportLevelsApi, attendance: getMyAttendanceApi, payments: getMyPaymentsApi,
+    profile: (t) => getCurrentUserApi(t).then(async (user) => ({
+      user, memberships: list(await getMembershipsByMemberApi(t, user.id).catch(() => [])),
+    })),
   },
 };
 
@@ -182,38 +187,166 @@ function Coach({ d }) {
   </>);
 }
 
+const ICON = {
+  pt: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M19 8v6 M22 11h-6",
+  cls: "M22 12h-4l-3 9L9 3l-3 9H2",
+  ok: "M22 11.08V12a10 10 0 1 1-5.93-9.14 M22 4 12 14.01l-3-3",
+  bill: "M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8 M12 17.5v-11",
+  cal: "M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
+  clock: "M12 6v6l4 2 M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20",
+  renew: "M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8 M21 3v5h-5 M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16 M8 16H3v5",
+};
+const Ic = ({ d, size = 20 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {d.split(" M").map((p, i) => <path key={i} d={(i ? "M" : "") + p} />)}
+  </svg>
+);
+
+const pick = (o, ...keys) => { for (const k of keys) if (o?.[k] != null && o[k] !== "") return o[k]; return ""; };
+const WD = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+const hm = (s) => new Date(s).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+const vnd = (v) => Number(v || 0).toLocaleString("vi-VN") + "đ";
+const SESSION_STATUS = { SCHEDULED: "Đã lên lịch", CONFIRMED: "Đã xác nhận", PENDING_PAYMENT: "Chờ thanh toán", COMPLETED: "Hoàn thành" };
+const ATT = { PRESENT: ["Có mặt", "ok"], ON_TIME: ["Đúng giờ", "ok"], LATE: ["Trễ giờ", "warn"], EXCUSED: ["Có phép", "warn"], ABSENT: ["Vắng", "bad"] };
+
+function MStat({ icon, tone, label, value, sub, action, onAction }) {
+  return (
+    <article className={"md-stat " + tone}>
+      <header><span>{label}</span><i><Ic d={icon} /></i></header>
+      <strong>{value}</strong>
+      {action ? <button type="button" className="md-link" onClick={onAction}>{action} →</button> : <small>{sub}</small>}
+    </article>
+  );
+}
+
 function Member({ d, onNavigate }) {
-  const up = upcoming(d.bookings);
+  const user = d.profile?.user;
+  const memberships = d.profile?.memberships || [];
+  const active = memberships.filter((m) => m.status === "ACTIVE").sort((a, b) => String(b.endDate).localeCompare(String(a.endDate)))[0];
+  const now = new Date();
+
+  let left = 0, totalDays = 1;
+  if (active) {
+    totalDays = Math.max(1, Math.round((new Date(active.endDate) - new Date(active.startDate)) / 86400000));
+    left = Math.max(0, Math.ceil((new Date(active.endDate) - now) / 86400000));
+  }
+
+  const ptUp = upcoming(d.bookings);
+  const classUp = list(d.sessions)
+    .filter((s) => s.startTime && new Date(s.startTime) > now && !/CANCEL/i.test(s.status || ""));
+  const schedule = [
+    ...ptUp.map((b) => ({ id: "pt" + b.id, start: b.startTime, end: b.endTime, title: "PT 1-1 " + (b.sportName || b.sport?.name || ""), tag: "PT 1-1", place: "", person: b.coachName || b.coachFullName || b.coach?.fullName || "", status: b.status })),
+    ...classUp.map((s) => ({ id: "cs" + s.id, start: s.startTime, end: s.endTime, title: s.className || "Lớp #" + s.classId, tag: "Lớp học", place: s.facilityName || "", person: "", status: s.status })),
+  ].sort((a, b) => new Date(a.start) - new Date(b.start)).slice(0, 4);
+
+  const regs = list(d.regs).filter((r) => !r.status || r.status === "CONFIRMED");
+  const att = list(d.attendance).map((a) => ({ ...a, when: pick(a, "startTime", "sessionStartTime", "markedAt", "date", "createdAt"), name: pick(a, "className", "sessionName", "courseName") }))
+    .sort((a, b) => new Date(b.when) - new Date(a.when));
+  const month = att.filter((a) => a.when && new Date(a.when).getMonth() === now.getMonth() && new Date(a.when).getFullYear() === now.getFullYear());
+  const attended = month.filter((a) => /PRESENT|ON_TIME|LATE/i.test(a.status || "")).length;
+  const pendingBills = list(d.payments).filter((p) => p.status === "PENDING");
+  const billTotal = pendingBills.reduce((a, p) => a + Number(p.amount || 0), 0);
   const levels = list(d.levels);
+  const nextOne = schedule[0];
+
   return (<>
-    <Stats items={[
-      { label: "Buổi PT đã đặt", value: total(d.bookings), color: "blue" },
-      { label: "Sắp diễn ra", value: d.bookings == null ? "—" : up.length, color: "green" },
-      { label: "Bộ môn có trình độ", value: total(d.levels), color: "orange" },
-      { label: "Lần đánh giá kỹ năng", value: total(d.assessments), color: "blue" },
-    ]} />
-    <div className="dash-grid wide">
-      <Card title="Lịch tập cá nhân sắp tới">
-        <BookingList items={up} who={(b) => b.coachName || b.coachFullName || b.coach?.fullName || ""} />
-      </Card>
-      <Card title="Trình độ của tôi">
-        {levels.length === 0 ? <Empty>Bạn chưa được đánh giá trình độ.</Empty> : (
-          <ul className="dash-rows">
-            {levels.slice(0, 5).map((l, i) => (
-              <li key={l.id ?? i}><span>{l.sportName || l.sport?.name || "Bộ môn"}</span><b>{l.level || l.skillLevel || "—"}</b></li>
+    <header className="md-greet">
+      <div>
+        <h1>Xin chào, {user?.name || "bạn"} 👋 {active && <span className="md-badge">{active.planName}</span>}</h1>
+        <p>Hôm nay: {now.toLocaleDateString("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })} • Sẵn sàng bứt phá giới hạn hôm nay!</p>
+      </div>
+      <button type="button" className="md-cta" onClick={() => onNavigate("member-pt-booking")}><Ic d={ICON.cal} size={18} /> Đặt buổi huấn luyện</button>
+    </header>
+
+    <section className="md-hero">
+      {active ? (<>
+        <div className="md-hero-top">
+          <span className="md-pill">GÓI {String(active.planName).toUpperCase()}</span>
+          <span className="md-pill live">● Đang hoạt động</span>
+          <span className="md-pill">Tự gia hạn: {active.autoRenew ? "Bật" : "Tắt"}</span>
+        </div>
+        <h2>Tập luyện cùng SPORTS CENTER</h2>
+        <p>Gói có hiệu lực từ {active.startDate} đến {active.endDate}.</p>
+        <div className="md-hero-bottom">
+          <div className="md-progress-wrap">
+            <div className="md-progress-label"><span>Thời hạn sử dụng (Còn <b>{left} ngày</b> / {totalDays} ngày)</span><span>Hết hạn: {active.endDate}</span></div>
+            <div className="md-progress"><i style={{ width: Math.min(100, (left / totalDays) * 100) + "%" }} /></div>
+          </div>
+          <button type="button" className="md-ghost" onClick={() => onNavigate("member-membership")}><Ic d={ICON.renew} size={18} /> Gia hạn gói</button>
+        </div>
+      </>) : (<>
+        <h2>Bạn chưa có gói thành viên</h2>
+        <p>Chọn một gói để mở khóa ưu đãi khóa học và huấn luyện viên cá nhân.</p>
+        <div className="md-hero-bottom"><span /><button type="button" className="md-ghost" onClick={() => onNavigate("member-membership")}>Xem các gói</button></div>
+      </>)}
+    </section>
+
+    <div className="md-stats">
+      <MStat icon={ICON.pt} tone="blue" label="Buổi PT sắp tới" value={ptUp.length}
+        sub={ptUp[0] ? "Buổi tiếp theo: " + hm(ptUp[0].startTime) + " " + WD[new Date(ptUp[0].startTime).getDay()] : "Chưa có buổi nào"} />
+      <MStat icon={ICON.cls} tone="green" label="Lớp đang học" value={regs.length}
+        sub={regs.slice(0, 3).map((r) => r.className).filter(Boolean).join(", ") || "Chưa đăng ký lớp"} />
+      <MStat icon={ICON.ok} tone="purple" label="Điểm danh tháng này" value={<>{attended}<em> / {month.length}</em></>}
+        sub={month.length ? "Đạt " + Math.round((attended / month.length) * 100) + "% số buổi" : "Chưa có buổi nào trong tháng"} />
+      <MStat icon={ICON.bill} tone={pendingBills.length ? "orange" : "gray"} label="Hóa đơn chờ thanh toán"
+        value={<>{pendingBills.length}{pendingBills.length > 0 && <em> ({vnd(billTotal)})</em>}</>}
+        sub="Không có hóa đơn nào đang chờ" action={pendingBills.length ? "Thanh toán ngay" : ""} onAction={() => onNavigate("member-payments")} />
+    </div>
+
+    <div className="md-grid">
+      <section className="md-card">
+        <div className="md-card-head"><h2><Ic d={ICON.cal} size={20} /> Lịch tập sắp tới</h2>
+          <button type="button" className="md-link" onClick={() => onNavigate("member-schedule")}>Xem tất cả lịch →</button></div>
+        {schedule.length === 0 ? (
+          <div className="md-empty"><Ic d={ICON.cal} size={28} /><p>Chưa có buổi tập nào sắp tới.</p>
+            <button type="button" className="md-cta" onClick={() => onNavigate("member-pt-booking")}>Đặt buổi đầu tiên</button></div>
+        ) : (
+          <ul className="md-timeline">
+            {schedule.map((x) => (
+              <li key={x.id}>
+                <div className="md-date"><small>{WD[new Date(x.start).getDay()]}</small><b>{new Date(x.start).getDate()}</b><span>{hm(x.start)}</span></div>
+                <div className="md-info">
+                  <h3>{x.title} <span className={"md-tag " + (x.tag === "PT 1-1" ? "pt" : "cls")}>{x.tag}</span></h3>
+                  <p>Thời gian: {hm(x.start)}{x.end ? " - " + hm(x.end) : ""}{x.place ? " • " + x.place : ""}</p>
+                  {x.person && <p className="md-who">Coach {x.person}</p>}
+                </div>
+                <span className="md-chip ok">{SESSION_STATUS[x.status] || x.status || "Đã lên lịch"}</span>
+              </li>
             ))}
           </ul>
         )}
-      </Card>
+      </section>
+
+      <section className="md-card">
+        <div className="md-card-head"><h2><Ic d={ICON.clock} size={20} /> Điểm danh gần đây</h2></div>
+        {att.length === 0 ? (
+          <div className="md-empty"><Ic d={ICON.ok} size={28} /><p>Chưa có lịch sử điểm danh.</p></div>
+        ) : (
+          <table className="md-table">
+            <thead><tr><th>Ngày</th><th>Môn tập</th><th>Trạng thái</th></tr></thead>
+            <tbody>
+              {att.slice(0, 4).map((a, i) => {
+                const [label, tone] = ATT[String(a.status).toUpperCase()] || [a.status || "—", "warn"];
+                return (<tr key={a.id ?? i}>
+                  <td>{a.when ? new Date(a.when).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }) : "—"}<small>{a.when ? hm(a.when) : ""}</small></td>
+                  <td>{a.name || "Buổi tập"}</td><td><span className={"md-chip " + tone}>{label}</span></td></tr>);
+              })}
+            </tbody>
+          </table>
+        )}
+        <button type="button" className="md-wide" onClick={() => onNavigate("member-attendance")}>Xem toàn bộ lịch sử điểm danh</button>
+      </section>
     </div>
-    <Card title="Truy cập nhanh" className="narrow">
-      <div className="dash-actions">
-        <button type="button" onClick={() => onNavigate("member-pt-booking")}><b>Đặt buổi huấn luyện</b><span>Chọn HLV và giờ tập</span></button>
-        <button type="button" onClick={() => onNavigate("member-levels")}><b>Trình độ &amp; đánh giá</b><span>Nhận xét từ HLV</span></button>
-        <Link to="/tuyen-sinh"><b>Gói thành viên</b><span>Xem và đăng ký gói tập</span></Link>
-        <Link to="/bo-mon"><b>Lớp học</b><span>Bộ môn và khóa học</span></Link>
-      </div>
-    </Card>
+
+    <section className="md-card">
+      <div className="md-card-head"><h2>Trình độ của tôi</h2>
+        <button type="button" className="md-link" onClick={() => onNavigate("member-levels")}>Chi tiết →</button></div>
+      {levels.length === 0 ? <p className="dash-empty">Bạn chưa được đánh giá trình độ.</p> : (
+        <div className="md-levels">
+          {levels.map((l, i) => <div key={l.id ?? i}><span>{l.sportName || l.sport?.name || "Bộ môn #" + l.sportId}</span><b>{l.level || "—"}</b></div>)}
+        </div>
+      )}
+    </section>
   </>);
 }
 
@@ -234,8 +367,8 @@ export default function Dashboard({ token, role, onLogout, onNavigate }) {
     <div className="layout">
       <Sidebar role={role} activePage="dashboard" onLogout={onLogout} onNavigate={onNavigate} />
       <main className="main dash-main">
-        <h1>{title}</h1>
-        <p className="subtitle">{sub || "Hôm nay: " + today}</p>
+        {role !== "MEMBER" && <><h1>{title}</h1>
+        <p className="subtitle">{sub || "Hôm nay: " + today}</p></>}
         {loading ? <div className="queue-state">Đang tải dữ liệu…</div> : <View d={data} onNavigate={onNavigate} />}
       </main>
     </div>

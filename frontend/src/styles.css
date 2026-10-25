@@ -905,3 +905,240 @@ legend {
   .coach-assessment-notes { grid-column: auto; }
   .coach-assessment-row-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 }
+/* DÁN VÀO CUỐI file styles.css thật — style cho trang Trình độ & đánh giá (Member)
+   v2: dùng biến màu riêng (--lvl-*) và selector cụ thể hơn để không bị CSS
+   khác (ví dụ :root --navy/--blue ở public-site/styles.css, hoặc CSS cũ
+   trùng tên class) ghi đè. */
+
+.levels-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-sub);
+  margin-bottom: 18px;
+}
+.levels-breadcrumb span:last-child { color: var(--text-main); font-weight: 600; }
+
+.levels-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.member-levels-page .eyebrow {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #0a61f2;
+  background: #eaf1fe;
+  padding: 4px 10px;
+  border-radius: 999px;
+  margin: 0 0 10px;
+}
+
+.levels-cta { width: auto; padding: 0 20px; white-space: nowrap; }
+
+.levels-sport-picker {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.levels-current-badge {
+  background: #e7f6ec;
+  color: #146c3b;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 999px;
+}
+
+/* ---- Card trình độ hiện tại, nền gradient tối ----
+   Biến --lvl-navy/--lvl-blue khai báo RIÊNG trên chính .member-level-card,
+   không dùng chung --navy/--blue toàn cục, nên không thể bị file CSS khác
+   (ví dụ public-site/styles.css) ghi đè giá trị. */
+.member-level-card {
+  --lvl-navy: #091f38;
+  --lvl-blue: #0a61f2;
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 24px;
+  background: linear-gradient(135deg, var(--lvl-navy), var(--lvl-blue));
+  border-radius: 18px;
+  padding: 28px 32px;
+  margin-top: 8px;
+}
+
+/* Mọi chữ và phần tử con đều ép màu trắng rõ ràng, selector cụ thể hơn
+   (.member-level-card .xxx) để chắc chắn thắng mọi rule cũ trùng tên class. */
+.member-level-card,
+.member-level-card * {
+  color: #fff;
+}
+
+.member-level-card .member-level-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.member-level-card .eyebrow {
+  background: rgba(255, 255, 255, 0.18) !important;
+  color: #fff !important;
+}
+
+.member-level-card .member-level-value {
+  background: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  line-height: 1.2;
+}
+
+.member-level-card .levels-verified-chip {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+.member-level-card .levels-verified-chip-solid {
+  background: #1a9e66 !important;
+}
+
+.member-level-card .member-level-card-side {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  justify-content: center;
+}
+
+.member-level-card .levels-verified-date {
+  margin: 0;
+  font-size: 13px;
+  color: #dbe9ff !important;
+}
+
+.member-level-card .levels-coach-chip {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.member-level-card .member-level-card-side p {
+  margin: 0;
+  font-size: 13px;
+  color: #dbe9ff !important;
+}
+
+/* ---- Lịch sử đánh giá ---- */
+.member-history-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.levels-year-filter {
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 13px;
+  background: #fff;
+}
+
+.member-levels-page .member-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.member-levels-page .member-history-card {
+  display: flex;
+  gap: 16px;
+  background: #fff !important;
+  color: var(--text-main) !important;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 20px;
+}
+.member-levels-page .member-history-card * {
+  color: inherit;
+}
+
+.member-history-quarter {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #0a61f2;
+  color: #fff !important;
+  font-weight: 700;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.member-history-body { flex: 1; min-width: 0; }
+
+.member-history-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.member-history-heading strong { display: block; font-size: 14px; }
+.member-history-heading span { font-size: 12px; color: var(--text-sub) !important; }
+
+.coach-assessment-status {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.member-history-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px 16px;
+  margin: 0 0 8px;
+}
+.member-history-facts dt { font-size: 11px; color: var(--text-sub) !important; margin: 0; }
+.member-history-facts dd { font-size: 13px; margin: 2px 0 0; }
+
+.member-history-notes {
+  font-size: 13px;
+  color: var(--text-sub) !important;
+  background: #f6f9fc;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .member-level-card { grid-template-columns: 1fr; }
+  .member-levels-page .member-history-card { flex-direction: column; }
+}
