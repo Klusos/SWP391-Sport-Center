@@ -17,6 +17,9 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+
+import org.hibernate.annotations.JdbcType;
+import org.hibernate.type.descriptor.jdbc.TimestampUtcAsJdbcTimestampJdbcType;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -43,7 +46,8 @@ public class MembershipUpgradeCounterReceipt {
     @Column(name = "amount", nullable = false, precision = 12, scale = 2, updatable = false)
     private BigDecimal amount;
 
-    @Column(name = "received_at_utc", nullable = false, updatable = false)
+    @Column(name = "received_at_utc", nullable = false, updatable = false, columnDefinition = "datetime2(6)")
+    @JdbcType(TimestampUtcAsJdbcTimestampJdbcType.class)
     private Instant receivedAtUtc;
 
     @Nationalized
