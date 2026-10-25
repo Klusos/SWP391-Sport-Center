@@ -8,6 +8,7 @@ import {
   getMyPaymentsApi,
   getPublicMembershipPlansApi,
 } from "../api";
+import { validVnpayUrl } from "../courseCheckout";
 import "./Portal.css";
 import "./MemberMembership.css";
 
@@ -64,21 +65,33 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
     (payment) => payment?.purpose === "MEMBERSHIP" && payment?.status === "PENDING",
   ), [payments]);
 
-  async function startPurchase(plan) {
+  async function startPurchase(plan, method) {
     if (busyPlanId !== null || pendingMembershipPayments.length > 0) return;
-    if (!window.confirm(`Tạo yêu cầu thanh toán tại quầy cho gói “${plan.name}” với giá ${money(plan.price)}? Gói chỉ được kích hoạt sau khi nhân viên xác nhận đã nhận tiền.`)) return;
+    const confirmation = method === "ONLINE"
+      ? `Tạo yêu cầu VNPay Sandbox cho gói “${plan.name}” với giá ${money(plan.price)}? Gói chỉ được kích hoạt sau khi máy chủ xác nhận thanh toán thành công.`
+      : `Tạo yêu cầu thanh toán tại quầy cho gói “${plan.name}” với giá ${money(plan.price)}? Gói chỉ được kích hoạt sau khi nhân viên xác nhận đã nhận tiền.`;
+    if (!window.confirm(confirmation)) return;
     setBusyPlanId(plan.id);
     setError("");
     setNotice("");
     try {
       const payment = await createPaymentApi(token, {
-        method: "COUNTER",
+        method,
         purpose: "MEMBERSHIP",
         referenceId: Number(plan.id),
         autoRenew: false,
       });
       setPayments((current) => [payment, ...(current || [])]);
-      setNotice(`Đã tạo yêu cầu thanh toán #${payment.id}. Vui lòng thanh toán tại quầy; gói chưa được kích hoạt.`);
+      if (method === "ONLINE") {
+        if (!validVnpayUrl(payment.paymentUrl)) {
+          await load();
+          setError(`Đã tạo thanh toán #${payment.id}, nhưng máy chủ không trả về liên kết VNPay Sandbox hợp lệ. Thanh toán vẫn đang chờ; không tạo lại hoặc tự hủy. Hãy làm mới trạng thái và liên hệ lễ tân nếu cần hỗ trợ.`);
+          return;
+        }
+        window.location.assign(payment.paymentUrl);
+      } else {
+        setNotice(`Đã tạo yêu cầu thanh toán #${payment.id}. Vui lòng thanh toán tại quầy; gói chưa được kích hoạt.`);
+      }
     } catch (requestError) {
       setError(requestError.status === 409
         ? "Đã có yêu cầu thanh toán đang chờ cho gói này. Hãy tiếp tục thanh toán hoặc hủy yêu cầu hiện tại."
@@ -121,7 +134,7 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
     <Sidebar role={role} activePage="member-membership" onLogout={onLogout} onNavigate={onNavigate} />
     <main className="main">
       <header className="member-membership-header">
-        <div><h1>Gói thành viên</h1><p className="subtitle">Mua mới hoặc gia hạn bằng thanh toán tại quầy. Gói chỉ được kích hoạt sau khi nhân viên xác nhận đã nhận tiền.</p></div>
+        <div><h1>Gói thành viên</h1><p className="subtitle">Mua mới hoặc gia hạn tại quầy hay qua VNPay Sandbox. Gói chỉ được kích hoạt sau khi máy chủ xác nhận thanh toán thành công.</p></div>
         <button type="button" onClick={() => void load()} disabled={loading}>{loading ? "Đang tải…" : "Làm mới"}</button>
       </header>
       {error && <div className="banner error" role="alert">{error}</div>}
@@ -145,13 +158,13 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
           : <ul className="dash-rows">{pendingMembershipPayments.map((payment) => {
             const plan = (plans || []).find((item) => Number(item.id) === Number(payment.referenceId));
             return <li key={payment.id}>
-              <span><b>{plan?.name || `Gói #${payment.referenceId}`}</b><br /><small>Thanh toán #{payment.id} · {money(payment.amount)} · Chờ thanh toán tại quầy</small></span>
+              <span><b>{plan?.name || `Gói #${payment.referenceId}`}</b><br /><small>Thanh toán #{payment.id} · {money(payment.amount)} · {payment.method === "ONLINE" ? "VNPay Sandbox · trạng thái do máy chủ xác nhận" : "Thanh toán tại quầy · chờ nhân viên xác nhận"}</small></span>
               <button type="button" disabled={cancelingId !== null} onClick={() => void cancelPendingPayment(payment)}>
                 {cancelingId === payment.id ? "Đang hủy…" : "Hủy yêu cầu"}
               </button>
             </li>;
           })}</ul>}
-        {pendingMembershipPayments.length > 0 && <p className="banner info" role="note">Hãy đến quầy để thanh toán. Nhân viên sẽ xác nhận giao dịch; màn hình này không có thao tác tự xác nhận thành công.</p>}
+        {pendingMembershipPayments.length > 0 && <p className="banner info" role="note">Không thể tạo thêm thanh toán Membership khi còn yêu cầu đang chờ. Với VNPay, hãy kiểm tra trạng thái trước khi thử lại; việc quay về từ cổng thanh toán không tự xác nhận thành công.</p>}
       </section>
 
       <h2 style={{ margin: "26px 0 14px", fontSize: 18 }}>Các gói đang mở</h2>
@@ -161,12 +174,18 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
             <h2>{plan.name}</h2><strong>{money(plan.price)}</strong>
             <small>Thời hạn: {plan.durationMonths} tháng · Giảm khóa học {plan.courseDiscountPercent ?? 0}%</small>
             {plan.description && <p>{plan.description}</p>}
-            <button type="button" disabled={busyPlanId !== null || pendingMembershipPayments.length > 0}
-              onClick={() => void startPurchase(plan)}>
-              {busyPlanId === plan.id ? "Đang tạo yêu cầu…" : currentMemberships.length ? "Mua / gia hạn" : "Mua gói"}
-            </button>
+            <div className="member-membership-payment-actions">
+              <button type="button" disabled={busyPlanId !== null || pendingMembershipPayments.length > 0}
+                onClick={() => void startPurchase(plan, "COUNTER")}>
+                {busyPlanId === plan.id ? "Đang tạo yêu cầu…" : currentMemberships.length ? "Mua / gia hạn · tại quầy" : "Mua gói · tại quầy"}
+              </button>
+              <button type="button" disabled={busyPlanId !== null || pendingMembershipPayments.length > 0}
+                onClick={() => void startPurchase(plan, "ONLINE")}>
+                {busyPlanId === plan.id ? "Đang tạo yêu cầu…" : currentMemberships.length ? "Mua / gia hạn · VNPay Sandbox" : "Mua gói · VNPay Sandbox"}
+              </button>
+            </div>
           </article>)}</div>}
-      <p className="banner info" role="note">Hiện chưa có cổng thanh toán trực tuyến thật. Yêu cầu tự phục vụ được tạo ở trạng thái chờ và cần thanh toán tại quầy; không có xác nhận thành công giả lập.</p>
+      <p className="banner info" role="note">VNPay Sandbox là môi trường thử nghiệm. Trạng thái Membership chỉ thay đổi theo xác nhận thanh toán từ máy chủ.</p>
     </main>
   </div>;
 }
