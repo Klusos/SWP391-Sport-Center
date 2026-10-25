@@ -54,26 +54,28 @@ BEGIN TRY
 
     -- Preserve original start/end period snapshots. REPLACED is an explicit entitlement
     -- state; replaced_on records the effective cutoff, and replacement_membership_id links history.
+    -- Statements that reference columns added in this batch run through EXEC so SQL Server
+    -- compiles them after the ALTER TABLE ... ADD; otherwise the whole batch fails to compile.
     ALTER TABLE dbo.membership ADD replaced_on DATE NULL, replacement_membership_id INT NULL;
-    ALTER TABLE dbo.membership WITH CHECK ADD CONSTRAINT fk_membership_replacement
-        FOREIGN KEY (replacement_membership_id) REFERENCES dbo.membership(id);
-    ALTER TABLE dbo.membership WITH CHECK ADD CONSTRAINT ck_membership_replacement_metadata
-        CHECK ((status='REPLACED' AND replaced_on IS NOT NULL AND replacement_membership_id IS NOT NULL)
-            OR (status<>'REPLACED' AND replaced_on IS NULL AND replacement_membership_id IS NULL));
-    CREATE UNIQUE INDEX ux_membership_replaced_by ON dbo.membership(replacement_membership_id)
-        WHERE replacement_membership_id IS NOT NULL;
+    EXEC(N'ALTER TABLE dbo.membership WITH CHECK ADD CONSTRAINT fk_membership_replacement
+        FOREIGN KEY (replacement_membership_id) REFERENCES dbo.membership(id);');
+    EXEC(N'ALTER TABLE dbo.membership WITH CHECK ADD CONSTRAINT ck_membership_replacement_metadata
+        CHECK ((status=''REPLACED'' AND replaced_on IS NOT NULL AND replacement_membership_id IS NOT NULL)
+            OR (status<>''REPLACED'' AND replaced_on IS NULL AND replacement_membership_id IS NULL));');
+    EXEC(N'CREATE UNIQUE INDEX ux_membership_replaced_by ON dbo.membership(replacement_membership_id)
+        WHERE replacement_membership_id IS NOT NULL;');
 
     -- Nullable winning link is set in the same transaction that changes Payment to SUCCESS.
     ALTER TABLE dbo.membership_upgrade_payment_evidence
         ADD applied_membership_id INT NULL, applied_at_utc DATETIME2(6) NULL;
-    ALTER TABLE dbo.membership_upgrade_payment_evidence WITH CHECK ADD CONSTRAINT fk_upgrade_evidence_applied_membership
-        FOREIGN KEY (applied_membership_id) REFERENCES dbo.membership(id);
-    ALTER TABLE dbo.membership_upgrade_payment_evidence WITH CHECK ADD CONSTRAINT ck_upgrade_evidence_applied_pair
+    EXEC(N'ALTER TABLE dbo.membership_upgrade_payment_evidence WITH CHECK ADD CONSTRAINT fk_upgrade_evidence_applied_membership
+        FOREIGN KEY (applied_membership_id) REFERENCES dbo.membership(id);');
+    EXEC(N'ALTER TABLE dbo.membership_upgrade_payment_evidence WITH CHECK ADD CONSTRAINT ck_upgrade_evidence_applied_pair
         CHECK ((applied_membership_id IS NULL AND applied_at_utc IS NULL)
-            OR (applied_membership_id IS NOT NULL AND applied_at_utc IS NOT NULL));
-    CREATE UNIQUE INDEX ux_upgrade_evidence_applied_membership
+            OR (applied_membership_id IS NOT NULL AND applied_at_utc IS NOT NULL));');
+    EXEC(N'CREATE UNIQUE INDEX ux_upgrade_evidence_applied_membership
         ON dbo.membership_upgrade_payment_evidence(applied_membership_id)
-        WHERE applied_membership_id IS NOT NULL;
+        WHERE applied_membership_id IS NOT NULL;');
 
     -- One append-only row per distinct verified callback evidence tuple. No signature or raw
     -- callback parameters are stored. A missing provider capture time is durably represented as NULL.
