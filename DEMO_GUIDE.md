@@ -1,4 +1,4 @@
-# Hướng dẫn chạy demo SportCenter (Flow 1–4)
+# Hướng dẫn chạy demo SportCenter (Flow 2 và 4)
 
 Dành cho thành viên nhóm đã có `SportCenterDB` trên SQL Server local, đang ở trạng thái của nhánh `main` (đã chạy các migration cũ và `demo-seed.sql`). Repo không có script tạo schema gốc, nên máy chưa có DB cần xin bản backup từ nhóm.
 
@@ -11,7 +11,7 @@ Thời gian: khoảng 15 phút.
 - Lấy code:
   ```powershell
   git fetch
-  git switch demo/flow4-and-fixes
+  git switch feature/flow4-training
   ```
 
 ## 2. Backup DB trước khi làm
@@ -32,15 +32,6 @@ Mở PowerShell ở thư mục `backend\docs\sql`. Chạy **đúng thứ tự**,
 $files = @(
   "phase8-7b-facility-sports.sql",
   "phase8-7c-course-registration-holds.sql",
-  "phase9-1-support-tickets.sql",
-  "phase9-2a-membership-purchase-refactor.sql",
-  "phase9-2a1-membership-renewal-foundation.sql",
-  "phase9-2a1-membership-renewal-scheduler.sql",
-  "phase9-2a1-c-renewal-checkout-attempts.sql",
-  "phase9-2a1-c1-applied-membership-link.sql",
-  "phase9-3-membership-upgrade-payment-drafts.sql",
-  "phase9-4-membership-upgrade-settlement.sql",
-  "phase9-5-membership-upgrade-checkout-integration.sql",
   "phase10-1-flow4-training.sql"
 )
 foreach ($f in $files) {
@@ -90,10 +81,10 @@ Mật khẩu chung ghi trong `backend/docs/sql/README.md` (mục demo seed). Ema
 
 | Vai trò | Email | Dùng để |
 |---|---|---|
-| Admin | `demo.admin` | Quản lý khóa học, lớp, lịch; báo cáo doanh thu |
-| Lễ tân | `demo.reception1` | Xác nhận thanh toán tại quầy |
+| Admin | `demo.admin` | Quản lý khóa học, lớp, lịch |
+| Lễ tân | `demo.reception1` | Điểm danh, bán gói membership |
 | Coach | `demo.coach1` | Điểm danh, giáo án, kết quả, đánh giá (lớp "Demo Seed Lớp tối T3-T5") |
-| Member | `demo.member01` | Đăng ký lớp mới và thanh toán |
+| Member | `demo.member01` | Đăng ký lớp mới |
 | Member | `demo.member02`, `demo.member03` | Đã học lớp tối T3-T5, có sẵn kết quả |
 
 ## 7. Kịch bản demo
@@ -102,11 +93,7 @@ Mật khẩu chung ghi trong `backend/docs/sql/README.md` (mục demo seed). Ema
 1. Khóa học → Demo Badminton → "Demo Seed Cầu lông cơ bản".
 2. Chọn "Demo Seed Đợt sắp khai giảng" → xem lịch 8 buổi của "Demo Seed Lớp sáng T7-CN" → Đăng ký.
 
-**Flow 3 – Thanh toán**
-1. Vẫn `demo.member01`: tại đăng ký vừa tạo, chọn thanh toán VNPay (hoặc tại quầy).
-2. VNPay sandbox, thẻ test NCB: số thẻ `9704198526191432198`, tên `NGUYEN VAN A`, ngày phát hành `07/15`, OTP `123456`.
-3. Nếu chọn tại quầy: đăng nhập `demo.reception1` → "Thanh toán khóa học" → xác nhận.
-4. `demo.admin` → Tổng quan → "Mở báo cáo doanh thu".
+**Flow 3 – Thanh toán**: API thanh toán và VNPay sandbox đã có trên `main`, nhưng giao diện thanh toán khóa học và báo cáo doanh thu chưa có trong nhánh này nên không demo bằng giao diện.
 
 **Flow 4 – Huấn luyện và điểm danh** (`demo.coach1`)
 1. "Giáo án & kết quả" → lớp "Demo Seed Lớp tối T3-T5": xem mục tiêu và 4 bài tập; thử thêm/sửa một bài.

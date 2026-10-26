@@ -1,19 +1,16 @@
 # SportCenter Implementation Status
 
-## Flow 4 training and demo fixes (2026-10-25, branch `demo/flow4-and-fixes`)
+## Flow 4 training and demo fixes (2026-10-26, branch `feature/flow4-training`)
 
 | Area | Change | Verification |
 |---|---|---|
 | Flow 4 training | `TrainingPlan` (goal, description), `TrainingExercise`, `TrainingResult` (score 1–10 per PRESENT member and session), `ProgressEvaluation` (rating 1–5, append-only); `/api/training/**`; Coach page "Giáo án & kết quả" and Member page "Kết quả tập luyện" | `TrainingIntegrationTest` 4 passed; API end-to-end on local SQL Server (plan, exercises, attendance gate 409, session completion, result, evaluation, member view, other-coach 403) |
 | `phase10-1-flow4-training.sql` | New additive, idempotent migration | Rehearsed twice on a restored copy, then applied to local `SportCenterDB` |
-| `phase9-4` migration | Statements referencing columns added in the same batch now run through `EXEC`; previously the batch failed to compile (`Invalid column name 'applied_membership_id'`) | Full chain 8-7b → 9-5 rehearsed on a restore taken before 8-7b with no manual steps |
-| Instant mapping | Membership upgrade entities map `Instant` with `TimestampUtcAsJdbcTimestampJdbcType` and `datetime2(6)`; Hibernate otherwise expected `datetimeoffset` and the backend could not start on SQL Server | Backend starts with `ddl-auto=validate` on the rehearsal and local databases without overrides |
 | `ClassSessionService` | Facility guidance check used `LocalDateTime.now()` instead of the injected `Clock` | `ClassSessionServiceTest` 31 passed; its tests now use the fixed clock instead of the real date (four tests had started failing on 2026-10-23) |
-| PT booking payment | "Pay with VNPay" for PT bookings within the 15-minute hold; VNPay PT results are routed from the payment result page back to the PT page | API: ONLINE `PT_BOOKING` payment returns a signed sandbox URL |
 
-- Team demo setup: `DEMO_GUIDE.md` (repo root), `backend/.env.example`, and `docs/sql/demo-seed-flow2-4.sql` (additive, date-relative Flow 2–4 demo data guarded by `@ConfirmLocalDemoDatabase`). The guide sequence (migrations 8-7b → 10-1, then the seed) was rehearsed on a restore of a `main`-state database with `demo-seed.sql`; the backend validated the schema and the Flow 2–4 demo steps passed over the API. A second seed run stops without changes.
-- Full backend suite (H2 `phase1`): 369 tests, 0 failures. Frontend: lint, build and 58 node tests passed.
-- Not done: browser click-through and a real card payment; no frontend test covers the new pages.
+- Team demo setup: `DEMO_GUIDE.md` (repo root), `backend/.env.example`, and `docs/sql/demo-seed-flow2-4.sql` (additive, date-relative Flow 2–4 demo data guarded by `@ConfirmLocalDemoDatabase`). The seed was first rehearsed with the Phase 9 migrations applied; on this branch it needs only migrations 8-7b, 8-7c and 10-1, and that sequence has not been rehearsed separately.
+- Full backend suite (H2 `phase1`): 261 tests, 0 failures. Frontend: build passed and lint is clean for the Flow 4 files.
+- Not done: browser click-through; no frontend test covers the new pages. Membership upgrade and VNPay for PT bookings are not part of this branch.
 
 ## Flow 3: VNPay sandbox gateway (2026-10-19)
 

@@ -23,7 +23,7 @@
     for the live demo (take attendance -> complete -> record results); four
     upcoming sessions; a training plan with four exercises.
   - "Demo Seed Lớp sáng T7-CN" (opens in 10 days, registration open): no
-    registrations, so demo.member01 can register and pay with VNPay.
+    registrations, so demo.member01 can register.
 */
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
@@ -47,7 +47,6 @@ BEGIN TRY
 
     IF OBJECT_ID(N'dbo.training_plan', N'U') IS NULL OR OBJECT_ID(N'dbo.facility_sport', N'U') IS NULL
        OR COL_LENGTH(N'dbo.course_registration', N'payment_deadline') IS NULL
-       OR COL_LENGTH(N'dbo.payment', N'monthly_price_snapshot') IS NULL
         THROW 51105, 'Apply every migration up to phase10-1-flow4-training.sql before this seed.', 1;
 
     IF EXISTS (SELECT 1 FROM dbo.course WHERE name = N'Demo Seed Cầu lông cơ bản')
