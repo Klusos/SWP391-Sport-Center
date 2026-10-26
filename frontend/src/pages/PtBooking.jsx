@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
+import PaymentMethodModal from "../components/PaymentMethodModal";
 import { cancelPaymentApi, createPaymentApi, createPtBookingApi, getMyPaymentsApi, getMyPtBookingsApi, getPublicSportsApi, getPtEligibleCoachesApi } from "../api";
-import { acquirePtPaymentAction, bookingPayments, focusPtPaymentPanel, pendingPtPayment, ptPaymentExpired, ptPaymentMoney, ptOnlineUrlIsTrusted, ptPaymentPayload, ptCancellationWarning } from "../ptPaymentFlow";
+import { acquirePtPaymentAction, bookingPayments, filterPtBookingHistory, focusPtPaymentPanel, paginatePtBookingHistory, partitionPtBookings, pendingPtPayment, ptPaymentExpired, ptPaymentMoney, ptOnlineUrlIsTrusted, ptPaymentPayload, ptCancellationWarning } from "../ptPaymentFlow";
 import "./PtBooking.css";
 
 const rows = (value) => Array.isArray(value) ? value : value?.content ?? [];
@@ -20,8 +21,11 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
   const [sports, setSports] = useState([]), [sportId, setSportId] = useState("");
   const [startTime, setStartTime] = useState(""), [coaches, setCoaches] = useState([]);
   const [history, setHistory] = useState([]), [selectedCoach, setSelectedCoach] = useState("");
+  const [historyStatus, setHistoryStatus] = useState("ALL"), [historyQuery, setHistoryQuery] = useState(""), [historyPage, setHistoryPage] = useState(0);
   const [payments, setPayments] = useState([]), [paymentBusyId, setPaymentBusyId] = useState(null);
   const [paymentError, setPaymentError] = useState("");
+  const [paymentModalBooking, setPaymentModalBooking] = useState(null);
+  const [paymentReconciliationRequired, setPaymentReconciliationRequired] = useState(false);
   const [now, setNow] = useState(0);
   const focusBookingId = useRef(null);
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false);
@@ -29,39 +33,87 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
   const action = useRef(false);
   const lifecycle = useRef(0);
   const paymentAction = useRef(false);
+  const { actionable: actionableBookings, history: historicalBookings } = useMemo(
+    () => partitionPtBookings(history, now), [history, now],
+  );
+  const filteredHistory = useMemo(
+    () => filterPtBookingHistory(historicalBookings, historyStatus, historyQuery),
+    [historicalBookings, historyStatus, historyQuery],
+  );
+  const historyPageSize = 5;
+  const historyPageData = paginatePtBookingHistory(filteredHistory, historyPage, historyPageSize);
 
   async function refreshAuthoritative() {
     const [bookings, paymentRows] = await Promise.all([getMyPtBookingsApi(token), getMyPaymentsApi(token)]);
-    setHistory(rows(bookings)); setPayments(rows(paymentRows));
+    const refreshedPayments = rows(paymentRows);
+    setHistory(rows(bookings)); setPayments(refreshedPayments);
+    setPaymentReconciliationRequired(false);
+    return refreshedPayments;
+  }
+
+  function openPaymentModal(booking) {
+    if (paymentReconciliationRequired) {
+      setPaymentError("Refresh booking and payment status before starting another payment.");
+      return;
+    }
+    if (paymentBusyId !== null || booking.status !== "PENDING_PAYMENT" || ptPaymentExpired(booking, currentTimestamp())) {
+      setPaymentError("This PT booking payment hold has expired. Refresh booking status before continuing.");
+      return;
+    }
+    if (pendingPtPayment(payments, booking.id)) {
+      setPaymentError("A pending payment already exists for this booking. Cancel it or wait for settlement before switching methods.");
+      void refreshAuthoritative().catch(() => {});
+      return;
+    }
+    setPaymentError("");
+    setPaymentModalBooking(booking);
+  }
+
+  function closePaymentModal() {
+    if (paymentBusyId !== null) return;
+    setPaymentModalBooking(null);
+    setPaymentError("");
   }
 
   async function startPayment(booking, method) {
-    if (paymentBusyId !== null || !acquirePtPaymentAction(paymentAction)) return;
+    if (paymentBusyId !== null || paymentReconciliationRequired || !acquirePtPaymentAction(paymentAction)) return false;
     if (booking.status !== "PENDING_PAYMENT" || ptPaymentExpired(booking, currentTimestamp())) {
-      setPaymentError("This PT booking payment hold has expired. Refresh booking status before continuing."); paymentAction.current = false; return;
+      setPaymentError("This PT booking payment hold has expired. Refresh booking status before continuing."); paymentAction.current = false; return false;
     }
     if (pendingPtPayment(payments, booking.id)) {
       setPaymentError("A pending payment already exists for this booking. Cancel it or wait for settlement before switching methods.");
       try { await refreshAuthoritative(); } catch { /* Keep the current payment state visible. */ }
       paymentAction.current = false;
-      return;
+      return false;
     }
     setPaymentBusyId(booking.id); setPaymentError("");
     try {
       const payment = await createPaymentApi(token, ptPaymentPayload(booking.id, method));
       setPayments((previous) => [payment, ...previous.filter((item) => item.id !== payment.id)]);
-      if (method === "ONLINE" && (!payment?.paymentUrl || !ptOnlineUrlIsTrusted(payment.paymentUrl))) {
-        try { await refreshAuthoritative(); } catch { /* Preserve the created response in UI state. */ }
-        setPaymentError("Online payment was created, but its URL is missing or not a trusted VNPay Sandbox URL. The payment remains visible; do not create another payment."); return;
+      let refreshedPayments;
+      try { refreshedPayments = await refreshAuthoritative(); }
+      catch {
+        setPaymentReconciliationRequired(true);
+        setPaymentError("Payment was created, but booking/payment history could not refresh. Refresh status before any further payment action.");
       }
-      try { await refreshAuthoritative(); }
-      catch { setPaymentError("Payment was created, but booking/payment history could not refresh. Check status before any further action."); }
+      if (!refreshedPayments?.some((item) => Number(item.id) === Number(payment.id))) {
+        setPayments((previous) => [payment, ...previous.filter((item) => item.id !== payment.id)]);
+        setPaymentReconciliationRequired(true);
+        setPaymentError("Payment was created but is not visible in refreshed history yet. Refresh status before any further payment action.");
+      }
+      if (method === "ONLINE" && (!payment?.paymentUrl || !ptOnlineUrlIsTrusted(payment.paymentUrl))) {
+        setPaymentError("Online payment was created, but its URL is missing or not a trusted VNPay Sandbox URL. The payment remains visible; do not create another payment."); return true;
+      }
       if (method === "ONLINE") window.location.assign(payment.paymentUrl);
+      return true;
     } catch (requestError) {
       setPaymentError(requestError.status === 409
         ? "A payment already exists or the booking is no longer payable. Booking and payment history were refreshed."
         : `Payment outcome is uncertain: ${requestError.message || "network error"}. Check refreshed history before trying again.`);
-      try { await refreshAuthoritative(); } catch { /* Preserve the uncertainty warning. */ }
+      try { await refreshAuthoritative(); } catch { /* Keep payment actions locked until the user refreshes. */ }
+      setPaymentReconciliationRequired(true);
+      setPaymentError("Could not confirm the payment request outcome. Review the refreshed history, then manually refresh once more before trying again.");
+      return false;
     } finally { paymentAction.current = false; setPaymentBusyId(null); }
   }
 
@@ -107,6 +159,57 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
     setter(value); setCoaches([]); setSelectedCoach(""); setNotice("");
   }
 
+  function paymentDetails(booking, allowCreate = false) {
+    const related = bookingPayments(payments, booking.id);
+    const pending = pendingPtPayment(payments, booking.id);
+    const expired = ptPaymentExpired(booking, now);
+    if (!related.length && !(booking.status === "PENDING_PAYMENT" && (allowCreate || expired))) return null;
+    return <div className="pt-payment-actions">
+      {related.map((payment) => <div className="pt-payment-state" key={payment.id}>
+        <strong>{payment.method} payment #{payment.id}: {payment.status}</strong>
+        <span>{ptPaymentMoney(payment.amount)}</span>
+        {payment.status === "PENDING" && <>
+          <small>{payment.method === "COUNTER" ? "Chờ xác nhận tại quầy. Booking chỉ được xác nhận sau khi nhân viên ghi nhận thanh toán." : "Đang chờ VNPay xác nhận. Việc quay về từ trình duyệt không tự xác nhận thanh toán."}</small>
+          <button type="button" className="pt-secondary-button" disabled={paymentBusyId !== null} onClick={() => void cancelPendingPayment(payment)}>Hủy thanh toán đang chờ</button>
+        </>}
+      </div>)}
+      {booking.status === "PENDING_PAYMENT" && (expired
+        ? <p role="status">Đã hết hạn giữ chỗ; không thể tạo thanh toán mới cho booking này.</p>
+        : paymentReconciliationRequired
+          ? <p role="alert">Hãy làm mới lịch sử thanh toán trước khi tiếp tục.</p>
+          : pending
+            ? <p role="status">Đã có thanh toán {pending.method} đang chờ. Không tạo thanh toán khác; hãy chờ xác nhận hoặc hủy yêu cầu đang chờ.</p>
+            : allowCreate && <div className="pt-payment-choice">
+              <p>Chọn phương thức thanh toán. Booking chỉ được xác nhận theo trạng thái từ máy chủ.</p>
+              <button id={`pt-payment-button-${booking.id}`} type="button" disabled={paymentBusyId !== null || paymentReconciliationRequired} onClick={() => openPaymentModal(booking)}>
+                {paymentBusyId === booking.id ? "Đang xử lý…" : "Thanh toán"}
+              </button>
+            </div>)}
+    </div>;
+  }
+
+  function bookingStatus(booking) {
+    return booking.status === "PENDING_PAYMENT" ? "Chờ thanh toán" : booking.status;
+  }
+
+  function bookingCard(booking, actionable = false) {
+    return <article className={actionable ? "pt-booking-summary is-actionable" : "pt-booking-summary"} key={booking.id}>
+      <div className="pt-booking-summary-main">
+        <strong>{booking.sportName || "Môn thể thao"} · {booking.coachName || "Huấn luyện viên"}</strong>
+        <span>{vietnamTime(booking.startTime, true)} – {vietnamTime(booking.endTime)}</span>
+        {actionable && <small>Giữ chỗ đến {vietnamTime(booking.paymentExpiresAt, true)} (giờ Việt Nam)</small>}
+        <span className="pt-status">{bookingStatus(booking)}</span>
+        {booking.status === "PENDING_PAYMENT" && ptPaymentExpired(booking, now) && <small className="pt-expired-hold">Đã hết hạn theo thời gian giữ chỗ (trạng thái máy chủ: PENDING_PAYMENT).</small>}
+      </div>
+      <div className="pt-booking-summary-side">
+        <strong>{money(booking.finalPrice)}</strong>
+        {actionable && paymentDetails(booking, true)}
+        {!actionable && (bookingPayments(payments, booking.id).length > 0 || booking.status === "PENDING_PAYMENT")
+          && <details className="pt-history-payment-details"><summary>Chi tiết thanh toán và thao tác được phép</summary>{paymentDetails(booking)}</details>}
+      </div>
+    </article>;
+  }
+
   async function findCoaches(event) {
     event.preventDefault();
     if (action.current || loading) return;
@@ -147,6 +250,7 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
   }
 
 return (
+<>
 <div className="layout pt-booking-layout">
 <Sidebar
 role={role}
@@ -350,119 +454,82 @@ onLogout={onLogout}
         )}
       </section>
 
-      <section className="pt-card pt-history-card">
+      <section className="pt-card pt-actionable-card" aria-labelledby="pt-actionable-title">
+        <div className="pt-section-heading">
+          <span className="pt-section-icon"><span aria-hidden="true">⏳</span></span>
+          <div>
+            <h2 id="pt-actionable-title">Cần xử lý</h2>
+            <p>Booking đang giữ chỗ được sắp theo hạn thanh toán gần nhất.</p>
+          </div>
+        </div>
+        {loading ? <div className="pt-loading" role="status">Đang tải booking cần xử lý…</div>
+          : actionableBookings.length === 0 ? <div className="pt-empty"><strong>Không có booking cần xử lý.</strong><p>Booking mới sẽ xuất hiện ở đây sau khi được tạo.</p></div>
+            : <div className="pt-actionable-list">{actionableBookings.map((booking) => bookingCard(booking, true))}</div>}
+      </section>
+
+      <section className="pt-card pt-history-card" aria-labelledby="pt-history-title">
         <div className="pt-section-heading">
           <span className="pt-section-icon">
             <span aria-hidden="true">📅</span>
           </span>
 
           <div>
-            <h2>PT booking history</h2>
-            <p>
-              Review your previous and upcoming PT sessions.
-            </p>
-            <button type="button" className="pt-secondary-button" disabled={paymentBusyId !== null} onClick={() => void refreshAuthoritative().catch((requestError) => setPaymentError("Could not refresh booking and payment history: " + requestError.message))}>Refresh booking and payment status</button>
+            <h2 id="pt-history-title">Lịch sử Booking</h2>
+            <p>Booking đã xác nhận, đã hủy hoặc hết hạn được lưu tại đây.</p>
+            <button type="button" className="pt-secondary-button" disabled={paymentBusyId !== null} onClick={() => void refreshAuthoritative().catch((requestError) => setPaymentError("Could not refresh booking and payment history: " + requestError.message))}>Làm mới trạng thái booking và thanh toán</button>
           </div>
         </div>
 
         {loading ? (
           <div className="pt-loading" role="status">
-            Loading booking history...
+            Đang tải lịch sử booking…
           </div>
         ) : history.length === 0 ? (
           <div className="pt-empty">
-            <span
-              className="pt-empty-icon"
-              aria-hidden="true"
-            >
-              📋
-            </span>
-
-            <strong>No PT sessions yet.</strong>
-
-            <p>
-              Your bookings will appear here after you
-              book a session.
-            </p>
+            <strong>Chưa có lịch sử booking.</strong>
+            <p>Booking sẽ chuyển vào lịch sử sau khi được xác nhận, hủy hoặc hết hạn.</p>
           </div>
-        ) : (
-          <div className="pt-history">
-            {history.map((booking) => (
-              <article
-                className="pt-history-row"
-                key={booking.id}
-              >
-                <div className="pt-history-main">
-                  <strong>
-                    {booking.sportName} /{" "}
-                    {booking.coachName}
-                  </strong>
-
-                  <span>
-                    {vietnamTime(booking.startTime, true)}
-                  </span>
-
-                  <small>
-                    Ends at{" "}
-                    {vietnamTime(booking.endTime)}
-                  </small>
-                </div>
-
-                <div className="pt-history-meta">
-                  <strong className="pt-history-price">
-                    {money(booking.finalPrice)}
-                  </strong>
-
-                  <span
-                    className={
-                      "pt-status " +
-                      (booking.status === "PENDING_PAYMENT"
-                        ? "pending"
-                        : booking.status === "COMPLETED"
-                          ? "completed"
-                          : booking.status === "CANCELLED"
-                            ? "cancelled"
-                            : "")
-                    }
-                  >
-                    {booking.status === "PENDING_PAYMENT"
-                      ? "Payment pending"
-                      : booking.status}
-                  </span>
-                  {booking.paymentExpiresAt && <small>Payment hold deadline: {vietnamTime(booking.paymentExpiresAt, true)} (Vietnam time)</small>}
-                  {(() => {
-                    const related = bookingPayments(payments, booking.id);
-                    const pending = pendingPtPayment(payments, booking.id);
-                    const expired = ptPaymentExpired(booking, now);
-                    return <div id={`pt-payment-panel-${booking.id}`} className="pt-payment-actions" tabIndex={-1} aria-label={`Payment options for PT booking ${booking.id}`}>
-                      {related.map((payment) => <div className="pt-payment-state" key={payment.id}>
-                        <strong>{payment.method} payment #{payment.id}: {payment.status}</strong>
-                        <span>{ptPaymentMoney(payment.amount)}</span>
-                        {payment.status === "PENDING" && <>
-                          <small>{payment.method === "COUNTER" ? "Pay at Receptionist. The booking is confirmed only after staff records settlement." : "Awaiting VNPay settlement. Browser return alone does not confirm payment."}</small>
-                          <button type="button" className="pt-secondary-button" disabled={paymentBusyId !== null} onClick={() => void cancelPendingPayment(payment)}>Cancel pending payment</button>
-                        </>}
-                      </div>)}
-                      {booking.status === "PENDING_PAYMENT" && (expired
-                        ? <p role="status">Payment hold expired. Refresh booking and payment history; no new payment can be started for this hold.</p>
-                        : pending
-                          ? <p role="status">A pending {pending.method} payment already exists. Cancel it or wait for settlement before switching methods.</p>
-                          : <div className="pt-payment-choice">
-                            <p>Choose one payment method. Booking confirmation comes only from the backend.</p>
-                            <button type="button" disabled={paymentBusyId !== null} onClick={() => void startPayment(booking, "ONLINE")}>{paymentBusyId === booking.id ? "Processing..." : "Pay online with VNPay Sandbox"}</button>
-                            <button type="button" disabled={paymentBusyId !== null} onClick={() => void startPayment(booking, "COUNTER")}>Pay at Receptionist</button>
-                          </div>)}
-                    </div>;
-                  })()}
-                </div>
-              </article>
-            ))}
+        ) : <>
+          <div className="pt-history-controls">
+            <label>Tìm môn hoặc huấn luyện viên
+              <input type="search" value={historyQuery} onChange={(event) => { setHistoryQuery(event.target.value); setHistoryPage(0); }} placeholder="Nhập tên môn hoặc huấn luyện viên" />
+            </label>
+            <label>Lọc trạng thái
+              <select value={historyStatus} onChange={(event) => { setHistoryStatus(event.target.value); setHistoryPage(0); }}>
+                <option value="ALL">Tất cả trạng thái</option>
+                <option value="CONFIRMED">CONFIRMED</option>
+                <option value="CANCELLED">CANCELLED</option>
+                <option value="EXPIRED">EXPIRED</option>
+                <option value="PENDING_PAYMENT">PENDING_PAYMENT đã hết hạn</option>
+              </select>
+            </label>
           </div>
-        )}
+          {filteredHistory.length === 0
+            ? <div className="pt-empty"><strong>{historicalBookings.length ? "Không tìm thấy booking phù hợp." : "Chưa có booking trong lịch sử."}</strong><p>Thay đổi bộ lọc hoặc từ khóa để xem các booking khác.</p></div>
+            : <div className="pt-compact-history" aria-live="polite">{historyPageData.items.map((booking) => bookingCard(booking))}</div>}
+          {filteredHistory.length > 0 && <nav className="pt-history-pagination" aria-label="Phân trang lịch sử booking">
+            <span>{filteredHistory.length} booking · Trang {historyPageData.page + 1} / {historyPageData.totalPages}</span>
+            <div>
+              <button type="button" className="pt-secondary-button" onClick={() => setHistoryPage((page) => Math.max(0, page - 1))} disabled={historyPageData.page <= 0}>Trước</button>
+              <button type="button" className="pt-secondary-button" onClick={() => setHistoryPage((page) => page + 1)} disabled={historyPageData.page + 1 >= historyPageData.totalPages}>Sau</button>
+            </div>
+          </nav>}
+        </>}
       </section>
     </div>
   </main>
 </div>
 
+{paymentModalBooking && <PaymentMethodModal
+  amount={money(paymentModalBooking.finalPrice)}
+  context={`PT Booking #${paymentModalBooking.id} · ${paymentModalBooking.sportName} với ${paymentModalBooking.coachName} · giữ chỗ đến ${vietnamTime(paymentModalBooking.paymentExpiresAt, true)} (giờ Việt Nam)`}
+  busy={paymentBusyId === paymentModalBooking.id}
+  error={paymentError}
+  canContinue={!paymentReconciliationRequired && !pendingPtPayment(payments, paymentModalBooking.id)}
+  onCancel={closePaymentModal}
+  onSuccess={() => setPaymentModalBooking(null)}
+  onContinue={(method) => startPayment(paymentModalBooking, method)}
+/>}
+ </>
 );
 }

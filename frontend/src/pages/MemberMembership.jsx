@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Sidebar from "../components/Sidebar";
+import PaymentMethodModal from "../components/PaymentMethodModal";
 import {
   cancelPaymentApi,
   createPaymentApi,
@@ -27,6 +28,8 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
   const [loading, setLoading] = useState(true);
   const [busyPlanId, setBusyPlanId] = useState(null);
   const [cancelingId, setCancelingId] = useState(null);
+  const [paymentModalPlan, setPaymentModalPlan] = useState(null);
+  const [paymentReconciliationRequired, setPaymentReconciliationRequired] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -43,15 +46,15 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
       setMemberships(rows(ownMemberships));
       setPayments(rows(ownPayments));
       setPlans(rows(availablePlans).filter((plan) => String(plan?.status).toUpperCase() === "ACTIVE"));
+      setPaymentReconciliationRequired(false);
+      return rows(ownPayments);
     } catch (requestError) {
-      setMemberships([]);
-      setPayments([]);
-      setPlans([]);
       setError(requestError.status === 401
         ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
         : requestError.status === 403
           ? "Tài khoản không có quyền xem thông tin gói hội viên."
           : requestError.message || "Không tải được thông tin hội viên và thanh toán.");
+      return false;
     } finally {
       setLoading(false);
     }
@@ -68,11 +71,7 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
   ), [payments]);
 
   async function startPurchase(plan, method) {
-    if (busyPlanId !== null || pendingMembershipPayments.length > 0) return;
-    const confirmation = method === "ONLINE"
-      ? `Tạo yêu cầu VNPay Sandbox cho gói “${plan.name}” với giá ${money(plan.price)}? Gói chỉ được kích hoạt sau khi máy chủ xác nhận thanh toán thành công.`
-      : `Tạo yêu cầu thanh toán tại quầy cho gói “${plan.name}” với giá ${money(plan.price)}? Gói chỉ được kích hoạt sau khi nhân viên xác nhận đã nhận tiền.`;
-    if (!window.confirm(confirmation)) return;
+    if (busyPlanId !== null || pendingMembershipPayments.length > 0 || paymentReconciliationRequired) return false;
     setBusyPlanId(plan.id);
     setError("");
     setNotice("");
@@ -83,24 +82,45 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
         referenceId: Number(plan.id),
         autoRenew: false,
       });
-      setPayments((current) => [payment, ...(current || [])]);
+      setPayments((current) => [payment, ...(current || []).filter((item) => item.id !== payment.id)]);
+      const refreshedPayments = await load();
+      const paymentVisibleInHistory = Array.isArray(refreshedPayments)
+        && refreshedPayments.some((item) => Number(item.id) === Number(payment.id));
+      if (!paymentVisibleInHistory) {
+        setPaymentReconciliationRequired(true);
+        setPayments((current) => [payment, ...(current || []).filter((item) => item.id !== payment.id)]);
+      }
       if (method === "ONLINE") {
         if (!validVnpayUrl(payment.paymentUrl)) {
-          await load();
           setError(`Đã tạo thanh toán #${payment.id}, nhưng máy chủ không trả về liên kết VNPay Sandbox hợp lệ. Thanh toán vẫn đang chờ; không tạo lại hoặc tự hủy. Hãy làm mới trạng thái và liên hệ lễ tân nếu cần hỗ trợ.`);
-          return;
+          return true;
         }
         window.location.assign(payment.paymentUrl);
+        return true;
       } else {
         setNotice(`Đã tạo yêu cầu thanh toán #${payment.id}. Vui lòng thanh toán tại quầy; gói chưa được kích hoạt.`);
+        return true;
       }
     } catch (requestError) {
       const message = membershipPurchaseErrorMessage(requestError);
       await load();
-      setError(message);
+      setPaymentReconciliationRequired(true);
+      setError(`${message} Làm mới lịch sử thanh toán trước khi thử lại.`);
+      return false;
     } finally {
       setBusyPlanId(null);
     }
+  }
+
+  function openPurchaseModal(plan) {
+    if (loading || busyPlanId !== null || pendingMembershipPayments.length > 0 || paymentReconciliationRequired) return;
+    setError("");
+    setPaymentModalPlan(plan);
+  }
+
+  function closePaymentModal() {
+    if (busyPlanId !== null) return;
+    setPaymentModalPlan(null);
   }
 
   async function cancelPendingPayment(payment) {
@@ -172,17 +192,23 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
             <small>Thời hạn: {plan.durationMonths} tháng · Giảm khóa học {plan.courseDiscountPercent ?? 0}%</small>
             {plan.description && <p>{plan.description}</p>}
             <div className="member-membership-payment-actions">
-              <button type="button" disabled={busyPlanId !== null || pendingMembershipPayments.length > 0}
-                onClick={() => void startPurchase(plan, "COUNTER")}>
-                {busyPlanId === plan.id ? "Đang tạo yêu cầu…" : currentMemberships.length ? "Mua / gia hạn · tại quầy" : "Mua gói · tại quầy"}
-              </button>
-              <button type="button" disabled={busyPlanId !== null || pendingMembershipPayments.length > 0}
-                onClick={() => void startPurchase(plan, "ONLINE")}>
-                {busyPlanId === plan.id ? "Đang tạo yêu cầu…" : currentMemberships.length ? "Mua / gia hạn · VNPay Sandbox" : "Mua gói · VNPay Sandbox"}
+              <button type="button" disabled={busyPlanId !== null || pendingMembershipPayments.length > 0 || paymentReconciliationRequired}
+                onClick={() => openPurchaseModal(plan)}>
+                {busyPlanId === plan.id ? "Đang tạo yêu cầu…" : currentMemberships.length ? "Mua / gia hạn" : "Mua gói"}
               </button>
             </div>
           </article>)}</div>}
       <p className="banner info" role="note">VNPay Sandbox là môi trường thử nghiệm. Trạng thái Membership chỉ thay đổi theo xác nhận thanh toán từ máy chủ.</p>
     </main>
+    {paymentModalPlan && <PaymentMethodModal
+      amount={money(paymentModalPlan.price)}
+      context={`Gói ${paymentModalPlan.name} · ${paymentModalPlan.durationMonths} tháng · ${currentMemberships.length ? "mua hoặc gia hạn" : "mua mới"}`}
+      busy={busyPlanId === paymentModalPlan.id}
+      error={error}
+      canContinue={!paymentReconciliationRequired && pendingMembershipPayments.length === 0}
+      onCancel={closePaymentModal}
+      onSuccess={() => setPaymentModalPlan(null)}
+      onContinue={(method) => startPurchase(paymentModalPlan, method)}
+    />}
   </div>;
 }

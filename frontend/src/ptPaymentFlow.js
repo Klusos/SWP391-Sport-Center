@@ -3,10 +3,39 @@ import { vietnamDate, validVnpayUrl } from "./courseCheckout.js";
 export const canViewPtPayments = (role) => ["ADMIN", "RECEPTIONIST"].includes(role);
 export const ptPaymentMoney = (amount) => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(amount ?? 0);
 export const ptPaymentExpired = (booking, now = Date.now()) => !(vietnamDate(booking?.paymentExpiresAt)?.getTime() > now);
+const bookingDateValue = (value) => vietnamDate(value)?.getTime() ?? 0;
+export const ptBookingDeadline = (booking) => bookingDateValue(booking?.paymentExpiresAt);
 export const bookingPayments = (payments, bookingId) => payments.filter((payment) =>
   payment.purpose === "PT_BOOKING" && Number(payment.referenceId) === Number(bookingId));
 export const pendingPtPayment = (payments, bookingId) => bookingPayments(payments, bookingId)
   .find((payment) => payment.status === "PENDING");
+export function partitionPtBookings(bookings, now = Date.now()) {
+  const actionable = [];
+  const history = [];
+  for (const booking of Array.isArray(bookings) ? bookings : []) {
+    if (booking?.status === "PENDING_PAYMENT" && !ptPaymentExpired(booking, now)) actionable.push(booking);
+    else history.push(booking);
+  }
+  actionable.sort((left, right) => ptBookingDeadline(left) - ptBookingDeadline(right) || Number(left.id) - Number(right.id));
+  history.sort((left, right) => bookingDateValue(right.createdAt ?? right.startTime) - bookingDateValue(left.createdAt ?? left.startTime)
+    || Number(right.id) - Number(left.id));
+  return { actionable, history };
+}
+export function filterPtBookingHistory(bookings, status = "ALL", query = "") {
+  const needle = String(query).trim().toLocaleLowerCase();
+  return (Array.isArray(bookings) ? bookings : []).filter((booking) => {
+    const matchesStatus = status === "ALL" || booking?.status === status;
+    const searchable = `${booking?.sportName ?? ""} ${booking?.coachName ?? ""}`.toLocaleLowerCase();
+    return matchesStatus && (!needle || searchable.includes(needle));
+  });
+}
+export function paginatePtBookingHistory(bookings, page = 0, pageSize = 5) {
+  const total = Array.isArray(bookings) ? bookings.length : 0;
+  const safeSize = Number.isSafeInteger(pageSize) && pageSize > 0 ? pageSize : 5;
+  const totalPages = Math.ceil(total / safeSize);
+  const safePage = Math.max(0, Math.min(Number.isSafeInteger(page) ? page : 0, Math.max(totalPages - 1, 0)));
+  return { items: (Array.isArray(bookings) ? bookings : []).slice(safePage * safeSize, (safePage + 1) * safeSize), page: safePage, pageSize: safeSize, total, totalPages };
+}
 export const ptPaymentPayload = (bookingId, method) => {
   if (!Number.isSafeInteger(Number(bookingId)) || Number(bookingId) < 1 || !["ONLINE", "COUNTER"].includes(method)) {
     throw new Error("Invalid PT payment request.");
@@ -22,10 +51,10 @@ export function acquirePtPaymentAction(lock) { if (lock.current) return false; l
 export function focusPtPaymentPanel(bookingId, documentRef = globalThis.document) {
   const id = Number(bookingId);
   if (!Number.isSafeInteger(id) || id < 1 || !documentRef?.getElementById) return false;
-  const panel = documentRef.getElementById(`pt-payment-panel-${id}`);
-  if (!panel) return false;
-  panel.scrollIntoView?.({ behavior: "smooth", block: "center" });
-  panel.focus?.({ preventScroll: true });
+  const button = documentRef.getElementById(`pt-payment-button-${id}`);
+  if (!button) return false;
+  button.scrollIntoView?.({ behavior: "smooth", block: "center" });
+  button.focus?.({ preventScroll: true });
   return true;
 }
 

@@ -39,13 +39,13 @@ test("member payment lock rejects repeated clicks synchronously", () => {
   assert.equal(acquirePtPaymentAction(lock), true);
 });
 
-test("new booking payment panel is focused and scrolled into view", () => {
+test("new booking payment button is focused and scrolled into view", () => {
   const calls = [];
-  const panel = {
+  const button = {
     scrollIntoView: (options) => calls.push(["scroll", options]),
     focus: (options) => calls.push(["focus", options]),
   };
-  const documentRef = { getElementById: (id) => id === "pt-payment-panel-18" ? panel : null };
+  const documentRef = { getElementById: (id) => id === "pt-payment-button-18" ? button : null };
   assert.equal(focusPtPaymentPanel(18, documentRef), true);
   assert.deepEqual(calls, [
     ["scroll", { behavior: "smooth", block: "center" }],
@@ -106,7 +106,17 @@ test("component handles 409 and refuses automatic duplicate payment attempts", a
   assert.match(source, /ptOnlineUrlIsTrusted\(payment\.paymentUrl\)/);
   assert.match(source, /focusBookingId\.current = result\.id/);
   assert.match(source, /focusPtPaymentPanel\(targetId\)/);
-  assert.match(source, /id=\{`pt-payment-panel-\$\{booking\.id\}`\}/);
+  assert.match(source, /id=\{`pt-payment-button-\$\{booking\.id\}`\}/);
+  assert.match(source, /onClick=\{\(\) => openPaymentModal\(booking\)\}/);
+  assert.match(source, /<PaymentMethodModal/);
+  assert.match(source, /const payment = await createPaymentApi/);
+  assert.match(source, /refreshedPayments = await refreshAuthoritative\(\)/);
+  assert.match(source, /if \(method === "ONLINE" && \(!payment\?\.paymentUrl \|\| !ptOnlineUrlIsTrusted\(payment\.paymentUrl\)\)\)[\s\S]*?return true/);
+  assert.match(source, /onSuccess=\{\(\) => setPaymentModalBooking\(null\)\}/);
+  assert.match(source, /setPaymentReconciliationRequired\(true\)/);
+  assert.match(source, /function openPaymentModal\(booking\)[\s\S]*?setPaymentModalBooking\(booking\)/);
+  assert.match(source, /function closePaymentModal\(\)[\s\S]*?setPaymentModalBooking\(null\)/);
+  assert.doesNotMatch(source, /startPayment\(booking,\s*["'](?:ONLINE|COUNTER)["']\)/);
 });
 
 test("component requires confirmation before canceling and exposes the VNPay warning", async () => {
