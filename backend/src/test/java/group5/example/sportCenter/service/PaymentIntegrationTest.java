@@ -504,6 +504,119 @@ class PaymentIntegrationTest {
     }
 
     @Test
+    void pendingPtCounterQueueIsStaffOnlyAndExcludesOnlineAndExpiredHolds() throws Exception {
+        PersonalTrainingBooking counterBooking = booking(now().plusMinutes(15));
+        PaymentResponse counterPayment = service.createPayment(request(PaymentPurpose.PT_BOOKING, counterBooking.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+
+        PersonalTrainingBooking onlineBooking = booking(now().plusMinutes(15));
+        service.createPayment(request(PaymentPurpose.PT_BOOKING, onlineBooking.getId(), PaymentMethod.ONLINE), jwt(member));
+
+        PersonalTrainingBooking expiredBooking = booking(now().minusSeconds(1));
+        // Construct a pre-existing stale counter payment to prove the queue never treats an expired hold as payable.
+        queueFixture(member, PaymentMethod.COUNTER, PaymentPurpose.PT_BOOKING, PaymentStatus.PENDING)
+                .setReferenceId(expiredBooking.getId());
+        payments.flush();
+
+        String path = "/api/payments/pending-pt";
+        mvc.perform(get(path).header("Authorization", bearer(member)))
+                .andExpect(status().isForbidden());
+        mvc.perform(get(path).header("Authorization", bearer(coach.getUser())))
+                .andExpect(status().isForbidden());
+        mvc.perform(get(path).header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].paymentId").value(counterPayment.getId()))
+                .andExpect(jsonPath("$.content[0].bookingId").value(counterBooking.getId()))
+                .andExpect(jsonPath("$.content[0].memberId").value(member.getId()))
+                .andExpect(jsonPath("$.content[0].memberName").value(member.getName()))
+                .andExpect(jsonPath("$.content[0].sportName").value(sport.getName()))
+                .andExpect(jsonPath("$.content[0].coachName").value(coach.getUser().getName()))
+                .andExpect(jsonPath("$.content[0].amount").value(425000))
+                .andExpect(jsonPath("$.content[0].paymentStatus").value("PENDING"))
+                .andExpect(jsonPath("$.content[0].bookingStatus").value("PENDING_PAYMENT"))
+                .andExpect(jsonPath("$.content[0].paymentDeadline").isString())
+                .andExpect(jsonPath("$.content[0].transactionCode").doesNotExist())
+                .andExpect(jsonPath("$.content[0].email").doesNotExist());
+    }
+
+    @Test
+    void ptBookingRejectsSecondActivePaymentAndAllowsRetryAfterCancellation() {
+        PersonalTrainingBooking booking = booking(now().plusMinutes(15));
+        PaymentResponse first = service.createPayment(request(PaymentPurpose.PT_BOOKING, booking.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+
+        ResponseStatusException duplicate = assertThrows(ResponseStatusException.class,
+                () -> service.createPayment(request(PaymentPurpose.PT_BOOKING, booking.getId(),
+                        PaymentMethod.ONLINE), jwt(member)));
+        assertEquals(409, duplicate.getStatusCode().value());
+        assertEquals(1, payments.findByMemberIdOrderByCreatedAtDesc(member.getId()).stream()
+                .filter(payment -> payment.getPurpose() == PaymentPurpose.PT_BOOKING
+                        && payment.getReferenceId().equals(booking.getId())
+                        && payment.getStatus() == PaymentStatus.PENDING).count());
+
+        service.cancelPayment(first.getId(), jwt(member));
+        PaymentResponse retry = service.createPayment(request(PaymentPurpose.PT_BOOKING, booking.getId(),
+                PaymentMethod.ONLINE), jwt(member));
+        assertEquals(PaymentStatus.PENDING.name(), retry.getStatus());
+        assertTrue(retry.getPaymentUrl() != null && !retry.getPaymentUrl().isBlank());
+        assertEquals(PersonalTrainingBookingStatus.PENDING_PAYMENT,
+                bookings.findById(booking.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void concurrentPtPaymentRequestsCreateOnlyOnePendingAttempt() throws Exception {
+        PersonalTrainingBooking booking = booking(now().plusMinutes(15));
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            java.util.concurrent.Callable<Boolean> issue = () -> {
+                ready.countDown();
+                assertTrue(start.await(5, TimeUnit.SECONDS));
+                try {
+                    service.createPayment(request(PaymentPurpose.PT_BOOKING, booking.getId(),
+                            PaymentMethod.COUNTER), jwt(member));
+                    return true;
+                } catch (ResponseStatusException exception) {
+                    if (exception.getStatusCode().value() != 409) throw exception;
+                    return false;
+                }
+            };
+            Future<Boolean> first = pool.submit(issue);
+            Future<Boolean> second = pool.submit(issue);
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            assertEquals(1, (first.get(10, TimeUnit.SECONDS) ? 1 : 0)
+                    + (second.get(10, TimeUnit.SECONDS) ? 1 : 0));
+        } finally {
+            pool.shutdownNow();
+        }
+        assertEquals(1, payments.findByMemberIdOrderByCreatedAtDesc(member.getId()).stream()
+                .filter(payment -> payment.getPurpose() == PaymentPurpose.PT_BOOKING
+                        && payment.getReferenceId().equals(booking.getId())
+                        && payment.getStatus() == PaymentStatus.PENDING).count());
+    }
+
+    @Test
+    void failedPtPaymentCanBeRetriedAndPendingCounterPaymentCanBeConfirmedOnce() {
+        PersonalTrainingBooking retryBooking = booking(now().plusMinutes(15));
+        PaymentResponse failed = service.createPayment(request(PaymentPurpose.PT_BOOKING, retryBooking.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        assertEquals("CANCELLED", service.processAtCounter(failed.getId(), counter(false), jwt(receptionist)).getStatus());
+        PaymentResponse retried = service.createPayment(request(PaymentPurpose.PT_BOOKING, retryBooking.getId(),
+                PaymentMethod.ONLINE), jwt(member));
+        assertEquals("ONLINE", retried.getMethod());
+
+        PersonalTrainingBooking counterBooking = booking(now().plusMinutes(15));
+        PaymentResponse pending = service.createPayment(request(PaymentPurpose.PT_BOOKING, counterBooking.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        assertEquals("SUCCESS", service.processAtCounter(pending.getId(), counter(true), jwt(receptionist)).getStatus());
+        assertEquals(PersonalTrainingBookingStatus.CONFIRMED,
+                bookings.findById(counterBooking.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
     void replayedSuccessfulPtPaymentCallbackDoesNotDuplicateConfirmationNotices() throws Exception {
         PersonalTrainingBooking booking = booking(now().plusMinutes(15));
         PaymentResponse payment = service.createPayment(request(PaymentPurpose.PT_BOOKING, booking.getId(),

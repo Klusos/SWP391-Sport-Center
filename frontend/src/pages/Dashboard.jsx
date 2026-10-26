@@ -234,7 +234,7 @@ function Member({ d, onNavigate }) {
       <div className="dash-actions">
         <button type="button" onClick={() => onNavigate("member-pt-booking")}><b>Đặt buổi huấn luyện</b><span>Chọn HLV và giờ tập</span></button>
         <button type="button" onClick={() => onNavigate("member-levels")}><b>Trình độ &amp; đánh giá</b><span>Nhận xét từ HLV</span></button>
-        <Link to="/tuyen-sinh"><b>Gói thành viên</b><span>Xem và đăng ký gói tập</span></Link>
+        <Link to="/member/membership"><b>Gói thành viên</b><span>Xem và đăng ký gói tập</span></Link>
         <Link to="/bo-mon"><b>Lớp học</b><span>Bộ môn và khóa học</span></Link>
       </div>
     </Card>

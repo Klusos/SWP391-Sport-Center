@@ -23,6 +23,7 @@ import group5.example.sportCenter.dto.CounterPaymentRequest;
 import group5.example.sportCenter.dto.CreatePaymentRequest;
 import group5.example.sportCenter.dto.PaymentResponse;
 import group5.example.sportCenter.dto.PendingCoursePaymentResponse;
+import group5.example.sportCenter.dto.PendingPtPaymentResponse;
 import group5.example.sportCenter.entity.MembershipPlan;
 import group5.example.sportCenter.entity.Payment;
 import group5.example.sportCenter.entity.PaymentMethod;
@@ -95,12 +96,30 @@ public class PaymentService {
             }
         }
 
+        if (request.getPurpose() == PaymentPurpose.PT_BOOKING) {
+            // Serialize all payment attempts for this member before checking the booking's
+            // existing pending attempts. Booking creation uses the same stable member row lock.
+            Integer lockedMemberId = member.getId();
+            member = userRepository.findByIdForBookingUpdate(lockedMemberId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + lockedMemberId));
+            if (!"MEMBER".equalsIgnoreCase(member.getRole()) || !"ACTIVE".equalsIgnoreCase(member.getStatus())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "PT booking payment requires an ACTIVE MEMBER account");
+            }
+        }
+
         BigDecimal amount = resolveAmountAndValidate(request, member);
         if (request.getPurpose() == PaymentPurpose.MEMBERSHIP
                 && paymentRepository.existsByMember_IdAndPurposeAndReferenceIdAndStatus(
                         member.getId(), PaymentPurpose.MEMBERSHIP, request.getReferenceId(), PaymentStatus.PENDING)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "A pending membership payment already exists for this member and plan");
+        }
+        if (request.getPurpose() == PaymentPurpose.PT_BOOKING
+                && paymentRepository.existsByPurposeAndReferenceIdAndStatus(
+                        PaymentPurpose.PT_BOOKING, request.getReferenceId(), PaymentStatus.PENDING)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "A pending payment already exists for this PT booking; cancel it before retrying or changing method");
         }
 
         Payment payment = new Payment();
@@ -274,6 +293,17 @@ public class PaymentService {
         }
         // Read eligibility only: an expired hold does not prove that money was received.
         return paymentRepository.findPendingCoursePayments(now(), PageRequest.of(page, size));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PendingPtPaymentResponse> getPendingPtCounterPayments(int page, int size, Jwt jwt) {
+        requireStaff(currentActor(jwt));
+        if (page < 0 || size < 1 || size > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must be nonnegative and size between 1 and 100");
+        }
+        // Expired or terminal booking holds are omitted: a pending payment is not authority
+        // to confirm after the booking's 15-minute payment window has elapsed.
+        return paymentRepository.findPendingPtPayments(now(), PageRequest.of(page, size));
     }
 
     // ---------------------------------------------------------------- helpers

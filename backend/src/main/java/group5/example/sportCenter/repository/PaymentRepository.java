@@ -17,6 +17,7 @@ import group5.example.sportCenter.entity.Payment;
 import group5.example.sportCenter.entity.PaymentPurpose;
 import group5.example.sportCenter.entity.PaymentStatus;
 import group5.example.sportCenter.dto.PendingCoursePaymentResponse;
+import group5.example.sportCenter.dto.PendingPtPaymentResponse;
 import jakarta.persistence.LockModeType;
 
 public interface PaymentRepository extends JpaRepository<Payment, Integer> {
@@ -50,6 +51,30 @@ public interface PaymentRepository extends JpaRepository<Payment, Integer> {
           and r.paymentDeadline > :now
         """)
     Page<PendingCoursePaymentResponse> findPendingCoursePayments(@Param("now") LocalDateTime now, Pageable pageable);
+
+    @Query(value = """
+        select new group5.example.sportCenter.dto.PendingPtPaymentResponse(
+            p.id, b.id, m.id, m.name, b.sport.id, b.sport.name, b.coach.id, b.coach.user.name,
+            b.startTime, b.endTime, p.amount, p.status, b.status, b.paymentExpiresAt, p.createdAt)
+        from Payment p join p.member m, PersonalTrainingBooking b
+        where p.referenceId = b.id and m.id = b.member.id
+          and p.method = group5.example.sportCenter.entity.PaymentMethod.COUNTER
+          and p.purpose = group5.example.sportCenter.entity.PaymentPurpose.PT_BOOKING
+          and p.status = group5.example.sportCenter.entity.PaymentStatus.PENDING
+          and b.status = group5.example.sportCenter.entity.PersonalTrainingBookingStatus.PENDING_PAYMENT
+          and b.paymentExpiresAt > :now
+        order by p.createdAt asc, p.id asc
+        """, countQuery = """
+        select count(p.id)
+        from Payment p join p.member m, PersonalTrainingBooking b
+        where p.referenceId = b.id and m.id = b.member.id
+          and p.method = group5.example.sportCenter.entity.PaymentMethod.COUNTER
+          and p.purpose = group5.example.sportCenter.entity.PaymentPurpose.PT_BOOKING
+          and p.status = group5.example.sportCenter.entity.PaymentStatus.PENDING
+          and b.status = group5.example.sportCenter.entity.PersonalTrainingBookingStatus.PENDING_PAYMENT
+          and b.paymentExpiresAt > :now
+        """)
+    Page<PendingPtPaymentResponse> findPendingPtPayments(@Param("now") LocalDateTime now, Pageable pageable);
 
     List<Payment> findByMemberIdOrderByCreatedAtDesc(Integer memberId);
 

@@ -10,6 +10,7 @@ import {
 } from "../api";
 import { validVnpayUrl } from "../courseCheckout";
 import { isMembershipEffective } from "../membershipDates";
+import { membershipPurchaseErrorMessage } from "../membershipPurchase";
 import "./Portal.css";
 import "./MemberMembership.css";
 
@@ -94,14 +95,9 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
         setNotice(`Đã tạo yêu cầu thanh toán #${payment.id}. Vui lòng thanh toán tại quầy; gói chưa được kích hoạt.`);
       }
     } catch (requestError) {
-      setError(requestError.status === 409
-        ? "Đã có yêu cầu thanh toán đang chờ cho gói này. Hãy tiếp tục thanh toán hoặc hủy yêu cầu hiện tại."
-        : requestError.status === 401
-          ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
-          : requestError.status === 403
-            ? "Bạn chỉ có thể tạo thanh toán cho tài khoản của mình."
-            : requestError.message || "Không thể tạo yêu cầu thanh toán.");
+      const message = membershipPurchaseErrorMessage(requestError);
       await load();
+      setError(message);
     } finally {
       setBusyPlanId(null);
     }

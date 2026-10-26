@@ -333,7 +333,7 @@ export default function App() {
 
           <Route path="/huan-luyen-vien" element={<Coaches />} />
           <Route path="/co-so-vat-chat" element={<Facilities />} />
-          <Route path="/tuyen-sinh" element={<Admission />} />
+          <Route path="/tuyen-sinh" element={<Admission auth={auth} />} />
 
           <Route
             path="/membership-plans"
