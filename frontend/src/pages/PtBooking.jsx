@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import { cancelPaymentApi, createPaymentApi, createPtBookingApi, getMyPaymentsApi, getMyPtBookingsApi, getPublicSportsApi, getPtEligibleCoachesApi } from "../api";
-import { acquirePtPaymentAction, bookingPayments, pendingPtPayment, ptPaymentExpired, ptPaymentMoney, ptOnlineUrlIsTrusted, ptPaymentPayload, ptCancellationWarning } from "../ptPaymentFlow";
+import { acquirePtPaymentAction, bookingPayments, focusPtPaymentPanel, pendingPtPayment, ptPaymentExpired, ptPaymentMoney, ptOnlineUrlIsTrusted, ptPaymentPayload, ptCancellationWarning } from "../ptPaymentFlow";
 import "./PtBooking.css";
 
 const rows = (value) => Array.isArray(value) ? value : value?.content ?? [];
@@ -23,6 +23,7 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
   const [payments, setPayments] = useState([]), [paymentBusyId, setPaymentBusyId] = useState(null);
   const [paymentError, setPaymentError] = useState("");
   const [now, setNow] = useState(0);
+  const focusBookingId = useRef(null);
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false);
   const [error, setError] = useState(""), [notice, setNotice] = useState("");
   const action = useRef(false);
@@ -96,6 +97,12 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
     return () => { window.clearTimeout(immediate); window.clearInterval(timer); };
   }, []);
 
+  useEffect(() => {
+    const targetId = focusBookingId.current;
+    if (targetId == null || !history.some((booking) => booking.id === targetId)) return;
+    if (focusPtPaymentPanel(targetId)) focusBookingId.current = null;
+  }, [history]);
+
   function changeCriteria(setter, value) {
     setter(value); setCoaches([]); setSelectedCoach(""); setNotice("");
   }
@@ -131,6 +138,7 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
       setCoaches([]); setSelectedCoach("");
       // Keep the created pending booking visible even if the history read fails.
       setHistory((previous) => [result, ...previous.filter((booking) => booking.id !== result.id)]);
+      focusBookingId.current = result.id;
       try {
         await refreshAuthoritative();
       } catch (requestError) { if (lifecycle.current === version) setError("Booking #" + result.id + " was created, but history could not be refreshed: " + requestError.message); }
@@ -426,7 +434,7 @@ onLogout={onLogout}
                     const related = bookingPayments(payments, booking.id);
                     const pending = pendingPtPayment(payments, booking.id);
                     const expired = ptPaymentExpired(booking, now);
-                    return <div className="pt-payment-actions">
+                    return <div id={`pt-payment-panel-${booking.id}`} className="pt-payment-actions" tabIndex={-1} aria-label={`Payment options for PT booking ${booking.id}`}>
                       {related.map((payment) => <div className="pt-payment-state" key={payment.id}>
                         <strong>{payment.method} payment #{payment.id}: {payment.status}</strong>
                         <span>{ptPaymentMoney(payment.amount)}</span>

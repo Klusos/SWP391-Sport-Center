@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { getPendingPtPaymentsApi, createPaymentApi, cancelPaymentApi } from "../src/api.js";
-import { acquirePtPaymentAction, canViewPtPayments, createPtCounterQueue, pendingPtPayment, ptCancellationWarning, ptOnlineUrlIsTrusted, ptPaymentExpired, ptPaymentPayload } from "../src/ptPaymentFlow.js";
+import { acquirePtPaymentAction, canViewPtPayments, createPtCounterQueue, focusPtPaymentPanel, pendingPtPayment, ptCancellationWarning, ptOnlineUrlIsTrusted, ptPaymentExpired, ptPaymentPayload } from "../src/ptPaymentFlow.js";
 
 const booking = { id: 18, status: "PENDING_PAYMENT", paymentExpiresAt: "2099-10-26T18:00:00" };
 const payment = (status = "PENDING", method = "ONLINE") => ({ id: 81, memberId: 7, purpose: "PT_BOOKING", referenceId: 18, status, method, amount: 299000 });
@@ -37,6 +37,22 @@ test("member payment lock rejects repeated clicks synchronously", () => {
   assert.equal(acquirePtPaymentAction(lock), false);
   lock.current = false;
   assert.equal(acquirePtPaymentAction(lock), true);
+});
+
+test("new booking payment panel is focused and scrolled into view", () => {
+  const calls = [];
+  const panel = {
+    scrollIntoView: (options) => calls.push(["scroll", options]),
+    focus: (options) => calls.push(["focus", options]),
+  };
+  const documentRef = { getElementById: (id) => id === "pt-payment-panel-18" ? panel : null };
+  assert.equal(focusPtPaymentPanel(18, documentRef), true);
+  assert.deepEqual(calls, [
+    ["scroll", { behavior: "smooth", block: "center" }],
+    ["focus", { preventScroll: true }],
+  ]);
+  assert.equal(focusPtPaymentPanel(0, documentRef), false);
+  assert.equal(focusPtPaymentPanel(18, { getElementById: () => null }), false);
 });
 
 test("trusted VNPay URL policy rejects non-sandbox or malformed URLs", () => {
@@ -88,6 +104,9 @@ test("component handles 409 and refuses automatic duplicate payment attempts", a
   assert.match(source, /if \(pendingPtPayment\(payments, booking\.id\)\)/);
   assert.match(source, /do not create another payment/);
   assert.match(source, /ptOnlineUrlIsTrusted\(payment\.paymentUrl\)/);
+  assert.match(source, /focusBookingId\.current = result\.id/);
+  assert.match(source, /focusPtPaymentPanel\(targetId\)/);
+  assert.match(source, /id=\{`pt-payment-panel-\$\{booking\.id\}`\}/);
 });
 
 test("component requires confirmation before canceling and exposes the VNPay warning", async () => {

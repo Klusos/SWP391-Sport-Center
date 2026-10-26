@@ -19,6 +19,16 @@ export const ptCancellationWarning = (payment) => payment?.method === "ONLINE"
   : "Cancel this pending counter payment?";
 export function acquirePtPaymentAction(lock) { if (lock.current) return false; lock.current = true; return true; }
 
+export function focusPtPaymentPanel(bookingId, documentRef = globalThis.document) {
+  const id = Number(bookingId);
+  if (!Number.isSafeInteger(id) || id < 1 || !documentRef?.getElementById) return false;
+  const panel = documentRef.getElementById(`pt-payment-panel-${id}`);
+  if (!panel) return false;
+  panel.scrollIntoView?.({ behavior: "smooth", block: "center" });
+  panel.focus?.({ preventScroll: true });
+  return true;
+}
+
 export function createPtCounterQueue({ fetchQueue, settle, fetchHistory, confirm, onQueue, onBusy, onOutcome,
   timeoutMs = 15000, setTimer = setTimeout, clearTimer = clearTimeout, initialUncertain = [], onUncertain = () => {}, saveUncertain = () => {} }) {
   let busy = false, page = 0, version = 0, disposed = false;
