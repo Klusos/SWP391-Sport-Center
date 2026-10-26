@@ -311,7 +311,7 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
                                   <span className={"coach-attendance-badge attendance-" + String(currentStatus).toLowerCase()}>{statusLabel(currentStatus)}</span>
                                   <label className="coach-attendance-select-label" htmlFor={"attendance-" + memberId}>Trạng thái cập nhật</label>
                                   <select id={"attendance-" + memberId} value={chosenStatus}
-                                    onChange={(event) => setRowValue(setSelectedStatuses, memberId, event.target.value)}
+                                    onChange={(event) => setRowValue(setSelectedStatuses, rowKey, event.target.value)}
                                     disabled={!roster.markingAllowed || sessionCancelled || savingMemberId !== null}>
                                     {["NOT_MARKED", "PRESENT", "ABSENT", "EXCUSED"].map((status) =>
                                       <option key={status} value={status} disabled={status === "NOT_MARKED"}>{statusLabel(status)}</option>)}

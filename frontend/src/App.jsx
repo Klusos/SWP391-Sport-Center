@@ -23,6 +23,7 @@ import CourseManagement from "./pages/CourseManagement";
 import MemberCourses from "./pages/MemberCourses";
 import MemberMembership from "./pages/MemberMembership";
 import MemberProfile from "./pages/MemberProfile";
+import MemberCourseDetail from "./pages/MemberCourseDetail";
 import Schedule from "./pages/Schedule";
 import PublicLayout from "./public-site/PublicLayout";
 import Admission from "./public-site/pages/Admission";
@@ -54,7 +55,7 @@ export default function App(){
  <Route element={<MemberRoute auth={auth}/>}><Route path="/member/dashboard" element={<Dashboard {...member}/>}/><Route path="/member/attendance" element={<MemberAttendance {...member}/>}/>```
 <Route path="/member/pt-booking" element={<PtBooking {...member} />}/>
 ```
-<Route path="/member/levels-assessments" element={<MemberLevelsAssessments {...member}/>}/><Route path="/member/courses" element={<MemberCourses {...member}/>}/><Route path="/member/membership" element={<MemberMembership {...member}/>}/><Route path="/member/schedule" element={<Schedule {...member}/>}/><Route path="/member/profile" element={<MemberProfile {...member}/>}/></Route>
+<Route path="/member/levels-assessments" element={<MemberLevelsAssessments {...member}/>}/><Route path="/member/courses" element={<MemberCourses {...member}/>}/><Route path="/member/membership" element={<MemberMembership {...member}/>}/><Route path="/member/schedule" element={<Schedule {...member}/>}/><Route path="/member/profile" element={<MemberProfile {...member}/>}/> <Route path="/member/courses/:courseId" element={<MemberCourseDetail {...member} />}/></Route>
  <Route element={<CoachRoute auth={auth}/>}><Route path="/coach/dashboard" element={<Dashboard {...coach}/>}/><Route path="/coach/schedule" element={<Schedule {...coach}/>}/><Route path="/coach/pt-sessions" element={<CoachPtSessions {...coach}/>}/><Route path="/coach/skill-assessments" element={<CoachSkillAssessments {...coach}/>}/><Route path="/coach/attendance" element={<CoachAttendance {...coach}/>}/></Route>
  <Route path="*" element={<Navigate to="/" replace/>}/></Routes>{auth?.accessToken && <NotificationBell token={auth.accessToken} role={auth.role} />}</>
 }
