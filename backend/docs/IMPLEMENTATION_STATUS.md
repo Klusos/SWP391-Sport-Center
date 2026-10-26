@@ -4,13 +4,13 @@
 
 | Area | Change | Verification |
 |---|---|---|
-| Flow 4 training | `TrainingPlan` (goal, description), `TrainingExercise`, `TrainingResult` (score 1–10 per PRESENT member and session), `ProgressEvaluation` (rating 1–5, append-only); `/api/training/**`; Coach page "Giáo án & kết quả" and Member page "Kết quả tập luyện" | `TrainingIntegrationTest` 4 passed; API end-to-end on local SQL Server (plan, exercises, attendance gate 409, session completion, result, evaluation, member view, other-coach 403) |
+| Flow 4 training | `TrainingPlan` (goal, description), `TrainingExercise`, `TrainingResult` (score 1–10 per PRESENT member and session), `ProgressEvaluation` (rating 1–5, append-only); `/api/training/**`; Coach page "Giáo án & kết quả" (also at `/admin/training` as "Quản lý tập luyện"; training writes are locked against double submits) and Member page "Kết quả tập luyện" | `TrainingIntegrationTest` 6 passed (including admin access, 401/403 for anonymous and member writes, 404 for unknown ids, 400 for invalid exercise values); frontend `npm test` covers the API client paths and role routing; API end-to-end on local SQL Server (plan, exercises, attendance gate 409, session completion, result, evaluation, member view, other-coach 403) |
 | `phase10-1-flow4-training.sql` | New additive, idempotent migration | Rehearsed twice on a restored copy, then applied to local `SportCenterDB` |
 | `ClassSessionService` | Facility guidance check used `LocalDateTime.now()` instead of the injected `Clock` | `ClassSessionServiceTest` 31 passed; its tests now use the fixed clock instead of the real date (four tests had started failing on 2026-10-23) |
 
 - Team demo setup: `DEMO_GUIDE.md` (repo root), `backend/.env.example`, and `docs/sql/demo-seed-flow2-4.sql` (additive, date-relative Flow 2–4 demo data guarded by `@ConfirmLocalDemoDatabase`). The seed was first rehearsed with the Phase 9 migrations applied; on this branch it needs only migrations 8-7b, 8-7c and 10-1, and that sequence has not been rehearsed separately.
-- Full backend suite (H2 `phase1`): 261 tests, 0 failures. Frontend: build passed and lint is clean for the Flow 4 files.
-- Not done: browser click-through; no frontend test covers the new pages. Membership upgrade and VNPay for PT bookings are not part of this branch.
+- Full backend suite (H2 `phase1`): 263 tests, 0 failures. Frontend: build passed, `npm test` 5 passed, and lint is clean for the Flow 4 files.
+- Not done: browser click-through; no component test renders the training pages. Membership upgrade and VNPay for PT bookings are not part of this branch.
 
 ## Flow 3: VNPay sandbox gateway (2026-10-19)
 
