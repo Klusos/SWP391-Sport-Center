@@ -22,8 +22,8 @@
 .training-exercises small { color: var(--text-sub, #637083); }
 .training-exercise-form { border-top: 1px dashed var(--border, #dfe6ee); padding-top: 12px; }
 .training-exercise-form h3 { margin: 0; font-size: 14px; }
-.link-button { background: none; border: none; padding: 0; color: #0a61f2; cursor: pointer; font-size: 13px; }
-.link-button.danger { color: #b3261e; }
+.training-link-button { background: none; border: none; padding: 0; color: #0a61f2; cursor: pointer; font-size: 13px; }
+.training-link-button.danger { color: #b3261e; }
 .training-sessions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .training-sessions li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border, #dfe6ee); border-radius: 8px; }
 .training-sessions li.selected { border-color: #0a61f2; background: #f1f6ff; }

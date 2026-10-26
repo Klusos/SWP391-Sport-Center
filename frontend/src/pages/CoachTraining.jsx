@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import {
   addTrainingExerciseApi,
@@ -27,6 +27,12 @@ const numberOrNull = (value) => value === "" || value == null ? null : Number(va
 const errorText = (error, fallback) => error?.status === 403
   ? "Bạn không có quyền thao tác trên lớp này."
   : error?.message || fallback;
+// busy state only disables buttons after the next render; the ref blocks a fast double click immediately.
+const acquire = (lock) => {
+  if (lock.current) return false;
+  lock.current = true;
+  return true;
+};
 
 export default function CoachTraining({ token, role, onLogout, onNavigate }) {
   const [classes, setClasses] = useState([]);
@@ -60,7 +66,7 @@ export default function CoachTraining({ token, role, onLogout, onNavigate }) {
   const fail = (requestError, fallback) => { setNotice(""); setError(errorText(requestError, fallback)); };
 
   return <div className="layout">
-    <Sidebar role={role} activePage="coach-training" onLogout={onLogout} onNavigate={onNavigate} />
+    <Sidebar role={role} activePage={role === "ADMIN" ? "admin-training" : "coach-training"} onLogout={onLogout} onNavigate={onNavigate} />
     <main className="main training-page">
       <header className="training-header">
         <div>
@@ -69,7 +75,7 @@ export default function CoachTraining({ token, role, onLogout, onNavigate }) {
         </div>
         <label className="training-class-picker">Lớp
           <select value={classId} onChange={(event) => { setClassId(event.target.value); setNotice(""); setError(""); }} disabled={loading || !classes.length}>
-            {!classes.length && <option value="">Chưa có lớp được giao</option>}
+            {!classes.length && <option value="">{role === "ADMIN" ? "Chưa có lớp" : "Chưa có lớp được giao"}</option>}
             {classes.map((item) => <option key={item.classId} value={item.classId}>
               {item.className} · {item.courseName}
             </option>)}
@@ -79,7 +85,7 @@ export default function CoachTraining({ token, role, onLogout, onNavigate }) {
       {error && <div className="banner error" role="alert">{error}</div>}
       {notice && <div className="banner success" role="status">{notice}</div>}
 
-      {loading ? <p role="status">Đang tải…</p> : !selected ? <p className="dash-empty">Bạn chưa được giao lớp nào.</p> : <>
+      {loading ? <p role="status">Đang tải…</p> : !selected ? <p className="dash-empty">{role === "ADMIN" ? "Chưa có lớp nào." : "Bạn chưa được giao lớp nào."}</p> : <>
         <section className="training-summary">
           <span><b>{selected.sportName}</b> · {selected.courseOfferingName}</span>
           <span>{selected.confirmedMembers} học viên</span>
@@ -104,6 +110,7 @@ function PlanTab({ token, classId, onSaved, flash, fail }) {
   const [exercise, setExercise] = useState(EMPTY_EXERCISE);
   const [editingId, setEditingId] = useState(null);
   const [busy, setBusy] = useState(false);
+  const actionLock = useRef(false);
   const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
@@ -128,6 +135,7 @@ function PlanTab({ token, classId, onSaved, flash, fail }) {
 
   async function savePlan(event) {
     event.preventDefault();
+    if (!acquire(actionLock)) return;
     setBusy(true);
     try {
       const saved = await saveTrainingPlanApi(token, classId, { goal: form.goal, description: form.description || null });
@@ -135,11 +143,12 @@ function PlanTab({ token, classId, onSaved, flash, fail }) {
       flash(plan ? "Đã cập nhật giáo án." : "Đã tạo giáo án. Bạn có thể thêm bài tập.");
       onSaved();
     } catch (requestError) { fail(requestError, "Không lưu được giáo án."); }
-    finally { setBusy(false); }
+    finally { actionLock.current = false; setBusy(false); }
   }
 
   async function saveExercise(event) {
     event.preventDefault();
+    if (!acquire(actionLock)) return;
     setBusy(true);
     const payload = {
       name: exercise.name,
@@ -157,18 +166,19 @@ function PlanTab({ token, classId, onSaved, flash, fail }) {
       setEditingId(null);
       await load();
     } catch (requestError) { fail(requestError, "Không lưu được bài tập."); }
-    finally { setBusy(false); }
+    finally { actionLock.current = false; setBusy(false); }
   }
 
   async function removeExercise(item) {
     if (!window.confirm(`Xóa bài tập “${item.name}”?`)) return;
+    if (!acquire(actionLock)) return;
     setBusy(true);
     try {
       await deleteTrainingExerciseApi(token, item.id);
       flash("Đã xóa bài tập.");
       await load();
     } catch (requestError) { fail(requestError, "Không xóa được bài tập."); }
-    finally { setBusy(false); }
+    finally { actionLock.current = false; setBusy(false); }
   }
 
   function edit(item) {
@@ -208,8 +218,8 @@ function PlanTab({ token, classId, onSaved, flash, fail }) {
               {item.notes && <small>{item.notes}</small>}
             </div>
             <span>
-              <button type="button" className="link-button" disabled={busy} onClick={() => edit(item)}>Sửa</button>
-              <button type="button" className="link-button danger" disabled={busy} onClick={() => void removeExercise(item)}>Xóa</button>
+              <button type="button" className="training-link-button" disabled={busy} onClick={() => edit(item)}>Sửa</button>
+              <button type="button" className="training-link-button danger" disabled={busy} onClick={() => void removeExercise(item)}>Xóa</button>
             </span>
           </li>)}</ol>}
         <form className="training-form training-exercise-form" onSubmit={saveExercise}>
@@ -236,6 +246,7 @@ function SessionsTab({ token, classId, onChanged, flash, fail }) {
   const [sheet, setSheet] = useState(null);
   const [drafts, setDrafts] = useState({});
   const [busy, setBusy] = useState(false);
+  const actionLock = useRef(false);
 
   const loadSessions = useCallback(async () => {
     try { setSessions(await getTrainingSessionsApi(token, classId)); }
@@ -259,6 +270,7 @@ function SessionsTab({ token, classId, onChanged, flash, fail }) {
 
   async function complete(session) {
     if (!window.confirm("Xác nhận buổi học đã được tiến hành xong?")) return;
+    if (!acquire(actionLock)) return;
     setBusy(true);
     try {
       await completeTrainingSessionApi(token, session.sessionId);
@@ -266,11 +278,12 @@ function SessionsTab({ token, classId, onChanged, flash, fail }) {
       await loadSessions();
       onChanged();
     } catch (requestError) { fail(requestError, "Không hoàn thành được buổi học."); }
-    finally { setBusy(false); }
+    finally { actionLock.current = false; setBusy(false); }
   }
 
   async function saveResult(row) {
     const draft = drafts[row.memberId] || {};
+    if (!acquire(actionLock)) return;
     setBusy(true);
     try {
       await recordTrainingResultApi(token, sheet.sessionId, row.memberId, { score: Number(draft.score), notes: draft.notes || null });
@@ -278,7 +291,7 @@ function SessionsTab({ token, classId, onChanged, flash, fail }) {
       await openSheet(sheet.sessionId);
       await loadSessions();
     } catch (requestError) { fail(requestError, "Không lưu được kết quả."); }
-    finally { setBusy(false); }
+    finally { actionLock.current = false; setBusy(false); }
   }
 
   if (!sessions) return <p role="status">Đang tải buổi học…</p>;
@@ -332,6 +345,7 @@ function ProgressTab({ token, classId, flash, fail }) {
   const [rows, setRows] = useState(null);
   const [drafts, setDrafts] = useState({});
   const [busy, setBusy] = useState(false);
+  const actionLock = useRef(false);
 
   const load = useCallback(async () => {
     try { setRows(await getTrainingProgressApi(token, classId)); }
@@ -347,6 +361,7 @@ function ProgressTab({ token, classId, flash, fail }) {
 
   async function evaluate(row) {
     const draft = drafts[row.memberId] || {};
+    if (!acquire(actionLock)) return;
     setBusy(true);
     try {
       await evaluateProgressApi(token, classId, row.memberId, { rating: Number(draft.rating), comment: draft.comment });
@@ -354,7 +369,7 @@ function ProgressTab({ token, classId, flash, fail }) {
       setDrafts({ ...drafts, [row.memberId]: { rating: "", comment: "" } });
       await load();
     } catch (requestError) { fail(requestError, "Không lưu được đánh giá."); }
-    finally { setBusy(false); }
+    finally { actionLock.current = false; setBusy(false); }
   }
 
   if (!rows) return <p role="status">Đang tải tiến độ…</p>;
