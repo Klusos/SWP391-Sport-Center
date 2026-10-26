@@ -18,6 +18,7 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
     ["member-membership", "Gói thành viên"],
     ["member-schedule", "Lịch trình"],
     ["member-levels", "Trình độ & đánh giá"],
+    ["member-training", "K\u1ebft qu\u1ea3 t\u1eadp luy\u1ec7n"],
     ["member-attendance", "Lịch sử điểm danh"],
     ["member-pt-booking", "Đặt buổi huấn luyện"],
     ["support-tickets", "Hỗ trợ"],
@@ -28,6 +29,7 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
     ["coach-schedule", "Lịch trình"],
     ["coach-pt-sessions", "Buổi huấn luyện cá nhân"],
     ["coach-assessments", "Đánh giá kỹ năng"],
+    ["coach-training", "Gi\u00e1o \u00e1n & k\u1ebft qu\u1ea3"],
     ["coach-attendance", "Điểm danh"],
   ];
   const receptionistLinks = [
@@ -52,6 +54,7 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
     ["courses", "Quản lý khóa học"],
     ["facilities", "Quản lý cơ sở vật chất"],
     ["notification-broadcast", "Gửi thông báo"],
+    ["admin-training", "Qu\u1ea3n l\u00fd t\u1eadp luy\u1ec7n"],
     ["audit-logs", "Audit Logs"],
     ["register", "Đăng ký thành viên"],
     ["consultations", "Yêu cầu tư vấn"],

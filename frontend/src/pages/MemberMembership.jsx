@@ -9,6 +9,7 @@ import {
   getPublicMembershipPlansApi,
 } from "../api";
 import { validVnpayUrl } from "../courseCheckout";
+import { isMembershipEffective } from "../membershipDates";
 import "./Portal.css";
 import "./MemberMembership.css";
 
@@ -128,7 +129,7 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
     }
   }
 
-  const currentMemberships = (memberships || []).filter((membership) => membership?.status === "ACTIVE");
+  const currentMemberships = (memberships || []).filter(isMembershipEffective);
 
   return <div className="layout">
     <Sidebar role={role} activePage="member-membership" onLogout={onLogout} onNavigate={onNavigate} />

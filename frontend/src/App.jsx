@@ -38,6 +38,8 @@ import CourseCheckout from "./pages/CourseCheckout";
 import SupportTickets from "./pages/SupportTickets";
 import MemberCourses from "./pages/MemberCourses";
 import MemberMembership from "./pages/MemberMembership";
+import CoachTraining from "./pages/CoachTraining";
+import MemberTraining from "./pages/MemberTraining";
 import MemberProfile from "./pages/MemberProfile";
 import Schedule from "./pages/Schedule";
 import Layout from "./components/Layout";
@@ -253,6 +255,7 @@ export default function App() {
           "admin-courses": "/admin/courses",
           "notification-broadcast": "/admin/notifications/broadcast",
           "audit-logs": "/admin/audit-logs",
+          "admin-training": "/admin/training",
           "membership-plans": "/staff/membership-plans",
           "membership-sales": "/receptionist/membership-sales",
           "course-payments": "/receptionist/course-payments",
@@ -278,6 +281,7 @@ export default function App() {
           "coach-pt-sessions": "/coach/pt-sessions",
           "coach-assessments": "/coach/skill-assessments",
           "coach-attendance": "/coach/attendance",
+          "coach-training": "/coach/training",
         }[page] || "/coach/dashboard"
       ),
   };
@@ -295,6 +299,7 @@ export default function App() {
           "member-schedule": "/member/schedule",
           "member-profile": "/member/profile",
           "member-levels": "/member/levels-assessments",
+          "member-training": "/member/training",
           "member-attendance": "/member/attendance",
           "member-pt-booking": "/member/pt-booking",
           "support-tickets": "/member/support-tickets",
@@ -448,6 +453,8 @@ export default function App() {
               element={<AdminAuditLogs {...staff} />}
             />
 
+            <Route path="/admin/training" element={<CoachTraining {...staff} />} />
+
             {/* Các trang mới của Admin — bọc trong Layout (sidebar + .app-shell) */}
             <Route element={<Layout {...staff} />}>
               <Route
@@ -517,6 +524,8 @@ export default function App() {
             path="/member/levels-assessments"
             element={<MemberLevelsAssessments {...member} />}
           />
+
+          <Route path="/member/training" element={<MemberTraining {...member} />} />
 
           <Route
             path="/member/courses"
@@ -595,6 +604,8 @@ export default function App() {
             path="/coach/attendance"
             element={<CoachAttendance {...coach} />}
           />
+
+          <Route path="/coach/training" element={<CoachTraining {...coach} />} />
         </Route>
 
         {/* Trang không tồn tại */}
