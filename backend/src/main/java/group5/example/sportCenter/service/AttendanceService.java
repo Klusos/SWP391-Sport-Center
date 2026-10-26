@@ -3,8 +3,10 @@ package group5.example.sportCenter.service;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -97,7 +99,7 @@ public class AttendanceService {
 
         return new AttendanceRosterResponse(session.getId(), session.getCourseClass().getId(),
                 session.getCourseClass().getName(), session.getStartTime(), session.getEndTime(), session.getStatus(),
-                !isCancelled(session) && !LocalDateTime.now(clock).isBefore(session.getStartTime()), members);
+                canMarkAttendanceToday(session), members);
     }
 
     @Transactional
@@ -127,12 +129,15 @@ public class AttendanceService {
             created = attendanceRepository.saveAndFlush(created);
             appendHistory(created, null, request.status(), actor, now, null);
             auditLogs.record("MARK", "ATTENDANCE", created.getId(), "Attendance marked as " + created.getStatus().name() + ".");
+
+            completeSessionIfAllMembersMarked(session);
             return attendanceResponse(created);
         }
 
         // Repeating the same status is idempotent: return the stored row unchanged and
         // do not alter its latest marker, note, or history.
         if (existing.getStatus() == request.status()) {
+            completeSessionIfAllMembersMarked(session);
             return attendanceResponse(existing);
         }
 
@@ -152,6 +157,8 @@ public class AttendanceService {
         appendHistory(saved, previous, request.status(), actor, now, reason);
         auditLogs.record("CORRECT", "ATTENDANCE", saved.getId(), "Attendance corrected from "
                 + previous.name() + " to " + saved.getStatus().name() + ".");
+
+        completeSessionIfAllMembersMarked(session);
         return attendanceResponse(saved);
     }
 
@@ -175,9 +182,63 @@ public class AttendanceService {
         if (isCancelled(session)) {
             throw error(HttpStatus.CONFLICT, "Attendance cannot be marked for a CANCELLED ClassSession");
         }
-        if (LocalDateTime.now(clock).isBefore(session.getStartTime())) {
+
+        LocalDateTime now = LocalDateTime.now(clock);
+
+        if (now.isBefore(session.getStartTime())) {
             throw error(HttpStatus.CONFLICT, "Attendance can be marked only at or after the ClassSession start time");
         }
+
+        if (!now.toLocalDate().equals(session.getStartTime().toLocalDate())) {
+            throw error(HttpStatus.CONFLICT,
+                    "Attendance can only be marked or corrected on the ClassSession date");
+        }
+    }
+
+    private boolean canMarkAttendanceToday(ClassSession session) {
+        if (isCancelled(session)) {
+            return false;
+        }
+
+        LocalDateTime now = LocalDateTime.now(clock);
+
+        return !now.isBefore(session.getStartTime())
+                && now.toLocalDate().equals(session.getStartTime().toLocalDate());
+    }
+
+    private void completeSessionIfAllMembersMarked(ClassSession session) {
+        if (session == null || isCancelled(session) || "COMPLETED".equalsIgnoreCase(session.getStatus())) {
+            return;
+        }
+
+        var confirmedRegistrations = registrationRepository.findByCourseClassIdAndStatus(
+                session.getCourseClass().getId(),
+                CourseRegistrationStatus.CONFIRMED);
+
+        if (confirmedRegistrations.isEmpty()) {
+            return;
+        }
+
+        Set<Integer> markedMemberIds = new HashSet<>();
+
+        attendanceRepository.findByClassSessionId(session.getId())
+                .forEach(attendance -> markedMemberIds.add(attendance.getMember().getId()));
+
+        boolean allMembersMarked = confirmedRegistrations.stream()
+                .allMatch(registration -> markedMemberIds.contains(registration.getMember().getId()));
+
+        if (!allMembersMarked) {
+            return;
+        }
+
+        session.setStatus("COMPLETED");
+        classSessionRepository.saveAndFlush(session);
+
+        auditLogs.record(
+                "COMPLETE",
+                "CLASS_SESSION",
+                session.getId(),
+                "ClassSession automatically completed because attendance was marked for all confirmed members.");
     }
 
     private boolean isCancelled(ClassSession session) {
