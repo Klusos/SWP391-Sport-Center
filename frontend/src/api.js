@@ -447,6 +447,12 @@ export function getPendingMembershipPaymentsApi(token, page = 0, size = 20) {
   });
 }
 
+export function getPendingPtPaymentsApi(token, page = 0, size = 20) {
+  return request(`/api/payments/pending-pt?page=${page}&size=${size}`, {
+    headers: authenticatedHeaders(token),
+  });
+}
+
 export function getMyPaymentsApi(token) {
   return request("/api/payments/me", { headers: authenticatedHeaders(token) });
 }

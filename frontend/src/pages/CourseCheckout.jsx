@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
-import { createPaymentApi, getCurrentUserApi, getMembershipsByMemberApi, getMyPaymentsApi, getMyRegistrationsApi, cancelPaymentApi } from "../api";
+import { createPaymentApi, getCurrentUserApi, getMembershipsByMemberApi, getMyPaymentsApi, getMyPtBookingsApi, getMyRegistrationsApi, cancelPaymentApi } from "../api";
 import { acquireAction, canCheckout, checkoutAccess, paymentMessage, pendingCounter, positiveId, prepareCheckout, registrationMessage, registrationPayments, shouldPoll, startStatusPolling, validVnpayUrl, vietnamDate } from "../courseCheckout";
+import { findOwnedPayment, findOwnedPtBooking, ptPaymentReturnMessage } from "../paymentReturn";
 import "./CourseCheckout.css";
 
 const money = (value) => Number(value).toLocaleString("vi-VN", { style: "currency", currency: "VND" });
@@ -40,17 +41,21 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
   const read = useCallback(async () => {
     if (result && paymentId) {
       const payments = array(await getMyPaymentsApi(token));
-      const returnedPayment = payments.find((item) => item.id === paymentId);
+      const returnedPayment = findOwnedPayment(payments, paymentId);
       if (returnedPayment?.purpose === "MEMBERSHIP") {
         const user = await getCurrentUserApi(token);
         const memberships = array(await getMembershipsByMemberApi(token, user.id));
-        return { payments, registrations: [], memberships };
+        return { payments, registrations: [], memberships, ptBookings: [] };
+      }
+      if (returnedPayment?.purpose === "PT_BOOKING") {
+        const ptBookings = array(await getMyPtBookingsApi(token));
+        return { payments, registrations: [], memberships: [], ptBookings };
       }
       const registrations = array(await getMyRegistrationsApi(token));
-      return { payments, registrations, memberships: [] };
+      return { payments, registrations, memberships: [], ptBookings: [] };
     }
     const [payments, registrations] = await Promise.all([getMyPaymentsApi(token), getMyRegistrationsApi(token)]);
-    return { payments: array(payments), registrations: array(registrations), memberships: [] };
+    return { payments: array(payments), registrations: array(registrations), memberships: [], ptBookings: [] };
   }, [token, result, paymentId]);
 
   useEffect(() => {
@@ -70,7 +75,8 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
         const registration = next.registrations.find((item) => item.id === (positiveId(registrationId) || (payment?.purpose === "COURSE_REGISTRATION" ? payment.referenceId : null)));
         return shouldPoll(registration, registrationPayments(next.payments, registration?.id))
           || (result && paymentId && !payment)
-          || (result && payment?.purpose === "MEMBERSHIP" && payment.status === "PENDING");
+          || (result && payment?.purpose === "MEMBERSHIP" && payment.status === "PENDING")
+          || (result && payment?.purpose === "PT_BOOKING" && payment.status === "PENDING");
       }) : () => {};
     return () => { alive.current = false; stop(); };
   }, [read, token, auth?.role, paymentId, registrationId, result, refreshVersion]);
@@ -79,6 +85,7 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
   if (checkoutAccess(auth) !== "MEMBER") return <Navigate to="/" replace />;
 
   const targetPayment = data?.payments.find((payment) => payment.id === paymentId);
+  const targetPtBooking = findOwnedPtBooking(data?.ptBookings, targetPayment);
   // A return query must resolve through authenticated ownership; never fall back to a guessed registration.
   const id = result ? (targetPayment?.purpose === "COURSE_REGISTRATION" ? targetPayment.referenceId : null) : positiveId(registrationId);
   const registration = data?.registrations.find((item) => item.id === id);
@@ -145,13 +152,25 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
         {result && paymentId && !targetPayment && <p role="alert">Không tìm thấy thanh toán trong tài khoản hiện tại. Kiểm tra tài khoản và mã thanh toán.</p>}
         {result && targetPayment && targetPayment.purpose !== "COURSE_REGISTRATION" && <section>
           <h2>Thanh toán #{targetPayment.id}</h2>
-          <p>{paymentMessage(targetPayment)}</p>
+          {targetPayment.purpose !== "PT_BOOKING" && <p>{paymentMessage(targetPayment)}</p>}
           {targetPayment.purpose === "MEMBERSHIP" && <>
             <p role="status">{targetPayment.status === "PENDING" ? "Đang chờ VNPay hoặc máy chủ xác minh. Gói hội viên chưa được kích hoạt." : targetPayment.status === "REFUND_REQUIRED" ? "Khoản thanh toán cần nhân viên đối soát hoặc xử lý hoàn tiền. Gói chưa được suy đoán là đã kích hoạt." : targetPayment.status === "CANCELLED" ? "Thanh toán đã hủy; không kích hoạt gói từ giao dịch này." : "Trạng thái thanh toán do máy chủ xác nhận. Trạng thái gói bên dưới được tải riêng từ tài khoản của bạn."}</p>
             <h3>Trạng thái gói hội viên</h3>
             {!data?.memberships ? <p role="status">Đang tải trạng thái gói…</p> : data.memberships.length === 0
               ? <p>Chưa có gói hội viên trong tài khoản.</p>
               : <ul>{data.memberships.map((membership) => <li key={membership.id}>{membership.planName} · {membership.status} · {membership.startDate} → {membership.endDate}</li>)}</ul>}
+          </>}
+          {targetPayment.purpose === "PT_BOOKING" && <>
+            <p role={targetPayment.status === "REFUND_REQUIRED" ? "alert" : "status"}>{ptPaymentReturnMessage(targetPayment)}</p>
+            <h3>PT Booking status</h3>
+            {!data?.ptBookings ? <p role="status">Loading your PT booking status…</p> : !targetPtBooking
+              ? <p role="alert">This payment belongs to your account, but the referenced PT booking was not found in your booking history. Contact Receptionist; no status is inferred from URL parameters.</p>
+              : <dl><dt>Booking</dt><dd>#{targetPtBooking.id}</dd><dt>Status</dt><dd>{targetPtBooking.status}</dd>
+                <dt>Sport / Coach</dt><dd>{targetPtBooking.sportName} · {targetPtBooking.coachName}</dd>
+                <dt>Appointment</dt><dd>{deadline(targetPtBooking.startTime)} – {deadline(targetPtBooking.endTime)} (Vietnam time)</dd>
+                <dt>Payment hold deadline</dt><dd>{deadline(targetPtBooking.paymentExpiresAt)}</dd></dl>}
+            {targetPayment.status === "PENDING" && <p role="status">Settlement can arrive later. Use Refresh status below; no new payment is created by this page.</p>}
+            <Link to="/member/pt-booking">Open PT bookings and refresh payment history</Link>
           </>}
           <Link to="/member/membership">Xem gói hội viên và lịch sử thanh toán</Link><Link to="/member/pt-booking">Xem lịch PT</Link>
         </section>}

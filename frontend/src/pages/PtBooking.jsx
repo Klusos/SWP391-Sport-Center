@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
-import { createPtBookingApi, getMyPtBookingsApi, getPublicSportsApi, getPtEligibleCoachesApi } from "../api";
+import { cancelPaymentApi, createPaymentApi, createPtBookingApi, getMyPaymentsApi, getMyPtBookingsApi, getPublicSportsApi, getPtEligibleCoachesApi } from "../api";
+import { acquirePtPaymentAction, bookingPayments, pendingPtPayment, ptPaymentExpired, ptPaymentMoney, ptOnlineUrlIsTrusted, ptPaymentPayload, ptCancellationWarning } from "../ptPaymentFlow";
 import "./PtBooking.css";
 
 const rows = (value) => Array.isArray(value) ? value : value?.content ?? [];
 const money = (value) => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(value ?? 0);
+const currentTimestamp = () => Date.now();
 function vietnamTime(value, date = false) {
   if (!value) return "Time unavailable";
   const local = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(value);
@@ -18,10 +20,60 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
   const [sports, setSports] = useState([]), [sportId, setSportId] = useState("");
   const [startTime, setStartTime] = useState(""), [coaches, setCoaches] = useState([]);
   const [history, setHistory] = useState([]), [selectedCoach, setSelectedCoach] = useState("");
+  const [payments, setPayments] = useState([]), [paymentBusyId, setPaymentBusyId] = useState(null);
+  const [paymentError, setPaymentError] = useState("");
+  const [now, setNow] = useState(0);
   const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false);
   const [error, setError] = useState(""), [notice, setNotice] = useState("");
   const action = useRef(false);
   const lifecycle = useRef(0);
+  const paymentAction = useRef(false);
+
+  async function refreshAuthoritative() {
+    const [bookings, paymentRows] = await Promise.all([getMyPtBookingsApi(token), getMyPaymentsApi(token)]);
+    setHistory(rows(bookings)); setPayments(rows(paymentRows));
+  }
+
+  async function startPayment(booking, method) {
+    if (paymentBusyId !== null || !acquirePtPaymentAction(paymentAction)) return;
+    if (booking.status !== "PENDING_PAYMENT" || ptPaymentExpired(booking, currentTimestamp())) {
+      setPaymentError("This PT booking payment hold has expired. Refresh booking status before continuing."); paymentAction.current = false; return;
+    }
+    if (pendingPtPayment(payments, booking.id)) {
+      setPaymentError("A pending payment already exists for this booking. Cancel it or wait for settlement before switching methods.");
+      try { await refreshAuthoritative(); } catch { /* Keep the current payment state visible. */ }
+      paymentAction.current = false;
+      return;
+    }
+    setPaymentBusyId(booking.id); setPaymentError("");
+    try {
+      const payment = await createPaymentApi(token, ptPaymentPayload(booking.id, method));
+      setPayments((previous) => [payment, ...previous.filter((item) => item.id !== payment.id)]);
+      if (method === "ONLINE" && (!payment?.paymentUrl || !ptOnlineUrlIsTrusted(payment.paymentUrl))) {
+        try { await refreshAuthoritative(); } catch { /* Preserve the created response in UI state. */ }
+        setPaymentError("Online payment was created, but its URL is missing or not a trusted VNPay Sandbox URL. The payment remains visible; do not create another payment."); return;
+      }
+      try { await refreshAuthoritative(); }
+      catch { setPaymentError("Payment was created, but booking/payment history could not refresh. Check status before any further action."); }
+      if (method === "ONLINE") window.location.assign(payment.paymentUrl);
+    } catch (requestError) {
+      setPaymentError(requestError.status === 409
+        ? "A payment already exists or the booking is no longer payable. Booking and payment history were refreshed."
+        : `Payment outcome is uncertain: ${requestError.message || "network error"}. Check refreshed history before trying again.`);
+      try { await refreshAuthoritative(); } catch { /* Preserve the uncertainty warning. */ }
+    } finally { paymentAction.current = false; setPaymentBusyId(null); }
+  }
+
+  async function cancelPendingPayment(payment) {
+    if (paymentBusyId !== null || payment.status !== "PENDING" || !acquirePtPaymentAction(paymentAction)) return;
+    if (!window.confirm(ptCancellationWarning(payment))) { paymentAction.current = false; return; }
+    setPaymentBusyId(payment.id); setPaymentError("");
+    try { await cancelPaymentApi(token, payment.id); await refreshAuthoritative(); }
+    catch (requestError) {
+      setPaymentError(`Cancellation outcome is uncertain: ${requestError.message || "network error"}. Refresh history; do not create another payment until status is confirmed.`);
+      try { await refreshAuthoritative(); } catch { /* Preserve uncertainty warning. */ }
+    } finally { paymentAction.current = false; setPaymentBusyId(null); }
+  }
 
   useEffect(() => {
     const version = ++lifecycle.current;
@@ -30,13 +82,19 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
       if (!active) return;
       setLoading(true); setError("");
       try {
-        const [items, bookings] = await Promise.all([getPublicSportsApi(), getMyPtBookingsApi(token)]);
-        if (active && lifecycle.current === version) { setSports(rows(items)); setHistory(rows(bookings)); }
+        const [items, bookings, paymentRows] = await Promise.all([getPublicSportsApi(), getMyPtBookingsApi(token), getMyPaymentsApi(token)]);
+        if (active && lifecycle.current === version) { setSports(rows(items)); setHistory(rows(bookings)); setPayments(rows(paymentRows)); }
       } catch (requestError) { if (active) setError(requestError.message || "Could not load booking data."); }
       finally { if (active) setLoading(false); }
     });
     return () => { active = false; lifecycle.current += 1; };
   }, [token]);
+
+  useEffect(() => {
+    const immediate = window.setTimeout(() => setNow(Date.now()), 0);
+    const timer = window.setInterval(() => setNow(Date.now()), 15000);
+    return () => { window.clearTimeout(immediate); window.clearInterval(timer); };
+  }, []);
 
   function changeCriteria(setter, value) {
     setter(value); setCoaches([]); setSelectedCoach(""); setNotice("");
@@ -69,13 +127,12 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
     try {
       const result = await createPtBookingApi(token, { coachId: choice.coachId, sportId: Number(sportId), startTime });
       if (lifecycle.current !== version) return;
-      setNotice("Your 90-minute session is held until " + vietnamTime(result.paymentExpiresAt, true) + " (Vietnam time). Complete payment within 15 minutes; this is not payment confirmation.");
+      setNotice(`Booking #${result.id} is ${result.status}. Your 90-minute session is held until ${vietnamTime(result.paymentExpiresAt, true)} (Vietnam time). Complete payment within 15 minutes; this is not payment confirmation.`);
       setCoaches([]); setSelectedCoach("");
       // Keep the created pending booking visible even if the history read fails.
       setHistory((previous) => [result, ...previous.filter((booking) => booking.id !== result.id)]);
       try {
-        const bookings = await getMyPtBookingsApi(token);
-        if (lifecycle.current === version) setHistory(rows(bookings));
+        await refreshAuthoritative();
       } catch (requestError) { if (lifecycle.current === version) setError("Booking #" + result.id + " was created, but history could not be refreshed: " + requestError.message); }
     } catch (requestError) { if (lifecycle.current === version) setError(requestError.message || "Booking failed."); }
     finally { action.current = false; if (lifecycle.current === version) setBusy(false); }
@@ -125,6 +182,8 @@ onLogout={onLogout}
           {notice}
         </p>
       )}
+
+      {paymentError && <p className="pt-alert pt-error" role="alert">{paymentError}</p>}
 
       <section className="pt-card">
         <div className="pt-section-heading">
@@ -294,6 +353,7 @@ onLogout={onLogout}
             <p>
               Review your previous and upcoming PT sessions.
             </p>
+            <button type="button" className="pt-secondary-button" disabled={paymentBusyId !== null} onClick={() => void refreshAuthoritative().catch((requestError) => setPaymentError("Could not refresh booking and payment history: " + requestError.message))}>Refresh booking and payment status</button>
           </div>
         </div>
 
@@ -361,6 +421,31 @@ onLogout={onLogout}
                       ? "Payment pending"
                       : booking.status}
                   </span>
+                  {booking.paymentExpiresAt && <small>Payment hold deadline: {vietnamTime(booking.paymentExpiresAt, true)} (Vietnam time)</small>}
+                  {(() => {
+                    const related = bookingPayments(payments, booking.id);
+                    const pending = pendingPtPayment(payments, booking.id);
+                    const expired = ptPaymentExpired(booking, now);
+                    return <div className="pt-payment-actions">
+                      {related.map((payment) => <div className="pt-payment-state" key={payment.id}>
+                        <strong>{payment.method} payment #{payment.id}: {payment.status}</strong>
+                        <span>{ptPaymentMoney(payment.amount)}</span>
+                        {payment.status === "PENDING" && <>
+                          <small>{payment.method === "COUNTER" ? "Pay at Receptionist. The booking is confirmed only after staff records settlement." : "Awaiting VNPay settlement. Browser return alone does not confirm payment."}</small>
+                          <button type="button" className="pt-secondary-button" disabled={paymentBusyId !== null} onClick={() => void cancelPendingPayment(payment)}>Cancel pending payment</button>
+                        </>}
+                      </div>)}
+                      {booking.status === "PENDING_PAYMENT" && (expired
+                        ? <p role="status">Payment hold expired. Refresh booking and payment history; no new payment can be started for this hold.</p>
+                        : pending
+                          ? <p role="status">A pending {pending.method} payment already exists. Cancel it or wait for settlement before switching methods.</p>
+                          : <div className="pt-payment-choice">
+                            <p>Choose one payment method. Booking confirmation comes only from the backend.</p>
+                            <button type="button" disabled={paymentBusyId !== null} onClick={() => void startPayment(booking, "ONLINE")}>{paymentBusyId === booking.id ? "Processing..." : "Pay online with VNPay Sandbox"}</button>
+                            <button type="button" disabled={paymentBusyId !== null} onClick={() => void startPayment(booking, "COUNTER")}>Pay at Receptionist</button>
+                          </div>)}
+                    </div>;
+                  })()}
                 </div>
               </article>
             ))}

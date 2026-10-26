@@ -38,6 +38,7 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
     ["membership-sales", "Bán gói hội viên"],
     ["course-registration", "Đăng ký khóa học tại quầy"],
     ["course-payments", "Thanh toán khóa học"],
+    ["pt-payments", "Thanh toán PT"],
     ["support-tickets", "Yêu cầu hỗ trợ"],
     ["consultations", "Yêu cầu tư vấn"],
   ];
@@ -46,6 +47,7 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
     ["members", "Thành viên"],
     ["membership-plans", "Gói hội viên"],
     ["course-payments", "Thanh toán khóa học"],
+    ["pt-payments", "Thanh toán PT"],
     ["course-registration", "Đăng ký khóa học tại quầy"],
     ["support-tickets", "Yêu cầu hỗ trợ"],
     ["attendance", "Điểm danh lớp học"],

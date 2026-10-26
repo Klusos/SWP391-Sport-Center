@@ -22,6 +22,7 @@ import FacilityManagement from "./pages/FacilityManagement";
 import MembershipPlans from "./pages/MembershipPlans";
 import ReceptionistMembershipSales from "./pages/ReceptionistMembershipSales";
 import ReceptionistCoursePayments from "./pages/ReceptionistCoursePayments";
+import ReceptionistPtPayments from "./pages/ReceptionistPtPayments";
 import ReceptionistCourseRegistration from "./pages/ReceptionistCourseRegistration";
 import PtBooking from "./pages/PtBooking";
 import CoachPtSessions from "./pages/CoachPtSessions";
@@ -259,6 +260,7 @@ export default function App() {
           "membership-plans": "/staff/membership-plans",
           "membership-sales": "/receptionist/membership-sales",
           "course-payments": "/receptionist/course-payments",
+          "pt-payments": "/receptionist/pt-payments",
           "course-registration": "/receptionist/course-registration",
           "support-tickets": "/staff/support-tickets",
           attendance: "/admin/attendance",
@@ -407,6 +409,7 @@ export default function App() {
           </Route>
 
           <Route path="/receptionist/course-payments" element={<ReceptionistCoursePayments {...staff} userId={auth?.userId} />} />
+          <Route path="/receptionist/pt-payments" element={<ReceptionistPtPayments {...staff} userId={auth?.userId} />} />
           <Route path="/receptionist/course-registration" element={<ReceptionistCourseRegistration {...staff} />} />
 
           {/* Chỉ Admin */}

@@ -1,0 +1,16 @@
+.pt-payment-queue header { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; }
+.pt-payment-queue button { padding:10px 14px; border:1px solid #1769a0; border-radius:8px; background:#1769a0; color:#fff; cursor:pointer; }
+.pt-payment-queue button:disabled { opacity:.55; cursor:default; }
+.pt-payment-queue button:focus-visible { outline:3px solid #dfaa23; outline-offset:3px; }
+.pt-queue-table { overflow-x:auto; margin:20px 0; background:#fff; border:1px solid #d4dfeb; border-radius:12px; }
+.pt-queue-table table { width:100%; min-width:1050px; border-collapse:collapse; }
+.pt-queue-table caption { padding:12px; text-align:left; }
+.pt-queue-table th,.pt-queue-table td { padding:14px; text-align:left; vertical-align:top; border-bottom:1px solid #e0e8f0; }
+.pt-queue-table th { background:#eff5fb; }
+.pt-queue-table small { display:block; margin-top:6px; }
+.pt-queue-pagination { display:flex; flex-wrap:wrap; gap:14px; align-items:center; }
+.pt-queue-outcome,.pt-queue-review { padding:16px; border:1px solid #b9cadd; border-radius:10px; margin:16px 0; overflow-wrap:anywhere; }
+.pt-queue-outcome.success { background:#e7f5ec; color:#185b36; }
+.pt-queue-outcome.warning,.pt-queue-review { background:#fff5dc; color:#664c12; }
+.pt-queue-review>div { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:12px 0; }
+@media(max-width:700px) { .pt-payment-queue header { flex-direction:column; } .pt-queue-table th,.pt-queue-table td { padding:10px; } }
