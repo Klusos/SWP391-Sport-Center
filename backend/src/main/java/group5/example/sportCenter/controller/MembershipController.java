@@ -16,7 +16,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import group5.example.sportCenter.dto.CreateMembershipRequest;
 import group5.example.sportCenter.dto.MembershipResponse;
+import group5.example.sportCenter.dto.MembershipUpgradeOptionsResponse;
 import group5.example.sportCenter.service.MembershipService;
+import group5.example.sportCenter.service.MembershipUpgradeService;
 import jakarta.validation.Valid;
 
 @RestController
@@ -24,10 +26,13 @@ import jakarta.validation.Valid;
 public class MembershipController {
 
     private final MembershipService membershipService;
+    private final MembershipUpgradeService membershipUpgradeService;
 
     public MembershipController(
-            MembershipService membershipService) {
+            MembershipService membershipService,
+            MembershipUpgradeService membershipUpgradeService) {
         this.membershipService = membershipService;
+        this.membershipUpgradeService = membershipUpgradeService;
     }
 
     @GetMapping
@@ -58,6 +63,15 @@ public class MembershipController {
             @AuthenticationPrincipal Jwt jwt) {
 
         return membershipService.getMembershipsByMemberId(memberId, jwt);
+    }
+
+    /** Gói hiện tại, các gói có thể nâng lên và số tiền phải trả; payment tạo qua POST /api/payments (purpose UPGRADE). */
+    @GetMapping("/member/{memberId}/upgrade-options")
+    public MembershipUpgradeOptionsResponse getUpgradeOptions(
+            @PathVariable Integer memberId,
+            @AuthenticationPrincipal Jwt jwt) {
+
+        return membershipUpgradeService.getOptions(memberId, jwt);
     }
 
     @PatchMapping("/{id}/cancel-renewal")

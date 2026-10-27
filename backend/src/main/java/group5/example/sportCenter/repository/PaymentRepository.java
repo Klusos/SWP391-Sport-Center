@@ -22,7 +22,9 @@ import jakarta.persistence.LockModeType;
 
 public interface PaymentRepository extends JpaRepository<Payment, Integer> {
 
-    Page<Payment> findByStatusAndMethodAndPurpose(PaymentStatus status, PaymentMethod method, PaymentPurpose purpose, Pageable pageable);
+    Page<Payment> findByStatusAndMethodAndPurposeIn(PaymentStatus status, PaymentMethod method, List<PaymentPurpose> purposes, Pageable pageable);
+
+    boolean existsByMember_IdAndPurposeInAndStatus(Integer memberId, List<PaymentPurpose> purposes, PaymentStatus status);
 
     // Scalar projection avoids lazy-loading member/course/class entities for each queue row.
     // referenceId is purpose-scoped; it is not a mapped Payment -> registration association.

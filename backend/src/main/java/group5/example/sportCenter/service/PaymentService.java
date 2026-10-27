@@ -49,6 +49,7 @@ public class PaymentService {
     private final UserRepository userRepository;
     private final MembershipPlanRepository membershipPlanRepository;
     private final MembershipService membershipService;
+    private final MembershipUpgradeService membershipUpgradeService;
     private final CourseRegistrationPaymentHandler courseRegistrationHandler;
     private final PtBookingPaymentHandler ptBookingHandler;
     private final PaymentGateway paymentGateway;
@@ -59,6 +60,7 @@ public class PaymentService {
             UserRepository userRepository,
             MembershipPlanRepository membershipPlanRepository,
             MembershipService membershipService,
+            MembershipUpgradeService membershipUpgradeService,
             CourseRegistrationPaymentHandler courseRegistrationHandler,
             PtBookingPaymentHandler ptBookingHandler,
             PaymentGateway paymentGateway,
@@ -67,6 +69,7 @@ public class PaymentService {
         this.userRepository = userRepository;
         this.membershipPlanRepository = membershipPlanRepository;
         this.membershipService = membershipService;
+        this.membershipUpgradeService = membershipUpgradeService;
         this.courseRegistrationHandler = courseRegistrationHandler;
         this.ptBookingHandler = ptBookingHandler;
         this.paymentGateway = paymentGateway;
@@ -85,7 +88,7 @@ public class PaymentService {
         User actor = currentActor(callerJwt);
         User member = resolveMember(actor, request.getMemberId());
 
-        if (request.getPurpose() == PaymentPurpose.MEMBERSHIP) {
+        if (request.getPurpose() == PaymentPurpose.MEMBERSHIP || request.getPurpose() == PaymentPurpose.UPGRADE) {
             // Serialize repeated requests on a stable member row before checking PENDING payments.
             Integer lockedMemberId = member.getId();
             member = userRepository.findByIdForBookingUpdate(lockedMemberId)
@@ -108,12 +111,21 @@ public class PaymentService {
             }
         }
 
-        BigDecimal amount = resolveAmountAndValidate(request, member);
+        // The upgrade quote checks pending payments itself and must be stored with the payment.
+        MembershipUpgradeService.Quote upgradeQuote = request.getPurpose() == PaymentPurpose.UPGRADE
+                ? membershipUpgradeService.quote(member, request.getReferenceId()) : null;
+        BigDecimal amount = upgradeQuote != null ? upgradeQuote.amount() : resolveAmountAndValidate(request, member);
         if (request.getPurpose() == PaymentPurpose.MEMBERSHIP
                 && paymentRepository.existsByMember_IdAndPurposeAndReferenceIdAndStatus(
                         member.getId(), PaymentPurpose.MEMBERSHIP, request.getReferenceId(), PaymentStatus.PENDING)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "A pending membership payment already exists for this member and plan");
+        }
+        if (request.getPurpose() == PaymentPurpose.MEMBERSHIP
+                && paymentRepository.existsByMember_IdAndPurposeInAndStatus(
+                        member.getId(), List.of(PaymentPurpose.UPGRADE), PaymentStatus.PENDING)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "A pending membership upgrade must be paid or cancelled before buying another plan");
         }
         if (request.getPurpose() == PaymentPurpose.PT_BOOKING
                 && paymentRepository.existsByPurposeAndReferenceIdAndStatus(
@@ -134,6 +146,9 @@ public class PaymentService {
         payment.setTransactionCode("TXN-" + UUID.randomUUID().toString().replace("-", "")
                 .substring(0, 16).toUpperCase(Locale.ROOT));
         payment = paymentRepository.save(payment);
+        if (upgradeQuote != null) {
+            membershipUpgradeService.record(payment, upgradeQuote);
+        }
 
         String url = request.getMethod() == PaymentMethod.ONLINE
                 ? paymentGateway.createPaymentUrl(payment.getTransactionCode(), amount, clientIp)
@@ -153,6 +168,9 @@ public class PaymentService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This payment is not a counter payment");
         }
         requirePending(payment);
+        if (payment.getPurpose() == PaymentPurpose.UPGRADE && Boolean.TRUE.equals(request.getSuccess())) {
+            membershipUpgradeService.requireOpenQuote(payment);
+        }
 
         payment.setProcessedBy(actor);
         return toResponse(finalizePayment(payment, request.getSuccess(), request.getNote()), null);
@@ -233,6 +251,7 @@ public class PaymentService {
             }
             case COURSE_REGISTRATION -> courseRegistrationHandler.apply(payment);
             case PT_BOOKING -> ptBookingHandler.apply(payment);
+            case UPGRADE -> membershipUpgradeService.apply(payment);
         };
         if (refundReason.isPresent()) {
             return markRefundRequired(payment, refundReason.get());
@@ -279,8 +298,8 @@ public class PaymentService {
         if (page < 0 || size < 1 || size > 100) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must be nonnegative and size between 1 and 100");
         }
-        return paymentRepository.findByStatusAndMethodAndPurpose(
-                PaymentStatus.PENDING, PaymentMethod.COUNTER, PaymentPurpose.MEMBERSHIP,
+        return paymentRepository.findByStatusAndMethodAndPurposeIn(
+                PaymentStatus.PENDING, PaymentMethod.COUNTER, List.of(PaymentPurpose.MEMBERSHIP, PaymentPurpose.UPGRADE),
                 PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt", "id")))
                 .map(payment -> toResponse(payment, null));
     }
@@ -322,6 +341,7 @@ public class PaymentService {
             }
             case COURSE_REGISTRATION -> courseRegistrationHandler.quote(member, request.getReferenceId());
             case PT_BOOKING -> ptBookingHandler.quote(member, request.getReferenceId());
+            case UPGRADE -> throw new IllegalStateException("Upgrade amounts come from MembershipUpgradeService.quote");
         };
     }
 

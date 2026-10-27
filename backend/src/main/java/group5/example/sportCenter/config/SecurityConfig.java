@@ -175,7 +175,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/memberships/expire").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/memberships").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/memberships").hasAnyRole("ADMIN", "RECEPTIONIST")
-                .requestMatchers(HttpMethod.GET, "/api/memberships/member/*", "/api/memberships/*")
+                .requestMatchers(HttpMethod.GET, "/api/memberships/member/*", "/api/memberships/*",
+                        "/api/memberships/member/*/upgrade-options")
                     .hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
                 .requestMatchers(HttpMethod.PATCH,
                         "/api/memberships/*/cancel-renewal",
