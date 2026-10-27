@@ -91,5 +91,6 @@ export function paymentMessage(payment) {
   return ({ PENDING: "Đang chờ xử lý. Chưa có xác nhận thanh toán thành công.",
     SUCCESS: "Máy chủ đã ghi nhận thanh toán thành công. Kiểm tra trạng thái đăng ký bên dưới.",
     CANCELLED: "Thanh toán đã bị hủy. Trạng thái đăng ký được theo dõi riêng.",
-    REFUND_REQUIRED: "Khoản tiền không thể áp dụng cho đăng ký. Vui lòng liên hệ lễ tân để đối soát / hoàn tiền; không thanh toán lại." })[payment.status] || payment.status;
+    REFUND_REQUIRED: "Khoản tiền không thể áp dụng cho đăng ký. Vui lòng liên hệ lễ tân để đối soát / hoàn tiền; không thanh toán lại.",
+    REFUNDED: "Khoản tiền đã được trung tâm hoàn lại." })[payment.status] || payment.status;
 }

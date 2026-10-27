@@ -1,19 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import {
-  cancelMembershipApi,
   cancelPaymentApi,
   createPaymentApi,
   getCurrentUserApi,
   getMembershipUpgradeOptionsApi,
   getMembershipsByMemberApi,
+  getMyCancellationRequestsApi,
   getMyPaymentsApi,
   getPublicMembershipPlansApi,
+  requestMembershipCancellationApi,
   setAutoRenewApi,
+  withdrawCancellationRequestApi,
 } from "../api";
 import { validVnpayUrl } from "../courseCheckout";
+import {
+  canRequestCancellation, CANCELLATION_NOTICE_HOURS, cancellationRequestErrorMessage, formatDate, formatDateTime, lastRequestDay,
+  paymentMethodLabel, paymentPurposeLabel, paymentStatusLabel, requestStatusLabel,
+} from "../membershipCancellation";
 import { isMembershipEffective, todayInVietnam } from "../membershipDates";
-import { activeMembershipChain, cancellableMembershipId, cancelMembershipErrorMessage, isAutoRenewalPayment, RENEWAL_NOTICE_DAYS } from "../membershipRenewal";
+import { activeMembershipChain, cancellableMembershipId, isAutoRenewalPayment, RENEWAL_NOTICE_DAYS } from "../membershipRenewal";
 import { membershipPurchaseErrorMessage } from "../membershipPurchase";
 import { isMembershipPayment, upgradeBlockedMessage, upgradeErrorMessage } from "../membershipUpgrade";
 import "./Portal.css";
@@ -21,13 +27,14 @@ import "./MemberMembership.css";
 
 const rows = (value) => Array.isArray(value) ? value : value?.content ?? [];
 const money = (value) => value == null ? "—" : Number(value).toLocaleString("vi-VN") + " ₫";
-const statusLabel = { ACTIVE: "Đang hoạt động", EXPIRED: "Đã hết hạn", UPGRADED: "Đã nâng cấp", PENDING: "Chờ thanh toán", SUCCESS: "Đã thanh toán", CANCELLED: "Đã hủy", REFUND_REQUIRED: "Cần xử lý hoàn tiền" };
+const statusLabel = { ACTIVE: "Đang hoạt động", EXPIRED: "Đã hết hạn", UPGRADED: "Đã nâng cấp", CANCELLED: "Đã hủy" };
 
 export default function MemberMembership({ token, role, onLogout, onNavigate }) {
   const [plans, setPlans] = useState(null);
   const [memberships, setMemberships] = useState(null);
   const [payments, setPayments] = useState(null);
   const [upgrade, setUpgrade] = useState(null);
+  const [cancellationRequests, setCancellationRequests] = useState([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
@@ -43,20 +50,23 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
         getCurrentUserApi(token),
         getPublicMembershipPlansApi(),
       ]);
-      const [ownMemberships, ownPayments, upgradeOptions] = await Promise.all([
+      const [ownMemberships, ownPayments, upgradeOptions, ownRequests] = await Promise.all([
         getMembershipsByMemberApi(token, user.id),
         getMyPaymentsApi(token),
         getMembershipUpgradeOptionsApi(token, user.id),
+        getMyCancellationRequestsApi(token),
       ]);
       setMemberships(rows(ownMemberships));
       setPayments(rows(ownPayments));
       setUpgrade(upgradeOptions);
+      setCancellationRequests(rows(ownRequests));
       setPlans(rows(availablePlans).filter((plan) => String(plan?.status).toUpperCase() === "ACTIVE"));
     } catch (requestError) {
       setMemberships([]);
       setPayments([]);
       setPlans([]);
       setUpgrade(null);
+      setCancellationRequests([]);
       setError(requestError.status === 401
         ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
         : requestError.status === 403
@@ -218,27 +228,50 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
     }
   }
 
-  async function cancelUpcoming(membership) {
+  async function requestCancellation(membership) {
     if (togglingId !== null) return;
-    if (!window.confirm(`Hủy gói “${membership.planName}” (${membership.startDate} → ${membership.endDate}) chưa bắt đầu? `
-      + "Khoản đã thanh toán cho gói này sẽ được hoàn 100%; vui lòng liên hệ lễ tân để nhận tiền. Thao tác không thể hoàn tác.")) return;
+    const reason = window.prompt(`Gửi yêu cầu hủy gói “${membership.planName}” (${formatDate(membership.startDate)} → ${formatDate(membership.endDate)})? `
+      + "Nếu được duyệt, khoản đã thanh toán cho gói này được hoàn 100% tại quầy. Lý do (không bắt buộc):", "");
+    if (reason === null) return;
     setTogglingId(membership.id);
     setError("");
     setNotice("");
     try {
-      await cancelMembershipApi(token, membership.id);
+      await requestMembershipCancellationApi(token, membership.id, reason.trim() || null);
       await load();
-      setNotice(`Đã hủy gói “${membership.planName}”. Lễ tân sẽ hoàn tiền khoản đã thanh toán cho gói này.`);
+      setNotice(`Đã gửi yêu cầu hủy gói “${membership.planName}”. Gói vẫn giữ nguyên cho đến khi nhân viên duyệt; bạn sẽ nhận thông báo kết quả.`);
     } catch (requestError) {
-      setError(cancelMembershipErrorMessage(requestError));
+      setError(cancellationRequestErrorMessage(requestError));
+      await load();
     } finally {
       setTogglingId(null);
     }
   }
 
+  async function withdrawRequest(request) {
+    if (togglingId !== null) return;
+    if (!window.confirm(`Rút yêu cầu hủy gói “${request.planName}”? Gói sẽ tiếp tục như bình thường.`)) return;
+    setTogglingId(request.membershipId);
+    setError("");
+    setNotice("");
+    try {
+      await withdrawCancellationRequestApi(token, request.id);
+      await load();
+      setNotice(`Đã rút yêu cầu hủy gói “${request.planName}”.`);
+    } catch (requestError) {
+      setError(cancellationRequestErrorMessage(requestError));
+      await load();
+    } finally {
+      setTogglingId(null);
+    }
+  }
+
+  const today = todayInVietnam();
   const currentMemberships = (memberships || []).filter(isMembershipEffective);
-  const membershipChain = activeMembershipChain(memberships, todayInVietnam());
-  const cancellableId = cancellableMembershipId(membershipChain, todayInVietnam());
+  const membershipChain = activeMembershipChain(memberships, today);
+  const cancellableId = cancellableMembershipId(membershipChain, today);
+  const pendingRequestFor = (membershipId) => cancellationRequests.find(
+    (request) => request.membershipId === membershipId && request.status === "PENDING");
 
   return <div className="layout">
     <Sidebar role={role} activePage="member-membership" onLogout={onLogout} onNavigate={onNavigate} />
@@ -261,10 +294,18 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
               aria-pressed={Boolean(membership.autoRenew)} onClick={() => void toggleAutoRenew(membership)}>
               {togglingId === membership.id ? "Đang lưu…" : membership.autoRenew ? "Tự gia hạn: Bật" : "Tự gia hạn: Tắt"}
             </button>
-            {membership.id === cancellableId && <button type="button" className="secondary" disabled={togglingId !== null}
-              onClick={() => void cancelUpcoming(membership)}>Hủy gói</button>}
+            {membership.id === cancellableId && (pendingRequestFor(membership.id)
+              ? <button type="button" className="secondary" disabled={togglingId !== null}
+                onClick={() => void withdrawRequest(pendingRequestFor(membership.id))}>Rút yêu cầu hủy</button>
+              : canRequestCancellation(membership, today)
+                ? <button type="button" className="secondary" disabled={togglingId !== null}
+                  onClick={() => void requestCancellation(membership)}>Yêu cầu hủy gói</button>
+                : <small>Đã quá hạn yêu cầu hủy</small>)}
+            {membership.id === cancellableId && pendingRequestFor(membership.id) && <small>Đang chờ nhân viên duyệt hủy</small>}
+            {membership.id === cancellableId && !pendingRequestFor(membership.id) && canRequestCancellation(membership, today)
+              && <small>Hạn gửi yêu cầu: hết ngày {formatDate(lastRequestDay(membership.startDate))}</small>}
           </li>)}</ul>}
-        {membershipChain.length > 0 && <p className="subtitle">Gói đang chạy không hủy và không hoàn tiền; nếu không muốn tiếp tục, hãy tắt tự gia hạn. Gói đã mua trước nhưng chưa bắt đầu có thể hủy (hủy từ gói sau cùng) và được hoàn 100% tại quầy.</p>}
+        {membershipChain.length > 0 && <p className="subtitle">Gói đang chạy không hủy và không hoàn tiền; nếu không muốn tiếp tục, hãy tắt tự gia hạn. Gói đã mua trước nhưng chưa bắt đầu có thể gửi yêu cầu hủy (hủy từ gói sau cùng), chậm nhất {CANCELLATION_NOTICE_HOURS} giờ trước ngày bắt đầu; khi nhân viên duyệt, khoản đã thanh toán được hoàn 100% tại quầy.</p>}
         {membershipChain.length > 0 && <p className="subtitle">Khi thanh toán gia hạn thành công, thời hạn mới sẽ nối tiếp ngày kết thúc hiện tại. Bật tự gia hạn: {RENEWAL_NOTICE_DAYS} ngày trước khi gói cuối cùng hết hạn, hệ thống tạo yêu cầu gia hạn cùng gói và gửi thông báo; bạn thanh toán tại quầy hoặc VNPay trước ngày hết hạn. Chưa thanh toán thì yêu cầu tự hủy và gói hết hạn bình thường.</p>}
       </section>
 
@@ -306,6 +347,36 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
             </li>;
           })}</ul>}
         {pendingMembershipPayments.length > 0 && <p className="banner info" role="note">Không thể tạo thêm thanh toán Membership khi còn yêu cầu đang chờ. Với VNPay, hãy kiểm tra trạng thái trước khi thử lại; việc quay về từ cổng thanh toán không tự xác nhận thành công.</p>}
+      </section>
+
+      {!loading && cancellationRequests.length > 0 && <section className="dash-card">
+        <h2>Yêu cầu hủy gói</h2>
+        <ul className="dash-rows">{cancellationRequests.map((request) => <li key={request.id}>
+          <span><b>{request.planName}</b> · {formatDate(request.startDate)} → {formatDate(request.endDate)}<br />
+            <small>Gửi lúc {formatDateTime(request.requestedAt)}{request.reason ? ` · Lý do: ${request.reason}` : ""}
+              {request.decidedAt && request.status !== "WITHDRAWN" ? ` · Xử lý lúc ${formatDateTime(request.decidedAt)}` : ""}
+              {request.decisionNote ? ` · Ghi chú: ${request.decisionNote}` : ""}</small></span>
+          <em>{requestStatusLabel[request.status] || request.status}</em>
+        </li>)}</ul>
+      </section>}
+
+      <section className="dash-card">
+        <h2>Lịch sử thanh toán</h2>
+        {loading ? <p role="status">Đang tải lịch sử thanh toán…</p> : !payments?.length
+          ? <p className="dash-empty">Bạn chưa có giao dịch nào.</p>
+          : <div className="member-payment-history"><table>
+            <thead><tr><th>Mã</th><th>Thời gian</th><th>Nội dung</th><th>Hình thức</th><th>Số tiền</th><th>Trạng thái</th></tr></thead>
+            <tbody>{payments.map((payment) => <tr key={payment.id}>
+              <td>#{payment.id}</td>
+              <td>{formatDateTime(payment.createdAt)}</td>
+              <td>{paymentPurposeLabel[payment.purpose] || payment.purpose}{isAutoRenewalPayment(payment) ? " (tự gia hạn)" : ""}</td>
+              <td>{paymentMethodLabel[payment.method] || payment.method}</td>
+              <td>{money(payment.amount)}</td>
+              <td><span className={`member-payment-status ${String(payment.status).toLowerCase()}`}>{paymentStatusLabel[payment.status] || payment.status}</span>
+                {payment.status === "REFUNDED" && payment.refundedAt && <small>{formatDateTime(payment.refundedAt)}</small>}
+                {payment.status === "REFUND_REQUIRED" && <small>Liên hệ lễ tân để nhận tiền</small>}</td>
+            </tr>)}</tbody>
+          </table></div>}
       </section>
 
       <h2 style={{ margin: "26px 0 14px", fontSize: 18 }}>Các gói đang mở</h2>

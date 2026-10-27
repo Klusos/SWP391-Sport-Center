@@ -2,14 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import {
   cancelMembershipApi,
+  confirmRefundApi,
   createPaymentApi,
+  decideCancellationRequestApi,
+  getCancellationRequestsApi,
   getMembershipsByMemberApi,
   getMemberPaymentsApi,
   getPendingMembershipPaymentsApi,
   getPublicMembershipPlansApi,
+  getRefundRequiredPaymentsApi,
   getUsersApi,
   processCounterPaymentApi,
 } from "../api";
+import { cancellationRequestErrorMessage, formatDate, formatDateTime, paymentPurposeLabel, paymentStatusLabel } from "../membershipCancellation";
 import { todayInVietnam } from "../membershipDates";
 import { activeMembershipChain, cancellableMembershipId, cancelMembershipErrorMessage, isAutoRenewalPayment } from "../membershipRenewal";
 import { isMembershipPayment, upgradeErrorMessage } from "../membershipUpgrade";
@@ -38,6 +43,25 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [cancelRequests, setCancelRequests] = useState(null);
+  const [refunds, setRefunds] = useState(null);
+
+  // Cancellation requests awaiting review and payments awaiting a refund (all purposes).
+  const loadReviewQueues = useCallback(async () => {
+    try {
+      const [requests, refundPage] = await Promise.all([getCancellationRequestsApi(token), getRefundRequiredPaymentsApi(token, 0, 50)]);
+      setCancelRequests(rows(requests));
+      setRefunds(refundPage);
+    } catch (requestError) {
+      setError(requestError.status === 401 ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
+        : requestError.message || "Không tải được yêu cầu hủy gói hoặc khoản cần hoàn tiền.");
+    }
+  }, [token]);
+  useEffect(() => {
+    let current = true;
+    Promise.resolve().then(() => current && loadReviewQueues());
+    return () => { current = false; };
+  }, [loadReviewQueues]);
 
   const loadQueue = useCallback(async () => {
     const requestId = ++queueRequest.current;
@@ -206,6 +230,52 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
     } finally { setSaving(false); }
   }
 
+  async function decideRequest(request, approve) {
+    if (saving) return;
+    let note = null;
+    if (approve) {
+      if (!window.confirm(`Duyệt hủy gói #${request.membershipId} (${request.planName}) của ${request.memberName}? `
+        + `Gói bị hủy và ${request.purchasePaymentId ? `thanh toán #${request.purchasePaymentId} (${money(request.purchaseAmount)})` : "khoản đã mua (nếu có)"} chuyển sang "Chờ hoàn tiền".`)) return;
+    } else {
+      note = window.prompt(`Từ chối yêu cầu hủy gói #${request.membershipId} của ${request.memberName}. Nhập lý do gửi cho hội viên (bắt buộc):`);
+      if (note === null) return;
+      if (!note.trim()) { setError("Cần nhập lý do khi từ chối yêu cầu hủy gói."); return; }
+    }
+    setSaving(true); setError(""); setNotice("");
+    try {
+      await decideCancellationRequestApi(token, request.id, approve, note?.trim() || null);
+      setNotice(approve
+        ? `Đã duyệt hủy gói #${request.membershipId}. Khoản cần hoàn tiền xuất hiện trong mục "Cần hoàn tiền".`
+        : `Đã từ chối yêu cầu hủy gói #${request.membershipId}; hội viên đã được thông báo.`);
+      setHistoryVersion((value) => value + 1);
+    } catch (requestError) {
+      setError(cancellationRequestErrorMessage(requestError));
+    } finally {
+      await loadReviewQueues();
+      setSaving(false);
+    }
+  }
+
+  async function confirmRefund(payment) {
+    if (saving) return;
+    const note = window.prompt(`Xác nhận đã trả ${money(payment.amount)} cho ${payment.memberName} (thanh toán #${payment.id})? `
+      + "Chỉ xác nhận khi tiền đã thực sự được hoàn. Ghi chú (không bắt buộc, ví dụ: tiền mặt, chuyển khoản):", "");
+    if (note === null) return;
+    setSaving(true); setError(""); setNotice("");
+    try {
+      await confirmRefundApi(token, payment.id, note.trim() || null);
+      setNotice(`Đã ghi nhận hoàn tiền thanh toán #${payment.id}; hội viên đã được thông báo.`);
+      setHistoryVersion((value) => value + 1);
+    } catch (requestError) {
+      setError(requestError.status === 401 ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
+        : /Only a REFUND_REQUIRED/.test(requestError.message || "") ? "Khoản này đã được xử lý trước đó. Hãy làm mới danh sách."
+          : requestError.message || "Không thể xác nhận hoàn tiền.");
+    } finally {
+      await loadReviewQueues();
+      setSaving(false);
+    }
+  }
+
   function startAnother() { setPendingPayment(null); setNotice(""); setError(""); setPlanId(""); }
 
   return <div className="layout">
@@ -214,7 +284,7 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
       <header className="membership-sales-header">
         <div><p className="pt-eyebrow">SPORTCENTER / RECEPTIONIST</p><h1>Hỗ trợ mua gói hội viên</h1>
           <p>Tạo thanh toán tại quầy cho thành viên. Gói chỉ được kích hoạt hoặc gia hạn sau khi xác nhận thanh toán thành công.</p></div>
-        <button type="button" onClick={() => { void load(); void loadQueue(); setHistoryVersion((value) => value + 1); }} disabled={loading || saving || queueLoading}>Làm mới</button>
+        <button type="button" onClick={() => { void load(); void loadQueue(); void loadReviewQueues(); setHistoryVersion((value) => value + 1); }} disabled={loading || saving || queueLoading}>Làm mới</button>
       </header>
       {error && <p className="membership-sales-alert error" role="alert">{error}</p>}
       {notice && <p className="membership-sales-alert success" role="status">{notice}</p>}
@@ -222,7 +292,7 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
         <h2>Thanh toán gói hội viên chờ tại quầy</h2>
         {queueLoading ? <p role="status">Đang tải hàng chờ…</p> : queue && <>
           {queue.content.length === 0 ? <p>Không có thanh toán chờ tại quầy.</p> : queue.content.map((payment) => <div key={payment.id} className="membership-sales-history-row">
-            <span>#{payment.id} · {payment.memberName} (#{payment.memberId}) · {purposeLabel(payment)}{plans.find((plan) => plan.id === payment.referenceId)?.name || `Gói #${payment.referenceId}`} · {money(payment.amount)} · {payment.status}</span>
+            <span>#{payment.id} · {payment.memberName} (#{payment.memberId}) · {purposeLabel(payment)}{plans.find((plan) => plan.id === payment.referenceId)?.name || `Gói #${payment.referenceId}`} · {money(payment.amount)} · {paymentStatusLabel[payment.status] || payment.status}</span>
             <button type="button" disabled={saving} onClick={() => selectPayment(payment)}>Chọn thanh toán</button>
           </div>)}
           <div className="membership-sales-actions">
@@ -231,6 +301,32 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
             <button type="button" disabled={saving || queue.last} onClick={() => setQueuePage(queuePage + 1)}>Trang sau</button>
           </div>
         </>}
+      </section>
+      <section className="membership-sales-card">
+        <h2>Yêu cầu hủy gói chờ duyệt</h2>
+        {cancelRequests === null ? <p role="status">Đang tải yêu cầu…</p> : cancelRequests.length === 0
+          ? <p>Không có yêu cầu hủy gói nào đang chờ.</p>
+          : cancelRequests.map((request) => <div key={request.id} className="membership-sales-history-row">
+            <span>#{request.id} · {request.memberName} (#{request.memberId}) · {request.planName} {formatDate(request.startDate)} → {formatDate(request.endDate)}
+              {" · "}{request.purchaseAmount != null ? `hoàn ${money(request.purchaseAmount)}` : "không có thanh toán gốc"}
+              {" · "}gửi {formatDateTime(request.requestedAt)}{request.reason ? ` · Lý do: ${request.reason}` : ""}</span>
+            <span className="membership-sales-actions">
+              <button type="button" disabled={saving} onClick={() => void decideRequest(request, true)}>Duyệt hủy</button>
+              <button type="button" className="secondary" disabled={saving} onClick={() => void decideRequest(request, false)}>Từ chối</button>
+            </span>
+          </div>)}
+        <p className="membership-sales-note">Chỉ duyệt được khi gói chưa bắt đầu và là gói sau cùng. Yêu cầu chưa xử lý sẽ tự hết hiệu lực khi gói bắt đầu.</p>
+      </section>
+      <section className="membership-sales-card">
+        <h2>Cần hoàn tiền</h2>
+        {refunds === null ? <p role="status">Đang tải…</p> : refunds.content.length === 0
+          ? <p>Không có khoản nào cần hoàn tiền.</p>
+          : <>{refunds.content.map((payment) => <div key={payment.id} className="membership-sales-history-row">
+            <span>#{payment.id} · {payment.memberName} (#{payment.memberId}) · {paymentPurposeLabel[payment.purpose] || payment.purpose} · {money(payment.amount)}
+              {payment.note ? ` · ${payment.note}` : ""}</span>
+            <button type="button" disabled={saving} onClick={() => void confirmRefund(payment)}>Xác nhận đã hoàn tiền</button>
+          </div>)}
+          {refunds.totalElements > refunds.content.length && <p>Đang hiển thị {refunds.content.length} / {refunds.totalElements} khoản cũ nhất.</p>}</>}
       </section>
       {loading ? <p role="status">Đang tải thành viên và gói hội viên…</p> : <>
         <section className="membership-sales-card">
@@ -257,7 +353,7 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
           {selectedMember && paymentData?.memberId === memberId && <div className="membership-sales-history">
             <h3>Lịch sử thanh toán gói</h3>
             {paymentData.rows.length === 0 ? <p>Chưa có giao dịch membership.</p> : paymentData.rows.map((payment) => <div key={payment.id} className="membership-sales-history-row">
-              <span>#{payment.id} · {payment.purpose === "UPGRADE" ? "Nâng cấp · " : ""}{money(payment.amount)} · {payment.status}</span>
+              <span>#{payment.id} · {payment.purpose === "UPGRADE" ? "Nâng cấp · " : ""}{money(payment.amount)} · {paymentStatusLabel[payment.status] || payment.status}</span>
               {payment.status === "PENDING" && payment.method === "COUNTER" && <button type="button" disabled={saving} onClick={() => selectPayment(payment)}>Tiếp tục xử lý</button>}
             </div>)}
           </div>}
@@ -275,7 +371,7 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
         {pendingPayment && <section className="membership-sales-card membership-sales-payment" aria-live="polite">
           <h2>Thanh toán #{pendingPayment.id}</h2><dl><div><dt>Thành viên</dt><dd>{pendingPayment.memberName || `#${pendingPayment.memberId}`}</dd></div>
             <div><dt>Gói</dt><dd>{purposeLabel(pendingPayment)}{selectedPlan?.name || `Gói #${pendingPayment.referenceId}`}</dd></div><div><dt>Số tiền</dt><dd>{money(pendingPayment.amount)}</dd></div>
-            <div><dt>Trạng thái</dt><dd>{pendingPayment.status}</dd></div></dl>
+            <div><dt>Trạng thái</dt><dd>{paymentStatusLabel[pendingPayment.status] || pendingPayment.status}</dd></div></dl>
           {pendingPayment.status === "PENDING" && pendingPayment.method === "COUNTER" ? <div className="membership-sales-actions">
             <button type="button" disabled={saving} onClick={() => void processPayment(true)}>{saving ? "Đang xử lý…" : "Xác nhận đã nhận thanh toán"}</button>
             <button type="button" className="secondary" disabled={saving} onClick={() => void processPayment(false)}>Hủy thanh toán (chưa nhận tiền)</button>

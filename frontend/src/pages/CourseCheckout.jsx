@@ -148,7 +148,7 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
           <h2>Thanh toán #{targetPayment.id}</h2>
           <p>{paymentMessage(targetPayment)}</p>
           {isMembershipPayment(targetPayment.purpose) && <>
-            <p role="status">{targetPayment.status === "PENDING" ? "Đang chờ VNPay hoặc máy chủ xác minh. Gói hội viên chưa được kích hoạt." : targetPayment.status === "REFUND_REQUIRED" ? "Khoản thanh toán cần nhân viên đối soát hoặc xử lý hoàn tiền. Gói chưa được suy đoán là đã kích hoạt." : targetPayment.status === "CANCELLED" ? "Thanh toán đã hủy; không kích hoạt gói từ giao dịch này." : "Trạng thái thanh toán do máy chủ xác nhận. Trạng thái gói bên dưới được tải riêng từ tài khoản của bạn."}</p>
+            <p role="status">{targetPayment.status === "PENDING" ? "Đang chờ VNPay hoặc máy chủ xác minh. Gói hội viên chưa được kích hoạt." : targetPayment.status === "REFUND_REQUIRED" ? "Khoản thanh toán cần nhân viên đối soát hoặc xử lý hoàn tiền. Gói chưa được suy đoán là đã kích hoạt." : targetPayment.status === "REFUNDED" ? "Khoản thanh toán này đã được hoàn tiền; gói không được kích hoạt từ giao dịch này." : targetPayment.status === "CANCELLED" ? "Thanh toán đã hủy; không kích hoạt gói từ giao dịch này." : "Trạng thái thanh toán do máy chủ xác nhận. Trạng thái gói bên dưới được tải riêng từ tài khoản của bạn."}</p>
             <h3>Trạng thái gói hội viên</h3>
             {!data?.memberships ? <p role="status">Đang tải trạng thái gói…</p> : data.memberships.length === 0
               ? <p>Chưa có gói hội viên trong tài khoản.</p>
