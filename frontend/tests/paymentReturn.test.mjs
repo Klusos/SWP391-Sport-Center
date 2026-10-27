@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { findOwnedPayment, findOwnedPtBooking, ptPaymentReturnMessage } from "../src/paymentReturn.js";
+import { findOwnedPayment, findOwnedPtBooking } from "../src/paymentReturn.js";
+import { paymentPurposePresentation, paymentServiceLabel, paymentStatusPresentation, serviceStatusLabel } from "../src/paymentResult.js";
 import { startStatusPolling } from "../src/courseCheckout.js";
 
 const payments = [
@@ -16,6 +17,13 @@ test("return resolves only an exact positive ID found in authenticated owner pay
   assert.equal(findOwnedPayment(payments, "999"), null, "another owner's payment is absent from the authenticated history response");
 });
 
+test("URL paymentStatus cannot override the status on the authenticated payment", () => {
+  const url = new URL("http://localhost/member/membership?paymentId=10&paymentStatus=SUCCESS");
+  const payment = findOwnedPayment(payments, url.searchParams.get("paymentId"));
+  assert.equal(payment.status, "PENDING");
+  assert.equal(paymentStatusPresentation(payment.status).title, "Đang chờ xác nhận");
+});
+
 test("PT return resolves the booking only from PT purpose and its backend reference ID", () => {
   const booking = { id: 71, status: "CONFIRMED" };
   assert.equal(findOwnedPtBooking([booking], payments[0]), booking);
@@ -23,12 +31,23 @@ test("PT return resolves the booking only from PT purpose and its backend refere
   assert.equal(findOwnedPtBooking([{ id: 72 }], payments[0]), null);
 });
 
-test("PT result messages cover actual status outcomes without treating URL parameters as proof", () => {
-  assert.match(ptPaymentReturnMessage({ status: "SUCCESS" }), /backend confirms payment success/);
-  assert.match(ptPaymentReturnMessage({ status: "PENDING" }), /browser return alone does not confirm/);
-  assert.match(ptPaymentReturnMessage({ status: "FAILED" }), /backend reports payment failure/);
-  assert.match(ptPaymentReturnMessage({ status: "CANCELLED" }), /backend reports this payment as cancelled/);
-  assert.match(ptPaymentReturnMessage({ status: "REFUND_REQUIRED" }), /reconciliation or refund/);
+test("each Payment purpose has only its own primary destination", () => {
+  assert.deepEqual(paymentPurposePresentation({ purpose: "PT_BOOKING" }), { label: "Thanh toán buổi tập cá nhân", action: "Xem lịch PT", path: "/member/pt-booking" });
+  assert.deepEqual(paymentPurposePresentation({ purpose: "MEMBERSHIP" }), { label: "Thanh toán gói hội viên", action: "Xem gói hội viên", path: "/member/membership" });
+  assert.deepEqual(paymentPurposePresentation({ purpose: "COURSE_REGISTRATION" }), { label: "Thanh toán khóa học", action: "Xem khóa học của tôi", path: "/member/courses" });
+  assert.equal(paymentPurposePresentation({ purpose: "OTHER" }), null);
+});
+
+test("result status is localized and independent of the service resource status", () => {
+  assert.match(paymentStatusPresentation("SUCCESS").explanation, /Máy chủ xác nhận khoản thanh toán/);
+  assert.match(paymentStatusPresentation("PENDING").explanation, /chưa xác nhận buổi tập, đăng ký khóa học hoặc gói hội viên/);
+  assert.equal(paymentStatusPresentation("CANCELLED").title, "Giao dịch đã hủy");
+  assert.equal(paymentStatusPresentation("FAILED").title, "Thanh toán thất bại");
+  assert.equal(paymentStatusPresentation("REFUND_REQUIRED").tone, "warning");
+  assert.equal(paymentStatusPresentation("UNKNOWN").tone, "unknown");
+  assert.equal(paymentServiceLabel("PT_BOOKING"), "Trạng thái buổi tập");
+  assert.equal(serviceStatusLabel("CONFIRMED"), "Đã xác nhận");
+  assert.equal(serviceStatusLabel("PENDING_PAYMENT"), "Chờ thanh toán");
 });
 
 test("delayed PT settlement is re-read and polling stops only when backend status is terminal", async () => {
@@ -52,10 +71,12 @@ test("shared result loader branches on authenticated purpose and never creates p
   assert.match(readBlock, /findOwnedPayment\(payments, paymentId\)/);
   assert.match(readBlock, /returnedPayment\?\.purpose === "MEMBERSHIP"/);
   assert.match(readBlock, /returnedPayment\?\.purpose === "PT_BOOKING"/);
+  assert.match(readBlock, /returnedPayment\?\.purpose === "COURSE_REGISTRATION"/);
   assert.match(readBlock, /getMyPtBookingsApi\(token\)/);
   assert.match(readBlock, /getMyRegistrationsApi\(token\)/);
   assert.doesNotMatch(readBlock, /createPaymentApi/);
+  assert.doesNotMatch(readBlock, /paymentStatus/);
   assert.match(source, /payment\?\.purpose === "PT_BOOKING" && payment\.status === "PENDING"/);
-  assert.match(source, /targetPayment\.purpose === "MEMBERSHIP"/);
-  assert.match(source, /targetPayment\?\.purpose === "COURSE_REGISTRATION"/);
+  assert.match(source, /if \(result\) \{\s+return <main className="payment-result-page">[\s\S]*?<PaymentResultCard/);
+  assert.doesNotMatch(source, /params\.get\("paymentStatus"\)/);
 });
