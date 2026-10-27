@@ -43,3 +43,5 @@
   .pf-week { grid-template-columns: 1fr; }
   .pf-classes li { grid-template-columns: 1fr; }
 }   
+.pf-session.pending { border-left-color: #e0a800; background: #fff7e0; }
+.pf-session.pending em { color: #805b00; font-weight: 700; }

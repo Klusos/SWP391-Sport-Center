@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import RevenueBars from "../components/RevenueBars";
 import { defaultRevenueRange, formatVnd } from "../revenueReport";
+import { upcomingPtBookings } from "../ptBooking";
 import "./Dashboard.css";
 import "./Membertheme.css";
 import {
@@ -18,9 +19,8 @@ const list = (d) => (Array.isArray(d) ? d : d?.content ?? []);
 const total = (d) => (d == null ? "—" : d?.totalElements ?? list(d).length);
 const count = (d, fn) => (d == null ? "—" : list(d).filter(fn).length);
 const fmt = (s) => (s ? new Date(s).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" }) : "—");
-const upcoming = (d) => list(d)
-  .filter((b) => b.startTime && new Date(b.startTime) > new Date() && !/CANCEL/i.test(b.status || ""))
-  .sort((a, b) => new Date(a.startTime) - new Date(b.startTime));
+// PT bookings only: expired holds and cancelled sessions are not upcoming.
+const upcoming = (d) => upcomingPtBookings(list(d));
 const today = new Date().toLocaleDateString("vi-VN");
 
 const memberUsers = (t) => getUsersApi(t).then((u) => list(u).filter((x) => x.role === "MEMBER"));
@@ -333,7 +333,7 @@ function Member({ d, onNavigate }) {
                   <p>Thời gian: {hm(x.start)}{x.end ? " - " + hm(x.end) : ""}{x.place ? " • " + x.place : ""}</p>
                   {x.person && <p className="md-who">Coach {x.person}</p>}
                 </div>
-                <span className="md-chip ok">{SESSION_STATUS[x.status] || x.status || "Đã lên lịch"}</span>
+                <span className={"md-chip " + (x.status === "PENDING_PAYMENT" ? "warn" : "ok")}>{SESSION_STATUS[x.status] || x.status || "Đã lên lịch"}</span>
               </li>
             ))}
           </ul>

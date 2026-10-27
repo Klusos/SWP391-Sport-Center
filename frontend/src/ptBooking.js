@@ -33,6 +33,23 @@ export function holdActive(booking, now = Date.now()) {
   return booking?.status === "PENDING_PAYMENT" && Boolean(expires) && expires.getTime() > now;
 }
 
+// Bookings that still hold a slot: confirmed ones, and pending ones whose payment hold is running.
+export function ptBookingActive(booking, now = Date.now()) {
+  return booking?.status === "CONFIRMED" || holdActive(booking, now);
+}
+
+// The calendar also keeps cancelled sessions (greyed out) but drops expired holds and lapsed pending rows.
+export function ptBookingOnCalendar(booking, now = Date.now()) {
+  return ptBookingActive(booking, now) || booking?.status === "CANCELLED";
+}
+
+// Upcoming sessions for dashboards, soonest first.
+export function upcomingPtBookings(bookings, now = Date.now()) {
+  return (bookings || [])
+    .filter((booking) => ptBookingActive(booking, now) && (vietnamInstant(booking.startTime)?.getTime() ?? 0) > now)
+    .sort((a, b) => vietnamInstant(a.startTime) - vietnamInstant(b.startTime));
+}
+
 export function minutesLeft(booking, now = Date.now()) {
   const expires = vietnamInstant(booking?.paymentExpiresAt);
   return expires ? Math.max(0, Math.ceil((expires.getTime() - now) / 60000)) : 0;

@@ -27,6 +27,20 @@ test("members cancel pending bookings any time and confirmed ones until 24 hours
   assert.equal(canMemberCancel({ status: "EXPIRED", startTime: "2026-11-20T09:00:00" }, 0), false);
 });
 
+test("calendars drop expired holds, keep cancelled sessions, and dashboards count only live upcoming ones", async () => {
+  const { ptBookingOnCalendar, upcomingPtBookings } = await import("../src/ptBooking.js");
+  const now = at("2026-10-27T16:30:00+07:00");
+  const confirmed = { id: 1, status: "CONFIRMED", startTime: "2026-11-20T09:00:00" };
+  const holding = { id: 2, status: "PENDING_PAYMENT", startTime: "2026-11-19T09:00:00", paymentExpiresAt: "2026-10-27T16:40:00" };
+  const lapsed = { id: 3, status: "PENDING_PAYMENT", startTime: "2026-11-18T09:00:00", paymentExpiresAt: "2026-10-27T16:00:00" };
+  const expired = { id: 4, status: "EXPIRED", startTime: "2026-11-17T09:00:00" };
+  const cancelled = { id: 5, status: "CANCELLED", startTime: "2026-11-16T09:00:00" };
+  const past = { id: 6, status: "CONFIRMED", startTime: "2026-10-20T09:00:00" };
+  const all = [confirmed, holding, lapsed, expired, cancelled, past];
+  assert.deepEqual(all.filter((b) => ptBookingOnCalendar(b, now)).map((b) => b.id), [1, 2, 5, 6]);
+  assert.deepEqual(upcomingPtBookings(all, now).map((b) => b.id), [2, 1]);
+});
+
 test("only the pending PT payment of that booking is picked", () => {
   const payments = [
     { id: 1, purpose: "PT_BOOKING", referenceId: 7, status: "CANCELLED" },
