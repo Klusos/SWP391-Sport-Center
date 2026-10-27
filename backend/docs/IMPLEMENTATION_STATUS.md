@@ -1,5 +1,20 @@
 # SportCenter Implementation Status
 
+## Membership upgrade (2026-10-27, branch `feature/flow4-membership-upgrade`)
+
+Built on `bugfix/existing-functions` with Flow 4 (`feature/flow4-training`) merged in.
+
+| Area | Change | Verification |
+|---|---|---|
+| Policy | Upgrade now, keep `endDate`, pay the prorated per-day difference for the remaining days (30-day months, rounded up to 1,000 VND); target must cost more per day and keep every benefit; no mid-term downgrade or refund | `MembershipUpgradeIntegrationTest` 6 passed |
+| Backend | `PaymentPurpose.UPGRADE`, `MembershipUpgrade` quote entity, `MembershipUpgradeService` (options, quote, expiry, settlement), `GET /api/memberships/member/{id}/upgrade-options`; COUNTER upgrades join the pending membership queue; old membership becomes `UPGRADED` | Counter, VNPay within and after the 15-minute quote, counter after midnight (409), blocked reasons, rounding |
+| `phase11-1-membership-upgrade.sql` | Adds `UPGRADE` to `ck_payment_purpose` (kept when already present), `dbo.membership_upgrade`, filtered unique index for one PENDING upgrade per member | Rehearsed twice on a restored copy of the local DB (with the purpose CHECK reset to three values), backend started with `ddl-auto=validate`, then a counter upgrade (317,000 VND, end date kept) and a VNPay upgrade URL over the API; the copy was dropped. Not yet applied to local `SportCenterDB` |
+| Frontend | Member "Nâng cấp gói" section (counter or VNPay), pending upgrade requests, VNPay result page, receptionist queue labels, revenue report "Nâng cấp gói" | `npm test` 62 passed, lint clean for changed files, build passed |
+
+- Full backend suite (H2 `phase1`, `PAYMENT_PROVIDER=mock`): 296 tests, 0 failures, 1 skipped (SQL Server opt-in).
+- Merge notes: phase10-1 no longer requires the `sportcenter-recovery-sql` server name; Flow 4 conflicts keep Klusos's copies; the member dashboard keeps the fe2 layout, so `dashboardMembershipNavigation.test.mjs` now checks `onNavigate("member-membership")`.
+- Not done: browser click-through of the upgrade pages; a real VNPay card payment for an upgrade.
+
 ## Flow 4 training and demo fixes (2026-10-26, branch `feature/flow4-training`)
 
 | Area | Change | Verification |

@@ -584,6 +584,7 @@ Payment is a separate operation from membership purchase, course registration an
 | `MEMBERSHIP` | `MembershipPlan.id` (plan must be `ACTIVE`) | `plan.price` | Activates a new ACTIVE membership from today, or, if one is still valid, renews by adding a new membership that starts on the latest current `endDate` |
 | `COURSE_REGISTRATION` | `CourseRegistration.id` (own, `PENDING_PAYMENT`, deadline not reached) | registration `finalPrice` snapshot | Confirms the registration atomically with Payment success; late settlement becomes `REFUND_REQUIRED` and EXPIRED |
 | `PT_BOOKING` | `PersonalTrainingBooking.id` (own, `PENDING_PAYMENT`, hold not expired, not yet paid) | booking `finalPrice` | Confirms the booking (`PENDING_PAYMENT` -> `CONFIRMED`) |
+| `UPGRADE` | target `MembershipPlan.id` (`ACTIVE`, an upgrade of the current plan) | prorated difference, see below | Marks the current membership `UPGRADED` and creates an ACTIVE membership on the target plan from today to the same `endDate` |
 
 Payment status: `PENDING` -> `SUCCESS` | `CANCELLED` | `REFUND_REQUIRED`. `REFUND_REQUIRED` means money was received but could not be applied (PT hold expired first, registration no longer active, the reference was already paid by another payment, or the gateway reported success after the payment was cancelled). The booking is left `EXPIRED`; the refund itself is handled manually. `REFUND_REQUIRED` is excluded from revenue reports.
 
@@ -606,6 +607,18 @@ Receptionist membership sales are handled in one workflow at `/receptionist/memb
 Configuration: simulated callbacks require `PAYMENT_CALLBACK_SECRET` (a long random string) and `PAYMENT_MOCK_GATEWAY_ENABLED=true` under an explicitly active `demo`, `dev`, `development`, `test`, or `phase1` profile; the callback URL must use loopback. Production profiles always disable the simulator. When disabled, ONLINE payment creation returns 503; COUNTER payments remain available.
 
 VNPay sandbox: set `PAYMENT_PROVIDER=vnpay`, `VNPAY_TMN_CODE` and `VNPAY_HASH_SECRET` (from the sandbox registration email at https://sandbox.vnpayment.vn/devreg) in `backend/.env`; never commit them. Optional overrides: `VNPAY_PAY_URL` (default sandbox `vpcpay.html`), `VNPAY_RETURN_URL` (default `http://localhost:8080/api/payments/vnpay/return`), `PAYMENT_FRONTEND_RESULT_URL` (default `http://localhost:5173/member/membership`). The backend fails to start if the TMN code or hash secret is missing while `PAYMENT_PROVIDER=vnpay`. With VNPay, ONLINE `paymentUrl` is the VNPay payment page (amount sent as VND x 100, `vnp_TxnRef` is the transaction code without `-`, link valid for 15 minutes). Sandbox testing uses the NCB test card listed in the VNPay sandbox documentation. An abandoned ONLINE payment stays `PENDING` until the member or staff cancels it. SQL Server: review and manually run `docs/sql/phase2-payment.sql` before starting with `ddl-auto=validate`; it has not been executed as part of this integration.
+
+### Membership upgrade (Phase 11.1)
+
+Policy: upgrade takes effect immediately and keeps the current `endDate`; the member pays only the price difference for the remaining days. No mid-term downgrade, no refund of the difference.
+
+- `GET /api/memberships/member/{memberId}/upgrade-options` - the MEMBER themself or ADMIN/RECEPTIONIST. Returns the current membership, `remainingDays`, `blockedReason` and `options[]` (`planId`, `planName`, `planPrice`, `durationMonths`, discounts, `amount`).
+- Create the payment with `POST /api/payments` and `{"method":"ONLINE|COUNTER","purpose":"UPGRADE","referenceId":<target plan id>}`. ONLINE returns the VNPay `paymentUrl`; COUNTER appears in `GET /api/payments/pending-memberships` and is confirmed with `PATCH /api/payments/{id}/counter`.
+- Eligible target: a different ACTIVE plan that costs more per day (`price / durationMonths`) and keeps every benefit (course and PT discounts not lower; PT plan and one-on-one coaching not removed). This rules out e.g. STANDARD -> DELUXE (higher price, lower course discount).
+- Amount: `(target price per day - current price per day) x remainingDays`, using 30-day months and current list prices, rounded up to 1,000 VND. `remainingDays` = days from today to the exclusive `endDate`.
+- `blockedReason` (also returned as 409 on payment creation): `NO_ACTIVE_MEMBERSHIP`, `MULTIPLE_ACTIVE_MEMBERSHIPS`, `QUEUED_MEMBERSHIP` (a renewal already starts after the current plan), `PENDING_PAYMENT` (a MEMBERSHIP or UPGRADE payment is pending), `TOO_FEW_DAYS_LEFT` (fewer than 3 days). While an UPGRADE payment is pending, a MEMBERSHIP purchase also returns 409.
+- Quote expiry: COUNTER quotes expire at midnight (Vietnam time); ONLINE quotes after 15 minutes or at midnight, whichever is first, and ONLINE upgrades are refused in the last 5 minutes before midnight. Staff confirming an expired COUNTER quote get 409 and must cancel it. A gateway success after expiry, or after the source membership stopped being current, becomes `REFUND_REQUIRED` and nothing is changed.
+- Quotes are stored in `membership_upgrade` (payment, source membership, target plan, remaining days, expiry, resulting membership). Apply `docs/sql/phase11-1-membership-upgrade.sql` first.
 
 ## Notifications (Phase 6.1A)
 
