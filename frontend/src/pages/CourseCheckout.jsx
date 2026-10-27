@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import { createPaymentApi, getCurrentUserApi, getMembershipsByMemberApi, getMyPaymentsApi, getMyRegistrationsApi, cancelPaymentApi } from "../api";
 import { acquireAction, canCheckout, checkoutAccess, paymentMessage, pendingCounter, positiveId, prepareCheckout, registrationMessage, registrationPayments, shouldPoll, startStatusPolling, validVnpayUrl, vietnamDate } from "../courseCheckout";
+import { isMembershipPayment } from "../membershipUpgrade";
 import "./CourseCheckout.css";
 
 const money = (value) => Number(value).toLocaleString("vi-VN", { style: "currency", currency: "VND" });
@@ -41,7 +42,7 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
     if (result && paymentId) {
       const payments = array(await getMyPaymentsApi(token));
       const returnedPayment = payments.find((item) => item.id === paymentId);
-      if (returnedPayment?.purpose === "MEMBERSHIP") {
+      if (isMembershipPayment(returnedPayment?.purpose)) {
         const user = await getCurrentUserApi(token);
         const memberships = array(await getMembershipsByMemberApi(token, user.id));
         return { payments, registrations: [], memberships };
@@ -70,7 +71,7 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
         const registration = next.registrations.find((item) => item.id === (positiveId(registrationId) || (payment?.purpose === "COURSE_REGISTRATION" ? payment.referenceId : null)));
         return shouldPoll(registration, registrationPayments(next.payments, registration?.id))
           || (result && paymentId && !payment)
-          || (result && payment?.purpose === "MEMBERSHIP" && payment.status === "PENDING");
+          || (result && isMembershipPayment(payment?.purpose) && payment.status === "PENDING");
       }) : () => {};
     return () => { alive.current = false; stop(); };
   }, [read, token, auth?.role, paymentId, registrationId, result, refreshVersion]);
@@ -146,7 +147,7 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
         {result && targetPayment && targetPayment.purpose !== "COURSE_REGISTRATION" && <section>
           <h2>Thanh toán #{targetPayment.id}</h2>
           <p>{paymentMessage(targetPayment)}</p>
-          {targetPayment.purpose === "MEMBERSHIP" && <>
+          {isMembershipPayment(targetPayment.purpose) && <>
             <p role="status">{targetPayment.status === "PENDING" ? "Đang chờ VNPay hoặc máy chủ xác minh. Gói hội viên chưa được kích hoạt." : targetPayment.status === "REFUND_REQUIRED" ? "Khoản thanh toán cần nhân viên đối soát hoặc xử lý hoàn tiền. Gói chưa được suy đoán là đã kích hoạt." : targetPayment.status === "CANCELLED" ? "Thanh toán đã hủy; không kích hoạt gói từ giao dịch này." : "Trạng thái thanh toán do máy chủ xác nhận. Trạng thái gói bên dưới được tải riêng từ tài khoản của bạn."}</p>
             <h3>Trạng thái gói hội viên</h3>
             {!data?.memberships ? <p role="status">Đang tải trạng thái gói…</p> : data.memberships.length === 0

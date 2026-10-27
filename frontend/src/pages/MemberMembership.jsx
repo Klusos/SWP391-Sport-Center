@@ -4,6 +4,7 @@ import {
   cancelPaymentApi,
   createPaymentApi,
   getCurrentUserApi,
+  getMembershipUpgradeOptionsApi,
   getMembershipsByMemberApi,
   getMyPaymentsApi,
   getPublicMembershipPlansApi,
@@ -11,17 +12,19 @@ import {
 import { validVnpayUrl } from "../courseCheckout";
 import { isMembershipEffective } from "../membershipDates";
 import { membershipPurchaseErrorMessage } from "../membershipPurchase";
+import { isMembershipPayment, upgradeBlockedMessage, upgradeErrorMessage } from "../membershipUpgrade";
 import "./Portal.css";
 import "./MemberMembership.css";
 
 const rows = (value) => Array.isArray(value) ? value : value?.content ?? [];
 const money = (value) => value == null ? "—" : Number(value).toLocaleString("vi-VN") + " ₫";
-const statusLabel = { ACTIVE: "Đang hoạt động", EXPIRED: "Đã hết hạn", PENDING: "Chờ thanh toán", SUCCESS: "Đã thanh toán", CANCELLED: "Đã hủy", REFUND_REQUIRED: "Cần xử lý hoàn tiền" };
+const statusLabel = { ACTIVE: "Đang hoạt động", EXPIRED: "Đã hết hạn", UPGRADED: "Đã nâng cấp", PENDING: "Chờ thanh toán", SUCCESS: "Đã thanh toán", CANCELLED: "Đã hủy", REFUND_REQUIRED: "Cần xử lý hoàn tiền" };
 
 export default function MemberMembership({ token, role, onLogout, onNavigate }) {
   const [plans, setPlans] = useState(null);
   const [memberships, setMemberships] = useState(null);
   const [payments, setPayments] = useState(null);
+  const [upgrade, setUpgrade] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
@@ -36,17 +39,20 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
         getCurrentUserApi(token),
         getPublicMembershipPlansApi(),
       ]);
-      const [ownMemberships, ownPayments] = await Promise.all([
+      const [ownMemberships, ownPayments, upgradeOptions] = await Promise.all([
         getMembershipsByMemberApi(token, user.id),
         getMyPaymentsApi(token),
+        getMembershipUpgradeOptionsApi(token, user.id),
       ]);
       setMemberships(rows(ownMemberships));
       setPayments(rows(ownPayments));
+      setUpgrade(upgradeOptions);
       setPlans(rows(availablePlans).filter((plan) => String(plan?.status).toUpperCase() === "ACTIVE"));
     } catch (requestError) {
       setMemberships([]);
       setPayments([]);
       setPlans([]);
+      setUpgrade(null);
       setError(requestError.status === 401
         ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
         : requestError.status === 403
@@ -64,8 +70,39 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
   }, [load]);
 
   const pendingMembershipPayments = useMemo(() => (payments || []).filter(
-    (payment) => payment?.purpose === "MEMBERSHIP" && payment?.status === "PENDING",
+    (payment) => isMembershipPayment(payment?.purpose) && payment?.status === "PENDING",
   ), [payments]);
+
+  async function startUpgrade(option, method) {
+    if (busyPlanId !== null || pendingMembershipPayments.length > 0) return;
+    const where = method === "ONLINE" ? "qua VNPay Sandbox" : "tại quầy";
+    if (!window.confirm(`Nâng cấp lên “${option.planName}” ${where} với ${money(option.amount)} cho ${upgrade.remainingDays} ngày còn lại? `
+      + `Gói mới có hiệu lực ngay sau khi thanh toán thành công và vẫn hết hạn ngày ${upgrade.currentEndDate}. `
+      + (method === "ONLINE" ? "Báo giá có hiệu lực 15 phút." : "Báo giá có hiệu lực đến hết hôm nay."))) return;
+    setBusyPlanId(option.planId);
+    setError("");
+    setNotice("");
+    try {
+      const payment = await createPaymentApi(token, { method, purpose: "UPGRADE", referenceId: Number(option.planId) });
+      setPayments((current) => [payment, ...(current || [])]);
+      if (method === "ONLINE") {
+        if (!validVnpayUrl(payment.paymentUrl)) {
+          await load();
+          setError(`Đã tạo thanh toán nâng cấp #${payment.id}, nhưng máy chủ không trả về liên kết VNPay Sandbox hợp lệ. Hãy làm mới trạng thái hoặc hủy yêu cầu rồi thử lại.`);
+          return;
+        }
+        window.location.assign(payment.paymentUrl);
+      } else {
+        setNotice(`Đã tạo yêu cầu nâng cấp #${payment.id}. Vui lòng thanh toán tại quầy trong hôm nay; gói hiện tại chưa thay đổi.`);
+      }
+    } catch (requestError) {
+      const message = upgradeErrorMessage(requestError);
+      await load();
+      setError(message);
+    } finally {
+      setBusyPlanId(null);
+    }
+  }
 
   async function startPurchase(plan, method) {
     if (busyPlanId !== null || pendingMembershipPayments.length > 0) return;
@@ -148,6 +185,27 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
         {currentMemberships.length > 0 && <p className="subtitle">Khi thanh toán gia hạn thành công, thời hạn mới sẽ nối tiếp ngày kết thúc hiện tại theo quy tắc của hệ thống.</p>}
       </section>
 
+      {!loading && upgrade?.currentMembershipId && <section className="dash-card">
+        <h2>Nâng cấp gói</h2>
+        <p className="subtitle">Gói mới có hiệu lực ngay và giữ nguyên ngày hết hạn {upgrade.currentEndDate}. Bạn chỉ trả phần chênh lệch cho {upgrade.remainingDays} ngày còn lại (tính tháng 30 ngày, làm tròn lên 1.000 ₫). Không hạ cấp giữa kỳ và không hoàn tiền phần chênh lệch.</p>
+        {upgrade.blockedReason ? <p className="dash-empty">{upgradeBlockedMessage(upgrade.blockedReason)}</p>
+          : upgrade.options.length === 0 ? <p className="dash-empty">Bạn đang dùng gói cao nhất có thể nâng cấp.</p>
+            : <div className="pf-plans">{upgrade.options.map((option) => <article key={option.planId} className="pf-plan">
+              <h2>{upgrade.currentPlanName} → {option.planName}</h2><strong>{money(option.amount)}</strong>
+              <small>Giá gói {money(option.planPrice)} / {option.durationMonths} tháng · Giảm khóa học {option.courseDiscountPercent}% · Giảm PT {option.personalTrainingDiscountPercent}%</small>
+              <div className="member-membership-payment-actions">
+                <button type="button" disabled={busyPlanId !== null || pendingMembershipPayments.length > 0}
+                  onClick={() => void startUpgrade(option, "COUNTER")}>
+                  {busyPlanId === option.planId ? "Đang tạo yêu cầu…" : "Nâng cấp · tại quầy"}
+                </button>
+                <button type="button" disabled={busyPlanId !== null || pendingMembershipPayments.length > 0}
+                  onClick={() => void startUpgrade(option, "ONLINE")}>
+                  {busyPlanId === option.planId ? "Đang tạo yêu cầu…" : "Nâng cấp · VNPay Sandbox"}
+                </button>
+              </div>
+            </article>)}</div>}
+      </section>}
+
       <section className="dash-card">
         <h2>Thanh toán đang chờ</h2>
         {loading ? <p role="status">Đang tải lịch sử thanh toán…</p> : pendingMembershipPayments.length === 0
@@ -155,7 +213,7 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
           : <ul className="dash-rows">{pendingMembershipPayments.map((payment) => {
             const plan = (plans || []).find((item) => Number(item.id) === Number(payment.referenceId));
             return <li key={payment.id}>
-              <span><b>{plan?.name || `Gói #${payment.referenceId}`}</b><br /><small>Thanh toán #{payment.id} · {money(payment.amount)} · {payment.method === "ONLINE" ? "VNPay Sandbox · trạng thái do máy chủ xác nhận" : "Thanh toán tại quầy · chờ nhân viên xác nhận"}</small></span>
+              <span><b>{payment.purpose === "UPGRADE" ? "Nâng cấp lên " : ""}{plan?.name || `Gói #${payment.referenceId}`}</b><br /><small>Thanh toán #{payment.id} · {money(payment.amount)} · {payment.method === "ONLINE" ? "VNPay Sandbox · trạng thái do máy chủ xác nhận" : "Thanh toán tại quầy · chờ nhân viên xác nhận"}</small></span>
               <button type="button" disabled={cancelingId !== null} onClick={() => void cancelPendingPayment(payment)}>
                 {cancelingId === payment.id ? "Đang hủy…" : "Hủy yêu cầu"}
               </button>

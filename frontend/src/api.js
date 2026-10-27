@@ -561,6 +561,12 @@ export function getMembershipsByMemberApi(token, memberId) {
   });
 }
 
+export function getMembershipUpgradeOptionsApi(token, memberId) {
+  return request("/api/memberships/member/" + encodeURIComponent(memberId) + "/upgrade-options", {
+    headers: authenticatedHeaders(token),
+  });
+}
+
 export function getCoursesApi(token) {
   return request("/api/courses", { headers: authenticatedHeaders(token) });
 }

@@ -4,6 +4,7 @@ export const REVENUE_PURPOSES = [
   ["MEMBERSHIP", "Hội viên"],
   ["COURSE_REGISTRATION", "Đăng ký khóa học"],
   ["PT_BOOKING", "Huấn luyện cá nhân"],
+  ["UPGRADE", "Nâng cấp gói"],
 ];
 
 export function hcmDate(value = new Date()) {
