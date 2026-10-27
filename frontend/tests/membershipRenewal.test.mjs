@@ -35,3 +35,39 @@ test("the toggle calls the enable and cancel-renewal endpoints", async () => {
     ["PATCH", "http://localhost:8080/api/memberships/9/cancel-renewal"],
   ]);
 });
+
+test("members may cancel only the last membership and only before it starts; admins may also cancel a running one", async () => {
+  const { cancellableMembershipId } = await import("../src/membershipRenewal.js");
+  const running = { id: 2, startDate: "2026-10-15", endDate: "2026-11-15" };
+  const upcoming = { id: 3, startDate: "2026-11-15", endDate: "2026-12-15" };
+  assert.equal(cancellableMembershipId([running, upcoming], "2026-10-27"), 3);
+  assert.equal(cancellableMembershipId([running], "2026-10-27"), null);
+  assert.equal(cancellableMembershipId([running], "2026-10-27", { staffCanCancelRunning: true }), 2);
+  assert.equal(cancellableMembershipId([], "2026-10-27"), null);
+});
+
+test("cancelling sends the optional reason to the cancel endpoint", async () => {
+  const { cancelMembershipApi } = await import("../src/api.js");
+  const original = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => { calls.push({ url, options }); return new Response("{}", { status: 200 }); };
+  try {
+    await cancelMembershipApi("t", 5);
+    await cancelMembershipApi("t", 6, "Medical");
+  } finally {
+    globalThis.fetch = original;
+  }
+  assert.equal(calls[0].url, "http://localhost:8080/api/memberships/5/cancel");
+  assert.equal(calls[0].options.method, "PATCH");
+  assert.deepEqual(JSON.parse(calls[0].options.body), { reason: null });
+  assert.deepEqual(JSON.parse(calls[1].options.body), { reason: "Medical" });
+});
+
+test("admins reach the membership sales page through their own guarded route", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
+  const adminGuard = app.indexOf("<Route element={<AdminRoute auth={auth} />}>");
+  const route = app.indexOf('path="/admin/membership-sales"');
+  assert.ok(adminGuard >= 0 && route > adminGuard);
+  assert.ok(route < app.indexOf("<Route element={<MemberRoute auth={auth} />}>"));
+});

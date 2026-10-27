@@ -81,7 +81,9 @@ public class MembershipAutoRenewalService {
      * chưa có thanh toán gói nào đang chờ. Gọi từ job và khi member vừa bật tự gia hạn.
      */
     @Transactional
-    public Optional<Payment> createIfDue(Membership membership) {
+    public Optional<Payment> createIfDue(Membership given) {
+        // Re-read inside this transaction: callers may pass a detached entity with lazy member/plan proxies.
+        Membership membership = membershipRepository.findById(given.getId()).orElse(given);
         LocalDate today = today();
         if (!Boolean.TRUE.equals(membership.getAutoRenew()) || !"ACTIVE".equals(membership.getStatus())
                 || !membership.getEndDate().isAfter(today)

@@ -561,6 +561,14 @@ export function getMembershipsByMemberApi(token, memberId) {
   });
 }
 
+export function cancelMembershipApi(token, membershipId, reason = null) {
+  return request("/api/memberships/" + encodeURIComponent(membershipId) + "/cancel", {
+    method: "PATCH",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ reason }),
+  });
+}
+
 export function getMembershipUpgradeOptionsApi(token, memberId) {
   return request("/api/memberships/member/" + encodeURIComponent(memberId) + "/upgrade-options", {
     headers: authenticatedHeaders(token),

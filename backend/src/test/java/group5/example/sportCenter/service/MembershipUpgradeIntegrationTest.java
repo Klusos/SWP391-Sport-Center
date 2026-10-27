@@ -303,8 +303,8 @@ class MembershipUpgradeIntegrationTest {
         jdbc.update("delete from audit_log");
         notifications.deleteAllInBatch();
         upgrades.deleteAllInBatch();
-        paymentRows.deleteAllInBatch();
         memberships.deleteAllInBatch();
+        paymentRows.deleteAllInBatch();
         plans.deleteAllInBatch();
         users.deleteAll(users.findAll().stream().filter(u -> u.getEmail().endsWith(EMAIL_DOMAIN)).toList());
     }

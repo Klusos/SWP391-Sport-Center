@@ -180,7 +180,8 @@ public class SecurityConfig {
                     .hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
                 .requestMatchers(HttpMethod.PATCH,
                         "/api/memberships/*/cancel-renewal",
-                        "/api/memberships/*/enable-auto-renew")
+                        "/api/memberships/*/enable-auto-renew",
+                        "/api/memberships/*/cancel")
                     .hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
                 .requestMatchers("/api/memberships", "/api/memberships/**").denyAll()
 

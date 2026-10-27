@@ -2,7 +2,9 @@ package group5.example.sportCenter.service;
 
 import java.time.LocalDate;
 import java.time.Clock;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -17,21 +19,31 @@ import group5.example.sportCenter.dto.CreateMembershipRequest;
 import group5.example.sportCenter.dto.MembershipResponse;
 import group5.example.sportCenter.entity.Membership;
 import group5.example.sportCenter.entity.MembershipPlan;
+import group5.example.sportCenter.entity.Payment;
+import group5.example.sportCenter.entity.PaymentPurpose;
+import group5.example.sportCenter.entity.PaymentStatus;
 import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.MembershipPlanRepository;
 import group5.example.sportCenter.repository.MembershipRepository;
+import group5.example.sportCenter.repository.PaymentRepository;
 import group5.example.sportCenter.repository.UserRepository;
 
 @Service
 public class MembershipService {
 
+    public static final String CANCELLED = "CANCELLED";
+
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    private static final DateTimeFormatter VN_DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    private static final List<PaymentPurpose> MEMBERSHIP_PURPOSES = List.of(PaymentPurpose.MEMBERSHIP, PaymentPurpose.UPGRADE);
 
     private final MembershipRepository membershipRepository;
     private final UserRepository userRepository;
     private final MembershipPlanRepository membershipPlanRepository;
     private final MembershipAutoRenewalService autoRenewalService;
+    private final PaymentRepository paymentRepository;
+    private final NotificationService notificationService;
     private final Clock clock;
 
     public MembershipService(
@@ -39,11 +51,15 @@ public class MembershipService {
             UserRepository userRepository,
             MembershipPlanRepository membershipPlanRepository,
             MembershipAutoRenewalService autoRenewalService,
+            PaymentRepository paymentRepository,
+            NotificationService notificationService,
             Clock clock) {
         this.membershipRepository = membershipRepository;
         this.userRepository = userRepository;
         this.membershipPlanRepository = membershipPlanRepository;
         this.autoRenewalService = autoRenewalService;
+        this.paymentRepository = paymentRepository;
+        this.notificationService = notificationService;
         this.clock = clock;
     }
 
@@ -121,7 +137,10 @@ public class MembershipService {
      * bắt đầu đúng ngày gói hiện tại kết thúc (endDate là mốc loại trừ), không sửa gói cũ.
      */
     @Transactional
-    public Membership activateOrRenewFromPayment(Integer memberId, Integer planId, boolean autoRenew) {
+    public Membership activateOrRenewFromPayment(Payment payment) {
+        Integer memberId = payment.getMember().getId();
+        Integer planId = payment.getReferenceId();
+        boolean autoRenew = Boolean.TRUE.equals(payment.getAutoRenew());
         // Khoá dòng user để hai lần gia hạn song song không cùng tính từ một endDate.
         User member = userRepository.findByIdForBookingUpdate(memberId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + memberId));
@@ -142,7 +161,74 @@ public class MembershipService {
         membership.setEndDate(startDate.plusMonths(plan.getDurationMonths()));
         membership.setAutoRenew(autoRenew);
         membership.setStatus("ACTIVE");
+        membership.setPurchasePayment(payment);
         return membershipRepository.save(membership);
+    }
+
+    /**
+     * Huỷ gói. Gói chưa bắt đầu: member hoặc staff huỷ được, khoản đã mua gói chuyển REFUND_REQUIRED để lễ tân
+     * hoàn 100%. Gói đang chạy: chỉ ADMIN, bắt buộc lý do, không tự hoàn tiền (xử lý ngoài hệ thống).
+     * Chỉ huỷ được gói cuối trong chuỗi, để các gói còn lại không bị hở ngày.
+     */
+    @Transactional
+    public MembershipResponse cancelMembership(Integer id, String reason, Jwt callerJwt) {
+        User actor = currentActor(callerJwt);
+        Membership membership = membershipRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Membership not found with id: " + id));
+        Integer memberId = membership.getMember().getId();
+        requireOwnMembershipOrStaff(actor, memberId);
+        // Same member-row lock as purchases, upgrades and the auto-renewal job.
+        userRepository.findByIdForBookingUpdate(memberId);
+
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        if (!"ACTIVE".equals(membership.getStatus()) || !membership.getEndDate().isAfter(today)) {
+            throw new IllegalArgumentException("Only an active or upcoming membership can be cancelled");
+        }
+        if (membershipRepository.existsByMemberIdAndStatusAndStartDateGreaterThanEqual(memberId, "ACTIVE", membership.getEndDate())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Cancel the membership that starts after this one first");
+        }
+        String trimmedReason = reason == null || reason.isBlank() ? null : reason.trim();
+        boolean upcoming = membership.getStartDate().isAfter(today);
+        if (!upcoming) {
+            if (!"ADMIN".equalsIgnoreCase(actor.getRole())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "A running membership is not cancellable or refundable; turn off auto-renew instead. Only ADMIN can cancel it in special cases");
+            }
+            if (trimmedReason == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A reason is required to cancel a running membership");
+            }
+        }
+
+        // An unpaid auto-renewal for this membership is pointless once it is cancelled.
+        autoRenewalService.cancelPendingFor(membership);
+        if (!upcoming && paymentRepository.existsByMember_IdAndPurposeInAndStatus(memberId, MEMBERSHIP_PURPOSES, PaymentStatus.PENDING)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Finish or cancel the member's pending membership payment before cancelling the running membership");
+        }
+
+        String role = actor.getRole().toUpperCase(Locale.ROOT);
+        membership.setStatus(CANCELLED);
+        membership.setCancelledAt(LocalDateTime.now(clock.withZone(BUSINESS_ZONE)));
+        membership.setCancelReason(trimmedReason != null ? trimmedReason
+                : "Cancelled by " + role + " before it started");
+
+        String moneyMessage;
+        Payment purchase = membership.getPurchasePayment();
+        if (upcoming && purchase != null && purchase.getStatus() == PaymentStatus.SUCCESS) {
+            purchase.setStatus(PaymentStatus.REFUND_REQUIRED);
+            purchase.setNote("Refund 100%: membership #" + membership.getId() + " was cancelled before it started");
+            paymentRepository.save(purchase);
+            moneyMessage = "Khoản thanh toán #" + purchase.getId() + " sẽ được hoàn 100%; vui lòng liên hệ lễ tân để nhận tiền.";
+        } else if (upcoming) {
+            moneyMessage = "Không tìm thấy thanh toán gốc của gói này; lễ tân sẽ đối soát và hoàn tiền nếu có.";
+        } else {
+            moneyMessage = "Lý do: " + trimmedReason + ". Khoản hoàn tiền (nếu có) do trung tâm xử lý trực tiếp.";
+        }
+        notificationService.createForUser(memberId, "Gói " + membership.getPlan().getName() + " đã được huỷ",
+                "Gói " + membership.getStartDate().format(VN_DATE) + " → " + membership.getEndDate().format(VN_DATE)
+                        + " đã được huỷ. " + moneyMessage);
+        return toResponse(membershipRepository.save(membership));
     }
 
     @Transactional
@@ -253,6 +339,7 @@ public class MembershipService {
                 membership.getStartDate(),
                 membership.getEndDate(),
                 membership.getAutoRenew(),
-                membership.getStatus());
+                membership.getStatus(),
+                membership.getCancelReason());
     }
 }

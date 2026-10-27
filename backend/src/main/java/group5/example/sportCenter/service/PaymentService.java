@@ -244,9 +244,7 @@ public class PaymentService {
 
         Optional<String> refundReason = switch (payment.getPurpose()) {
             case MEMBERSHIP -> {
-                membershipService.activateOrRenewFromPayment(
-                        payment.getMember().getId(), payment.getReferenceId(),
-                        Boolean.TRUE.equals(payment.getAutoRenew()));
+                membershipService.activateOrRenewFromPayment(payment);
                 yield Optional.empty();
             }
             case COURSE_REGISTRATION -> courseRegistrationHandler.apply(payment);

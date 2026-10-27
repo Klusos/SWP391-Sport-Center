@@ -1053,6 +1053,8 @@ class PaymentIntegrationTest {
     private void cleanDatabase() {
         jdbc.update("delete from audit_log");
         notifications.deleteAllInBatch();
+        // Memberships reference the payment that bought them.
+        memberships.deleteAll();
         payments.deleteAll();
         bookings.deleteAll();
         classSessions.deleteAll();
@@ -1060,7 +1062,6 @@ class PaymentIntegrationTest {
         classes.deleteAll();
         offerings.deleteAll();
         courses.deleteAll();
-        memberships.deleteAll();
         plans.deleteAll();
         List<User> ownUsers = users.findAll().stream().filter(u -> u.getEmail().endsWith(EMAIL_DOMAIN)).toList();
         var ownUserIds = ownUsers.stream().map(User::getId).toList();

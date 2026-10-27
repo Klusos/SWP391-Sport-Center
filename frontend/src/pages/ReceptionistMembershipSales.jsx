@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import {
+  cancelMembershipApi,
   createPaymentApi,
   getMembershipsByMemberApi,
   getMemberPaymentsApi,
@@ -9,7 +10,8 @@ import {
   getUsersApi,
   processCounterPaymentApi,
 } from "../api";
-import { isAutoRenewalPayment } from "../membershipRenewal";
+import { todayInVietnam } from "../membershipDates";
+import { activeMembershipChain, cancellableMembershipId, cancelMembershipErrorMessage, isAutoRenewalPayment } from "../membershipRenewal";
 import { isMembershipPayment, upgradeErrorMessage } from "../membershipUpgrade";
 import "./ReceptionistMembershipSales.css";
 
@@ -114,6 +116,9 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
   const selectedPlan = plans.find((plan) => String(plan.id) === (pendingPayment ? String(pendingPayment.referenceId) : planId)) || null;
   const memberMemberships = membershipData?.memberId === memberId ? membershipData.rows : null;
   const activeMemberships = (memberMemberships || []).filter((membership) => membership.status === "ACTIVE");
+  const today = todayInVietnam();
+  const memberChain = activeMembershipChain(memberMemberships, today);
+  const staffCancellableId = cancellableMembershipId(memberChain, today, { staffCanCancelRunning: role === "ADMIN" });
 
   async function createPendingPayment(event) {
     event.preventDefault();
@@ -178,10 +183,33 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
     } finally { setSaving(false); }
   }
 
+  async function cancelForMember(membership) {
+    if (saving) return;
+    const upcoming = String(membership.startDate) > today;
+    let reason = null;
+    if (upcoming) {
+      if (!window.confirm(`Hủy gói #${membership.id} (${membership.planName}) chưa bắt đầu? Khoản đã mua gói sẽ chuyển sang "Cần hoàn tiền" để hoàn 100%.`)) return;
+    } else {
+      reason = window.prompt(`Hủy đặc biệt gói đang chạy #${membership.id} (${membership.planName}). Quyền lợi dừng ngay. Nhập lý do (bắt buộc):`);
+      if (reason === null) return;
+      if (!reason.trim()) { setError("Cần nhập lý do khi hủy gói đang chạy."); return; }
+    }
+    setSaving(true); setError(""); setNotice("");
+    try {
+      await cancelMembershipApi(token, membership.id, reason);
+      setNotice(upcoming
+        ? `Đã hủy gói #${membership.id}. Hãy hoàn tiền khoản đã thanh toán cho gói này (trạng thái "Cần hoàn tiền").`
+        : `Đã hủy gói #${membership.id}. Hoàn tiền (nếu có) xử lý trực tiếp theo lý do đã ghi.`);
+      setHistoryVersion((value) => value + 1);
+    } catch (requestError) {
+      setError(cancelMembershipErrorMessage(requestError));
+    } finally { setSaving(false); }
+  }
+
   function startAnother() { setPendingPayment(null); setNotice(""); setError(""); setPlanId(""); }
 
   return <div className="layout">
-    <Sidebar role={role} activePage="membership-sales" onNavigate={onNavigate} onLogout={onLogout} />
+    <Sidebar role={role} activePage={role === "ADMIN" ? "admin-membership-sales" : "membership-sales"} onNavigate={onNavigate} onLogout={onLogout} />
     <main className="main membership-sales-page">
       <header className="membership-sales-header">
         <div><p className="pt-eyebrow">SPORTCENTER / RECEPTIONIST</p><h1>Hỗ trợ mua gói hội viên</h1>
@@ -216,6 +244,16 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
           {selectedMember && memberMemberships && <p className="membership-sales-current">{activeMemberships.length
             ? `Thành viên đang có ${activeMemberships.length} gói ACTIVE. Gói mua mới sẽ được gia hạn sau ngày kết thúc hiện tại theo quy tắc backend.`
             : "Thành viên chưa có gói ACTIVE; thanh toán thành công sẽ kích hoạt gói mới."}</p>}
+          {selectedMember && memberChain.length > 0 && <div className="membership-sales-history">
+            <h3>Gói hiện có</h3>
+            {memberChain.map((membership) => <div key={membership.id} className="membership-sales-history-row">
+              <span>#{membership.id} · {membership.planName} · {membership.startDate} → {membership.endDate} · {String(membership.startDate) > today ? "Sắp bắt đầu" : "Đang chạy"}</span>
+              {membership.id === staffCancellableId && <button type="button" disabled={saving} onClick={() => void cancelForMember(membership)}>
+                {String(membership.startDate) > today ? "Hủy gói (hoàn 100%)" : "Hủy đặc biệt"}
+              </button>}
+            </div>)}
+            <p className="membership-sales-note">Gói chưa bắt đầu: hủy và đánh dấu hoàn 100% khoản đã mua. Gói đang chạy: chỉ quản trị viên hủy trong trường hợp đặc biệt, phải ghi lý do; hoàn tiền (nếu có) xử lý trực tiếp.</p>
+          </div>}
           {selectedMember && paymentData?.memberId === memberId && <div className="membership-sales-history">
             <h3>Lịch sử thanh toán gói</h3>
             {paymentData.rows.length === 0 ? <p>Chưa có giao dịch membership.</p> : paymentData.rows.map((payment) => <div key={payment.id} className="membership-sales-history-row">

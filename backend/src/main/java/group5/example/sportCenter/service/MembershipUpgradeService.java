@@ -209,6 +209,7 @@ public class MembershipUpgradeService {
         upgraded.setStartDate(today);
         upgraded.setEndDate(source.getEndDate());
         upgraded.setStatus("ACTIVE");
+        upgraded.setPurchasePayment(payment);
         upgrade.setResultMembership(membershipRepository.save(upgraded));
         upgradeRepository.save(upgrade);
         return Optional.empty();

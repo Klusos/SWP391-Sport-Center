@@ -256,6 +256,7 @@ export default function App() {
           "notification-broadcast": "/admin/notifications/broadcast",
           "audit-logs": "/admin/audit-logs",
           "admin-training": "/admin/training",
+          "admin-membership-sales": "/admin/membership-sales",
           "membership-plans": "/staff/membership-plans",
           "membership-sales": "/receptionist/membership-sales",
           "course-payments": "/receptionist/course-payments",
@@ -454,6 +455,7 @@ export default function App() {
             />
 
             <Route path="/admin/training" element={<CoachTraining {...staff} />} />
+            <Route path="/admin/membership-sales" element={<ReceptionistMembershipSales {...staff} />} />
 
             {/* Các trang mới của Admin — bọc trong Layout (sidebar + .app-shell) */}
             <Route element={<Layout {...staff} />}>

@@ -620,6 +620,19 @@ Policy: upgrade takes effect immediately and keeps the current `endDate`; the me
 - Quote expiry: COUNTER quotes expire at midnight (Vietnam time); ONLINE quotes after 15 minutes or at midnight, whichever is first, and ONLINE upgrades are refused in the last 5 minutes before midnight. Staff confirming an expired COUNTER quote get 409 and must cancel it. A gateway success after expiry, or after the source membership stopped being current, becomes `REFUND_REQUIRED` and nothing is changed.
 - Quotes are stored in `membership_upgrade` (payment, source membership, target plan, remaining days, expiry, resulting membership). Apply `docs/sql/phase11-1-membership-upgrade.sql` first.
 
+### Membership auto-renew and cancellation (Phase 11.2)
+
+Auto-renew (no stored card, so it creates an invoice and a reminder):
+- `PATCH /api/memberships/{id}/enable-auto-renew` and `/cancel-renewal` - owner MEMBER or ADMIN/RECEPTIONIST.
+- `MembershipAutoRenewalService` runs daily at 00:00 (after expiry) and on demand with `POST /api/memberships/auto-renew/run` (ADMIN; returns `{created, cancelled}`). Three days before the last membership in a member's chain ends, if auto-renew is on, the plan is still ACTIVE and no MEMBERSHIP/UPGRADE payment is pending, it creates a PENDING COUNTER MEMBERSHIP payment for the same plan with `autoRenew = true` and note `AUTO_RENEWAL membership #<id>`, and notifies the member. Enabling auto-renew inside that window creates the request immediately.
+- Paying it (at the counter, or the member cancels it and pays the same plan ONLINE) queues the next period with auto-renew still on. An unpaid request is cancelled once the membership ends; turning auto-renew off cancels it at once. A plan that is no longer ACTIVE is not renewed; the member is notified instead.
+
+Cancellation - `PATCH /api/memberships/{id}/cancel` with optional `{"reason":"..."}` (max 500):
+- Only the last ACTIVE membership in the chain can be cancelled (409 otherwise), so no gaps appear.
+- Upcoming (start date after today): the owner MEMBER or ADMIN/RECEPTIONIST. Status becomes `CANCELLED`; the payment that bought it (`membership.purchase_payment_id`) changes from SUCCESS to `REFUND_REQUIRED` for a full refund at the desk, which also removes it from revenue. Memberships without a linked payment (older rows) are cancelled and left to staff reconciliation.
+- Running: members and receptionists get 403 (no refund; turn auto-renew off instead). ADMIN may cancel it with a required reason (400 without one); benefits stop immediately, the payment is not changed and any refund is handled outside the system. A pending MEMBERSHIP/UPGRADE payment must be settled or cancelled first (409).
+- The member is notified and `MembershipResponse.cancelReason` shows the reason. Admins use the membership page at `/admin/membership-sales`. Apply `docs/sql/phase11-2-membership-cancellation.sql` first.
+
 ## Notifications (Phase 6.1A)
 
 All four authenticated roles (ADMIN, RECEPTIONIST, COACH, MEMBER) may read and update only notifications owned by the authenticated user. The owner comes from the JWT subject; no endpoint accepts a user ID. There is intentionally no public notification creation endpoint. Internal services may create notifications for future business-event integrations.

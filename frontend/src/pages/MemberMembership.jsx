@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import {
+  cancelMembershipApi,
   cancelPaymentApi,
   createPaymentApi,
   getCurrentUserApi,
@@ -12,7 +13,7 @@ import {
 } from "../api";
 import { validVnpayUrl } from "../courseCheckout";
 import { isMembershipEffective, todayInVietnam } from "../membershipDates";
-import { activeMembershipChain, isAutoRenewalPayment, RENEWAL_NOTICE_DAYS } from "../membershipRenewal";
+import { activeMembershipChain, cancellableMembershipId, cancelMembershipErrorMessage, isAutoRenewalPayment, RENEWAL_NOTICE_DAYS } from "../membershipRenewal";
 import { membershipPurchaseErrorMessage } from "../membershipPurchase";
 import { isMembershipPayment, upgradeBlockedMessage, upgradeErrorMessage } from "../membershipUpgrade";
 import "./Portal.css";
@@ -217,8 +218,27 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
     }
   }
 
+  async function cancelUpcoming(membership) {
+    if (togglingId !== null) return;
+    if (!window.confirm(`Hủy gói “${membership.planName}” (${membership.startDate} → ${membership.endDate}) chưa bắt đầu? `
+      + "Khoản đã thanh toán cho gói này sẽ được hoàn 100%; vui lòng liên hệ lễ tân để nhận tiền. Thao tác không thể hoàn tác.")) return;
+    setTogglingId(membership.id);
+    setError("");
+    setNotice("");
+    try {
+      await cancelMembershipApi(token, membership.id);
+      await load();
+      setNotice(`Đã hủy gói “${membership.planName}”. Lễ tân sẽ hoàn tiền khoản đã thanh toán cho gói này.`);
+    } catch (requestError) {
+      setError(cancelMembershipErrorMessage(requestError));
+    } finally {
+      setTogglingId(null);
+    }
+  }
+
   const currentMemberships = (memberships || []).filter(isMembershipEffective);
   const membershipChain = activeMembershipChain(memberships, todayInVietnam());
+  const cancellableId = cancellableMembershipId(membershipChain, todayInVietnam());
 
   return <div className="layout">
     <Sidebar role={role} activePage="member-membership" onLogout={onLogout} onNavigate={onNavigate} />
@@ -241,7 +261,10 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
               aria-pressed={Boolean(membership.autoRenew)} onClick={() => void toggleAutoRenew(membership)}>
               {togglingId === membership.id ? "Đang lưu…" : membership.autoRenew ? "Tự gia hạn: Bật" : "Tự gia hạn: Tắt"}
             </button>
+            {membership.id === cancellableId && <button type="button" className="secondary" disabled={togglingId !== null}
+              onClick={() => void cancelUpcoming(membership)}>Hủy gói</button>}
           </li>)}</ul>}
+        {membershipChain.length > 0 && <p className="subtitle">Gói đang chạy không hủy và không hoàn tiền; nếu không muốn tiếp tục, hãy tắt tự gia hạn. Gói đã mua trước nhưng chưa bắt đầu có thể hủy (hủy từ gói sau cùng) và được hoàn 100% tại quầy.</p>}
         {membershipChain.length > 0 && <p className="subtitle">Khi thanh toán gia hạn thành công, thời hạn mới sẽ nối tiếp ngày kết thúc hiện tại. Bật tự gia hạn: {RENEWAL_NOTICE_DAYS} ngày trước khi gói cuối cùng hết hạn, hệ thống tạo yêu cầu gia hạn cùng gói và gửi thông báo; bạn thanh toán tại quầy hoặc VNPay trước ngày hết hạn. Chưa thanh toán thì yêu cầu tự hủy và gói hết hạn bình thường.</p>}
       </section>
 

@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import group5.example.sportCenter.dto.CancelMembershipRequest;
 import group5.example.sportCenter.dto.CreateMembershipRequest;
 import group5.example.sportCenter.dto.MembershipResponse;
 import group5.example.sportCenter.dto.MembershipUpgradeOptionsResponse;
@@ -89,6 +90,16 @@ public class MembershipController {
             @AuthenticationPrincipal Jwt jwt) {
 
         return membershipService.enableAutoRenew(id, jwt);
+    }
+
+    /** Huỷ gói chưa bắt đầu (member/staff, hoàn 100%) hoặc gói đang chạy (chỉ ADMIN, cần lý do). */
+    @PatchMapping("/{id}/cancel")
+    public MembershipResponse cancelMembership(
+            @PathVariable Integer id,
+            @Valid @RequestBody(required = false) CancelMembershipRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+
+        return membershipService.cancelMembership(id, request == null ? null : request.reason(), jwt);
     }
 
     @PostMapping("/auto-renew/run")
