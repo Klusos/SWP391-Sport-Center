@@ -626,7 +626,7 @@ Policy: upgrade takes effect immediately and keeps the current `endDate`; the me
 ### Membership auto-renew and cancellation (Phase 11.2)
 
 Auto-renew (no stored card, so it creates an invoice and a reminder):
-- `PATCH /api/memberships/{id}/enable-auto-renew` and `/cancel-renewal` - owner MEMBER or ADMIN/RECEPTIONIST.
+- `PATCH /api/memberships/{id}/enable-auto-renew` and `/cancel-renewal` - owner MEMBER or ADMIN/RECEPTIONIST. Auto-renew is a setting of the member's whole chain: either call sets the flag on every ACTIVE, unexpired membership of that member, because only the last one in the chain is ever renewed. A membership bought to follow a chain that has auto-renew on is created with it on as well (the member page shows the toggle only on the last membership).
 - `MembershipAutoRenewalService` runs daily at 00:00 (after expiry) and on demand with `POST /api/memberships/auto-renew/run` (ADMIN; returns `{created, cancelled}`). Three days before the last membership in a member's chain ends, if auto-renew is on, the plan is still ACTIVE and no MEMBERSHIP/UPGRADE payment is pending, it creates a PENDING COUNTER MEMBERSHIP payment for the same plan with `autoRenew = true` and note `AUTO_RENEWAL membership #<id>`, and notifies the member. Enabling auto-renew inside that window creates the request immediately.
 - Paying it (at the counter, or the member cancels it and pays the same plan ONLINE) queues the next period with auto-renew still on. An unpaid request is cancelled once the membership ends; turning auto-renew off cancels it at once. A plan that is no longer ACTIVE is not renewed; the member is notified instead.
 

@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -153,11 +154,14 @@ public class MembershipService {
                 .orElseThrow(() -> new ResourceNotFoundException("Membership plan not found with id: " + planId));
 
         LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
-        LocalDate startDate = membershipRepository
+        Optional<Membership> lastInChain = membershipRepository
                 .findByMemberIdAndStatusAndEndDateGreaterThan(memberId, "ACTIVE", today).stream()
-                .map(Membership::getEndDate)
-                .max(LocalDate::compareTo)
-                .orElse(today);
+                .max(Comparator.comparing(Membership::getEndDate));
+        LocalDate startDate = lastInChain.map(Membership::getEndDate).orElse(today);
+        // Auto-renew is a setting of the whole chain: a queued renewal keeps it on when the chain had it on.
+        if (lastInChain.isPresent() && Boolean.TRUE.equals(lastInChain.get().getAutoRenew())) {
+            autoRenew = true;
+        }
 
         Membership membership = new Membership();
         membership.setMember(member);
@@ -280,21 +284,33 @@ public class MembershipService {
         return updateAutoRenew(id, true, callerJwt);
     }
 
+    /**
+     * Tự gia hạn là cài đặt của cả chuỗi gói còn hiệu lực: bật/tắt ở một gói áp dụng cho mọi gói ACTIVE
+     * chưa hết hạn của member, vì chỉ gói cuối trong chuỗi mới thực sự được gia hạn.
+     */
     private MembershipResponse updateAutoRenew(Integer id, boolean enabled, Jwt callerJwt) {
         User actor = currentActor(callerJwt);
         Membership membership = membershipRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Membership not found with id: " + id));
         requireOwnMembershipOrStaff(actor, membership.getMember().getId());
         validateActiveMembership(membership);
-        membership.setAutoRenew(enabled);
-        Membership saved = membershipRepository.save(membership);
-        // Turning it on inside the notice window creates the renewal request now instead of at midnight.
-        if (enabled) {
-            autoRenewalService.createIfDue(saved);
-        } else {
-            autoRenewalService.cancelPendingFor(saved);
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        List<Membership> chain = membershipRepository.findByMemberIdAndStatusAndEndDateGreaterThan(
+                membership.getMember().getId(), "ACTIVE", today);
+        if (chain.stream().noneMatch(item -> item.getId().equals(membership.getId()))) {
+            chain = List.of(membership);
         }
-        return toResponse(saved);
+        chain.forEach(item -> item.setAutoRenew(enabled));
+        List<Membership> saved = membershipRepository.saveAll(chain);
+        // Turning it on inside the notice window creates the renewal request now instead of at midnight.
+        for (Membership item : saved) {
+            if (enabled) {
+                autoRenewalService.createIfDue(item);
+            } else {
+                autoRenewalService.cancelPendingFor(item);
+            }
+        }
+        return toResponse(saved.stream().filter(item -> item.getId().equals(id)).findFirst().orElse(membership));
     }
 
     /** Chạy job tự gia hạn ngay (ADMIN), giống job lúc nửa đêm; dùng cho demo và kiểm tra. */
