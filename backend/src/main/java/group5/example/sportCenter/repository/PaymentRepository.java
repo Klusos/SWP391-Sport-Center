@@ -16,11 +16,76 @@ import org.springframework.data.repository.query.Param;
 import group5.example.sportCenter.entity.Payment;
 import group5.example.sportCenter.entity.PaymentPurpose;
 import group5.example.sportCenter.entity.PaymentStatus;
+import group5.example.sportCenter.dto.PendingCoursePaymentResponse;
+import group5.example.sportCenter.dto.PendingPtPaymentResponse;
 import jakarta.persistence.LockModeType;
 
 public interface PaymentRepository extends JpaRepository<Payment, Integer> {
 
-    Page<Payment> findByStatusAndMethodAndPurpose(PaymentStatus status, PaymentMethod method, PaymentPurpose purpose, Pageable pageable);
+    Page<Payment> findByStatus(PaymentStatus status, Pageable pageable);
+
+    /** IDs only, so each payment is first loaded under its own row lock (findByIdForUpdate). */
+    @Query("select p.id from Payment p where p.purpose = :purpose and p.referenceId = :referenceId and p.status in :statuses")
+    List<Integer> findIdsByPurposeAndReferenceIdAndStatusIn(@Param("purpose") PaymentPurpose purpose,
+            @Param("referenceId") Integer referenceId, @Param("statuses") List<PaymentStatus> statuses);
+
+    Page<Payment> findByStatusAndMethodAndPurposeIn(PaymentStatus status, PaymentMethod method, List<PaymentPurpose> purposes, Pageable pageable);
+
+    boolean existsByMember_IdAndPurposeInAndStatus(Integer memberId, List<PaymentPurpose> purposes, PaymentStatus status);
+
+    List<Payment> findByStatusAndPurposeAndNoteStartingWith(PaymentStatus status, PaymentPurpose purpose, String notePrefix);
+
+    // Scalar projection avoids lazy-loading member/course/class entities for each queue row.
+    // referenceId is purpose-scoped; it is not a mapped Payment -> registration association.
+    @Query(value = """
+        select new group5.example.sportCenter.dto.PendingCoursePaymentResponse(
+            p.id, m.id, m.name, r.id, c.id, c.name, cl.id, cl.name,
+            p.amount, p.status, r.status, r.paymentDeadline, p.createdAt)
+        from Payment p join p.member m, CourseRegistration r
+        join r.courseClass cl join cl.courseOffering o join o.course c
+        where p.referenceId = r.id and m.id = r.member.id
+          and p.method = group5.example.sportCenter.entity.PaymentMethod.COUNTER
+          and p.purpose = group5.example.sportCenter.entity.PaymentPurpose.COURSE_REGISTRATION
+          and p.status = group5.example.sportCenter.entity.PaymentStatus.PENDING
+          and r.status = group5.example.sportCenter.entity.CourseRegistrationStatus.PENDING_PAYMENT
+          and r.paymentDeadline > :now
+        order by p.createdAt asc, p.id asc
+        """, countQuery = """
+        select count(p.id)
+        from Payment p join p.member m, CourseRegistration r
+        join r.courseClass cl join cl.courseOffering o join o.course c
+        where p.referenceId = r.id and m.id = r.member.id
+          and p.method = group5.example.sportCenter.entity.PaymentMethod.COUNTER
+          and p.purpose = group5.example.sportCenter.entity.PaymentPurpose.COURSE_REGISTRATION
+          and p.status = group5.example.sportCenter.entity.PaymentStatus.PENDING
+          and r.status = group5.example.sportCenter.entity.CourseRegistrationStatus.PENDING_PAYMENT
+          and r.paymentDeadline > :now
+        """)
+    Page<PendingCoursePaymentResponse> findPendingCoursePayments(@Param("now") LocalDateTime now, Pageable pageable);
+
+    @Query(value = """
+        select new group5.example.sportCenter.dto.PendingPtPaymentResponse(
+            p.id, b.id, m.id, m.name, b.sport.id, b.sport.name, b.coach.id, b.coach.user.name,
+            b.startTime, b.endTime, p.amount, p.status, b.status, b.paymentExpiresAt, p.createdAt)
+        from Payment p join p.member m, PersonalTrainingBooking b
+        where p.referenceId = b.id and m.id = b.member.id
+          and p.method = group5.example.sportCenter.entity.PaymentMethod.COUNTER
+          and p.purpose = group5.example.sportCenter.entity.PaymentPurpose.PT_BOOKING
+          and p.status = group5.example.sportCenter.entity.PaymentStatus.PENDING
+          and b.status = group5.example.sportCenter.entity.PersonalTrainingBookingStatus.PENDING_PAYMENT
+          and b.paymentExpiresAt > :now
+        order by p.createdAt asc, p.id asc
+        """, countQuery = """
+        select count(p.id)
+        from Payment p join p.member m, PersonalTrainingBooking b
+        where p.referenceId = b.id and m.id = b.member.id
+          and p.method = group5.example.sportCenter.entity.PaymentMethod.COUNTER
+          and p.purpose = group5.example.sportCenter.entity.PaymentPurpose.PT_BOOKING
+          and p.status = group5.example.sportCenter.entity.PaymentStatus.PENDING
+          and b.status = group5.example.sportCenter.entity.PersonalTrainingBookingStatus.PENDING_PAYMENT
+          and b.paymentExpiresAt > :now
+        """)
+    Page<PendingPtPaymentResponse> findPendingPtPayments(@Param("now") LocalDateTime now, Pageable pageable);
 
     List<Payment> findByMemberIdOrderByCreatedAtDesc(Integer memberId);
 
@@ -57,6 +122,17 @@ public interface PaymentRepository extends JpaRepository<Payment, Integer> {
         GROUP BY p.purpose
         """)
     List<Object[]> revenueByPurpose(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    /** Daily verified revenue, grouped by purpose for DAY/MONTH/YEAR report buckets. */
+    @Query("""
+        SELECT FUNCTION('year', p.paidAt), FUNCTION('month', p.paidAt), FUNCTION('day', p.paidAt),
+               p.purpose, SUM(p.amount)
+        FROM Payment p
+        WHERE p.status = group5.example.sportCenter.entity.PaymentStatus.SUCCESS
+          AND p.paidAt >= :from AND p.paidAt < :to
+        GROUP BY FUNCTION('year', p.paidAt), FUNCTION('month', p.paidAt), FUNCTION('day', p.paidAt), p.purpose
+        """)
+    List<Object[]> revenueBySettlementDay(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
     @Query("""
         SELECT p.method, COALESCE(SUM(p.amount), 0) FROM Payment p

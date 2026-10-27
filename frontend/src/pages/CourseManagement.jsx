@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import "./Portal.css";
 import "./Admin.css";
-import { getSportsApi, getCoachesApi, getFacilitiesApi, getCoursesBySportApi, saveCourseApi, getOfferingsApi, saveOfferingApi, getClassesApi, saveClassApi, getSessionsByClassApi, saveSessionApi, setSessionStatusApi } from "../api";
+import "./CourseManagement.css";
+import { getCourseApi, getCoachesApi, getFacilitiesApi, getOfferingsApi, saveOfferingApi, getClassesApi, saveClassApi, getSessionsByClassApi, saveSessionApi, setSessionStatusApi } from "../api";
 import { addMinutesToDateTimeLocal, getSessionActionAvailability, validateClassSessionSchedule, validateCourseOffering } from "../classSessionValidation";
 import ClassSessionGenerationPanel from "./ClassSessionGenerationPanel";
 
@@ -111,15 +113,14 @@ function Crud({ title, items, fields, columns, onSave, onPick, picked, rowAction
   );
 }
 
-const LEVELS = ["BEGINNER", "INTERMEDIATE", "ADVANCED"].map((v) => [v, v]);
 const st = (...vals) => ({ key: "status", label: "Trạng thái", type: "select", required: true, editOnly: true, options: vals.map((v) => [v, v]) });
 
 export default function CourseManagement({ token, role, onLogout, onNavigate }) {
-  const [sports, setSports] = useState([]);
+  const { courseId } = useParams();
+  const navigate = useNavigate();
   const [coaches, setCoaches] = useState([]);
   const [facilities, setFacilities] = useState([]);
-  const [sportId, setSportId] = useState(null);
-  const [courses, setCourses] = useState([]); const [course, setCourse] = useState(null);
+  const [course, setCourse] = useState(null);
   const [offerings, setOfferings] = useState([]); const [offering, setOffering] = useState(null);
   const [classes, setClasses] = useState([]); const [cls, setCls] = useState(null);
   const [sessions, setSessions] = useState([]);
@@ -127,22 +128,21 @@ export default function CourseManagement({ token, role, onLogout, onNavigate }) 
   const [actionClock, setActionClock] = useState(() => new Date());
   const fail = useCallback((e) => setMsg({ type: "error", text: e.message }), []);
 
-  const loadCourses = useCallback(() => sportId != null && getCoursesBySportApi(token, sportId).then((d) => setCourses(list(d))).catch(fail), [fail, sportId, token]);
   const loadOfferings = useCallback(() => course && getOfferingsApi(token, course.id).then((d) => setOfferings(list(d))).catch(fail), [course, fail, token]);
   const loadClasses = useCallback(() => offering && getClassesApi(token, offering.id).then((d) => setClasses(list(d))).catch(fail), [fail, offering, token]);
   const loadSessions = useCallback(() => cls && getSessionsByClassApi(token, cls.id).then((d) => setSessions(list(d))).catch(fail), [cls, fail, token]);
 
   useEffect(() => {
-    getSportsApi(token).then((d) => { const s = list(d); setSports(s); if (s[0]) setSportId(s[0].id); }).catch(fail);
     getCoachesApi(token).then((d) => setCoaches(list(d))).catch(() => {});
     getFacilitiesApi(token).then((d) => setFacilities(list(d))).catch(() => {});
   }, [fail, token]);
   useEffect(() => {
+    getCourseApi(token, courseId).then(setCourse).catch(fail);
+  }, [courseId, fail, token]);
+  useEffect(() => {
     const timer = window.setInterval(() => setActionClock(new Date()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setCourse(null); setCourses([]); loadCourses(); }, [loadCourses]);
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setOffering(null); setOfferings([]); loadOfferings(); }, [loadOfferings]);
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -156,15 +156,6 @@ export default function CourseManagement({ token, role, onLogout, onNavigate }) 
     reload();
   };
 
-  const courseFields = [
-    { key: "name", label: "Tên khóa học", required: true },
-    { key: "level", label: "Trình độ", type: "select", required: true, options: LEVELS },
-    { key: "targetAgeMin", label: "Tuổi tối thiểu", type: "number" },
-    { key: "targetAgeMax", label: "Tuổi tối đa", type: "number" },
-    { key: "description", label: "Mô tả", type: "textarea" },
-    { key: "learningOutcome", label: "Kết quả đạt được", type: "textarea" },
-    st("ACTIVE", "INACTIVE"),
-  ];
   const offeringFields = [
     { key: "name", label: "Tên đợt học", required: true },
     { key: "price", label: "Học phí", type: "number", required: true },
@@ -195,24 +186,19 @@ export default function CourseManagement({ token, role, onLogout, onNavigate }) 
     <div className="layout">
       <Sidebar role={role} activePage="courses" onLogout={onLogout} onNavigate={onNavigate} />
       <main className="main">
-        <h1>Quản lý khóa học &amp; lớp học</h1>
-        <p className="subtitle">Chọn bộ môn, rồi lần lượt chọn khóa học → đợt học → lớp để quản lý buổi học.</p>
+        <button type="button" className="adm-back" onClick={() => navigate("/staff/courses")}>← Danh sách khóa học</button>
+        <h1>{course ? course.name : "Đang tải khóa học…"}</h1>
+        {course && <section className="adm-block course-detail-summary">
+          <div><span className="subtitle">Sport</span><strong>{course.sportName || "—"}</strong></div>
+          <div><span className="subtitle">Trình độ</span><strong>{course.level || "—"}</strong></div>
+          <div><span className="subtitle">Độ tuổi</span><strong>{course.targetAgeMin ?? "—"} – {course.targetAgeMax ?? "—"}</strong></div>
+          <div><span className="subtitle">Trạng thái</span>{pill(course.status)}</div>
+          <button type="button" onClick={() => navigate("/staff/courses/" + course.id + "/edit")}>Sửa thông tin khóa học</button>
+          {course.description && <p>{course.description}</p>}
+        </section>}
         {msg && <div className={"banner " + msg.type} role="status">{msg.text}</div>}
 
-        <div className="pf-chips" role="tablist" aria-label="Bộ môn">
-          {sports.map((s) => (
-            <button key={s.id} type="button" role="tab" aria-selected={s.id === sportId}
-              className={"pf-chip" + (s.id === sportId ? " active" : "")} onClick={() => setSportId(s.id)}>{s.name}</button>
-          ))}
-        </div>
-
-        <Crud title="Khóa học" items={courses} fields={courseFields} picked={course} onPick={setCourse}
-          disabled={sportId == null} hint="Chọn một bộ môn."
-          columns={[{ key: "name", label: "Tên" }, { key: "level", label: "Trình độ" },
-            { label: "Độ tuổi", render: (c) => (c.targetAgeMin ?? "—") + " – " + (c.targetAgeMax ?? "—") },
-            { label: "Trạng thái", render: (c) => pill(c.status) }]}
-          onSave={save((id, b) => saveCourseApi(token, id, id ? b : { ...b, sportId }), loadCourses)} />
-
+        <p className="subtitle">Khóa học → Đợt học → Lớp → Buổi học</p>
         <Crud title={"Đợt học" + (course ? " – " + course.name : "")} items={offerings} fields={offeringFields} picked={offering} onPick={setOffering}
           disabled={!course} hint="Chọn một khóa học ở trên."
           columns={[{ key: "name", label: "Tên" },

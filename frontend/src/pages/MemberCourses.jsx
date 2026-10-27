@@ -60,7 +60,8 @@ export default function MemberCourses({ token, role, onLogout, onNavigate }) {
               <div><strong>{item.className || `Lớp #${item.classId}`}</strong><span>{[item.courseName, item.courseOfferingName].filter(Boolean).join(" · ") || "Thông tin khóa học không khả dụng"}</span></div>
               <span className="member-registration-status">{item.status === "PENDING_PAYMENT" ? "Payment pending" : item.status === "CONFIRMED" ? "Confirmed" : item.status === "EXPIRED" ? "Expired" : item.status}</span>
               {item.status === "PENDING_PAYMENT" && <span>Pay before {formatVietnamDateTime(item.paymentDeadline)} (Vietnam time).</span>}
-              {item.status === "PENDING_PAYMENT" && <button type="button" className="btn btn-outline-secondary" disabled={cancellingId !== null} onClick={() => void cancelHold(item.id)}>{cancellingId === item.id ? "Cancelling…" : "Cancel hold"}</button>}
+              <Link to={`/member/course-checkout/${item.id}`}>{item.status === "PENDING_PAYMENT" ? "Thanh toán / theo dõi" : "Xem thanh toán"}</Link>
+              {item.status === "PENDING_PAYMENT" && <button type="button" className="btn btn-outline-secondary" disabled={cancellingId !== null} onClick={() => void cancelHold(item.id)}>{cancellingId === item.id ? "Đang hủy…" : "Hủy giữ chỗ"}</button>}
               {item.courseId != null && <Link to={`/member/courses/${item.courseId}`}>Xem khóa học</Link>}
             </article>)}</div>}
       {cancelError && <p className="banner error" role="alert">{cancelError}</p>}

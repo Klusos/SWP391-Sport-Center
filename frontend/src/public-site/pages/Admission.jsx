@@ -46,7 +46,7 @@ function planBenefits(plan) {
   return benefits
 }
 
-export default function Admission() {
+export default function Admission({ auth }) {
   const [plans, setPlans] = useState([])
   const [loadingPlans, setLoadingPlans] = useState(true)
   const [plansError, setPlansError] = useState('')
@@ -139,7 +139,16 @@ export default function Admission() {
                         <li key={`${plan.id}-benefit-${index}`}><span className="perk-n">{index + 1}</span>{benefit}</li>
                       ))}
                     </ul>
-                    <button className="btn btn-outline-plan" type="button">TÌM HIỂU THÊM</button>
+                    {(!auth || auth.role === 'MEMBER') ? (
+                      <Link className="btn btn-outline-plan" to="/member/membership">
+                        TÌM HIỂU THÊM
+                      </Link>
+                    ) : (
+                      <button className="btn btn-outline-plan" type="button" disabled
+                        title="Chức năng mua gói thành viên dành cho tài khoản MEMBER">
+                        Chỉ dành cho hội viên
+                      </button>
+                    )}
                   </article>
                 </div>
               )

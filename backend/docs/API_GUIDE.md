@@ -367,6 +367,26 @@ Facility status updates accept `ACTIVE` or `INACTIVE`, case-insensitively, and p
 
 ClassSession POST/PUT and generation preview/confirm also require the selected Facility to support the Sport associated with the CourseOffering's Course. A null Facility remains allowed. Generation preview reports this as a candidate conflict; confirmation and manual writes reject incompatible assignments. Facility assignment edits share the Facility schedule row lock with session scheduling and cannot remove a Sport needed by a future or ongoing non-CANCELLED session. Cancelled and historical completed records are retained.
 
+## Flow 4: Training plans, results and progress (Phase 10.1)
+
+Writes are limited to the class's assigned COACH or ADMIN (403 otherwise). Staff (ADMIN/RECEPTIONIST) and the assigned COACH can read class data; a MEMBER reads a plan only for a class with a CONFIRMED registration and reads everything else through `GET /api/training/me`.
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/training/classes` | COACH: assigned classes; staff: all classes. Includes member/session counts and plan goal. |
+| GET / PUT | `/api/training/classes/{classId}/plan` | Read (404 until created) or create/update the training plan `{goal, description}`. |
+| POST | `/api/training/classes/{classId}/plan/exercises` | Add `{name, sets?, reps?, durationMinutes?, notes?, sortOrder?}`; 409 before the plan exists. |
+| PUT / DELETE | `/api/training/exercises/{exerciseId}` | Modify or remove an exercise. |
+| GET | `/api/training/classes/{classId}/sessions` | Sessions with PRESENT/result counts, `canComplete`, `canRecordResults`. |
+| POST | `/api/training/sessions/{sessionId}/complete` | Conduct session: SCHEDULED → COMPLETED at/after `endTime`; idempotent; 409 if CANCELLED or before end. |
+| GET | `/api/training/sessions/{sessionId}/results` | Result sheet: CONFIRMED members with attendance status and recorded result. |
+| PUT | `/api/training/sessions/{sessionId}/results/{memberId}` | Record/update `{score 1–10, notes?}`; 409 unless the session started, is not CANCELLED and the member is marked PRESENT. |
+| GET | `/api/training/classes/{classId}/progress` | Per member: attendance, result count, average score, latest evaluation and history. |
+| POST | `/api/training/classes/{classId}/members/{memberId}/evaluations` | Append `{rating 1–5, comment}`; 409 without a CONFIRMED registration. |
+| GET | `/api/training/me` | MEMBER: plan, attendance summary, session results and evaluations for each CONFIRMED class. |
+
+Plan, exercise, result, evaluation and session-completion writes create AuditLog entries. Apply `docs/sql/phase10-1-flow4-training.sql` before starting the backend with `ddl-auto=validate`.
+
 ## Module coverage note
 
 The Phase 2 CourseClass registration API is documented below. `/api/classes` manages CourseClass records; `/api/class-sessions` manages individual meetings.
@@ -550,8 +570,11 @@ All endpoints require authentication. MEMBER-only endpoints derive the member ID
 - `POST /api/pt-bookings` - MEMBER; JSON `{ "coachId": 12, "sportId": 3, "startTime": "2026-10-20T10:00:00" }`; returns 201 and a `PENDING_PAYMENT` booking with server-calculated `endTime`, prices, 90-minute duration, member, coach, sport, and `paymentExpiresAt` (15 minutes after creation).
 - `GET /api/pt-bookings/me` - MEMBER's own history.
 - `GET /api/pt-bookings/assigned` - authenticated COACH's bookings.
+- `PATCH /api/pt-bookings/{id}/cancel` - owner MEMBER or ADMIN/RECEPTIONIST. `PENDING_PAYMENT`: cancelled at any time and its PENDING payment attempts become `CANCELLED`. `CONFIRMED`: members may cancel until 24 hours before `startTime`, staff until it starts (409 otherwise); the SUCCESS payment becomes `REFUND_REQUIRED` for a 100% refund through the refund queue. The member is notified, and the coach too when the session was confirmed. Other statuses return 409.
 
-`PENDING_PAYMENT` reserves the interval for 15 minutes. A scheduled worker transitions due bookings to terminal `EXPIRED`; overlap checks also ignore pending rows whose `paymentExpiresAt` has passed, so a delayed worker does not hold the slot. `EXPIRED` and `CANCELLED` bookings do not block new bookings. Expiry and payment confirmation must lock the same booking row and recheck status/deadline in the transaction. Flow 3 may transition a booking from `PENDING_PAYMENT` to `CONFIRMED` only after verified payment and only before `paymentExpiresAt`; booking creation is not proof of payment. A late successful payment must leave the booking `EXPIRED`; Flow 3 must record/route the payment exception without confirming the booking. The refund or other remedy for late payment is intentionally unspecified. Payment amounts should reconcile to stored `originalPrice`, `discount`, and `finalPrice`. No cancellation endpoint is exposed.
+Paying: the member pays with `POST /api/payments` (`purpose: "PT_BOOKING"`, `referenceId` = booking ID) by `ONLINE` (VNPay; results return through the membership result URL and the frontend forwards PT results to `/member/pt-booking`) or `COUNTER`. Counter requests appear in `GET /api/payments/pending-pt` while the hold is active; staff settle them with `PATCH /api/payments/{id}/counter` from the "Thanh toán buổi PT" page (`/receptionist/pt-payments`). Only one PENDING attempt per booking is allowed; cancel it to switch method.
+
+`PENDING_PAYMENT` reserves the interval for 15 minutes. A scheduled worker transitions due bookings to terminal `EXPIRED`; overlap checks also ignore pending rows whose `paymentExpiresAt` has passed, so a delayed worker does not hold the slot. `EXPIRED` and `CANCELLED` bookings do not block new bookings. Expiry and payment confirmation must lock the same booking row and recheck status/deadline in the transaction. Flow 3 may transition a booking from `PENDING_PAYMENT` to `CONFIRMED` only after verified payment and only before `paymentExpiresAt`; booking creation is not proof of payment. A late successful payment must leave the booking `EXPIRED`; Flow 3 must record/route the payment exception without confirming the booking. A late successful payment becomes `REFUND_REQUIRED` and is refunded through the refund queue. Payment amounts should reconcile to stored `originalPrice`, `discount`, and `finalPrice`.
 
 SQL Server setup: after the core schema and `class_session` table, review and manually run `docs/sql/phase2-personal-training-bookings.sql` in `SportCenterDB`. The migration is not executed by the application and Hibernate remains `ddl-auto=validate`.
 
@@ -564,6 +587,7 @@ Payment is a separate operation from membership purchase, course registration an
 | `MEMBERSHIP` | `MembershipPlan.id` (plan must be `ACTIVE`) | `plan.price` | Activates a new ACTIVE membership from today, or, if one is still valid, renews by adding a new membership that starts on the latest current `endDate` |
 | `COURSE_REGISTRATION` | `CourseRegistration.id` (own, `PENDING_PAYMENT`, deadline not reached) | registration `finalPrice` snapshot | Confirms the registration atomically with Payment success; late settlement becomes `REFUND_REQUIRED` and EXPIRED |
 | `PT_BOOKING` | `PersonalTrainingBooking.id` (own, `PENDING_PAYMENT`, hold not expired, not yet paid) | booking `finalPrice` | Confirms the booking (`PENDING_PAYMENT` -> `CONFIRMED`) |
+| `UPGRADE` | target `MembershipPlan.id` (`ACTIVE`, an upgrade of the current plan) | prorated difference, see below | Marks the current membership `UPGRADED` and creates an ACTIVE membership on the target plan from today to the same `endDate` |
 
 Payment status: `PENDING` -> `SUCCESS` | `CANCELLED` | `REFUND_REQUIRED`. `REFUND_REQUIRED` means money was received but could not be applied (PT hold expired first, registration no longer active, the reference was already paid by another payment, or the gateway reported success after the payment was cancelled). The booking is left `EXPIRED`; the refund itself is handled manually. `REFUND_REQUIRED` is excluded from revenue reports.
 
@@ -586,6 +610,47 @@ Receptionist membership sales are handled in one workflow at `/receptionist/memb
 Configuration: simulated callbacks require `PAYMENT_CALLBACK_SECRET` (a long random string) and `PAYMENT_MOCK_GATEWAY_ENABLED=true` under an explicitly active `demo`, `dev`, `development`, `test`, or `phase1` profile; the callback URL must use loopback. Production profiles always disable the simulator. When disabled, ONLINE payment creation returns 503; COUNTER payments remain available.
 
 VNPay sandbox: set `PAYMENT_PROVIDER=vnpay`, `VNPAY_TMN_CODE` and `VNPAY_HASH_SECRET` (from the sandbox registration email at https://sandbox.vnpayment.vn/devreg) in `backend/.env`; never commit them. Optional overrides: `VNPAY_PAY_URL` (default sandbox `vpcpay.html`), `VNPAY_RETURN_URL` (default `http://localhost:8080/api/payments/vnpay/return`), `PAYMENT_FRONTEND_RESULT_URL` (default `http://localhost:5173/member/membership`). The backend fails to start if the TMN code or hash secret is missing while `PAYMENT_PROVIDER=vnpay`. With VNPay, ONLINE `paymentUrl` is the VNPay payment page (amount sent as VND x 100, `vnp_TxnRef` is the transaction code without `-`, link valid for 15 minutes). Sandbox testing uses the NCB test card listed in the VNPay sandbox documentation. An abandoned ONLINE payment stays `PENDING` until the member or staff cancels it. SQL Server: review and manually run `docs/sql/phase2-payment.sql` before starting with `ddl-auto=validate`; it has not been executed as part of this integration.
+
+### Membership upgrade (Phase 11.1)
+
+Policy: upgrade takes effect immediately and keeps the current `endDate`; the member pays only the price difference for the remaining days. No mid-term downgrade, no refund of the difference.
+
+- `GET /api/memberships/member/{memberId}/upgrade-options` - the MEMBER themself or ADMIN/RECEPTIONIST. Returns the current membership, `remainingDays`, `blockedReason` and `options[]` (`planId`, `planName`, `planPrice`, `durationMonths`, discounts, `amount`).
+- Create the payment with `POST /api/payments` and `{"method":"ONLINE|COUNTER","purpose":"UPGRADE","referenceId":<target plan id>}`. ONLINE returns the VNPay `paymentUrl`; COUNTER appears in `GET /api/payments/pending-memberships` and is confirmed with `PATCH /api/payments/{id}/counter`.
+- Eligible target: a different ACTIVE plan that costs more per day (`price / durationMonths`) and keeps every benefit (course and PT discounts not lower; PT plan and one-on-one coaching not removed). This rules out e.g. STANDARD -> DELUXE (higher price, lower course discount).
+- Amount: `(target price per day - current price per day) x remainingDays`, using 30-day months and current list prices, rounded up to 1,000 VND. `remainingDays` = days from today to the exclusive `endDate`.
+- `blockedReason` (also returned as 409 on payment creation): `NO_ACTIVE_MEMBERSHIP`, `MULTIPLE_ACTIVE_MEMBERSHIPS`, `QUEUED_MEMBERSHIP` (a renewal already starts after the current plan), `PENDING_PAYMENT` (a MEMBERSHIP or UPGRADE payment is pending), `TOO_FEW_DAYS_LEFT` (fewer than 3 days). While an UPGRADE payment is pending, a MEMBERSHIP purchase also returns 409.
+- Quote expiry: COUNTER quotes expire at midnight (Vietnam time); ONLINE quotes after 15 minutes or at midnight, whichever is first, and ONLINE upgrades are refused in the last 5 minutes before midnight. Staff confirming an expired COUNTER quote get 409 and must cancel it. A gateway success after expiry, or after the source membership stopped being current, becomes `REFUND_REQUIRED` and nothing is changed.
+- Quotes are stored in `membership_upgrade` (payment, source membership, target plan, remaining days, expiry, resulting membership). Apply `docs/sql/phase11-1-membership-upgrade.sql` first.
+
+### Membership auto-renew and cancellation (Phase 11.2)
+
+Auto-renew (no stored card, so it creates an invoice and a reminder):
+- `PATCH /api/memberships/{id}/enable-auto-renew` and `/cancel-renewal` - owner MEMBER or ADMIN/RECEPTIONIST.
+- `MembershipAutoRenewalService` runs daily at 00:00 (after expiry) and on demand with `POST /api/memberships/auto-renew/run` (ADMIN; returns `{created, cancelled}`). Three days before the last membership in a member's chain ends, if auto-renew is on, the plan is still ACTIVE and no MEMBERSHIP/UPGRADE payment is pending, it creates a PENDING COUNTER MEMBERSHIP payment for the same plan with `autoRenew = true` and note `AUTO_RENEWAL membership #<id>`, and notifies the member. Enabling auto-renew inside that window creates the request immediately.
+- Paying it (at the counter, or the member cancels it and pays the same plan ONLINE) queues the next period with auto-renew still on. An unpaid request is cancelled once the membership ends; turning auto-renew off cancels it at once. A plan that is no longer ACTIVE is not renewed; the member is notified instead.
+
+Direct cancellation (staff) - `PATCH /api/memberships/{id}/cancel` with optional `{"reason":"..."}` (max 500):
+- Members get 403 and must send a cancellation request (below).
+- Only the last ACTIVE membership in the chain can be cancelled (409 otherwise), so no gaps appear.
+- Upcoming (start date after today): ADMIN/RECEPTIONIST. Status becomes `CANCELLED`; a PENDING request for it is closed as APPROVED; the payment that bought it (`membership.purchase_payment_id`) changes from SUCCESS to `REFUND_REQUIRED` for a full refund at the desk, which also removes it from revenue. Memberships without a linked payment (older rows) are cancelled and left to staff reconciliation.
+- Running: members and receptionists get 403 (no refund; turn auto-renew off instead). ADMIN may cancel it with a required reason (400 without one); benefits stop immediately, the payment is not changed and any refund is handled outside the system. A pending MEMBERSHIP/UPGRADE payment must be settled or cancelled first (409).
+- The member is notified and `MembershipResponse.cancelReason` shows the reason. Admins use the membership page at `/admin/membership-sales`. Apply `docs/sql/phase11-2-membership-cancellation.sql` first.
+
+### Membership cancellation requests and refunds (Phase 11.3)
+
+Member requests (`MembershipCancellationRequestResponse`: id, membership, member, plan, dates, reason, status, requestedAt, decidedByName, decidedAt, decisionNote, purchasePaymentId, purchaseAmount):
+- `POST /api/memberships/cancellation-requests` - MEMBER, `{"membershipId":1,"reason":"..."}` (reason optional, max 500). Only for the member's own last ACTIVE upcoming membership, and only until 72 hours before 00:00 (Vietnam time) of its start date (409 after that, for a running membership, or when a request is already PENDING). All ACTIVE ADMIN/RECEPTIONIST users are notified.
+- `GET /api/memberships/cancellation-requests/me` - MEMBER, newest first. `PATCH /api/memberships/cancellation-requests/{id}/withdraw` - owner MEMBER while PENDING.
+- `GET /api/memberships/cancellation-requests?status=PENDING` - ADMIN/RECEPTIONIST, oldest first (status PENDING/APPROVED/REJECTED/WITHDRAWN/EXPIRED).
+- `PATCH /api/memberships/cancellation-requests/{id}/approve` with optional `{"note":"..."}` - ADMIN/RECEPTIONIST. Cancels the membership like a direct upcoming cancellation (purchase payment -> `REFUND_REQUIRED`, member notified); 409 if the membership has started or is no longer the last one.
+- `PATCH /api/memberships/cancellation-requests/{id}/reject` with required `{"note":"..."}` (400 without) - ADMIN/RECEPTIONIST; the member is notified with the note.
+- The daily membership job marks PENDING requests EXPIRED once their membership has started or is no longer ACTIVE, and notifies the member.
+
+Refunds:
+- `GET /api/payments/refund-required?page=0&size=20` - ADMIN/RECEPTIONIST, every `REFUND_REQUIRED` payment (all purposes), oldest first.
+- `PATCH /api/payments/{id}/refund` with optional `{"note":"..."}` - ADMIN/RECEPTIONIST confirms the money was returned: status `REFUNDED`, `refundedAt`/`refundedByName` set on `PaymentResponse`, the note is appended, the member is notified. 409 for any other status. `REFUNDED` is not revenue.
+- Apply `docs/sql/phase11-3-cancellation-requests-and-refunds.sql` first.
 
 ## Notifications (Phase 6.1A)
 

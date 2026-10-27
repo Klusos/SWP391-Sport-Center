@@ -21,15 +21,24 @@ import SportManagement from "./pages/SportManagement";
 import FacilityManagement from "./pages/FacilityManagement";
 import MembershipPlans from "./pages/MembershipPlans";
 import ReceptionistMembershipSales from "./pages/ReceptionistMembershipSales";
+import ReceptionistCoursePayments from "./pages/ReceptionistCoursePayments";
+import ReceptionistPtPayments from "./pages/ReceptionistPtPayments";
+import ReceptionistCourseRegistration from "./pages/ReceptionistCourseRegistration";
 import PtBooking from "./pages/PtBooking";
 import CoachPtSessions from "./pages/CoachPtSessions";
 import CoachSkillAssessments from "./pages/CoachSkillAssessments";
 import CoachAttendance from "./pages/CoachAttendance";
+import CoachTraining from "./pages/CoachTraining";
+import MemberTraining from "./pages/MemberTraining";
 import StaffAttendance from "./pages/StaffAttendance";
 import MemberAttendance from "./pages/MemberAttendance";
 import MemberLevelsAssessments from "./pages/MemberLevelsAssessments";
 import Dashboard from "./pages/Dashboard";
 import CourseManagement from "./pages/CourseManagement";
+import CourseList from "./pages/CourseList";
+import CourseForm from "./pages/CourseForm";
+import CourseCheckout from "./pages/CourseCheckout";
+import SupportTickets from "./pages/SupportTickets";
 import MemberCourses from "./pages/MemberCourses";
 import MemberMembership from "./pages/MemberMembership";
 import MemberProfile from "./pages/MemberProfile";
@@ -80,7 +89,7 @@ function StaffRoute({ auth }) {
       <Navigate
         to="/login"
         replace
-        state={{ from: location.pathname }}
+        state={{ from: location.pathname + location.search }}
       />
     );
   }
@@ -100,7 +109,7 @@ function MemberRoute({ auth }) {
       <Navigate
         to="/login"
         replace
-        state={{ from: location.pathname }}
+        state={{ from: location.pathname + location.search }}
       />
     );
   }
@@ -201,7 +210,8 @@ export default function App() {
     const courseReturn =
       data.role === "MEMBER" &&
       typeof returnPath === "string" &&
-      (/^\/member\/courses\/[1-9]\d*$/.test(returnPath) ||
+      (/^\/member\/(?:course-checkout\/[1-9]\d*|membership)(?:\?[^#]*)?$/.test(returnPath) ||
+        /^\/member\/courses\/[1-9]\d*$/.test(returnPath) ||
         /^\/khoa-hoc\/[1-9]\d*$/.test(returnPath));
 
     const memberCoursePath = courseReturn
@@ -246,8 +256,14 @@ export default function App() {
           "admin-courses": "/admin/courses",
           "notification-broadcast": "/admin/notifications/broadcast",
           "audit-logs": "/admin/audit-logs",
+          "admin-training": "/admin/training",
+          "admin-membership-sales": "/admin/membership-sales",
           "membership-plans": "/staff/membership-plans",
           "membership-sales": "/receptionist/membership-sales",
+          "course-payments": "/receptionist/course-payments",
+          "pt-payments": "/receptionist/pt-payments",
+          "course-registration": "/receptionist/course-registration",
+          "support-tickets": "/staff/support-tickets",
           attendance: "/admin/attendance",
           register: "/staff/register-member",
           classes: "/admin/classes",
@@ -268,6 +284,7 @@ export default function App() {
           "coach-pt-sessions": "/coach/pt-sessions",
           "coach-assessments": "/coach/skill-assessments",
           "coach-attendance": "/coach/attendance",
+          "coach-training": "/coach/training",
         }[page] || "/coach/dashboard"
       ),
   };
@@ -285,8 +302,10 @@ export default function App() {
           "member-schedule": "/member/schedule",
           "member-profile": "/member/profile",
           "member-levels": "/member/levels-assessments",
+          "member-training": "/member/training",
           "member-attendance": "/member/attendance",
           "member-pt-booking": "/member/pt-booking",
+          "support-tickets": "/member/support-tickets",
           "member-classes": "/member/classes",
         }[page] || "/member/dashboard"
       ),
@@ -317,7 +336,7 @@ export default function App() {
 
           <Route path="/huan-luyen-vien" element={<Coaches />} />
           <Route path="/co-so-vat-chat" element={<Facilities />} />
-          <Route path="/tuyen-sinh" element={<Admission />} />
+          <Route path="/tuyen-sinh" element={<Admission auth={auth} />} />
 
           <Route
             path="/membership-plans"
@@ -376,6 +395,8 @@ export default function App() {
             element={<ConsultationQueue {...staff} />}
           />
 
+          <Route path="/staff/support-tickets" element={<SupportTickets {...staff} />} />
+
           <Route
             path="/staff/members"
             element={<MemberList {...staff} />}
@@ -387,6 +408,10 @@ export default function App() {
               element={<ReceptionistMembershipSales {...staff} />}
             />
           </Route>
+
+          <Route path="/receptionist/course-payments" element={<ReceptionistCoursePayments {...staff} userId={auth?.userId} />} />
+          <Route path="/receptionist/course-registration" element={<ReceptionistCourseRegistration {...staff} />} />
+          <Route path="/receptionist/pt-payments" element={<ReceptionistPtPayments {...staff} />} />
 
           {/* Chỉ Admin */}
           <Route element={<AdminRoute auth={auth} />}>
@@ -416,8 +441,11 @@ export default function App() {
 
             <Route
               path="/staff/courses"
-              element={<CourseManagement {...staff} />}
+              element={<CourseList {...staff} />}
             />
+            <Route path="/staff/courses/new" element={<CourseForm {...staff} />} />
+            <Route path="/staff/courses/:courseId/edit" element={<CourseForm {...staff} />} />
+            <Route path="/staff/courses/:courseId" element={<CourseManagement {...staff} />} />
 
             <Route
               path="/admin/notifications/broadcast"
@@ -429,6 +457,9 @@ export default function App() {
               element={<AdminAuditLogs {...staff} />}
             />
 
+            <Route path="/admin/training" element={<CoachTraining {...staff} />} />
+            <Route path="/admin/membership-sales" element={<ReceptionistMembershipSales {...staff} />} />
+
             {/* Các trang mới của Admin — bọc trong Layout (sidebar + .app-shell) */}
             <Route element={<Layout {...staff} />}>
               <Route
@@ -438,13 +469,7 @@ export default function App() {
 
               <Route
                 path="/admin/courses"
-                element={
-                  <CrudPage
-                    kind="courses"
-                    title="Demo — Quản lý khóa học"
-                    subtitle="Giao diện mẫu với dữ liệu minh họa; quản lý khóa học thật tại mục Khóa học."
-                  />
-                }
+                element={<Navigate to="/staff/courses" replace />}
               />
 
               <Route
@@ -460,7 +485,7 @@ export default function App() {
 
               <Route
                 path="/admin/reports"
-                element={<ReportPage />}
+                element={<ReportPage {...staff} />}
               />
             </Route>
           </Route>
@@ -472,7 +497,7 @@ export default function App() {
 
               <Route
                 path="/receptionist/support"
-                element={<Navigate to="/staff/consultations" replace />}
+                element={<Navigate to="/staff/support-tickets" replace />}
               />
             </Route>
           </Route>
@@ -496,19 +521,20 @@ export default function App() {
           />
 
           <Route
+            path="/member/training"
+            element={<MemberTraining {...member} />}
+          />
+
+          <Route
             path="/member/pt-booking"
-            element={
-              <PtBooking
-                token={auth?.accessToken}
-                onLogout={handleLogout}
-              />
-            }
+            element={<PtBooking {...member} />}
           />
 
           <Route
             path="/member/levels-assessments"
             element={<MemberLevelsAssessments {...member} />}
           />
+
 
           <Route
             path="/member/courses"
@@ -519,6 +545,8 @@ export default function App() {
             path="/member/courses/:courseId"
             element={<CourseDetail auth={auth} memberRoute onLogout={handleLogout} onNavigate={member.onNavigate} />}
           />
+          <Route path="/member/course-checkout/:registrationId" element={<CourseCheckout auth={auth} {...member} />} />
+          <Route path="/member/support-tickets" element={<SupportTickets {...member} />} />
 
           {/* Trang mới của hội viên — bọc trong Layout */}
           <Route element={<Layout {...member} />}>
@@ -536,7 +564,11 @@ export default function App() {
 
           <Route
             path="/member/membership"
-            element={<MemberMembership {...member} />}
+            element={new URLSearchParams(location.search).has("paymentId")
+                || new URLSearchParams(location.search).has("paymentStatus")
+                || new URLSearchParams(location.search).has("reason")
+              ? <CourseCheckout auth={auth} {...member} />
+              : <MemberMembership {...member} />}
           />
 
           <Route
@@ -581,6 +613,8 @@ export default function App() {
             path="/coach/attendance"
             element={<CoachAttendance {...coach} />}
           />
+
+          <Route path="/coach/training" element={<CoachTraining {...coach} />} />
         </Route>
 
         {/* Trang không tồn tại */}

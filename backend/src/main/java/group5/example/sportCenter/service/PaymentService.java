@@ -22,6 +22,8 @@ import org.springframework.web.server.ResponseStatusException;
 import group5.example.sportCenter.dto.CounterPaymentRequest;
 import group5.example.sportCenter.dto.CreatePaymentRequest;
 import group5.example.sportCenter.dto.PaymentResponse;
+import group5.example.sportCenter.dto.PendingCoursePaymentResponse;
+import group5.example.sportCenter.dto.PendingPtPaymentResponse;
 import group5.example.sportCenter.entity.MembershipPlan;
 import group5.example.sportCenter.entity.Payment;
 import group5.example.sportCenter.entity.PaymentMethod;
@@ -47,9 +49,11 @@ public class PaymentService {
     private final UserRepository userRepository;
     private final MembershipPlanRepository membershipPlanRepository;
     private final MembershipService membershipService;
+    private final MembershipUpgradeService membershipUpgradeService;
     private final CourseRegistrationPaymentHandler courseRegistrationHandler;
     private final PtBookingPaymentHandler ptBookingHandler;
     private final PaymentGateway paymentGateway;
+    private final NotificationService notificationService;
     private final Clock clock;
 
     public PaymentService(
@@ -57,17 +61,21 @@ public class PaymentService {
             UserRepository userRepository,
             MembershipPlanRepository membershipPlanRepository,
             MembershipService membershipService,
+            MembershipUpgradeService membershipUpgradeService,
             CourseRegistrationPaymentHandler courseRegistrationHandler,
             PtBookingPaymentHandler ptBookingHandler,
             PaymentGateway paymentGateway,
+            NotificationService notificationService,
             Clock clock) {
         this.paymentRepository = paymentRepository;
         this.userRepository = userRepository;
         this.membershipPlanRepository = membershipPlanRepository;
         this.membershipService = membershipService;
+        this.membershipUpgradeService = membershipUpgradeService;
         this.courseRegistrationHandler = courseRegistrationHandler;
         this.ptBookingHandler = ptBookingHandler;
         this.paymentGateway = paymentGateway;
+        this.notificationService = notificationService;
         this.clock = clock;
     }
 
@@ -83,7 +91,7 @@ public class PaymentService {
         User actor = currentActor(callerJwt);
         User member = resolveMember(actor, request.getMemberId());
 
-        if (request.getPurpose() == PaymentPurpose.MEMBERSHIP) {
+        if (request.getPurpose() == PaymentPurpose.MEMBERSHIP || request.getPurpose() == PaymentPurpose.UPGRADE) {
             // Serialize repeated requests on a stable member row before checking PENDING payments.
             Integer lockedMemberId = member.getId();
             member = userRepository.findByIdForBookingUpdate(lockedMemberId)
@@ -94,12 +102,39 @@ public class PaymentService {
             }
         }
 
-        BigDecimal amount = resolveAmountAndValidate(request, member);
+        if (request.getPurpose() == PaymentPurpose.PT_BOOKING) {
+            // Serialize all payment attempts for this member before checking the booking's
+            // existing pending attempts. Booking creation uses the same stable member row lock.
+            Integer lockedMemberId = member.getId();
+            member = userRepository.findByIdForBookingUpdate(lockedMemberId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + lockedMemberId));
+            if (!"MEMBER".equalsIgnoreCase(member.getRole()) || !"ACTIVE".equalsIgnoreCase(member.getStatus())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "PT booking payment requires an ACTIVE MEMBER account");
+            }
+        }
+
+        // The upgrade quote checks pending payments itself and must be stored with the payment.
+        MembershipUpgradeService.Quote upgradeQuote = request.getPurpose() == PaymentPurpose.UPGRADE
+                ? membershipUpgradeService.quote(member, request.getReferenceId()) : null;
+        BigDecimal amount = upgradeQuote != null ? upgradeQuote.amount() : resolveAmountAndValidate(request, member);
         if (request.getPurpose() == PaymentPurpose.MEMBERSHIP
                 && paymentRepository.existsByMember_IdAndPurposeAndReferenceIdAndStatus(
                         member.getId(), PaymentPurpose.MEMBERSHIP, request.getReferenceId(), PaymentStatus.PENDING)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "A pending membership payment already exists for this member and plan");
+        }
+        if (request.getPurpose() == PaymentPurpose.MEMBERSHIP
+                && paymentRepository.existsByMember_IdAndPurposeInAndStatus(
+                        member.getId(), List.of(PaymentPurpose.UPGRADE), PaymentStatus.PENDING)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "A pending membership upgrade must be paid or cancelled before buying another plan");
+        }
+        if (request.getPurpose() == PaymentPurpose.PT_BOOKING
+                && paymentRepository.existsByPurposeAndReferenceIdAndStatus(
+                        PaymentPurpose.PT_BOOKING, request.getReferenceId(), PaymentStatus.PENDING)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "A pending payment already exists for this PT booking; cancel it before retrying or changing method");
         }
 
         Payment payment = new Payment();
@@ -114,6 +149,9 @@ public class PaymentService {
         payment.setTransactionCode("TXN-" + UUID.randomUUID().toString().replace("-", "")
                 .substring(0, 16).toUpperCase(Locale.ROOT));
         payment = paymentRepository.save(payment);
+        if (upgradeQuote != null) {
+            membershipUpgradeService.record(payment, upgradeQuote);
+        }
 
         String url = request.getMethod() == PaymentMethod.ONLINE
                 ? paymentGateway.createPaymentUrl(payment.getTransactionCode(), amount, clientIp)
@@ -133,6 +171,9 @@ public class PaymentService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This payment is not a counter payment");
         }
         requirePending(payment);
+        if (payment.getPurpose() == PaymentPurpose.UPGRADE && Boolean.TRUE.equals(request.getSuccess())) {
+            membershipUpgradeService.requireOpenQuote(payment);
+        }
 
         payment.setProcessedBy(actor);
         return toResponse(finalizePayment(payment, request.getSuccess(), request.getNote()), null);
@@ -206,13 +247,12 @@ public class PaymentService {
 
         Optional<String> refundReason = switch (payment.getPurpose()) {
             case MEMBERSHIP -> {
-                membershipService.activateOrRenewFromPayment(
-                        payment.getMember().getId(), payment.getReferenceId(),
-                        Boolean.TRUE.equals(payment.getAutoRenew()));
+                membershipService.activateOrRenewFromPayment(payment);
                 yield Optional.empty();
             }
             case COURSE_REGISTRATION -> courseRegistrationHandler.apply(payment);
             case PT_BOOKING -> ptBookingHandler.apply(payment);
+            case UPGRADE -> membershipUpgradeService.apply(payment);
         };
         if (refundReason.isPresent()) {
             return markRefundRequired(payment, refundReason.get());
@@ -231,6 +271,41 @@ public class PaymentService {
         payment.setPaidAt(now());
         payment.setNote(reason);
         return paymentRepository.save(payment);
+    }
+
+    /** Hàng đợi khoản cần hoàn tiền (mọi purpose), cũ nhất trước. */
+    @Transactional(readOnly = true)
+    public Page<PaymentResponse> getRefundRequiredPayments(int page, int size, Jwt jwt) {
+        requireStaff(currentActor(jwt));
+        if (page < 0 || size < 1 || size > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must be nonnegative and size between 1 and 100");
+        }
+        return paymentRepository.findByStatus(PaymentStatus.REFUND_REQUIRED,
+                        PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "createdAt", "id")))
+                .map(payment -> toResponse(payment, null));
+    }
+
+    /** Nhân viên xác nhận đã trả tiền lại cho member: REFUND_REQUIRED -> REFUNDED. */
+    @Transactional
+    public PaymentResponse confirmRefund(Integer paymentId, String note, Jwt callerJwt) {
+        User actor = currentActor(callerJwt);
+        requireStaff(actor);
+        Payment payment = paymentRepository.findByIdForUpdate(paymentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + paymentId));
+        if (payment.getStatus() != PaymentStatus.REFUND_REQUIRED) {
+            throw new IllegalArgumentException("Only a REFUND_REQUIRED payment can be marked refunded: " + payment.getStatus());
+        }
+        payment.setStatus(PaymentStatus.REFUNDED);
+        payment.setRefundedAt(now());
+        payment.setRefundedBy(actor);
+        if (note != null && !note.isBlank()) {
+            String combined = (payment.getNote() == null ? "" : payment.getNote() + " | ") + "Refund: " + note.trim();
+            payment.setNote(combined.length() > 500 ? combined.substring(0, 500) : combined);
+        }
+        notificationService.createForUser(payment.getMember().getId(), "Đã hoàn tiền thanh toán #" + payment.getId(),
+                "Trung tâm đã hoàn " + payment.getAmount().stripTrailingZeros().toPlainString()
+                        + " VND cho khoản thanh toán #" + payment.getId() + ".");
+        return toResponse(paymentRepository.save(payment), null);
     }
 
     /** View Payment History (của chính mình). */
@@ -259,10 +334,31 @@ public class PaymentService {
         if (page < 0 || size < 1 || size > 100) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must be nonnegative and size between 1 and 100");
         }
-        return paymentRepository.findByStatusAndMethodAndPurpose(
-                PaymentStatus.PENDING, PaymentMethod.COUNTER, PaymentPurpose.MEMBERSHIP,
+        return paymentRepository.findByStatusAndMethodAndPurposeIn(
+                PaymentStatus.PENDING, PaymentMethod.COUNTER, List.of(PaymentPurpose.MEMBERSHIP, PaymentPurpose.UPGRADE),
                 PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt", "id")))
                 .map(payment -> toResponse(payment, null));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PendingCoursePaymentResponse> getPendingCourseCounterPayments(int page, int size, Jwt jwt) {
+        requireStaff(currentActor(jwt));
+        if (page < 0 || size < 1 || size > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must be nonnegative and size between 1 and 100");
+        }
+        // Read eligibility only: an expired hold does not prove that money was received.
+        return paymentRepository.findPendingCoursePayments(now(), PageRequest.of(page, size));
+    }
+
+    @Transactional(readOnly = true)
+    public Page<PendingPtPaymentResponse> getPendingPtCounterPayments(int page, int size, Jwt jwt) {
+        requireStaff(currentActor(jwt));
+        if (page < 0 || size < 1 || size > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must be nonnegative and size between 1 and 100");
+        }
+        // Expired or terminal booking holds are omitted: a pending payment is not authority
+        // to confirm after the booking's 15-minute payment window has elapsed.
+        return paymentRepository.findPendingPtPayments(now(), PageRequest.of(page, size));
     }
 
     // ---------------------------------------------------------------- helpers
@@ -281,6 +377,7 @@ public class PaymentService {
             }
             case COURSE_REGISTRATION -> courseRegistrationHandler.quote(member, request.getReferenceId());
             case PT_BOOKING -> ptBookingHandler.quote(member, request.getReferenceId());
+            case UPGRADE -> throw new IllegalStateException("Upgrade amounts come from MembershipUpgradeService.quote");
         };
     }
 
@@ -350,6 +447,7 @@ public class PaymentService {
         return new PaymentResponse(
                 p.getId(), p.getMember().getId(), p.getMember().getName(), p.getAmount(),
                 p.getMethod().name(), p.getPurpose().name(), p.getReferenceId(), p.getStatus().name(),
-                p.getTransactionCode(), paymentUrl, p.getNote(), p.getCreatedAt(), p.getPaidAt());
+                p.getTransactionCode(), paymentUrl, p.getNote(), p.getCreatedAt(), p.getPaidAt(),
+                p.getRefundedAt(), p.getRefundedBy() == null ? null : p.getRefundedBy().getName());
     }
 }

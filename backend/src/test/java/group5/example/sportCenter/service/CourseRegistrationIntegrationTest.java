@@ -153,6 +153,73 @@ class CourseRegistrationIntegrationTest {
     }
 
     @Test
+    void receptionistCreatesPendingRegistrationForSelectedMemberAndCounterSettlementConfirmsIt() throws Exception {
+        User receptionist = user("RECEPTIONIST", "ACTIVE");
+        Course course = course(sport, "BEGINNER", "ACTIVE");
+        CourseClass selected = classFor(course, 1);
+        String registrationBody = "{\"memberId\":" + member.getId() + ",\"classId\":" + selected.getId() + "}";
+
+        var created = mvc.perform(post("/api/course-registrations/staff")
+                        .header("Authorization", bearer(receptionist))
+                        .contentType("application/json").content(registrationBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.memberId").value(member.getId()))
+                .andExpect(jsonPath("$.status").value("PENDING_PAYMENT"))
+                .andExpect(jsonPath("$.paymentDeadline").exists())
+                .andExpect(jsonPath("$.finalPrice").value(100.0))
+                .andReturn();
+        int registrationId = responseId(created.getResponse().getContentAsString());
+
+        mvc.perform(post("/api/course-registrations/staff")
+                        .header("Authorization", bearer(member))
+                        .contentType("application/json").content(registrationBody))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/course-registrations/staff")
+                        .contentType("application/json").content(registrationBody))
+                .andExpect(status().isUnauthorized());
+        User admin = user("ADMIN", "ACTIVE");
+        CourseClass adminClass = classFor(course, 2);
+        mvc.perform(post("/api/course-registrations/staff")
+                        .header("Authorization", bearer(admin))
+                        .contentType("application/json")
+                        .content("{\"memberId\":" + member.getId() + ",\"classId\":" + adminClass.getId() + "}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.status").value("PENDING_PAYMENT"));
+        assertEquals(409, assertThrows(ResponseStatusException.class,
+                () -> service.registerForMember(member.getId(), request(selected), jwt(receptionist)))
+                .getStatusCode().value());
+        User secondMember = user("MEMBER", "ACTIVE");
+        assertEquals(409, assertThrows(ResponseStatusException.class,
+                () -> service.registerForMember(secondMember.getId(), request(selected), jwt(receptionist)))
+                .getStatusCode().value());
+
+        mvc.perform(post("/api/payments")
+                        .header("Authorization", bearer(receptionist)).contentType("application/json")
+                        .content("{\"memberId\":" + secondMember.getId()
+                                + ",\"method\":\"COUNTER\",\"purpose\":\"COURSE_REGISTRATION\",\"referenceId\":"
+                                + registrationId + "}"))
+                .andExpect(status().isForbidden());
+
+        var payment = mvc.perform(post("/api/payments")
+                        .header("Authorization", bearer(receptionist)).contentType("application/json")
+                        .content("{\"memberId\":" + member.getId()
+                                + ",\"method\":\"COUNTER\",\"purpose\":\"COURSE_REGISTRATION\",\"referenceId\":"
+                                + registrationId + "}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.memberId").value(member.getId()))
+                .andExpect(jsonPath("$.referenceId").value(registrationId))
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andReturn();
+        int paymentId = responseId(payment.getResponse().getContentAsString());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
+                        "/api/payments/" + paymentId + "/counter")
+                        .header("Authorization", bearer(receptionist)).contentType("application/json")
+                        .content("{\"success\":true,\"note\":\"received at counter\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("SUCCESS"));
+        assertEquals(CourseRegistrationStatus.CONFIRMED,
+                registrations.findById(registrationId).orElseThrow().getStatus());
+    }
+
+    @Test
     void equalOrHigherCoachVerifiedLevelAllowsEnrollmentAndInsufficientLevelIsRejected() {
         Course intermediate = course(sport, "INTERMEDIATE", "ACTIVE");
         CourseClass intermediateClass = classFor(intermediate, 5);
@@ -760,5 +827,11 @@ class CourseRegistrationIntegrationTest {
 
     private String bearer(User user) {
         return "Bearer " + tokens.generateToken(user);
+    }
+
+    private int responseId(String body) {
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\\\"id\\\"\\s*:\\s*(\\d+)").matcher(body);
+        assertTrue(matcher.find(), "Response must contain an id: " + body);
+        return Integer.parseInt(matcher.group(1));
     }
 }

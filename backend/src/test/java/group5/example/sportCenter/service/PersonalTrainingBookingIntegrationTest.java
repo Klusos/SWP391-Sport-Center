@@ -30,7 +30,14 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.server.ResponseStatusException;
 
+import group5.example.sportCenter.dto.CounterPaymentRequest;
+import group5.example.sportCenter.dto.CreatePaymentRequest;
 import group5.example.sportCenter.dto.CreatePersonalTrainingBookingRequest;
+import group5.example.sportCenter.dto.PaymentResponse;
+import group5.example.sportCenter.entity.Payment;
+import group5.example.sportCenter.entity.PaymentMethod;
+import group5.example.sportCenter.entity.PaymentPurpose;
+import group5.example.sportCenter.entity.PaymentStatus;
 import group5.example.sportCenter.entity.Coach;
 import group5.example.sportCenter.entity.CoachSport;
 import group5.example.sportCenter.entity.ClassSession;
@@ -53,11 +60,13 @@ import group5.example.sportCenter.repository.CourseRepository;
 import group5.example.sportCenter.repository.MembershipPlanRepository;
 import group5.example.sportCenter.repository.MembershipRepository;
 import group5.example.sportCenter.repository.NotificationRepository;
+import group5.example.sportCenter.repository.PaymentRepository;
 import group5.example.sportCenter.repository.PersonalTrainingBookingRepository;
 import group5.example.sportCenter.repository.SportRepository;
 import group5.example.sportCenter.repository.UserRepository;
 import group5.example.sportCenter.security.JwtService;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -82,6 +91,9 @@ class PersonalTrainingBookingIntegrationTest {
     @Autowired CourseOfferingRepository offerings;
     @Autowired CourseRepository courses;
     @Autowired CourseRegistrationRepository courseRegistrations;
+    @Autowired PaymentRepository payments;
+    @Autowired PaymentService paymentService;
+    @Autowired NotificationService notificationService;
     @Autowired Clock clock;
     @Autowired JwtService tokens;
     @Autowired WebApplicationContext context;
@@ -106,6 +118,7 @@ class PersonalTrainingBookingIntegrationTest {
         offerings.deleteAll();
         courses.deleteAll();
         memberships.deleteAll();
+        payments.deleteAllInBatch();
         coachSports.deleteAll();
         coaches.deleteAll();
         sports.deleteAll();
@@ -359,9 +372,59 @@ class PersonalTrainingBookingIntegrationTest {
     }
 
     @Test
+    void memberCancelsAPendingBookingAndItsPendingPaymentAndTheSlotIsFreed() throws Exception {
+        var booking = service.create(jwt, request(coach, sport, slot));
+        PaymentResponse pending = paymentService.createPayment(ptPayment(booking.id()), jwt);
+
+        mvc.perform(patch("/api/pt-bookings/" + booking.id() + "/cancel")
+                        .header("Authorization", "Bearer " + tokens.generateToken(coach.getUser())))
+                .andExpect(status().isForbidden());
+        User other = user("MEMBER", "ACTIVE", "other-pt");
+        mvc.perform(patch("/api/pt-bookings/" + booking.id() + "/cancel")
+                        .header("Authorization", "Bearer " + tokens.generateToken(other)))
+                .andExpect(status().isForbidden());
+        mvc.perform(patch("/api/pt-bookings/" + booking.id() + "/cancel")
+                        .header("Authorization", "Bearer " + tokens.generateToken(member)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+        mvc.perform(patch("/api/pt-bookings/" + booking.id() + "/cancel")
+                        .header("Authorization", "Bearer " + tokens.generateToken(member)))
+                .andExpect(status().isConflict());
+
+        assertEquals(PaymentStatus.CANCELLED, payments.findById(pending.getId()).orElseThrow().getStatus());
+        assertEquals(1, service.eligibleCoaches(jwt, sport.getId(), slot).size());
+    }
+
+    @Test
+    void cancellingAConfirmedBookingMarksThePaymentForRefundAndNotifiesTheCoach() {
+        var booking = service.create(jwt, request(coach, sport, slot));
+        PaymentResponse paid = payAtCounter(booking.id());
+        assertEquals("CONFIRMED", bookings.findById(booking.id()).orElseThrow().getStatus().name());
+
+        var cancelled = service.cancel(jwt, booking.id());
+        assertEquals("CANCELLED", cancelled.status());
+        Payment refund = payments.findById(paid.getId()).orElseThrow();
+        assertEquals(PaymentStatus.REFUND_REQUIRED, refund.getStatus());
+        assertTrue(refund.getNote().contains("PT booking #" + booking.id()));
+        assertEquals(1L, jdbc.queryForObject("select count(*) from notification where user_id = ? and title = ?",
+                Long.class, coach.getUser().getId(), "Buổi PT bị huỷ"));
+    }
+
+    @Test
+    void membersCannotCancelAConfirmedSessionWithin24HoursButStaffCan() {
+        LocalDateTime soon = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")).plusHours(10).withSecond(0).withNano(0);
+        var booking = service.create(jwt, request(coach, sport, soon));
+        payAtCounter(booking.id());
+
+        IllegalArgumentException tooLate = assertThrows(IllegalArgumentException.class, () -> service.cancel(jwt, booking.id()));
+        assertTrue(tooLate.getMessage().contains("24 hours"));
+        assertEquals("CANCELLED", service.cancel(jwt(receptionist()), booking.id()).status());
+    }
+
+    @Test
     void missingBasePriceFailsClearlyInsteadOfSubstitutingAValue() {
         PersonalTrainingBookingService unconfigured = new PersonalTrainingBookingService(bookings, users, coaches,
-                coachSports, sports, memberships, classSessions, clock, "");
+                coachSports, sports, memberships, classSessions, payments, notificationService, clock, "");
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> unconfigured.eligibleCoaches(jwt, sport.getId(), slot));
         assertEquals(503, exception.getStatusCode().value());
@@ -369,6 +432,26 @@ class PersonalTrainingBookingIntegrationTest {
                 (group5.example.sportCenter.exception.PtPricingConfigurationException) exception);
         assertEquals(503, error.getBody().status());
         assertTrue(error.getBody().message().contains("pricing is not configured"));
+    }
+
+    private CreatePaymentRequest ptPayment(Integer bookingId) {
+        CreatePaymentRequest request = new CreatePaymentRequest();
+        request.setPurpose(PaymentPurpose.PT_BOOKING);
+        request.setReferenceId(bookingId);
+        request.setMethod(PaymentMethod.COUNTER);
+        return request;
+    }
+
+    private PaymentResponse payAtCounter(Integer bookingId) {
+        PaymentResponse created = paymentService.createPayment(ptPayment(bookingId), jwt);
+        CounterPaymentRequest counter = new CounterPaymentRequest();
+        counter.setSuccess(true);
+        return paymentService.processAtCounter(created.getId(), counter, jwt(receptionist()));
+    }
+
+    private User receptionist() {
+        return users.findAll().stream().filter(u -> "RECEPTIONIST".equals(u.getRole())).findFirst()
+                .orElseGet(() -> user("RECEPTIONIST", "ACTIVE", "reception-pt"));
     }
 
     private User user(String role, String status, String suffix) {

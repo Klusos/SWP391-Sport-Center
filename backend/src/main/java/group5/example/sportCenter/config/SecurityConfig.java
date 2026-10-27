@@ -100,6 +100,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/member-sport-levels", "/api/member-sport-levels/**").denyAll()
 
                 .requestMatchers(HttpMethod.POST, "/api/course-registrations").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.POST, "/api/course-registrations/staff").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.POST, "/api/course-registrations/*/cancel").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/course-registrations/me",
                         "/api/course-registrations/me/class-sessions").hasRole("MEMBER")
@@ -117,9 +118,26 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/attendance/*/history").authenticated()
                 .requestMatchers("/api/attendance", "/api/attendance/**").denyAll()
 
+                // Flow 4 training: the service further limits writes to the assigned Coach or ADMIN.
+                .requestMatchers(HttpMethod.GET, "/api/training/me").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/training/classes/*/plan")
+                    .hasAnyRole("ADMIN", "RECEPTIONIST", "COACH", "MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/training/classes", "/api/training/classes/*/sessions",
+                        "/api/training/classes/*/progress", "/api/training/sessions/*/results")
+                    .hasAnyRole("ADMIN", "RECEPTIONIST", "COACH")
+                .requestMatchers(HttpMethod.PUT, "/api/training/classes/*/plan", "/api/training/exercises/*",
+                        "/api/training/sessions/*/results/*")
+                    .hasAnyRole("ADMIN", "COACH")
+                .requestMatchers(HttpMethod.POST, "/api/training/classes/*/plan/exercises",
+                        "/api/training/sessions/*/complete", "/api/training/classes/*/members/*/evaluations")
+                    .hasAnyRole("ADMIN", "COACH")
+                .requestMatchers(HttpMethod.DELETE, "/api/training/exercises/*").hasAnyRole("ADMIN", "COACH")
+                .requestMatchers("/api/training", "/api/training/**").denyAll()
+
                 .requestMatchers(HttpMethod.GET, "/api/pt-bookings/eligible-coaches", "/api/pt-bookings/me").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.POST, "/api/pt-bookings").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/pt-bookings/assigned").hasRole("COACH")
+                .requestMatchers(HttpMethod.PATCH, "/api/pt-bookings/*/cancel").hasAnyRole("MEMBER", "ADMIN", "RECEPTIONIST")
                 .requestMatchers("/api/pt-bookings", "/api/pt-bookings/**").denyAll()
 
                 .requestMatchers(HttpMethod.GET, "/api/payments/online/callback",
@@ -127,10 +145,22 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/payments").hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
                 .requestMatchers(HttpMethod.PATCH, "/api/payments/*/counter").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.PATCH, "/api/payments/*/cancel").hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
-                .requestMatchers(HttpMethod.GET, "/api/payments/pending-memberships").hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers(HttpMethod.GET, "/api/payments/pending-memberships", "/api/payments/pending-courses").hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers(HttpMethod.GET, "/api/payments/pending-pt", "/api/payments/refund-required").hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers(HttpMethod.PATCH, "/api/payments/*/refund").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.GET, "/api/payments/me").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/payments/member/*").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers("/api/payments", "/api/payments/**").denyAll()
+
+                .requestMatchers(HttpMethod.POST, "/api/support-tickets").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/support-tickets/me").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/support-tickets").hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers(HttpMethod.GET, "/api/support-tickets/*").authenticated()
+                .requestMatchers(HttpMethod.POST, "/api/support-tickets/*/messages").authenticated()
+                .requestMatchers(HttpMethod.PATCH, "/api/support-tickets/*/status",
+                        "/api/support-tickets/*/assign-to-me").hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers("/api/support-tickets", "/api/support-tickets/**").denyAll()
+
                 .requestMatchers(HttpMethod.GET, "/api/reports/**").hasRole("ADMIN")
                 .requestMatchers("/api/reports", "/api/reports/**").denyAll()
 
@@ -144,14 +174,22 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/membership-plans", "/api/membership-plans/**").hasRole("ADMIN")
                 .requestMatchers("/api/membership-plans", "/api/membership-plans/**").hasRole("ADMIN")
 
-                .requestMatchers(HttpMethod.POST, "/api/memberships/expire").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/memberships/expire", "/api/memberships/auto-renew/run").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/memberships").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/memberships/cancellation-requests").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/memberships/cancellation-requests/me").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.PATCH, "/api/memberships/cancellation-requests/*/withdraw").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/memberships/cancellation-requests").hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers(HttpMethod.PATCH, "/api/memberships/cancellation-requests/*/approve",
+                        "/api/memberships/cancellation-requests/*/reject").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.GET, "/api/memberships").hasAnyRole("ADMIN", "RECEPTIONIST")
-                .requestMatchers(HttpMethod.GET, "/api/memberships/member/*", "/api/memberships/*")
+                .requestMatchers(HttpMethod.GET, "/api/memberships/member/*", "/api/memberships/*",
+                        "/api/memberships/member/*/upgrade-options")
                     .hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
                 .requestMatchers(HttpMethod.PATCH,
                         "/api/memberships/*/cancel-renewal",
-                        "/api/memberships/*/enable-auto-renew")
+                        "/api/memberships/*/enable-auto-renew",
+                        "/api/memberships/*/cancel")
                     .hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
                 .requestMatchers("/api/memberships", "/api/memberships/**").denyAll()
 

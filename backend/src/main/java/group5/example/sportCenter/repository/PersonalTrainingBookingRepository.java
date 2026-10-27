@@ -24,6 +24,10 @@ public interface PersonalTrainingBookingRepository extends JpaRepository<Persona
     @Query("select b from PersonalTrainingBooking b where b.id = :id")
     Optional<PersonalTrainingBooking> findByIdForLifecycleUpdate(@Param("id") Integer id);
 
+    /** Scalar read so the booking entity is first loaded under its row lock. */
+    @Query("select b.member.id from PersonalTrainingBooking b where b.id = :id")
+    Optional<Integer> findMemberIdById(@Param("id") Integer id);
+
     @Query("select b.id from PersonalTrainingBooking b where b.status = "
             + "group5.example.sportCenter.entity.PersonalTrainingBookingStatus.PENDING_PAYMENT "
             + "and b.paymentExpiresAt <= :now")

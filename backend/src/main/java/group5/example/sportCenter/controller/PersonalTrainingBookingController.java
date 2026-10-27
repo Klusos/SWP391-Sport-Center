@@ -8,6 +8,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -48,6 +50,12 @@ public class PersonalTrainingBookingController {
     @GetMapping("/me")
     public List<PersonalTrainingBookingResponse> mine(@AuthenticationPrincipal Jwt jwt) {
         return service.mine(jwt);
+    }
+
+    /** Member huỷ booking của mình (đã xác nhận: trước giờ tập 24 giờ); staff huỷ trước giờ tập. */
+    @PatchMapping("/{id}/cancel")
+    public PersonalTrainingBookingResponse cancel(@PathVariable Integer id, @AuthenticationPrincipal Jwt jwt) {
+        return service.cancel(jwt, id);
     }
 
     @GetMapping("/assigned")

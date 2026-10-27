@@ -79,11 +79,25 @@ public class CourseRegistrationService {
     public CourseRegistrationResponse register(CreateCourseRegistrationRequest request, Jwt jwt) {
         User actor = access.actor(jwt);
         access.requireMember(actor);
+        return registerForMember(actor.getId(), request);
+    }
+
+    @Transactional
+    public CourseRegistrationResponse registerForMember(Integer memberId, CreateCourseRegistrationRequest request, Jwt jwt) {
+        User actor = access.actor(jwt);
+        access.requireStaff(actor);
+        if (memberId == null || memberId <= 0) {
+            throw error(HttpStatus.BAD_REQUEST, "A valid target member ID is required");
+        }
+        return registerForMember(memberId, request);
+    }
+
+    private CourseRegistrationResponse registerForMember(Integer memberId, CreateCourseRegistrationRequest request) {
 
         // Lock order is always MEMBER then CourseClass. The member lock serializes same-member
         // offering/schedule decisions; the class lock serializes seat counts for this class.
-        User member = users.findByIdForAssessmentUpdate(actor.getId())
-                .orElseThrow(() -> error(HttpStatus.UNAUTHORIZED, "Authenticated MEMBER not found"));
+        User member = users.findByIdForAssessmentUpdate(memberId)
+                .orElseThrow(() -> new ResourceNotFoundException("Member not found with id: " + memberId));
         if (!"MEMBER".equalsIgnoreCase(member.getRole()) || !"ACTIVE".equalsIgnoreCase(member.getStatus())) {
             throw error(HttpStatus.FORBIDDEN, "Only an ACTIVE MEMBER can register for a CourseClass");
         }

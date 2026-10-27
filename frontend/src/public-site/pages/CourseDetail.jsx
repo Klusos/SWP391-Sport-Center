@@ -313,8 +313,9 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
                 <span>Trạng thái: <b>{selectedOffering.status || "—"}</b></span>
               </div>}
               {existingOfferingRegistration && <div className="course-registration-success" role="status">
-                Bạn đã có đăng ký CONFIRMED cho đợt này: {existingOfferingRegistration.className || `Lớp #${existingOfferingRegistration.classId}`}.
-                <Link to="/member/schedule">Xem lịch học</Link>
+                Bạn đã có đăng ký {existingOfferingRegistration.status} cho đợt này: {existingOfferingRegistration.className || `Lớp #${existingOfferingRegistration.classId}`}.
+                <Link to={`/member/course-checkout/${existingOfferingRegistration.id}`}>Thanh toán / theo dõi đăng ký</Link>
+                {existingOfferingRegistration.status === "CONFIRMED" && <Link to="/member/schedule">Xem lịch học</Link>}
               </div>}
               {classesLoading ? <p role="status">Đang tải các lớp…</p>
                 : !classesError && classes.length === 0 ? <p className="queue-state">Đợt học này chưa có lớp.</p>
@@ -362,7 +363,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
               <strong>Đăng ký thành công — {registration.status}.</strong>
               <p>Mã đăng ký #{registration.id} · {registration.courseName} · {registration.courseOfferingName} · {registration.className}</p>
               <p>Giá gốc {formatPrice(registration.originalPrice)} · Ưu đãi {formatPrice(registration.membershipDiscount)} · Thành tiền {formatPrice(registration.finalPrice)}</p>
-              {registration.status === "PENDING_PAYMENT" && <p role="status">Payment pending. Pay before {formatDate(registration.paymentDeadline)} to keep this seat. Refresh registration history for the current server status.</p>}
+              {registration.status === "PENDING_PAYMENT" && <><p role="status">Đăng ký đang chờ thanh toán. Hạn thanh toán và trạng thái mới nhất được hiển thị tại trang thanh toán.</p><Link className="btn btn-cyan" to={`/member/course-checkout/${registration.id}`}>Thanh toán VNPay Sandbox / tại lễ tân</Link></>}
               {registration.status === "CONFIRMED" && <p role="status">Payment confirmed and registration active.</p>}
               {registration.status === "EXPIRED" && <p role="status">The payment deadline passed; this registration no longer reserves a seat.</p>}
               <Link to="/member/schedule">Đi đến lịch học</Link>

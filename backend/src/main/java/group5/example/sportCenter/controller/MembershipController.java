@@ -11,12 +11,22 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import group5.example.sportCenter.dto.CancelMembershipRequest;
+import group5.example.sportCenter.dto.CreateMembershipCancellationRequest;
 import group5.example.sportCenter.dto.CreateMembershipRequest;
+import group5.example.sportCenter.dto.DecisionNoteRequest;
+import group5.example.sportCenter.dto.MembershipCancellationRequestResponse;
 import group5.example.sportCenter.dto.MembershipResponse;
+import group5.example.sportCenter.dto.MembershipUpgradeOptionsResponse;
+import group5.example.sportCenter.entity.MembershipCancellationRequestStatus;
+import group5.example.sportCenter.service.MembershipAutoRenewalService;
+import group5.example.sportCenter.service.MembershipCancellationRequestService;
 import group5.example.sportCenter.service.MembershipService;
+import group5.example.sportCenter.service.MembershipUpgradeService;
 import jakarta.validation.Valid;
 
 @RestController
@@ -24,10 +34,16 @@ import jakarta.validation.Valid;
 public class MembershipController {
 
     private final MembershipService membershipService;
+    private final MembershipUpgradeService membershipUpgradeService;
+    private final MembershipCancellationRequestService cancellationRequestService;
 
     public MembershipController(
-            MembershipService membershipService) {
+            MembershipService membershipService,
+            MembershipUpgradeService membershipUpgradeService,
+            MembershipCancellationRequestService cancellationRequestService) {
         this.membershipService = membershipService;
+        this.membershipUpgradeService = membershipUpgradeService;
+        this.cancellationRequestService = cancellationRequestService;
     }
 
     @GetMapping
@@ -60,6 +76,15 @@ public class MembershipController {
         return membershipService.getMembershipsByMemberId(memberId, jwt);
     }
 
+    /** Gói hiện tại, các gói có thể nâng lên và số tiền phải trả; payment tạo qua POST /api/payments (purpose UPGRADE). */
+    @GetMapping("/member/{memberId}/upgrade-options")
+    public MembershipUpgradeOptionsResponse getUpgradeOptions(
+            @PathVariable Integer memberId,
+            @AuthenticationPrincipal Jwt jwt) {
+
+        return membershipUpgradeService.getOptions(memberId, jwt);
+    }
+
     @PatchMapping("/{id}/cancel-renewal")
     public MembershipResponse cancelAutoRenew(
             @PathVariable Integer id,
@@ -74,6 +99,72 @@ public class MembershipController {
             @AuthenticationPrincipal Jwt jwt) {
 
         return membershipService.enableAutoRenew(id, jwt);
+    }
+
+    /** Member gửi yêu cầu huỷ gói chưa bắt đầu, chậm nhất 72 giờ trước ngày bắt đầu. */
+    @PostMapping("/cancellation-requests")
+    @ResponseStatus(HttpStatus.CREATED)
+    public MembershipCancellationRequestResponse requestCancellation(
+            @Valid @RequestBody CreateMembershipCancellationRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+
+        return cancellationRequestService.create(request.membershipId(), request.reason(), jwt);
+    }
+
+    @GetMapping("/cancellation-requests/me")
+    public List<MembershipCancellationRequestResponse> myCancellationRequests(@AuthenticationPrincipal Jwt jwt) {
+        return cancellationRequestService.getMine(jwt);
+    }
+
+    /** Hàng đợi cho lễ tân/ADMIN; mặc định các yêu cầu đang chờ duyệt. */
+    @GetMapping("/cancellation-requests")
+    public List<MembershipCancellationRequestResponse> cancellationRequests(
+            @RequestParam(defaultValue = "PENDING") MembershipCancellationRequestStatus status,
+            @AuthenticationPrincipal Jwt jwt) {
+
+        return cancellationRequestService.getByStatus(status, jwt);
+    }
+
+    @PatchMapping("/cancellation-requests/{id}/withdraw")
+    public MembershipCancellationRequestResponse withdrawCancellationRequest(
+            @PathVariable Integer id,
+            @AuthenticationPrincipal Jwt jwt) {
+
+        return cancellationRequestService.withdraw(id, jwt);
+    }
+
+    @PatchMapping("/cancellation-requests/{id}/approve")
+    public MembershipCancellationRequestResponse approveCancellationRequest(
+            @PathVariable Integer id,
+            @Valid @RequestBody(required = false) DecisionNoteRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+
+        return cancellationRequestService.approve(id, request == null ? null : request.note(), jwt);
+    }
+
+    /** Từ chối bắt buộc có ghi chú để gửi cho member. */
+    @PatchMapping("/cancellation-requests/{id}/reject")
+    public MembershipCancellationRequestResponse rejectCancellationRequest(
+            @PathVariable Integer id,
+            @Valid @RequestBody(required = false) DecisionNoteRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+
+        return cancellationRequestService.reject(id, request == null ? null : request.note(), jwt);
+    }
+
+    /** Staff huỷ trực tiếp: gói chưa bắt đầu (hoàn 100%) hoặc gói đang chạy (chỉ ADMIN, cần lý do). */
+    @PatchMapping("/{id}/cancel")
+    public MembershipResponse cancelMembership(
+            @PathVariable Integer id,
+            @Valid @RequestBody(required = false) CancelMembershipRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+
+        return membershipService.cancelMembership(id, request == null ? null : request.reason(), jwt);
+    }
+
+    @PostMapping("/auto-renew/run")
+    public MembershipAutoRenewalService.RunResult runAutoRenewal(@AuthenticationPrincipal Jwt jwt) {
+        return membershipService.runAutoRenewal(jwt);
     }
 
     @PostMapping("/expire")
