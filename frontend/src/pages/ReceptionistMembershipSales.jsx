@@ -9,12 +9,14 @@ import {
   getUsersApi,
   processCounterPaymentApi,
 } from "../api";
+import { isAutoRenewalPayment } from "../membershipRenewal";
 import { isMembershipPayment, upgradeErrorMessage } from "../membershipUpgrade";
 import "./ReceptionistMembershipSales.css";
 
 const rows = (value) => Array.isArray(value) ? value : value?.content ?? [];
 const money = (value) => value == null ? "Chưa có giá" : Number(value).toLocaleString("vi-VN") + " ₫";
-const purposeLabel = (payment) => payment?.purpose === "UPGRADE" ? "Nâng cấp lên " : "";
+const purposeLabel = (payment) => payment?.purpose === "UPGRADE" ? "Nâng cấp lên "
+  : isAutoRenewalPayment(payment) ? "Gia hạn tự động · " : "";
 
 export default function ReceptionistMembershipSales({ token, role, onLogout, onNavigate }) {
   const [members, setMembers] = useState([]);

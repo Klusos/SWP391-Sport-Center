@@ -8,9 +8,11 @@ import {
   getMembershipsByMemberApi,
   getMyPaymentsApi,
   getPublicMembershipPlansApi,
+  setAutoRenewApi,
 } from "../api";
 import { validVnpayUrl } from "../courseCheckout";
-import { isMembershipEffective } from "../membershipDates";
+import { isMembershipEffective, todayInVietnam } from "../membershipDates";
+import { activeMembershipChain, isAutoRenewalPayment, RENEWAL_NOTICE_DAYS } from "../membershipRenewal";
 import { membershipPurchaseErrorMessage } from "../membershipPurchase";
 import { isMembershipPayment, upgradeBlockedMessage, upgradeErrorMessage } from "../membershipUpgrade";
 import "./Portal.css";
@@ -30,6 +32,7 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
   const [loading, setLoading] = useState(true);
   const [busyPlanId, setBusyPlanId] = useState(null);
   const [cancelingId, setCancelingId] = useState(null);
+  const [togglingId, setTogglingId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -162,7 +165,60 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
     }
   }
 
+  async function toggleAutoRenew(membership) {
+    if (togglingId !== null) return;
+    const enable = !membership.autoRenew;
+    if (!enable && !window.confirm(`Tắt tự gia hạn cho gói “${membership.planName}”? Yêu cầu gia hạn tự động chưa thanh toán (nếu có) sẽ bị hủy.`)) return;
+    setTogglingId(membership.id);
+    setError("");
+    setNotice("");
+    try {
+      await setAutoRenewApi(token, membership.id, enable);
+      await load();
+      setNotice(enable
+        ? `Đã bật tự gia hạn cho gói “${membership.planName}”. ${RENEWAL_NOTICE_DAYS} ngày trước khi hết hạn, hệ thống sẽ tạo yêu cầu gia hạn và gửi thông báo cho bạn.`
+        : `Đã tắt tự gia hạn cho gói “${membership.planName}”.`);
+    } catch (requestError) {
+      setError(requestError.status === 401
+        ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
+        : requestError.message || "Không thể thay đổi tự gia hạn.");
+    } finally {
+      setTogglingId(null);
+    }
+  }
+
+  // A pending counter request (e.g. an auto-renewal) can be paid online instead: cancel it, then create the ONLINE one.
+  async function switchToVnpay(payment) {
+    if (cancelingId !== null || busyPlanId !== null) return;
+    if (!window.confirm(`Chuyển yêu cầu #${payment.id} sang thanh toán VNPay Sandbox? Yêu cầu tại quầy sẽ được hủy và thay bằng yêu cầu online cùng số tiền.`)) return;
+    setCancelingId(payment.id);
+    setError("");
+    setNotice("");
+    try {
+      await cancelPaymentApi(token, payment.id);
+      const online = await createPaymentApi(token, {
+        method: "ONLINE",
+        purpose: "MEMBERSHIP",
+        referenceId: Number(payment.referenceId),
+        autoRenew: isAutoRenewalPayment(payment),
+      });
+      if (!validVnpayUrl(online.paymentUrl)) {
+        await load();
+        setError(`Đã tạo thanh toán #${online.id}, nhưng máy chủ không trả về liên kết VNPay Sandbox hợp lệ. Hãy làm mới trạng thái hoặc liên hệ lễ tân.`);
+        return;
+      }
+      window.location.assign(online.paymentUrl);
+    } catch (requestError) {
+      const message = membershipPurchaseErrorMessage(requestError);
+      await load();
+      setError(message);
+    } finally {
+      setCancelingId(null);
+    }
+  }
+
   const currentMemberships = (memberships || []).filter(isMembershipEffective);
+  const membershipChain = activeMembershipChain(memberships, todayInVietnam());
 
   return <div className="layout">
     <Sidebar role={role} activePage="member-membership" onLogout={onLogout} onNavigate={onNavigate} />
@@ -176,13 +232,17 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
 
       <section className="dash-card">
         <h2>Gói của tôi</h2>
-        {loading ? <p role="status">Đang tải thông tin…</p> : currentMemberships.length === 0
+        {loading ? <p role="status">Đang tải thông tin…</p> : membershipChain.length === 0
           ? <p className="dash-empty">Bạn chưa có gói đang hoạt động.</p>
-          : <ul className="dash-rows">{currentMemberships.map((membership) => <li key={membership.id}>
+          : <ul className="dash-rows">{membershipChain.map((membership) => <li key={membership.id}>
             <span><b>{membership.planName || "Gói thành viên"}</b><br /><small>{membership.startDate || "—"} → {membership.endDate || "—"}</small></span>
-            <em>{statusLabel[membership.status] || membership.status || "—"}</em>
+            <em>{isMembershipEffective(membership) ? statusLabel[membership.status] || membership.status : "Sắp bắt đầu"}</em>
+            <button type="button" className={membership.autoRenew ? "" : "secondary"} disabled={togglingId !== null}
+              aria-pressed={Boolean(membership.autoRenew)} onClick={() => void toggleAutoRenew(membership)}>
+              {togglingId === membership.id ? "Đang lưu…" : membership.autoRenew ? "Tự gia hạn: Bật" : "Tự gia hạn: Tắt"}
+            </button>
           </li>)}</ul>}
-        {currentMemberships.length > 0 && <p className="subtitle">Khi thanh toán gia hạn thành công, thời hạn mới sẽ nối tiếp ngày kết thúc hiện tại theo quy tắc của hệ thống.</p>}
+        {membershipChain.length > 0 && <p className="subtitle">Khi thanh toán gia hạn thành công, thời hạn mới sẽ nối tiếp ngày kết thúc hiện tại. Bật tự gia hạn: {RENEWAL_NOTICE_DAYS} ngày trước khi gói cuối cùng hết hạn, hệ thống tạo yêu cầu gia hạn cùng gói và gửi thông báo; bạn thanh toán tại quầy hoặc VNPay trước ngày hết hạn. Chưa thanh toán thì yêu cầu tự hủy và gói hết hạn bình thường.</p>}
       </section>
 
       {!loading && upgrade?.currentMembershipId && <section className="dash-card">
@@ -213,7 +273,10 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
           : <ul className="dash-rows">{pendingMembershipPayments.map((payment) => {
             const plan = (plans || []).find((item) => Number(item.id) === Number(payment.referenceId));
             return <li key={payment.id}>
-              <span><b>{payment.purpose === "UPGRADE" ? "Nâng cấp lên " : ""}{plan?.name || `Gói #${payment.referenceId}`}</b><br /><small>Thanh toán #{payment.id} · {money(payment.amount)} · {payment.method === "ONLINE" ? "VNPay Sandbox · trạng thái do máy chủ xác nhận" : "Thanh toán tại quầy · chờ nhân viên xác nhận"}</small></span>
+              <span><b>{payment.purpose === "UPGRADE" ? "Nâng cấp lên " : isAutoRenewalPayment(payment) ? "Gia hạn tự động · " : ""}{plan?.name || `Gói #${payment.referenceId}`}</b><br /><small>Thanh toán #{payment.id} · {money(payment.amount)} · {payment.method === "ONLINE" ? "VNPay Sandbox · trạng thái do máy chủ xác nhận" : "Thanh toán tại quầy · chờ nhân viên xác nhận"}</small></span>
+              {payment.purpose === "MEMBERSHIP" && payment.method === "COUNTER" && <button type="button" disabled={cancelingId !== null || busyPlanId !== null} onClick={() => void switchToVnpay(payment)}>
+                Chuyển sang VNPay
+              </button>}
               <button type="button" disabled={cancelingId !== null} onClick={() => void cancelPendingPayment(payment)}>
                 {cancelingId === payment.id ? "Đang hủy…" : "Hủy yêu cầu"}
               </button>
