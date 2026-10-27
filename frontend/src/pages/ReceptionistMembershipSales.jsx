@@ -142,7 +142,8 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
   const activeMemberships = (memberMemberships || []).filter((membership) => membership.status === "ACTIVE");
   const today = todayInVietnam();
   const memberChain = activeMembershipChain(memberMemberships, today);
-  const staffCancellableId = cancellableMembershipId(memberChain, today, { staffCanCancelRunning: role === "ADMIN" });
+  // Direct cancellation is ADMIN-only; receptionists only review member requests.
+  const staffCancellableId = role === "ADMIN" ? cancellableMembershipId(memberChain, today, { staffCanCancelRunning: true }) : null;
 
   async function createPendingPayment(event) {
     event.preventDefault();
@@ -348,7 +349,9 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
                 {String(membership.startDate) > today ? "Hủy gói (hoàn 100%)" : "Hủy đặc biệt"}
               </button>}
             </div>)}
-            <p className="membership-sales-note">Gói chưa bắt đầu: hủy và đánh dấu hoàn 100% khoản đã mua. Gói đang chạy: chỉ quản trị viên hủy trong trường hợp đặc biệt, phải ghi lý do; hoàn tiền (nếu có) xử lý trực tiếp.</p>
+            <p className="membership-sales-note">{role === "ADMIN"
+              ? "Gói chưa bắt đầu: hủy và đánh dấu hoàn 100% khoản đã mua. Gói đang chạy: chỉ hủy trong trường hợp đặc biệt, phải ghi lý do; hoàn tiền (nếu có) xử lý trực tiếp."
+              : "Lễ tân không hủy gói trực tiếp. Hội viên gửi yêu cầu hủy trên trang Gói thành viên; lễ tân duyệt hoặc từ chối ở mục \"Yêu cầu hủy gói chờ duyệt\". Trường hợp đặc biệt vui lòng chuyển cho quản trị viên."}</p>
           </div>}
           {selectedMember && paymentData?.memberId === memberId && <div className="membership-sales-history">
             <h3>Lịch sử thanh toán gói</h3>

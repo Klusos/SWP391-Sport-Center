@@ -171,18 +171,18 @@ public class MembershipService {
     }
 
     /**
-     * Huỷ gói trực tiếp (staff). Gói chưa bắt đầu: ADMIN/RECEPTIONIST huỷ được, khoản đã mua gói chuyển
-     * REFUND_REQUIRED để lễ tân hoàn 100%. Gói đang chạy: chỉ ADMIN, bắt buộc lý do, không tự hoàn tiền.
-     * Member không huỷ trực tiếp mà gửi yêu cầu huỷ (MembershipCancellationRequestService).
+     * Huỷ gói trực tiếp, chỉ ADMIN. Gói chưa bắt đầu: khoản đã mua gói chuyển REFUND_REQUIRED để lễ tân
+     * hoàn 100%. Gói đang chạy: bắt buộc lý do, không tự hoàn tiền.
+     * Member gửi yêu cầu huỷ và lễ tân chỉ duyệt/từ chối yêu cầu đó (MembershipCancellationRequestService).
      * Chỉ huỷ được gói cuối trong chuỗi, để các gói còn lại không bị hở ngày.
      */
     @Transactional
     public MembershipResponse cancelMembership(Integer id, String reason, Jwt callerJwt) {
         User actor = currentActor(callerJwt);
         String role = actor.getRole().toUpperCase(Locale.ROOT);
-        if (!role.equals("ADMIN") && !role.equals("RECEPTIONIST")) {
+        if (!role.equals("ADMIN")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Members cannot cancel directly; send a cancellation request for staff to review");
+                    "Only ADMIN can cancel a membership directly; members send a cancellation request for staff to review");
         }
         Membership membership = membershipRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Membership not found with id: " + id));
@@ -191,10 +191,6 @@ public class MembershipService {
         String trimmedReason = reason == null || reason.isBlank() ? null : reason.trim();
         boolean upcoming = membership.getStartDate().isAfter(today);
         if (!upcoming) {
-            if (!role.equals("ADMIN")) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                        "A running membership is not cancellable or refundable; turn off auto-renew instead. Only ADMIN can cancel it in special cases");
-            }
             if (trimmedReason == null) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A reason is required to cancel a running membership");
             }
@@ -213,7 +209,7 @@ public class MembershipService {
                     request.setStatus(MembershipCancellationRequestStatus.APPROVED);
                     request.setDecidedBy(actor);
                     request.setDecidedAt(LocalDateTime.now(clock.withZone(BUSINESS_ZONE)));
-                    request.setDecisionNote("Nhân viên đã huỷ gói trực tiếp");
+                    request.setDecisionNote("Quản trị viên đã huỷ gói trực tiếp");
                     cancellationRequestRepository.save(request);
                 });
         return toResponse(applyCancellation(membership,

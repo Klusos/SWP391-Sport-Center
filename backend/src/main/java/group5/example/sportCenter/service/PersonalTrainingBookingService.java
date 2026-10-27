@@ -146,17 +146,18 @@ public class PersonalTrainingBookingService {
 
     /**
      * Huỷ booking PT. Chờ thanh toán: huỷ luôn và huỷ các yêu cầu thanh toán đang chờ.
-     * Đã xác nhận: member huỷ được đến 24 giờ trước giờ tập, staff huỷ được trước giờ tập;
+     * Đã xác nhận: member huỷ được đến 24 giờ trước giờ tập, ADMIN huỷ thay được trước giờ tập;
      * khoản đã trả chuyển REFUND_REQUIRED để lễ tân hoàn 100%. HLV và member được thông báo.
+     * Lễ tân không huỷ booking của member.
      */
     @Transactional
     public PersonalTrainingBookingResponse cancel(Jwt jwt, Integer bookingId) {
         User actor = users.findById(currentUserId(jwt))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authenticated user was not found"));
         String role = actor.getRole().toUpperCase(Locale.ROOT);
-        boolean staff = role.equals("ADMIN") || role.equals("RECEPTIONIST");
+        boolean staff = role.equals("ADMIN");
         if (!"ACTIVE".equalsIgnoreCase(actor.getStatus()) || (!staff && !role.equals("MEMBER"))) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the member or staff can cancel a PT booking");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the member or ADMIN can cancel a PT booking");
         }
         Integer memberId = bookings.findMemberIdById(bookingId)
                 .orElseThrow(() -> new ResourceNotFoundException("PT booking not found with id: " + bookingId));
