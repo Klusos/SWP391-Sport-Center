@@ -384,7 +384,8 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
         : !plans?.length ? <p className="dash-empty">Hiện chưa có gói ACTIVE nào.</p>
           : <div className="pf-plans">{plans.map((plan) => <article key={plan.id} className="pf-plan">
             <h2>{plan.name}</h2><strong>{money(plan.price)}</strong>
-            <small>Thời hạn: {plan.durationMonths} tháng · Giảm khóa học {plan.courseDiscountPercent ?? 0}%</small>
+            <small>Thời hạn: {plan.durationMonths} tháng · Giảm khóa học {plan.courseDiscountPercent ?? 0}% · {plan.allowOneOnOneCoaching
+              ? `Đặt PT 1-1, giảm ${plan.personalTrainingDiscountPercent ?? 0}%` : "Không gồm PT 1-1"}</small>
             {plan.description && <p>{plan.description}</p>}
             <div className="member-membership-payment-actions">
               <button type="button" disabled={busyPlanId !== null || pendingMembershipPayments.length > 0}

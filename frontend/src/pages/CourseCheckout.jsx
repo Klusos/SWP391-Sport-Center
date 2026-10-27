@@ -80,6 +80,8 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
   if (checkoutAccess(auth) !== "MEMBER") return <Navigate to="/" replace />;
 
   const targetPayment = data?.payments.find((payment) => payment.id === paymentId);
+  // VNPay always returns through this page; PT booking results belong to the PT booking screen.
+  if (result && targetPayment?.purpose === "PT_BOOKING") return <Navigate to={"/member/pt-booking" + location.search} replace />;
   // A return query must resolve through authenticated ownership; never fall back to a guessed registration.
   const id = result ? (targetPayment?.purpose === "COURSE_REGISTRATION" ? targetPayment.referenceId : null) : positiveId(registrationId);
   const registration = data?.registrations.find((item) => item.id === id);

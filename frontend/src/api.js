@@ -231,6 +231,17 @@ export function getAssignedPtBookingsApi(token) {
   return request("/api/pt-bookings/assigned", { headers: authenticatedHeaders(token) });
 }
 
+export function cancelPtBookingApi(token, bookingId) {
+  return request("/api/pt-bookings/" + encodeURIComponent(bookingId) + "/cancel", {
+    method: "PATCH",
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function getPendingPtPaymentsApi(token, page = 0, size = 20) {
+  return request(`/api/payments/pending-pt?page=${page}&size=${size}`, { headers: authenticatedHeaders(token) });
+}
+
 export function getMyAttendanceApi(token) {
   return request("/api/attendance/me", { headers: authenticatedHeaders(token) });
 }

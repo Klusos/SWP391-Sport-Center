@@ -951,3 +951,62 @@
     text-align: left;
   }
 }
+
+/* ---------- PAYMENT / CANCEL ACTIONS ---------- */
+
+.pt-page .pt-history-meta .pt-primary-button,
+.pt-page .pt-secondary-button {
+  min-height: 36px;
+  padding: 7px 14px;
+  font-size: 13px;
+}
+
+.pt-page .pt-secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #c9d6e3;
+  border-radius: 10px;
+  background: #fff;
+  color: #2c4660;
+  font-family: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pt-page .pt-secondary-button:hover:not(:disabled) {
+  background: #f1f6fa;
+}
+
+.pt-page .pt-secondary-button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.pt-history-main small + small {
+  display: block;
+  margin-top: 2px;
+}
+
+.pt-page .pt-receptionist-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.pt-page .pt-receptionist-table th,
+.pt-page .pt-receptionist-table td {
+  padding: 10px;
+  border-bottom: 1px solid #e3ebf2;
+  text-align: left;
+  vertical-align: top;
+}
+
+.pt-page .pt-receptionist-table td small {
+  display: block;
+  color: #60758c;
+}
+
+.pt-page .pt-table-wrap {
+  overflow-x: auto;
+}
