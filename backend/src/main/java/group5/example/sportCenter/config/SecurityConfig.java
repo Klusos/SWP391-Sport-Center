@@ -145,7 +145,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.PATCH, "/api/payments/*/counter").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.PATCH, "/api/payments/*/cancel").hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/payments/pending-memberships", "/api/payments/pending-courses").hasAnyRole("ADMIN", "RECEPTIONIST")
-                .requestMatchers(HttpMethod.GET, "/api/payments/pending-pt").hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers(HttpMethod.GET, "/api/payments/pending-pt", "/api/payments/refund-required").hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers(HttpMethod.PATCH, "/api/payments/*/refund").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.GET, "/api/payments/me").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/payments/member/*").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers("/api/payments", "/api/payments/**").denyAll()
@@ -174,6 +175,12 @@ public class SecurityConfig {
 
                 .requestMatchers(HttpMethod.POST, "/api/memberships/expire", "/api/memberships/auto-renew/run").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/memberships").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/memberships/cancellation-requests").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/memberships/cancellation-requests/me").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.PATCH, "/api/memberships/cancellation-requests/*/withdraw").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/memberships/cancellation-requests").hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers(HttpMethod.PATCH, "/api/memberships/cancellation-requests/*/approve",
+                        "/api/memberships/cancellation-requests/*/reject").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.GET, "/api/memberships").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.GET, "/api/memberships/member/*", "/api/memberships/*",
                         "/api/memberships/member/*/upgrade-options")

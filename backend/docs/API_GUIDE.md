@@ -627,11 +627,27 @@ Auto-renew (no stored card, so it creates an invoice and a reminder):
 - `MembershipAutoRenewalService` runs daily at 00:00 (after expiry) and on demand with `POST /api/memberships/auto-renew/run` (ADMIN; returns `{created, cancelled}`). Three days before the last membership in a member's chain ends, if auto-renew is on, the plan is still ACTIVE and no MEMBERSHIP/UPGRADE payment is pending, it creates a PENDING COUNTER MEMBERSHIP payment for the same plan with `autoRenew = true` and note `AUTO_RENEWAL membership #<id>`, and notifies the member. Enabling auto-renew inside that window creates the request immediately.
 - Paying it (at the counter, or the member cancels it and pays the same plan ONLINE) queues the next period with auto-renew still on. An unpaid request is cancelled once the membership ends; turning auto-renew off cancels it at once. A plan that is no longer ACTIVE is not renewed; the member is notified instead.
 
-Cancellation - `PATCH /api/memberships/{id}/cancel` with optional `{"reason":"..."}` (max 500):
+Direct cancellation (staff) - `PATCH /api/memberships/{id}/cancel` with optional `{"reason":"..."}` (max 500):
+- Members get 403 and must send a cancellation request (below).
 - Only the last ACTIVE membership in the chain can be cancelled (409 otherwise), so no gaps appear.
-- Upcoming (start date after today): the owner MEMBER or ADMIN/RECEPTIONIST. Status becomes `CANCELLED`; the payment that bought it (`membership.purchase_payment_id`) changes from SUCCESS to `REFUND_REQUIRED` for a full refund at the desk, which also removes it from revenue. Memberships without a linked payment (older rows) are cancelled and left to staff reconciliation.
+- Upcoming (start date after today): ADMIN/RECEPTIONIST. Status becomes `CANCELLED`; a PENDING request for it is closed as APPROVED; the payment that bought it (`membership.purchase_payment_id`) changes from SUCCESS to `REFUND_REQUIRED` for a full refund at the desk, which also removes it from revenue. Memberships without a linked payment (older rows) are cancelled and left to staff reconciliation.
 - Running: members and receptionists get 403 (no refund; turn auto-renew off instead). ADMIN may cancel it with a required reason (400 without one); benefits stop immediately, the payment is not changed and any refund is handled outside the system. A pending MEMBERSHIP/UPGRADE payment must be settled or cancelled first (409).
 - The member is notified and `MembershipResponse.cancelReason` shows the reason. Admins use the membership page at `/admin/membership-sales`. Apply `docs/sql/phase11-2-membership-cancellation.sql` first.
+
+### Membership cancellation requests and refunds (Phase 11.3)
+
+Member requests (`MembershipCancellationRequestResponse`: id, membership, member, plan, dates, reason, status, requestedAt, decidedByName, decidedAt, decisionNote, purchasePaymentId, purchaseAmount):
+- `POST /api/memberships/cancellation-requests` - MEMBER, `{"membershipId":1,"reason":"..."}` (reason optional, max 500). Only for the member's own last ACTIVE upcoming membership, and only until 72 hours before 00:00 (Vietnam time) of its start date (409 after that, for a running membership, or when a request is already PENDING). All ACTIVE ADMIN/RECEPTIONIST users are notified.
+- `GET /api/memberships/cancellation-requests/me` - MEMBER, newest first. `PATCH /api/memberships/cancellation-requests/{id}/withdraw` - owner MEMBER while PENDING.
+- `GET /api/memberships/cancellation-requests?status=PENDING` - ADMIN/RECEPTIONIST, oldest first (status PENDING/APPROVED/REJECTED/WITHDRAWN/EXPIRED).
+- `PATCH /api/memberships/cancellation-requests/{id}/approve` with optional `{"note":"..."}` - ADMIN/RECEPTIONIST. Cancels the membership like a direct upcoming cancellation (purchase payment -> `REFUND_REQUIRED`, member notified); 409 if the membership has started or is no longer the last one.
+- `PATCH /api/memberships/cancellation-requests/{id}/reject` with required `{"note":"..."}` (400 without) - ADMIN/RECEPTIONIST; the member is notified with the note.
+- The daily membership job marks PENDING requests EXPIRED once their membership has started or is no longer ACTIVE, and notifies the member.
+
+Refunds:
+- `GET /api/payments/refund-required?page=0&size=20` - ADMIN/RECEPTIONIST, every `REFUND_REQUIRED` payment (all purposes), oldest first.
+- `PATCH /api/payments/{id}/refund` with optional `{"note":"..."}` - ADMIN/RECEPTIONIST confirms the money was returned: status `REFUNDED`, `refundedAt`/`refundedByName` set on `PaymentResponse`, the note is appended, the member is notified. 409 for any other status. `REFUNDED` is not revenue.
+- Apply `docs/sql/phase11-3-cancellation-requests-and-refunds.sql` first.
 
 ## Notifications (Phase 6.1A)
 

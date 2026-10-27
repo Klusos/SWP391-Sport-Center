@@ -53,6 +53,7 @@ public class PaymentService {
     private final CourseRegistrationPaymentHandler courseRegistrationHandler;
     private final PtBookingPaymentHandler ptBookingHandler;
     private final PaymentGateway paymentGateway;
+    private final NotificationService notificationService;
     private final Clock clock;
 
     public PaymentService(
@@ -64,6 +65,7 @@ public class PaymentService {
             CourseRegistrationPaymentHandler courseRegistrationHandler,
             PtBookingPaymentHandler ptBookingHandler,
             PaymentGateway paymentGateway,
+            NotificationService notificationService,
             Clock clock) {
         this.paymentRepository = paymentRepository;
         this.userRepository = userRepository;
@@ -73,6 +75,7 @@ public class PaymentService {
         this.courseRegistrationHandler = courseRegistrationHandler;
         this.ptBookingHandler = ptBookingHandler;
         this.paymentGateway = paymentGateway;
+        this.notificationService = notificationService;
         this.clock = clock;
     }
 
@@ -270,6 +273,41 @@ public class PaymentService {
         return paymentRepository.save(payment);
     }
 
+    /** Hàng đợi khoản cần hoàn tiền (mọi purpose), cũ nhất trước. */
+    @Transactional(readOnly = true)
+    public Page<PaymentResponse> getRefundRequiredPayments(int page, int size, Jwt jwt) {
+        requireStaff(currentActor(jwt));
+        if (page < 0 || size < 1 || size > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must be nonnegative and size between 1 and 100");
+        }
+        return paymentRepository.findByStatus(PaymentStatus.REFUND_REQUIRED,
+                        PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "createdAt", "id")))
+                .map(payment -> toResponse(payment, null));
+    }
+
+    /** Nhân viên xác nhận đã trả tiền lại cho member: REFUND_REQUIRED -> REFUNDED. */
+    @Transactional
+    public PaymentResponse confirmRefund(Integer paymentId, String note, Jwt callerJwt) {
+        User actor = currentActor(callerJwt);
+        requireStaff(actor);
+        Payment payment = paymentRepository.findByIdForUpdate(paymentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + paymentId));
+        if (payment.getStatus() != PaymentStatus.REFUND_REQUIRED) {
+            throw new IllegalArgumentException("Only a REFUND_REQUIRED payment can be marked refunded: " + payment.getStatus());
+        }
+        payment.setStatus(PaymentStatus.REFUNDED);
+        payment.setRefundedAt(now());
+        payment.setRefundedBy(actor);
+        if (note != null && !note.isBlank()) {
+            String combined = (payment.getNote() == null ? "" : payment.getNote() + " | ") + "Refund: " + note.trim();
+            payment.setNote(combined.length() > 500 ? combined.substring(0, 500) : combined);
+        }
+        notificationService.createForUser(payment.getMember().getId(), "Đã hoàn tiền thanh toán #" + payment.getId(),
+                "Trung tâm đã hoàn " + payment.getAmount().stripTrailingZeros().toPlainString()
+                        + " VND cho khoản thanh toán #" + payment.getId() + ".");
+        return toResponse(paymentRepository.save(payment), null);
+    }
+
     /** View Payment History (của chính mình). */
     @Transactional(readOnly = true)
     public List<PaymentResponse> getMyHistory(Jwt callerJwt) {
@@ -409,6 +447,7 @@ public class PaymentService {
         return new PaymentResponse(
                 p.getId(), p.getMember().getId(), p.getMember().getName(), p.getAmount(),
                 p.getMethod().name(), p.getPurpose().name(), p.getReferenceId(), p.getStatus().name(),
-                p.getTransactionCode(), paymentUrl, p.getNote(), p.getCreatedAt(), p.getPaidAt());
+                p.getTransactionCode(), paymentUrl, p.getNote(), p.getCreatedAt(), p.getPaidAt(),
+                p.getRefundedAt(), p.getRefundedBy() == null ? null : p.getRefundedBy().getName());
     }
 }

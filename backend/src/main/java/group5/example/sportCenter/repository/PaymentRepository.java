@@ -22,6 +22,8 @@ import jakarta.persistence.LockModeType;
 
 public interface PaymentRepository extends JpaRepository<Payment, Integer> {
 
+    Page<Payment> findByStatus(PaymentStatus status, Pageable pageable);
+
     Page<Payment> findByStatusAndMethodAndPurposeIn(PaymentStatus status, PaymentMethod method, List<PaymentPurpose> purposes, Pageable pageable);
 
     boolean existsByMember_IdAndPurposeInAndStatus(Integer memberId, List<PaymentPurpose> purposes, PaymentStatus status);

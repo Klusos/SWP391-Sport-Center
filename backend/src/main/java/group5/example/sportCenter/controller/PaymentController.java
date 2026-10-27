@@ -23,6 +23,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import group5.example.sportCenter.dto.CounterPaymentRequest;
 import group5.example.sportCenter.dto.CreatePaymentRequest;
+import group5.example.sportCenter.dto.DecisionNoteRequest;
 import group5.example.sportCenter.dto.PaymentResponse;
 import group5.example.sportCenter.dto.PendingCoursePaymentResponse;
 import group5.example.sportCenter.dto.PendingPtPaymentResponse;
@@ -148,6 +149,22 @@ public class PaymentController {
             @RequestParam(defaultValue = "20") int size,
             @AuthenticationPrincipal Jwt jwt) {
         return paymentService.getPendingMembershipCounterPayments(page, size, jwt);
+    }
+
+    @GetMapping("/refund-required")
+    public Page<PaymentResponse> refundRequired(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @AuthenticationPrincipal Jwt jwt) {
+        return paymentService.getRefundRequiredPayments(page, size, jwt);
+    }
+
+    /** Lễ tân/ADMIN xác nhận đã trả tiền lại cho member (REFUND_REQUIRED -> REFUNDED). */
+    @PatchMapping("/{id}/refund")
+    public PaymentResponse confirmRefund(@PathVariable Integer id,
+                                         @Valid @RequestBody(required = false) DecisionNoteRequest request,
+                                         @AuthenticationPrincipal Jwt jwt) {
+        return paymentService.confirmRefund(id, request == null ? null : request.note(), jwt);
     }
 
     @GetMapping("/me")
