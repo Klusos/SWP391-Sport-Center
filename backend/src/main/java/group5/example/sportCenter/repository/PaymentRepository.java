@@ -26,6 +26,8 @@ public interface PaymentRepository extends JpaRepository<Payment, Integer> {
 
     boolean existsByMember_IdAndPurposeInAndStatus(Integer memberId, List<PaymentPurpose> purposes, PaymentStatus status);
 
+    List<Payment> findByStatusAndPurposeAndNoteStartingWith(PaymentStatus status, PaymentPurpose purpose, String notePrefix);
+
     // Scalar projection avoids lazy-loading member/course/class entities for each queue row.
     // referenceId is purpose-scoped; it is not a mapped Payment -> registration association.
     @Query(value = """

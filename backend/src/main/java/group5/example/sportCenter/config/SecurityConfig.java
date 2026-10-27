@@ -172,7 +172,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/membership-plans", "/api/membership-plans/**").hasRole("ADMIN")
                 .requestMatchers("/api/membership-plans", "/api/membership-plans/**").hasRole("ADMIN")
 
-                .requestMatchers(HttpMethod.POST, "/api/memberships/expire").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/memberships/expire", "/api/memberships/auto-renew/run").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/memberships").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.GET, "/api/memberships").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.GET, "/api/memberships/member/*", "/api/memberships/*",

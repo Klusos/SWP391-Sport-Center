@@ -31,16 +31,19 @@ public class MembershipService {
     private final MembershipRepository membershipRepository;
     private final UserRepository userRepository;
     private final MembershipPlanRepository membershipPlanRepository;
+    private final MembershipAutoRenewalService autoRenewalService;
     private final Clock clock;
 
     public MembershipService(
             MembershipRepository membershipRepository,
             UserRepository userRepository,
             MembershipPlanRepository membershipPlanRepository,
+            MembershipAutoRenewalService autoRenewalService,
             Clock clock) {
         this.membershipRepository = membershipRepository;
         this.userRepository = userRepository;
         this.membershipPlanRepository = membershipPlanRepository;
+        this.autoRenewalService = autoRenewalService;
         this.clock = clock;
     }
 
@@ -159,7 +162,23 @@ public class MembershipService {
         requireOwnMembershipOrStaff(actor, membership.getMember().getId());
         validateActiveMembership(membership);
         membership.setAutoRenew(enabled);
-        return toResponse(membershipRepository.save(membership));
+        Membership saved = membershipRepository.save(membership);
+        // Turning it on inside the notice window creates the renewal request now instead of at midnight.
+        if (enabled) {
+            autoRenewalService.createIfDue(saved);
+        } else {
+            autoRenewalService.cancelPendingFor(saved);
+        }
+        return toResponse(saved);
+    }
+
+    /** Chạy job tự gia hạn ngay (ADMIN), giống job lúc nửa đêm; dùng cho demo và kiểm tra. */
+    public MembershipAutoRenewalService.RunResult runAutoRenewal(Jwt callerJwt) {
+        User actor = currentActor(callerJwt);
+        if (!"ADMIN".equalsIgnoreCase(actor.getRole())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only ADMIN can run auto-renewal manually");
+        }
+        return autoRenewalService.runDaily();
     }
 
     private void validateActiveMembership(Membership membership) {

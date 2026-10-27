@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import group5.example.sportCenter.dto.CreateMembershipRequest;
 import group5.example.sportCenter.dto.MembershipResponse;
 import group5.example.sportCenter.dto.MembershipUpgradeOptionsResponse;
+import group5.example.sportCenter.service.MembershipAutoRenewalService;
 import group5.example.sportCenter.service.MembershipService;
 import group5.example.sportCenter.service.MembershipUpgradeService;
 import jakarta.validation.Valid;
@@ -88,6 +89,11 @@ public class MembershipController {
             @AuthenticationPrincipal Jwt jwt) {
 
         return membershipService.enableAutoRenew(id, jwt);
+    }
+
+    @PostMapping("/auto-renew/run")
+    public MembershipAutoRenewalService.RunResult runAutoRenewal(@AuthenticationPrincipal Jwt jwt) {
+        return membershipService.runAutoRenewal(jwt);
     }
 
     @PostMapping("/expire")
