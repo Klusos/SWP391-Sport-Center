@@ -10,7 +10,9 @@ import {
   getMyPtBookingsApi, getMyMemberSportLevelsApi, getMySkillAssessmentsApi,
   getMyConsultationRequestsApi,
   getAdminRevenueReportApi,
+  getTrainingClassesApi, getCoachAttendanceSessionsApi,
 } from "../api";
+import { confirmedEnrollmentCount, upcomingTeachingSessions } from "../coachDashboard.js";
 
 /* ---------- helpers ---------- */
 const list = (d) => (Array.isArray(d) ? d : d?.content ?? []);
@@ -33,7 +35,12 @@ const LOADERS = {
     members: memberUsers, sports: getSportsApi, plans: getPublicMembershipPlansApi,
     requests: (t) => getConsultationRequestsApi(t, { size: 100 }),
   },
-  COACH: { bookings: getAssignedPtBookingsApi, assessments: getMySkillAssessmentAssignmentsApi },
+  COACH: {
+    bookings: getAssignedPtBookingsApi,
+    assessments: getMySkillAssessmentAssignmentsApi,
+    classes: getTrainingClassesApi,
+    teachingSessions: getCoachAttendanceSessionsApi,
+  },
   MEMBER: {
     bookings: getMyPtBookingsApi, levels: getMyMemberSportLevelsApi,
     assessments: getMySkillAssessmentsApi, requests: getMyConsultationRequestsApi,
@@ -41,7 +48,7 @@ const LOADERS = {
 };
 
 function useLoad(token, role) {
-  const [state, setState] = useState({ data: {}, loading: true });
+  const [state, setState] = useState({ data: {}, errors: {}, loading: true });
   useEffect(() => {
     let off = false;
     const loaders = LOADERS[role] || {};
@@ -49,8 +56,15 @@ function useLoad(token, role) {
     Promise.allSettled(keys.map((k) => loaders[k](token))).then((rs) => {
       if (off) return;
       const data = {};
-      keys.forEach((k, i) => { data[k] = rs[i].status === "fulfilled" ? rs[i].value : null; });
-      setState({ data, loading: false });
+      const errors = {};
+      keys.forEach((k, i) => {
+        if (rs[i].status === "fulfilled") data[k] = rs[i].value;
+        else {
+          data[k] = null;
+          errors[k] = rs[i].reason?.message || "Không thể tải dữ liệu.";
+        }
+      });
+      setState({ data, errors, loading: false });
     });
     return () => { off = true; };
   }, [token, role]);
@@ -179,22 +193,43 @@ function BookingList({ items, who }) {
   );
 }
 
-function Coach({ d }) {
+function Coach({ d, errors = {} }) {
   const up = upcoming(d.bookings);
   const pending = list(d.assessments).filter((a) => !/COMPLETED|CANCEL/i.test(a.status || ""));
+  const classes = list(d.classes);
+  const teachingSessions = upcomingTeachingSessions(d.teachingSessions);
+  const upcomingPt = up;
   return (<>
     <Stats items={[
-      { label: "Buổi PT được giao", value: total(d.bookings), color: "blue" },
-      { label: "Sắp diễn ra", value: d.bookings == null ? "—" : up.length, color: "green" },
+      { label: "Lớp được phân công", value: total(d.classes), color: "blue" },
+      { label: "Lượt đăng ký lớp đã xác nhận", value: d.classes == null ? "—" : confirmedEnrollmentCount(classes), color: "green" },
+      { label: "Buổi dạy sắp tới", value: d.teachingSessions == null ? "—" : teachingSessions.length, color: "orange" },
+      { label: "Buổi PT sắp tới", value: d.bookings == null ? "—" : upcomingPt.length, color: "blue" },
       { label: "Đánh giá cần làm", value: d.assessments == null ? "—" : pending.length, color: "orange" },
-      { label: "Tổng đánh giá", value: total(d.assessments), color: "blue" },
     ]} />
     <div className="dash-grid wide">
-      <Card title="Buổi huấn luyện sắp tới">
-        <BookingList items={up} who={(b) => b.memberName || b.memberFullName || b.member?.fullName || ""} />
+      <Card title="Lớp được phân công" note={errors.classes ? "" : `${classes.length} lớp`}>
+        {errors.classes ? <p className="dash-error" role="alert">Không tải được danh sách lớp: {errors.classes}</p>
+          : classes.length === 0 ? <Empty>Chưa có lớp nào được phân công.</Empty>
+            : <ul className="dash-rows">{classes.slice(0, 6).map((item) => <li key={item.classId}>
+              <span><b>{item.className || `Lớp #${item.classId}`}</b><br /><small>{[item.courseName, item.sportName].filter(Boolean).join(" · ")}</small></span>
+              <em>{Number(item.confirmedMembers || 0)} học viên</em>
+            </li>)}</ul>}
+        <Link className="coach-dashboard-link" to="/coach/training">Mở quản lý giáo án</Link>
+      </Card>
+      <Card title="Lịch dạy sắp tới" note="Lớp học">
+        {errors.teachingSessions ? <p className="dash-error" role="alert">Không tải được lịch dạy: {errors.teachingSessions}</p>
+          : <TeachingSessionList items={teachingSessions} />}
+        <Link className="coach-dashboard-link" to="/coach/schedule">Mở lịch trình</Link>
+      </Card>
+      <Card title="Buổi PT sắp tới">
+        {errors.bookings ? <p className="dash-error" role="alert">Không tải được lịch PT: {errors.bookings}</p>
+          : <BookingList items={upcomingPt} who={(b) => b.memberName || b.memberFullName || b.member?.fullName || ""} />}
+        <Link className="coach-dashboard-link" to="/coach/pt-sessions">Mở các buổi PT</Link>
       </Card>
       <Card title="Đánh giá kỹ năng cần làm">
-        {pending.length === 0 ? <Empty>Không có đánh giá nào đang chờ.</Empty> : (
+        {errors.assessments ? <p className="dash-error" role="alert">Không tải được đánh giá: {errors.assessments}</p>
+          : pending.length === 0 ? <Empty>Không có đánh giá nào đang chờ.</Empty> : (
           <ul className="dash-rows">
             {pending.slice(0, 5).map((a) => (
               <li key={a.id}><span>{a.memberName || a.memberFullName || "Học viên"}</span><em>{a.sportName || a.sport?.name || ""}</em></li>
@@ -204,6 +239,15 @@ function Coach({ d }) {
       </Card>
     </div>
   </>);
+}
+
+function TeachingSessionList({ items }) {
+  if (items.length === 0) return <Empty>Không có buổi dạy sắp tới.</Empty>;
+  return <ul className="dash-sessions">{items.slice(0, 5).map((session) => <li key={session.classSessionId}>
+    <div><small>{fmt(session.startTime)}</small><b>{session.courseClassName || "Lớp học"}</b></div>
+    <span>{[session.courseName, session.sportName].filter(Boolean).join(" · ")}</span>
+    <em>{session.sessionStatus || "SCHEDULED"}</em>
+  </li>)}</ul>;
 }
 
 function Member({ d, onNavigate }) {
@@ -250,7 +294,7 @@ const TITLES = {
 };
 
 export default function Dashboard({ token, role, onLogout, onNavigate }) {
-  const { data, loading } = useLoad(token, role);
+  const { data, errors, loading } = useLoad(token, role);
   const [title, sub] = TITLES[role] || TITLES.MEMBER;
   const View = { ADMIN: Admin, RECEPTIONIST: Receptionist, COACH: Coach, MEMBER: Member }[role] || Member;
 
@@ -260,7 +304,7 @@ export default function Dashboard({ token, role, onLogout, onNavigate }) {
       <main className="main dash-main">
         <h1>{title}</h1>
         <p className="subtitle">{sub || "Hôm nay: " + today}</p>
-        {loading ? <div className="queue-state">Đang tải dữ liệu…</div> : <View d={data} onNavigate={onNavigate} token={token} />}
+        {loading ? <div className="queue-state">Đang tải dữ liệu…</div> : <View d={data} errors={errors} onNavigate={onNavigate} token={token} />}
       </main>
     </div>
   );

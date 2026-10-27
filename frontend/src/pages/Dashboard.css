@@ -20,6 +20,8 @@
 .dash-card h2 small { color: var(--text-sub); font-size: 11px; font-weight: 500; }
 .dash-card h3 { margin: 22px 0 12px; font-size: 15px; }
 .dash-empty { margin: 0; padding: 14px; border-radius: var(--radius-sm); background: #f4f8fb; color: var(--text-sub); font-size: 13px; }
+.dash-error { margin: 0; padding: 14px; border-radius: var(--radius-sm); background: #fff0ec; color: #8f2e23; font-size: 13px; overflow-wrap: anywhere; }
+.coach-dashboard-link { display: inline-block; margin-top: 14px; color: var(--blue); font-size: 13px; font-weight: 650; }
 
 .dash-bars { display: flex; align-items: flex-end; gap: 4%; height: 220px; padding: 0 4px; }
 .dash-bars span { flex: 1; border-radius: 6px 6px 3px 3px; background: #0a61f2; min-width: 0; }
