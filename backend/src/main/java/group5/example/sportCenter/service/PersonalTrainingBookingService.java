@@ -6,7 +6,9 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -20,6 +22,9 @@ import group5.example.sportCenter.dto.EligiblePtCoachResponse;
 import group5.example.sportCenter.dto.PersonalTrainingBookingResponse;
 import group5.example.sportCenter.entity.Coach;
 import group5.example.sportCenter.entity.Membership;
+import group5.example.sportCenter.entity.Payment;
+import group5.example.sportCenter.entity.PaymentPurpose;
+import group5.example.sportCenter.entity.PaymentStatus;
 import group5.example.sportCenter.entity.PersonalTrainingBooking;
 import group5.example.sportCenter.entity.PersonalTrainingBookingStatus;
 import group5.example.sportCenter.entity.Sport;
@@ -30,6 +35,7 @@ import group5.example.sportCenter.repository.ClassSessionRepository;
 import group5.example.sportCenter.repository.CoachRepository;
 import group5.example.sportCenter.repository.CoachSportRepository;
 import group5.example.sportCenter.repository.MembershipRepository;
+import group5.example.sportCenter.repository.PaymentRepository;
 import group5.example.sportCenter.repository.PersonalTrainingBookingRepository;
 import group5.example.sportCenter.repository.SportRepository;
 import group5.example.sportCenter.repository.UserRepository;
@@ -38,7 +44,9 @@ import group5.example.sportCenter.repository.UserRepository;
 public class PersonalTrainingBookingService {
     public static final int SESSION_MINUTES = 90;
     public static final int PAYMENT_HOLD_MINUTES = 15;
+    public static final int CANCEL_NOTICE_HOURS = 24;
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    private static final DateTimeFormatter VN_DATE_TIME = DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy");
     private static final BigDecimal HUNDRED = new BigDecimal("100");
 
     private final PersonalTrainingBookingRepository bookings;
@@ -48,6 +56,8 @@ public class PersonalTrainingBookingService {
     private final SportRepository sports;
     private final MembershipRepository memberships;
     private final ClassSessionRepository classSessions;
+    private final PaymentRepository payments;
+    private final NotificationService notifications;
     private final Clock clock;
     private final String configuredBasePrice;
 
@@ -59,6 +69,8 @@ public class PersonalTrainingBookingService {
             SportRepository sports,
             MembershipRepository memberships,
             ClassSessionRepository classSessions,
+            PaymentRepository payments,
+            NotificationService notifications,
             Clock clock,
             @Value("${app.pt.session-base-price:}") String configuredBasePrice) {
         this.bookings = bookings;
@@ -68,6 +80,8 @@ public class PersonalTrainingBookingService {
         this.sports = sports;
         this.memberships = memberships;
         this.classSessions = classSessions;
+        this.payments = payments;
+        this.notifications = notifications;
         this.clock = clock;
         this.configuredBasePrice = configuredBasePrice;
     }
@@ -127,6 +141,73 @@ public class PersonalTrainingBookingService {
         LocalDateTime createdAt = LocalDateTime.now(clock.withZone(BUSINESS_ZONE));
         booking.setCreatedAt(createdAt);
         booking.setPaymentExpiresAt(createdAt.plusMinutes(PAYMENT_HOLD_MINUTES));
+        return toResponse(bookings.save(booking));
+    }
+
+    /**
+     * Huỷ booking PT. Chờ thanh toán: huỷ luôn và huỷ các yêu cầu thanh toán đang chờ.
+     * Đã xác nhận: member huỷ được đến 24 giờ trước giờ tập, staff huỷ được trước giờ tập;
+     * khoản đã trả chuyển REFUND_REQUIRED để lễ tân hoàn 100%. HLV và member được thông báo.
+     */
+    @Transactional
+    public PersonalTrainingBookingResponse cancel(Jwt jwt, Integer bookingId) {
+        User actor = users.findById(currentUserId(jwt))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authenticated user was not found"));
+        String role = actor.getRole().toUpperCase(Locale.ROOT);
+        boolean staff = role.equals("ADMIN") || role.equals("RECEPTIONIST");
+        if (!"ACTIVE".equalsIgnoreCase(actor.getStatus()) || (!staff && !role.equals("MEMBER"))) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the member or staff can cancel a PT booking");
+        }
+        Integer memberId = bookings.findMemberIdById(bookingId)
+                .orElseThrow(() -> new ResourceNotFoundException("PT booking not found with id: " + bookingId));
+        if (!staff && !memberId.equals(actor.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You can only cancel your own PT bookings");
+        }
+
+        // Same lock order as booking creation and counter payment: member, payments, then booking.
+        users.findByIdForBookingUpdate(memberId);
+        List<Payment> attempts = payments.findIdsByPurposeAndReferenceIdAndStatusIn(PaymentPurpose.PT_BOOKING, bookingId,
+                        List.of(PaymentStatus.PENDING, PaymentStatus.SUCCESS)).stream()
+                .map(id -> payments.findByIdForUpdate(id).orElseThrow())
+                .toList();
+        PersonalTrainingBooking booking = bookings.findByIdForLifecycleUpdate(bookingId)
+                .orElseThrow(() -> new ResourceNotFoundException("PT booking not found with id: " + bookingId));
+
+        LocalDateTime now = LocalDateTime.now(clock.withZone(BUSINESS_ZONE));
+        boolean confirmed = booking.getStatus() == PersonalTrainingBookingStatus.CONFIRMED;
+        if (!confirmed && booking.getStatus() != PersonalTrainingBookingStatus.PENDING_PAYMENT) {
+            throw new IllegalArgumentException("PT booking cannot be cancelled: " + booking.getStatus());
+        }
+        if (confirmed && !booking.getStartTime().isAfter(now)) {
+            throw new IllegalArgumentException("PT session has already started");
+        }
+        if (confirmed && !staff && booking.getStartTime().minusHours(CANCEL_NOTICE_HOURS).isBefore(now)) {
+            throw new IllegalArgumentException("Confirmed PT sessions can be cancelled up to " + CANCEL_NOTICE_HOURS
+                    + " hours before they start; contact the front desk");
+        }
+
+        booking.setStatus(PersonalTrainingBookingStatus.CANCELLED);
+        String moneyMessage = "";
+        for (Payment payment : attempts) {
+            if (payment.getStatus() == PaymentStatus.PENDING) {
+                payment.setStatus(PaymentStatus.CANCELLED);
+                payment.setNote("Cancelled with PT booking #" + bookingId);
+            } else if (payment.getStatus() == PaymentStatus.SUCCESS) {
+                payment.setStatus(PaymentStatus.REFUND_REQUIRED);
+                payment.setNote("Refund 100%: PT booking #" + bookingId + " was cancelled by " + role);
+                moneyMessage = " Khoản thanh toán #" + payment.getId() + " sẽ được hoàn 100%; vui lòng liên hệ lễ tân để nhận tiền.";
+            }
+            payments.save(payment);
+        }
+        String when = booking.getStartTime().format(VN_DATE_TIME);
+        notifications.createForUser(memberId, "Buổi PT đã được huỷ",
+                "Buổi PT " + booking.getSport().getName() + " lúc " + when + " với HLV "
+                        + booking.getCoach().getUser().getName() + " đã được huỷ." + moneyMessage);
+        if (confirmed) {
+            notifications.createForUser(booking.getCoach().getUser().getId(), "Buổi PT bị huỷ",
+                    "Buổi PT " + booking.getSport().getName() + " lúc " + when + " với hội viên "
+                            + booking.getMember().getName() + " đã bị huỷ.");
+        }
         return toResponse(bookings.save(booking));
     }
 

@@ -137,6 +137,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/pt-bookings/eligible-coaches", "/api/pt-bookings/me").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.POST, "/api/pt-bookings").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/pt-bookings/assigned").hasRole("COACH")
+                .requestMatchers(HttpMethod.PATCH, "/api/pt-bookings/*/cancel").hasAnyRole("MEMBER", "ADMIN", "RECEPTIONIST")
                 .requestMatchers("/api/pt-bookings", "/api/pt-bookings/**").denyAll()
 
                 .requestMatchers(HttpMethod.GET, "/api/payments/online/callback",
