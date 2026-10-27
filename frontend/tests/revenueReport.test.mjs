@@ -14,6 +14,6 @@ test("report defaults and date grouping use the Ho Chi Minh calendar", () => {
 test("VND display and reporting purposes use the supported payment categories", () => {
   assert.match(formatVnd(1250000), /1\.250\.000/);
   assert.deepEqual(REVENUE_PURPOSES.map(([purpose]) => purpose), [
-    "MEMBERSHIP", "COURSE_REGISTRATION", "PT_BOOKING",
+    "MEMBERSHIP", "COURSE_REGISTRATION", "PT_BOOKING", "UPGRADE",
   ]);
 });

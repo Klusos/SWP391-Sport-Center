@@ -34,6 +34,7 @@ test("PT return resolves the booking only from PT purpose and its backend refere
 test("each Payment purpose has only its own primary destination", () => {
   assert.deepEqual(paymentPurposePresentation({ purpose: "PT_BOOKING" }), { label: "Thanh toán buổi tập cá nhân", action: "Xem lịch PT", path: "/member/pt-booking" });
   assert.deepEqual(paymentPurposePresentation({ purpose: "MEMBERSHIP" }), { label: "Thanh toán gói hội viên", action: "Xem gói hội viên", path: "/member/membership" });
+  assert.equal(paymentPurposePresentation({ purpose: "UPGRADE" }).path, "/member/membership");
   assert.deepEqual(paymentPurposePresentation({ purpose: "COURSE_REGISTRATION" }), { label: "Thanh toán khóa học", action: "Xem khóa học của tôi", path: "/member/courses" });
   assert.equal(paymentPurposePresentation({ purpose: "OTHER" }), null);
 });
@@ -69,7 +70,7 @@ test("shared result loader branches on authenticated purpose and never creates p
   const source = await readFile(new URL("../src/pages/CourseCheckout.jsx", import.meta.url), "utf8");
   const readBlock = source.slice(source.indexOf("  const read = useCallback"), source.indexOf("  useEffect(() => {", source.indexOf("  const read = useCallback")));
   assert.match(readBlock, /findOwnedPayment\(payments, paymentId\)/);
-  assert.match(readBlock, /returnedPayment\?\.purpose === "MEMBERSHIP"/);
+  assert.match(readBlock, /isMembershipPayment\(returnedPayment\?\.purpose\)/);
   assert.match(readBlock, /returnedPayment\?\.purpose === "PT_BOOKING"/);
   assert.match(readBlock, /returnedPayment\?\.purpose === "COURSE_REGISTRATION"/);
   assert.match(readBlock, /getMyPtBookingsApi\(token\)/);

@@ -26,6 +26,10 @@ const pageByPath = {
   "/member/schedule": "member-schedule",
   "/member/levels-assessments": "member-levels",
   "/member/attendance": "member-attendance",
+  "/member/training": "member-training",
+  "/coach/training": "coach-training",
+  "/admin/training": "admin-training",
+  "/admin/membership-sales": "admin-membership-sales",
   "/member/pt-booking": "member-pt-booking",
   "/member/profile": "member-profile",
 };

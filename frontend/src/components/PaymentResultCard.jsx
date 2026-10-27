@@ -39,6 +39,13 @@ function ServiceDetails({ payment, ptBooking, membershipRecords, registration })
           <Detail label="Thời hạn">{membership.startDate || "—"} – {membership.endDate || "—"}</Detail>
         </div>) : <Detail label="Gói hội viên">{payment.status === "PENDING" ? "Gói sẽ được cập nhật sau khi máy chủ xác nhận thanh toán." : "Chưa tìm thấy bản ghi gói hội viên tương ứng trong dữ liệu tài khoản."}</Detail>}
       </>;
+    case "UPGRADE":
+      return <>
+        <Detail label="Mã gói đích">#{payment.referenceId}</Detail>
+        <Detail label="Trạng thái nâng cấp">{payment.status === "SUCCESS"
+          ? "Thanh toán đã được máy chủ xác nhận. Hãy kiểm tra danh sách gói hội viên để xem trạng thái gói mới."
+          : "Thông tin gói mới chỉ được cập nhật sau khi máy chủ xác nhận thanh toán."}</Detail>
+      </>;
     case "COURSE_REGISTRATION":
       return registration ? <>
         <Detail label="Mã đăng ký">#{registration.id}</Detail>
@@ -70,6 +77,7 @@ export default function PaymentResultCard({
     : [];
   const serviceStatus = payment?.purpose === "PT_BOOKING" ? ptBooking?.status
     : payment?.purpose === "MEMBERSHIP" ? matchingMemberships.some((item) => item.status === "ACTIVE") ? "ACTIVE" : matchingMemberships[0]?.status
+      : payment?.purpose === "UPGRADE" ? null
       : payment?.purpose === "COURSE_REGISTRATION" ? registration?.status : null;
   const needsRefresh = !payment || payment?.status === "PENDING"
     || (payment?.status === "SUCCESS" && ["PENDING_PAYMENT"].includes(serviceStatus))

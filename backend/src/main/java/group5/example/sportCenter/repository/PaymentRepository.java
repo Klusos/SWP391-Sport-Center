@@ -22,7 +22,18 @@ import jakarta.persistence.LockModeType;
 
 public interface PaymentRepository extends JpaRepository<Payment, Integer> {
 
-    Page<Payment> findByStatusAndMethodAndPurpose(PaymentStatus status, PaymentMethod method, PaymentPurpose purpose, Pageable pageable);
+    Page<Payment> findByStatus(PaymentStatus status, Pageable pageable);
+
+    /** IDs only, so each payment is first loaded under its own row lock (findByIdForUpdate). */
+    @Query("select p.id from Payment p where p.purpose = :purpose and p.referenceId = :referenceId and p.status in :statuses")
+    List<Integer> findIdsByPurposeAndReferenceIdAndStatusIn(@Param("purpose") PaymentPurpose purpose,
+            @Param("referenceId") Integer referenceId, @Param("statuses") List<PaymentStatus> statuses);
+
+    Page<Payment> findByStatusAndMethodAndPurposeIn(PaymentStatus status, PaymentMethod method, List<PaymentPurpose> purposes, Pageable pageable);
+
+    boolean existsByMember_IdAndPurposeInAndStatus(Integer memberId, List<PaymentPurpose> purposes, PaymentStatus status);
+
+    List<Payment> findByStatusAndPurposeAndNoteStartingWith(PaymentStatus status, PaymentPurpose purpose, String notePrefix);
 
     // Scalar projection avoids lazy-loading member/course/class entities for each queue row.
     // referenceId is purpose-scoped; it is not a mapped Payment -> registration association.

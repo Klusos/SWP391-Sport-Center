@@ -1,5 +1,38 @@
 # SportCenter Implementation Status
 
+## Membership upgrade (2026-10-27, branch `feature/flow4-membership-upgrade`)
+
+Built on `bugfix/existing-functions` with Flow 4 (`feature/flow4-training`) merged in.
+
+| Area | Change | Verification |
+|---|---|---|
+| Policy | Upgrade now, keep `endDate`, pay the prorated per-day difference for the remaining days (30-day months, rounded up to 1,000 VND); target must cost more per day and keep every benefit; no mid-term downgrade or refund | `MembershipUpgradeIntegrationTest` 6 passed |
+| Backend | `PaymentPurpose.UPGRADE`, `MembershipUpgrade` quote entity, `MembershipUpgradeService` (options, quote, expiry, settlement), `GET /api/memberships/member/{id}/upgrade-options`; COUNTER upgrades join the pending membership queue; old membership becomes `UPGRADED` | Counter, VNPay within and after the 15-minute quote, counter after midnight (409), blocked reasons, rounding |
+| `phase11-1-membership-upgrade.sql` | Adds `UPGRADE` to `ck_payment_purpose` (kept when already present), `dbo.membership_upgrade`, filtered unique index for one PENDING upgrade per member | Rehearsed twice on a restored copy of the local DB (with the purpose CHECK reset to three values), backend started with `ddl-auto=validate`, then a counter upgrade (317,000 VND, end date kept) and a VNPay upgrade URL over the API; the copy was dropped. Applied to the local `SportCenterDB` on 2026-10-27 after a backup |
+| Frontend | Member "Nâng cấp gói" section (counter or VNPay), pending upgrade requests, VNPay result page, receptionist queue labels, revenue report "Nâng cấp gói" | `npm test`, lint clean for changed files, build passed |
+| Auto-renew | Toggle on each current/upcoming membership; 3 days before the last membership ends the daily job (or enabling in that window) creates a PENDING counter renewal for the same plan and notifies the member; unpaid requests are cancelled after expiry or when the toggle is turned off; a counter request can be switched to VNPay | `MembershipAutoRenewalIntegrationTest` 5 passed |
+| Cancellation | Last upcoming membership: staff cancel directly, members send a request (until 72 hours before the start) that staff approve or reject with a note; approval makes the purchase payment `REFUND_REQUIRED` (100% refund); unanswered requests expire when the membership starts; running membership: ADMIN only with a reason, no automatic refund; admins reach the membership page at `/admin/membership-sales` | `MembershipCancellationIntegrationTest` 8 passed |
+| Refunds and payment history | Staff queue of `REFUND_REQUIRED` payments (all purposes) with "Xác nhận đã hoàn tiền" -> `REFUNDED` (who/when recorded, member notified); member page lists every payment with Vietnamese purpose/method/status labels | Covered by the same test class; frontend `membershipCancellation.test.mjs` |
+| PT booking fixes | Member PT page pays the 15-minute hold by VNPay or at the counter (switch or cancel a pending attempt), cancels bookings (`PATCH /api/pt-bookings/{id}/cancel`: pending any time, confirmed until 24 hours before, paid amount -> `REFUND_REQUIRED`); new receptionist/admin page "Thanh toán buổi PT" (`/receptionist/pt-payments`); member, coach and receptionist PT pages in Vietnamese; plan form labels separate "giáo án cá nhân" from "đặt PT 1-1" and warn when a PT discount cannot be used | `PersonalTrainingBookingIntegrationTest` 17 passed; frontend `ptBooking.test.mjs`; live on the local DB: VNPay URL created, pending booking cancelled with its payment, confirmed booking cancelled and refunded |
+| `phase11-3-cancellation-requests-and-refunds.sql` | Adds `REFUNDED` to `ck_payment_status`, `payment.refunded_at`/`refunded_by` (FK users), `dbo.membership_cancellation_request` with one PENDING request per membership (filtered unique index) | Rehearsed twice on a restored copy of the local DB (second run a no-op), backend started with `ddl-auto=validate`, then over HTTP: counter renewal, member request with a Vietnamese reason, receptionist approval, refund confirmation, `REFUNDED` in the member history; the copy was dropped. Not yet applied to the local `SportCenterDB` |
+| `phase11-2-membership-cancellation.sql` | Adds `membership.purchase_payment_id` (FK), `cancelled_at`, `cancel_reason`; not named `source_payment_id` because older local DBs already have that column from Phase 9 | Rehearsed twice on a restored copy of the local DB, Vietnamese reason stored correctly; the copy was dropped |
+
+- Full backend suite (H2 `phase1`, `PAYMENT_PROVIDER=mock`): 312 tests, 0 failures, 1 skipped (SQL Server opt-in). Frontend `npm test` 78 passed. Test cleanups delete memberships before payments because memberships now reference their purchase payment.
+- Merge notes: phase10-1 no longer requires the `sportcenter-recovery-sql` server name; Flow 4 conflicts keep Klusos's copies; the member dashboard keeps the fe2 layout, so `dashboardMembershipNavigation.test.mjs` now checks `onNavigate("member-membership")`.
+- Not done: browser click-through of the upgrade pages; a real VNPay card payment for an upgrade.
+
+## Flow 4 training and demo fixes (2026-10-26, branch `feature/flow4-training`)
+
+| Area | Change | Verification |
+|---|---|---|
+| Flow 4 training | `TrainingPlan` (goal, description), `TrainingExercise`, `TrainingResult` (score 1–10 per PRESENT member and session), `ProgressEvaluation` (rating 1–5, append-only); `/api/training/**`; Coach page "Giáo án & kết quả" (also at `/admin/training` as "Quản lý tập luyện"; training writes are locked against double submits) and Member page "Kết quả tập luyện" | `TrainingIntegrationTest` 6 passed (including admin access, 401/403 for anonymous and member writes, 404 for unknown ids, 400 for invalid exercise values); frontend `npm test` covers the API client paths and role routing; API end-to-end on local SQL Server (plan, exercises, attendance gate 409, session completion, result, evaluation, member view, other-coach 403) |
+| `phase10-1-flow4-training.sql` | New additive, idempotent migration | Rehearsed twice on a restored copy, then applied to local `SportCenterDB` |
+| `ClassSessionService` | Facility guidance check used `LocalDateTime.now()` instead of the injected `Clock` | `ClassSessionServiceTest` 31 passed; its tests now use the fixed clock instead of the real date (four tests had started failing on 2026-10-23) |
+
+- Team demo setup: `DEMO_GUIDE.md` (repo root), `backend/.env.example`, and `docs/sql/demo-seed-flow2-4.sql` (additive, date-relative Flow 2–4 demo data guarded by `@ConfirmLocalDemoDatabase`). The seed was first rehearsed with the Phase 9 migrations applied; on this branch it needs only migrations 8-7b, 8-7c and 10-1, and that sequence has not been rehearsed separately.
+- Full backend suite (H2 `phase1`): 263 tests, 0 failures. Frontend: build passed, `npm test` 5 passed, and lint is clean for the Flow 4 files.
+- Not done: browser click-through; no component test renders the training pages. Membership upgrade and VNPay for PT bookings are not part of this branch.
+
 ## Flow 3: VNPay sandbox gateway (2026-10-19)
 
 | Area | Code | Build and automated tests | Manual (VNPay sandbox) |

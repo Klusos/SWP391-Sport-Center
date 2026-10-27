@@ -23,6 +23,9 @@ public interface MembershipRepository extends JpaRepository<Membership, Integer>
     List<Membership> findByMemberIdAndStatusAndEndDateGreaterThan(
             Integer memberId, String status, LocalDate today);
 
+    // Đã có gói nối tiếp bắt đầu từ ngày này trở đi chưa
+    boolean existsByMemberIdAndStatusAndStartDateGreaterThanEqual(Integer memberId, String status, LocalDate date);
+
     List<Membership> findByMemberIdAndStatusAndStartDateLessThanEqualAndEndDateGreaterThan(
             Integer memberId, String status, LocalDate registrationDate, LocalDate registrationDateExclusiveEnd);
 

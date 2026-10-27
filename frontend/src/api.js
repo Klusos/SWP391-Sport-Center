@@ -231,6 +231,13 @@ export function getAssignedPtBookingsApi(token) {
   return request("/api/pt-bookings/assigned", { headers: authenticatedHeaders(token) });
 }
 
+export function cancelPtBookingApi(token, bookingId) {
+  return request("/api/pt-bookings/" + encodeURIComponent(bookingId) + "/cancel", {
+    method: "PATCH",
+    headers: authenticatedHeaders(token),
+  });
+}
+
 export function getMyAttendanceApi(token) {
   return request("/api/attendance/me", { headers: authenticatedHeaders(token) });
 }
@@ -567,6 +574,65 @@ export function getMembershipsByMemberApi(token, memberId) {
   });
 }
 
+export function cancelMembershipApi(token, membershipId, reason = null) {
+  return request("/api/memberships/" + encodeURIComponent(membershipId) + "/cancel", {
+    method: "PATCH",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function requestMembershipCancellationApi(token, membershipId, reason = null) {
+  return request("/api/memberships/cancellation-requests", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ membershipId, reason }),
+  });
+}
+
+export function getMyCancellationRequestsApi(token) {
+  return request("/api/memberships/cancellation-requests/me", { headers: authenticatedHeaders(token) });
+}
+
+export function withdrawCancellationRequestApi(token, requestId) {
+  return request("/api/memberships/cancellation-requests/" + encodeURIComponent(requestId) + "/withdraw", {
+    method: "PATCH",
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function getCancellationRequestsApi(token, status = "PENDING") {
+  return request("/api/memberships/cancellation-requests?status=" + encodeURIComponent(status), {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function decideCancellationRequestApi(token, requestId, approve, note = null) {
+  return request("/api/memberships/cancellation-requests/" + encodeURIComponent(requestId) + (approve ? "/approve" : "/reject"), {
+    method: "PATCH",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ note }),
+  });
+}
+
+export function getRefundRequiredPaymentsApi(token, page = 0, size = 20) {
+  return request(`/api/payments/refund-required?page=${page}&size=${size}`, { headers: authenticatedHeaders(token) });
+}
+
+export function confirmRefundApi(token, paymentId, note = null) {
+  return request("/api/payments/" + encodeURIComponent(paymentId) + "/refund", {
+    method: "PATCH",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ note }),
+  });
+}
+
+export function getMembershipUpgradeOptionsApi(token, memberId) {
+  return request("/api/memberships/member/" + encodeURIComponent(memberId) + "/upgrade-options", {
+    headers: authenticatedHeaders(token),
+  });
+}
+
 export function getCoursesApi(token) {
   return request("/api/courses", { headers: authenticatedHeaders(token) });
 }
@@ -683,6 +749,12 @@ export function markAllNotificationsReadApi(token) {
   });
 }
 
+export function setAutoRenewApi(token, membershipId, enable) {
+  return request("/api/memberships/" + encodeURIComponent(membershipId) + (enable ? "/enable-auto-renew" : "/cancel-renewal"), {
+    method: "PATCH",
+    headers: authenticatedHeaders(token),
+  });
+}
 export function broadcastNotificationsApi(token, payload) {
   return request("/api/admin/notifications/broadcast", {
     method: "POST",

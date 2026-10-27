@@ -28,6 +28,8 @@ import PtBooking from "./pages/PtBooking";
 import CoachPtSessions from "./pages/CoachPtSessions";
 import CoachSkillAssessments from "./pages/CoachSkillAssessments";
 import CoachAttendance from "./pages/CoachAttendance";
+import CoachTraining from "./pages/CoachTraining";
+import MemberTraining from "./pages/MemberTraining";
 import StaffAttendance from "./pages/StaffAttendance";
 import MemberAttendance from "./pages/MemberAttendance";
 import MemberLevelsAssessments from "./pages/MemberLevelsAssessments";
@@ -39,8 +41,6 @@ import CourseCheckout from "./pages/CourseCheckout";
 import SupportTickets from "./pages/SupportTickets";
 import MemberCourses from "./pages/MemberCourses";
 import MemberMembership from "./pages/MemberMembership";
-import CoachTraining from "./pages/CoachTraining";
-import MemberTraining from "./pages/MemberTraining";
 import MemberProfile from "./pages/MemberProfile";
 import Schedule from "./pages/Schedule";
 import Layout from "./components/Layout";
@@ -257,6 +257,7 @@ export default function App() {
           "notification-broadcast": "/admin/notifications/broadcast",
           "audit-logs": "/admin/audit-logs",
           "admin-training": "/admin/training",
+          "admin-membership-sales": "/admin/membership-sales",
           "membership-plans": "/staff/membership-plans",
           "membership-sales": "/receptionist/membership-sales",
           "course-payments": "/receptionist/course-payments",
@@ -457,6 +458,7 @@ export default function App() {
             />
 
             <Route path="/admin/training" element={<CoachTraining {...staff} />} />
+            <Route path="/admin/membership-sales" element={<ReceptionistMembershipSales {...staff} />} />
 
             {/* Các trang mới của Admin — bọc trong Layout (sidebar + .app-shell) */}
             <Route element={<Layout {...staff} />}>
@@ -519,6 +521,11 @@ export default function App() {
           />
 
           <Route
+            path="/member/training"
+            element={<MemberTraining {...member} />}
+          />
+
+          <Route
             path="/member/pt-booking"
             element={<PtBooking {...member} />}
           />
@@ -528,7 +535,6 @@ export default function App() {
             element={<MemberLevelsAssessments {...member} />}
           />
 
-          <Route path="/member/training" element={<MemberTraining {...member} />} />
 
           <Route
             path="/member/courses"

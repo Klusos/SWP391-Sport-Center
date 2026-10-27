@@ -5,6 +5,7 @@ import PaymentResultCard from "../components/PaymentResultCard";
 import { createPaymentApi, getCurrentUserApi, getMembershipsByMemberApi, getMyPaymentsApi, getMyPtBookingsApi, getMyRegistrationsApi, cancelPaymentApi } from "../api";
 import { acquireAction, canCheckout, checkoutAccess, paymentMessage, pendingCounter, positiveId, prepareCheckout, registrationMessage, registrationPayments, shouldPoll, startStatusPolling, validVnpayUrl, vietnamDate } from "../courseCheckout";
 import { findOwnedPayment, findOwnedPtBooking } from "../paymentReturn";
+import { isMembershipPayment } from "../membershipUpgrade";
 import "./CourseCheckout.css";
 
 const money = (value) => Number(value).toLocaleString("vi-VN", { style: "currency", currency: "VND" });
@@ -44,7 +45,7 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
       if (!paymentId) return { payments: array(await getMyPaymentsApi(token)), registrations: [], memberships: [], ptBookings: [] };
       const payments = array(await getMyPaymentsApi(token));
       const returnedPayment = findOwnedPayment(payments, paymentId);
-      if (returnedPayment?.purpose === "MEMBERSHIP") {
+      if (isMembershipPayment(returnedPayment?.purpose)) {
         const user = await getCurrentUserApi(token);
         const memberships = array(await getMembershipsByMemberApi(token, user.id));
         return { payments, registrations: [], memberships, ptBookings: [] };
@@ -82,7 +83,7 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
         const registration = next.registrations.find((item) => item.id === (positiveId(registrationId) || (payment?.purpose === "COURSE_REGISTRATION" ? payment.referenceId : null)));
         return shouldPoll(registration, registrationPayments(next.payments, registration?.id))
           || (result && paymentId && !payment)
-          || (result && payment?.purpose === "MEMBERSHIP" && payment.status === "PENDING")
+          || (result && isMembershipPayment(payment?.purpose) && payment.status === "PENDING")
           || (result && payment?.purpose === "PT_BOOKING" && payment.status === "PENDING");
       }) : () => {};
     return () => { alive.current = false; stop(); };

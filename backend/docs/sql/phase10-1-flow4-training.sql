@@ -17,7 +17,7 @@ IF CONVERT(nvarchar(128), SERVERPROPERTY('ServerName')) <> N'sportcenter-recover
 IF @@SERVERNAME <> N'sportcenter-recovery-sql'
     THROW 51002, 'Unexpected @@SERVERNAME. Expected sportcenter-recovery-sql.', 1;
 IF DB_NAME() <> N'SportCenterDB'
-    THROW 51003, 'Unexpected database. Select SportCenterDB on the approved recovery instance.', 1;
+    THROW 51003, 'Unexpected database. Select SportCenterDB before running the Flow 4 Training migration.', 1;
 IF DATABASEPROPERTYEX(DB_NAME(), 'Status') <> N'ONLINE'
     THROW 51004, 'SportCenterDB must be ONLINE.', 1;
 IF @@TRANCOUNT <> 0

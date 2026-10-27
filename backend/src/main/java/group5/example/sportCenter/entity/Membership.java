@@ -1,6 +1,9 @@
 package group5.example.sportCenter.entity;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+
+import org.hibernate.annotations.Nationalized;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -42,4 +45,15 @@ public class Membership {
 
     @Column(nullable = false, length = 30)
     private String status;
+
+    /** Payment đã mua gói này (MEMBERSHIP hoặc UPGRADE); null với gói cũ hoặc gói do ADMIN gán tay. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "purchasePaymentId")
+    private Payment purchasePayment;
+
+    private LocalDateTime cancelledAt;
+
+    @Nationalized
+    @Column(length = 500)
+    private String cancelReason;
 }

@@ -25,4 +25,7 @@ public class PaymentResponse {
     private String note;
     private LocalDateTime createdAt;
     private LocalDateTime paidAt;
+    /** Chỉ có khi status = REFUNDED. */
+    private LocalDateTime refundedAt;
+    private String refundedByName;
 }

@@ -211,13 +211,15 @@ export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
               <div className="col-md-6 form-check ms-2">
                 <input className="form-check-input" id="allowPersonal" type="checkbox" checked={form.allowPersonalTrainingPlan}
                   onChange={(event) => setForm({ ...form, allowPersonalTrainingPlan: event.target.checked })} />
-                <label className="form-check-label" htmlFor="allowPersonal">Cho phép gói huấn luyện cá nhân</label>
+                <label className="form-check-label" htmlFor="allowPersonal">Có giáo án tập luyện cá nhân (không gồm buổi PT với huấn luyện viên)</label>
               </div>
               <div className="col-md-6 form-check ms-2">
                 <input className="form-check-input" id="allowOneOnOne" type="checkbox" checked={form.allowOneOnOneCoaching}
                   onChange={(event) => setForm({ ...form, allowOneOnOneCoaching: event.target.checked })} />
-                <label className="form-check-label" htmlFor="allowOneOnOne">Cho phép huấn luyện 1 kèm 1</label>
+                <label className="form-check-label" htmlFor="allowOneOnOne">Được đặt buổi PT 1-1 với huấn luyện viên</label>
               </div>
+              {!form.allowOneOnOneCoaching && Number(form.personalTrainingDiscountPercent) > 0 && <p className="col-12 text-warning mb-0" role="note">
+                Gói không được đặt buổi PT 1-1 nên ưu đãi huấn luyện cá nhân {form.personalTrainingDiscountPercent}% sẽ không được dùng.</p>}
             </div>
             <div className="d-flex gap-2 mt-3">
               <button type="submit" disabled={saving}>{saving ? "Đang lưu…" : "Lưu gói"}</button>
@@ -239,7 +241,9 @@ export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
                       <td><strong>{plan.name}</strong><br /><small>{plan.description || "Chưa có mô tả."}</small></td>
                       <td>{formatPrice(plan.price)}</td>
                       <td>{plan.durationMonths} tháng</td>
-                      <td>Khóa học {plan.courseDiscountPercent}%<br />Huấn luyện cá nhân {plan.personalTrainingDiscountPercent}%</td>
+                      <td>Khóa học {plan.courseDiscountPercent}%<br />
+                        {plan.allowOneOnOneCoaching ? `Đặt PT 1-1 · giảm ${plan.personalTrainingDiscountPercent}%` : "Không đặt được PT 1-1"}
+                        {plan.allowPersonalTrainingPlan && <><br />Có giáo án cá nhân</>}</td>
                       <td><span className={"status-pill status-" + String(plan.status).toLowerCase()}>{plan.status === "ACTIVE" ? "\u0110ang \u00e1p d\u1ee5ng" : "Ng\u1eebng \u00e1p d\u1ee5ng"}</span></td>
                       {admin && <td>
                         <div className="d-flex flex-wrap gap-2">

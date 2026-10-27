@@ -9,6 +9,11 @@ const paymentPurposes = {
     action: "Xem gói hội viên",
     path: "/member/membership",
   },
+  UPGRADE: {
+    label: "Thanh toán nâng cấp gói hội viên",
+    action: "Xem gói hội viên",
+    path: "/member/membership",
+  },
   COURSE_REGISTRATION: {
     label: "Thanh toán khóa học",
     action: "Xem khóa học của tôi",
@@ -66,6 +71,7 @@ export function paymentServiceLabel(purpose) {
   switch (purpose) {
     case "PT_BOOKING": return "Trạng thái buổi tập";
     case "MEMBERSHIP": return "Gói hội viên trên tài khoản";
+    case "UPGRADE": return "Trạng thái nâng cấp gói";
     case "COURSE_REGISTRATION": return "Trạng thái đăng ký";
     default: return "Trạng thái dịch vụ";
   }

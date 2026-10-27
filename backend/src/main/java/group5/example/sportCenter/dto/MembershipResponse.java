@@ -23,4 +23,5 @@ public class MembershipResponse {
     private LocalDate endDate;
     private Boolean autoRenew;
     private String status;
+    private String cancelReason;
 }

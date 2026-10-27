@@ -64,6 +64,13 @@ public class Payment {
 
     private LocalDateTime paidAt;
 
+    /** Chỉ có khi status = REFUNDED: lúc và người xác nhận đã trả tiền lại cho member. */
+    private LocalDateTime refundedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "refundedBy")
+    private User refundedBy;
+
     @PrePersist
     void onCreate() {
         this.createdAt = LocalDateTime.now();

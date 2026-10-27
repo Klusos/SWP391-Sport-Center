@@ -60,7 +60,7 @@ export function createCoursePaymentQueue({ fetchQueue, settle, fetchHistory, con
       const history = await fetchHistory(row.memberId);
       const payment = history.find((item) => item.id === row.paymentId && item.memberId === row.memberId
         && item.purpose === "COURSE_REGISTRATION" && item.referenceId === row.registrationId && item.method === "COUNTER");
-      if (payment && ["SUCCESS", "CANCELLED", "REFUND_REQUIRED"].includes(payment.status)) {
+      if (payment && ["SUCCESS", "CANCELLED", "REFUND_REQUIRED", "REFUNDED"].includes(payment.status)) {
         uncertain.delete(row.paymentId); publish();
         const outcome = coursePaymentOutcome(payment);
         emit(onOutcome, { ...outcome, text: prefix + outcome.text });
@@ -86,7 +86,7 @@ export function createCoursePaymentQueue({ fetchQueue, settle, fetchHistory, con
         uncertain.set(row.paymentId, { paymentId: row.paymentId, memberId: row.memberId, registrationId: row.registrationId }); publish();
         try {
           const payment = await timedSettlement(() => settle(row.paymentId, true, "Course payment received at reception"), timeoutMs, setTimer, clearTimer);
-          if (["SUCCESS", "CANCELLED", "REFUND_REQUIRED"].includes(payment.status)) { uncertain.delete(row.paymentId); publish(); }
+          if (["SUCCESS", "CANCELLED", "REFUND_REQUIRED", "REFUNDED"].includes(payment.status)) { uncertain.delete(row.paymentId); publish(); }
           emit(onOutcome, coursePaymentOutcome(payment));
         } catch (error) {
           await reconcile(row, `${error.status === 409 || error.status === 404 ? "Giao dịch có thể đã được nhân viên khác xử lý hoặc không còn khả dụng. " : "Yêu cầu chưa có kết quả chắc chắn: " + error.message + ". "}`);

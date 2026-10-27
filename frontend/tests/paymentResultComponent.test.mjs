@@ -38,11 +38,18 @@ test("result resolution ignores URL payment status and keeps authenticated owner
   assert.doesNotMatch(checkout, /params\.get\("paymentStatus"\)/);
   assert.doesNotMatch(checkout, /params\.get\("purpose"\)/);
   assert.match(checkout, /returnedPayment\?\.purpose === "PT_BOOKING"/);
-  assert.match(checkout, /returnedPayment\?\.purpose === "MEMBERSHIP"/);
+  assert.match(checkout, /isMembershipPayment\(returnedPayment\?\.purpose\)/);
   assert.match(checkout, /returnedPayment\?\.purpose === "COURSE_REGISTRATION"/);
   const resultBlock = checkout.slice(checkout.indexOf("  if (result) {"), checkout.indexOf("\n  return <div className=\"layout\"", checkout.indexOf("  if (result) {")));
   assert.doesNotMatch(resultBlock, /<Sidebar/);
   assert.match(resultBlock, /<PaymentResultCard/);
+});
+
+test("Upgrade results use the Membership destination without claiming the upgraded service is active", () => {
+  assert.match(component, /case "UPGRADE"/);
+  assert.match(component, /payment\?\.purpose === "UPGRADE" \? null/);
+  assert.match(component, /case "UPGRADE":[\s\S]*payment\.referenceId/);
+  assert.doesNotMatch(component, /payment\.status === "SUCCESS"[^\n]*UPGRADE/);
 });
 
 test("result layout is responsive, centered and keyboard-visible", () => {
