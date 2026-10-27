@@ -119,7 +119,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/attendance", "/api/attendance/**").denyAll()
 
                 // Flow 4 training: the service further limits writes to the assigned Coach or ADMIN.
-.requestMatchers(HttpMethod.GET, "/api/training/me").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/training/me").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/training/classes/*/plan")
                     .hasAnyRole("ADMIN", "RECEPTIONIST", "COACH", "MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/training/classes", "/api/training/classes/*/sessions",

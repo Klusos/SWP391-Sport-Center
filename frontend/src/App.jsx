@@ -27,6 +27,8 @@ import PtBooking from "./pages/PtBooking";
 import CoachPtSessions from "./pages/CoachPtSessions";
 import CoachSkillAssessments from "./pages/CoachSkillAssessments";
 import CoachAttendance from "./pages/CoachAttendance";
+import CoachTraining from "./pages/CoachTraining";
+import MemberTraining from "./pages/MemberTraining";
 import StaffAttendance from "./pages/StaffAttendance";
 import MemberAttendance from "./pages/MemberAttendance";
 import MemberLevelsAssessments from "./pages/MemberLevelsAssessments";
@@ -38,8 +40,6 @@ import CourseCheckout from "./pages/CourseCheckout";
 import SupportTickets from "./pages/SupportTickets";
 import MemberCourses from "./pages/MemberCourses";
 import MemberMembership from "./pages/MemberMembership";
-import CoachTraining from "./pages/CoachTraining";
-import MemberTraining from "./pages/MemberTraining";
 import MemberProfile from "./pages/MemberProfile";
 import Schedule from "./pages/Schedule";
 import Layout from "./components/Layout";
@@ -516,6 +516,11 @@ export default function App() {
           />
 
           <Route
+            path="/member/training"
+            element={<MemberTraining {...member} />}
+          />
+
+          <Route
             path="/member/pt-booking"
             element={<PtBooking {...member} />}
           />
@@ -525,7 +530,6 @@ export default function App() {
             element={<MemberLevelsAssessments {...member} />}
           />
 
-          <Route path="/member/training" element={<MemberTraining {...member} />} />
 
           <Route
             path="/member/courses"

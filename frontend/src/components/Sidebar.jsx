@@ -54,7 +54,7 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
     ["courses", "Quản lý khóa học"],
     ["facilities", "Quản lý cơ sở vật chất"],
     ["notification-broadcast", "Gửi thông báo"],
-    ["admin-training", "Qu\u1ea3n l\u00fd t\u1eadp luy\u1ec7n"],
+    ["admin-training", "Quản lý tập luyện"],
     ["audit-logs", "Audit Logs"],
     ["register", "Đăng ký thành viên"],
     ["consultations", "Yêu cầu tư vấn"],

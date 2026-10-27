@@ -367,6 +367,26 @@ Facility status updates accept `ACTIVE` or `INACTIVE`, case-insensitively, and p
 
 ClassSession POST/PUT and generation preview/confirm also require the selected Facility to support the Sport associated with the CourseOffering's Course. A null Facility remains allowed. Generation preview reports this as a candidate conflict; confirmation and manual writes reject incompatible assignments. Facility assignment edits share the Facility schedule row lock with session scheduling and cannot remove a Sport needed by a future or ongoing non-CANCELLED session. Cancelled and historical completed records are retained.
 
+## Flow 4: Training plans, results and progress (Phase 10.1)
+
+Writes are limited to the class's assigned COACH or ADMIN (403 otherwise). Staff (ADMIN/RECEPTIONIST) and the assigned COACH can read class data; a MEMBER reads a plan only for a class with a CONFIRMED registration and reads everything else through `GET /api/training/me`.
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/training/classes` | COACH: assigned classes; staff: all classes. Includes member/session counts and plan goal. |
+| GET / PUT | `/api/training/classes/{classId}/plan` | Read (404 until created) or create/update the training plan `{goal, description}`. |
+| POST | `/api/training/classes/{classId}/plan/exercises` | Add `{name, sets?, reps?, durationMinutes?, notes?, sortOrder?}`; 409 before the plan exists. |
+| PUT / DELETE | `/api/training/exercises/{exerciseId}` | Modify or remove an exercise. |
+| GET | `/api/training/classes/{classId}/sessions` | Sessions with PRESENT/result counts, `canComplete`, `canRecordResults`. |
+| POST | `/api/training/sessions/{sessionId}/complete` | Conduct session: SCHEDULED → COMPLETED at/after `endTime`; idempotent; 409 if CANCELLED or before end. |
+| GET | `/api/training/sessions/{sessionId}/results` | Result sheet: CONFIRMED members with attendance status and recorded result. |
+| PUT | `/api/training/sessions/{sessionId}/results/{memberId}` | Record/update `{score 1–10, notes?}`; 409 unless the session started, is not CANCELLED and the member is marked PRESENT. |
+| GET | `/api/training/classes/{classId}/progress` | Per member: attendance, result count, average score, latest evaluation and history. |
+| POST | `/api/training/classes/{classId}/members/{memberId}/evaluations` | Append `{rating 1–5, comment}`; 409 without a CONFIRMED registration. |
+| GET | `/api/training/me` | MEMBER: plan, attendance summary, session results and evaluations for each CONFIRMED class. |
+
+Plan, exercise, result, evaluation and session-completion writes create AuditLog entries. Apply `docs/sql/phase10-1-flow4-training.sql` before starting the backend with `ddl-auto=validate`.
+
 ## Module coverage note
 
 The Phase 2 CourseClass registration API is documented below. `/api/classes` manages CourseClass records; `/api/class-sessions` manages individual meetings.

@@ -287,6 +287,34 @@ class TrainingIntegrationTest {
     }
 
     @Test
+    void adminManagesAnyClassAndPlanUpdatesKeepTheSamePlan() throws Exception {
+        String planUrl = "/api/training/classes/" + coachClass.getId() + "/plan";
+        mvc.perform(get("/api/training/classes").header("Authorization", bearer(admin)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.classId == " + coachClass.getId() + ")]").exists());
+
+        String created = mvc.perform(put(planUrl).header("Authorization", bearer(admin)).contentType("application/json")
+                .content("{\"goal\":\"Admin draft\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        Integer planId = Integer.valueOf(created.replaceAll(".*\"id\":(\\d+).*", "$1"));
+        mvc.perform(put(planUrl).header("Authorization", bearer(coachUser)).contentType("application/json")
+                .content("{\"goal\":\"Coach goal\",\"description\":\"Revised\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(planId))
+                .andExpect(jsonPath("$.goal").value("Coach goal"));
+        assertEquals(1, plans.count());
+
+        mvc.perform(post(planUrl + "/exercises").header("Authorization", bearer(coachUser))
+                .contentType("application/json").content("{\"name\":\"Bad order\",\"sortOrder\":-1}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post(planUrl + "/exercises").header("Authorization", bearer(coachUser))
+                .contentType("application/json").content("{\"name\":\"Too many sets\",\"sets\":101}"))
+                .andExpect(status().isBadRequest());
+        assertEquals(0, exercises.count());
+    }
+
+    @Test
     void unauthenticatedAccessMemberWritesAndInvalidReferencesAreRejected() throws Exception {
         String planUrl = "/api/training/classes/" + coachClass.getId() + "/plan";
         mvc.perform(get("/api/training/classes")).andExpect(status().isUnauthorized());
