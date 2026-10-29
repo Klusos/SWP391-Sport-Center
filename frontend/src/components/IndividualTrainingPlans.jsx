@@ -8,10 +8,15 @@ import {
   getTrainingProgressApi,
   updateIndividualTrainingPlanApi,
 } from "../api";
+import {
+  addWeekWithUnusedNumber,
+  createLatestRequestGuard,
+  savePlanAndRefreshOpenHistory,
+  toIndividualTrainingPlanPayload,
+} from "./individualTrainingPlanHelpers";
 
 const blankWeek = (weekNumber = 1) => ({ weekNumber, title: "", description: "", exercises: [] });
 const blankExercise = () => ({ name: "", sets: "", reps: "", durationMinutes: "", notes: "" });
-const asOptionalNumber = (value) => value === "" || value == null ? null : Number(value);
 const toForm = (revision) => ({
   goal: revision?.goal || "",
   description: revision?.description || "",
@@ -24,21 +29,6 @@ const toForm = (revision) => ({
       durationMinutes: exercise.durationMinutes ?? "", notes: exercise.notes || "",
     })),
   })) : [blankWeek()],
-});
-const toPayload = (form) => ({
-  goal: form.goal,
-  description: form.description || null,
-  weeks: form.weeks.map((week) => ({
-    weekNumber: Number(week.weekNumber), title: week.title || null, description: week.description || null,
-    exercises: week.exercises.map((exercise, sortOrder) => ({
-      name: exercise.name,
-      sets: asOptionalNumber(exercise.sets),
-      reps: asOptionalNumber(exercise.reps),
-      durationMinutes: asOptionalNumber(exercise.durationMinutes),
-      notes: exercise.notes || null,
-      sortOrder,
-    })),
-  })),
 });
 
 function messageFor(error, fallback) {
@@ -56,6 +46,7 @@ export default function IndividualTrainingPlans({ token, mode, classId }) {
   const [members, setMembers] = useState([]);
   const [selected, setSelected] = useState(null);
   const [history, setHistory] = useState(null);
+  const [historyPlanId, setHistoryPlanId] = useState(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -64,6 +55,7 @@ export default function IndividualTrainingPlans({ token, mode, classId }) {
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [historyRequests] = useState(() => createLatestRequestGuard());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -94,8 +86,11 @@ export default function IndividualTrainingPlans({ token, mode, classId }) {
   const planByMember = useMemo(() => new Map(plans.map((plan) => [plan.memberId, plan])), [plans]);
 
   async function openPlan(plan) {
+    historyRequests.invalidate();
     setSelected(null);
     setHistory(null);
+    setHistoryPlanId(null);
+    setLoadingHistory(false);
     setEditing(false);
     setLoadingDetail(true);
     setError("");
@@ -108,17 +103,27 @@ export default function IndividualTrainingPlans({ token, mode, classId }) {
     }
   }
 
-  async function showHistory(planId) {
+  function clearHistory() {
+    historyRequests.invalidate();
     setHistory(null);
+    setHistoryPlanId(null);
+    setLoadingHistory(false);
+  }
+
+  async function showHistory(planId) {
+    const requestId = historyRequests.start();
+    setHistoryPlanId(planId);
     setError("");
     setLoadingHistory(true);
     try {
       const rows = await getIndividualTrainingPlanRevisionsApi(token, planId);
-      setHistory(Array.isArray(rows) ? rows : []);
+      if (historyRequests.isCurrent(requestId)) setHistory(Array.isArray(rows) ? rows : []);
     } catch (requestError) {
-      setError(messageFor(requestError, "Không tải được lịch sử chỉnh sửa."));
+      if (historyRequests.isCurrent(requestId)) {
+        setError(messageFor(requestError, "Không tải được lịch sử chỉnh sửa."));
+      }
     } finally {
-      setLoadingHistory(false);
+      if (historyRequests.isCurrent(requestId)) setLoadingHistory(false);
     }
   }
 
@@ -128,12 +133,20 @@ export default function IndividualTrainingPlans({ token, mode, classId }) {
     setError("");
     setNotice("");
     try {
-      const payload = toPayload(form);
-      const saved = planId
-        ? await updateIndividualTrainingPlanApi(token, planId, payload)
-        : await createIndividualTrainingPlanApi(token, classId, memberId, payload);
+      const payload = toIndividualTrainingPlanPayload(form);
+      const saved = await savePlanAndRefreshOpenHistory(
+        () => planId
+          ? updateIndividualTrainingPlanApi(token, planId, payload)
+          : createIndividualTrainingPlanApi(token, classId, memberId, payload),
+        {
+          planId,
+          historyIsOpen: planId != null && historyPlanId === planId,
+          refreshHistory: showHistory,
+        },
+      );
       setNotice(planId ? "Đã lưu phiên bản giáo án mới." : "Đã tạo giáo án cá nhân.");
       setCreatingFor(null);
+      if (planId == null) clearHistory();
       setEditing(false);
       setSelected(saved);
       await load();
@@ -163,7 +176,7 @@ export default function IndividualTrainingPlans({ token, mode, classId }) {
               <div><strong>{member.memberName}</strong><small>{plan ? `Phiên bản ${plan.currentRevision?.revisionNumber ?? "—"}` : "Chưa có giáo án cá nhân"}</small></div>
               <div className="training-actions">
                 {plan ? <button type="button" className="secondary" onClick={() => void openPlan(plan)}>Mở giáo án</button>
-                  : <button type="button" onClick={() => { setCreatingFor(member.memberId); setSelected(null); setHistory(null); }}>Tạo giáo án</button>}
+                  : <button type="button" onClick={() => { clearHistory(); setCreatingFor(member.memberId); setSelected(null); }}>Tạo giáo án</button>}
               </div>
             </article>;
           })}
@@ -188,9 +201,9 @@ export default function IndividualTrainingPlans({ token, mode, classId }) {
         : <PlanRevision revision={selected.currentRevision} />}
       <div className="training-actions">
         <button type="button" className="secondary" onClick={() => void showHistory(selected.id)}>Lịch sử phiên bản</button>
-        {isCoach && <button type="button" className="secondary" onClick={() => setSelected(null)}>Đóng chi tiết</button>}
+        {isCoach && <button type="button" className="secondary" onClick={() => { clearHistory(); setSelected(null); }}>Đóng chi tiết</button>}
       </div>
-      {history && <div className="individual-plan-history"><h4>Lịch sử chỉnh sửa</h4>
+      {historyPlanId === selected.id && history && <div className="individual-plan-history"><h4>Lịch sử chỉnh sửa</h4>
         {history.length === 0 ? <p className="training-muted">Chưa có lịch sử phiên bản.</p> : history.map((revision) => <details key={revision.id}>
           <summary>Phiên bản {revision.revisionNumber} · {formatDate(revision.createdAt)} · {revision.revisedByName}</summary>
           <PlanRevision revision={revision} />
@@ -215,7 +228,7 @@ function PlanEditor({ initial, busy, onCancel, onSubmit }) {
     <label>Mục tiêu *<input required maxLength={500} value={form.goal} onChange={(event) => setForm({ ...form, goal: event.target.value })} /></label>
     <label>Mô tả<textarea maxLength={2000} rows={3} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
     <div className="individual-plan-weeks-heading"><h4>Nội dung theo tuần</h4>
-      <button type="button" className="secondary" disabled={form.weeks.length >= 52} onClick={() => setForm({ ...form, weeks: [...form.weeks, blankWeek(form.weeks.length + 1)] })}>Thêm tuần</button></div>
+      <button type="button" className="secondary" disabled={form.weeks.length >= 52} onClick={() => setForm((current) => ({ ...current, weeks: addWeekWithUnusedNumber(current.weeks) }))}>Thêm tuần</button></div>
     {form.weeks.map((week, weekIndex) => <fieldset className="individual-plan-week" key={weekIndex}>
       <legend>Tuần {week.weekNumber}</legend>
       <div className="individual-plan-editor-grid">
