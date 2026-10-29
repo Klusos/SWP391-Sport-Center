@@ -275,7 +275,7 @@ class IndividualTrainingPlanCloneE2EIT {
     }
     private static boolean hasTextField(JsonNode node, String field, String expected) {
         if (node.isObject() && expected.equals(node.path(field).asText())) return true;
-        if (node.isContainerNode()) {
+        if (node.isObject() || node.isArray()) {
             for (JsonNode child : node) if (hasTextField(child, field, expected)) return true;
         }
         return false;
