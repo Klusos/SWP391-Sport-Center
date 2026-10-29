@@ -35,6 +35,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
 import group5.example.sportCenter.dto.CounterPaymentRequest;
+import group5.example.sportCenter.dto.CreatePaymentRequest;
+import group5.example.sportCenter.dto.PaymentResponse;
 import group5.example.sportCenter.entity.Membership;
 import group5.example.sportCenter.entity.MembershipPlan;
 import group5.example.sportCenter.entity.Payment;
@@ -160,6 +162,34 @@ class MembershipAutoRenewalIntegrationTest {
         assertEquals(current.getEndDate(), rows.get(1).getStartDate());
         assertEquals(current.getEndDate().plusMonths(1), rows.get(1).getEndDate());
         assertEquals(true, rows.get(1).getAutoRenew());
+    }
+
+    @Test
+    void aManuallyBoughtRenewalKeepsAutoRenewOnAndTheToggleAppliesToTheWholeChain() throws Exception {
+        Membership current = membership(member, plan, today.minusDays(10), today.plusDays(20), true);
+        CreatePaymentRequest purchase = new CreatePaymentRequest();
+        purchase.setPurpose(PaymentPurpose.MEMBERSHIP);
+        purchase.setReferenceId(plan.getId());
+        purchase.setMethod(PaymentMethod.COUNTER);
+        purchase.setAutoRenew(false);
+        PaymentResponse created = payments.createPayment(purchase, jwt(member));
+        payments.processAtCounter(created.getId(), counter(), jwt(receptionist));
+
+        List<Membership> rows = memberships.findByMemberId(member.getId()).stream()
+                .sorted(Comparator.comparing(Membership::getStartDate)).toList();
+        Membership queued = rows.get(1);
+        assertEquals(current.getEndDate(), queued.getStartDate());
+        assertEquals(true, queued.getAutoRenew());
+
+        // Turning it off from either membership turns it off for the whole chain, and on again likewise.
+        mvc.perform(patch("/api/memberships/" + current.getId() + "/cancel-renewal").header("Authorization", bearer(member)))
+                .andExpect(status().isOk());
+        assertEquals(false, memberships.findById(queued.getId()).orElseThrow().getAutoRenew());
+        assertEquals(false, memberships.findById(current.getId()).orElseThrow().getAutoRenew());
+        mvc.perform(patch("/api/memberships/" + queued.getId() + "/enable-auto-renew").header("Authorization", bearer(member)))
+                .andExpect(status().isOk());
+        assertEquals(true, memberships.findById(current.getId()).orElseThrow().getAutoRenew());
+        assertEquals(true, memberships.findById(queued.getId()).orElseThrow().getAutoRenew());
     }
 
     @Test

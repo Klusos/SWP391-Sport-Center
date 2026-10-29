@@ -179,7 +179,7 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
   async function toggleAutoRenew(membership) {
     if (togglingId !== null) return;
     const enable = !membership.autoRenew;
-    if (!enable && !window.confirm(`Tắt tự gia hạn cho gói “${membership.planName}”? Yêu cầu gia hạn tự động chưa thanh toán (nếu có) sẽ bị hủy.`)) return;
+    if (!enable && !window.confirm("Tắt tự gia hạn? Yêu cầu gia hạn tự động chưa thanh toán (nếu có) sẽ bị hủy.")) return;
     setTogglingId(membership.id);
     setError("");
     setNotice("");
@@ -187,8 +187,8 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
       await setAutoRenewApi(token, membership.id, enable);
       await load();
       setNotice(enable
-        ? `Đã bật tự gia hạn cho gói “${membership.planName}”. ${RENEWAL_NOTICE_DAYS} ngày trước khi hết hạn, hệ thống sẽ tạo yêu cầu gia hạn và gửi thông báo cho bạn.`
-        : `Đã tắt tự gia hạn cho gói “${membership.planName}”.`);
+        ? `Đã bật tự gia hạn. ${RENEWAL_NOTICE_DAYS} ngày trước khi gói “${membership.planName}” hết hạn, hệ thống sẽ tạo yêu cầu gia hạn và gửi thông báo cho bạn.`
+        : "Đã tắt tự gia hạn.");
     } catch (requestError) {
       setError(requestError.status === 401
         ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
@@ -287,26 +287,36 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
         <h2>Gói của tôi</h2>
         {loading ? <p role="status">Đang tải thông tin…</p> : membershipChain.length === 0
           ? <p className="dash-empty">Bạn chưa có gói đang hoạt động.</p>
-          : <ul className="dash-rows">{membershipChain.map((membership) => <li key={membership.id}>
-            <span><b>{membership.planName || "Gói thành viên"}</b><br /><small>{membership.startDate || "—"} → {membership.endDate || "—"}</small></span>
-            <em>{isMembershipEffective(membership) ? statusLabel[membership.status] || membership.status : "Sắp bắt đầu"}</em>
-            <button type="button" className={membership.autoRenew ? "" : "secondary"} disabled={togglingId !== null}
-              aria-pressed={Boolean(membership.autoRenew)} onClick={() => void toggleAutoRenew(membership)}>
-              {togglingId === membership.id ? "Đang lưu…" : membership.autoRenew ? "Tự gia hạn: Bật" : "Tự gia hạn: Tắt"}
-            </button>
-            {membership.id === cancellableId && (pendingRequestFor(membership.id)
-              ? <button type="button" className="secondary" disabled={togglingId !== null}
-                onClick={() => void withdrawRequest(pendingRequestFor(membership.id))}>Rút yêu cầu hủy</button>
-              : canRequestCancellation(membership, today)
-                ? <button type="button" className="secondary" disabled={togglingId !== null}
-                  onClick={() => void requestCancellation(membership)}>Yêu cầu hủy gói</button>
-                : <small>Đã quá hạn yêu cầu hủy</small>)}
-            {membership.id === cancellableId && pendingRequestFor(membership.id) && <small>Đang chờ nhân viên duyệt hủy</small>}
-            {membership.id === cancellableId && !pendingRequestFor(membership.id) && canRequestCancellation(membership, today)
-              && <small>Hạn gửi yêu cầu: hết ngày {formatDate(lastRequestDay(membership.startDate))}</small>}
-          </li>)}</ul>}
-        {membershipChain.length > 0 && <p className="subtitle">Gói đang chạy không hủy và không hoàn tiền; nếu không muốn tiếp tục, hãy tắt tự gia hạn. Gói đã mua trước nhưng chưa bắt đầu có thể gửi yêu cầu hủy (hủy từ gói sau cùng), chậm nhất {CANCELLATION_NOTICE_HOURS} giờ trước ngày bắt đầu; khi nhân viên duyệt, khoản đã thanh toán được hoàn 100% tại quầy.</p>}
-        {membershipChain.length > 0 && <p className="subtitle">Khi thanh toán gia hạn thành công, thời hạn mới sẽ nối tiếp ngày kết thúc hiện tại. Bật tự gia hạn: {RENEWAL_NOTICE_DAYS} ngày trước khi gói cuối cùng hết hạn, hệ thống tạo yêu cầu gia hạn cùng gói và gửi thông báo; bạn thanh toán tại quầy hoặc VNPay trước ngày hết hạn. Chưa thanh toán thì yêu cầu tự hủy và gói hết hạn bình thường.</p>}
+          : <div className="mm-chain">{membershipChain.map((membership, index) => {
+            const last = index === membershipChain.length - 1;
+            const running = isMembershipEffective(membership);
+            const pendingRequest = membership.id === cancellableId ? pendingRequestFor(membership.id) : null;
+            const requestable = membership.id === cancellableId && !pendingRequest && canRequestCancellation(membership, today);
+            return <div className="mm-chain-row" key={membership.id}>
+              <div className="mm-chain-plan"><b>{membership.planName || "Gói thành viên"}</b>
+                <small>{formatDate(membership.startDate)} → {formatDate(membership.endDate)}</small></div>
+              <span className={"mm-chain-status " + (running ? "running" : "upcoming")}>{running ? statusLabel[membership.status] || membership.status : "Sắp bắt đầu"}</span>
+              <div className="mm-chain-renew">
+                {last ? <button type="button" className={membership.autoRenew ? "" : "secondary"} disabled={togglingId !== null}
+                  aria-pressed={Boolean(membership.autoRenew)} onClick={() => void toggleAutoRenew(membership)}>
+                  {togglingId === membership.id ? "Đang lưu…" : membership.autoRenew ? "Tự gia hạn: Bật" : "Tự gia hạn: Tắt"}
+                </button> : <small>Đã có gói nối tiếp</small>}
+              </div>
+              <div className="mm-chain-cancel">
+                {pendingRequest ? <>
+                  <button type="button" className="secondary" disabled={togglingId !== null} onClick={() => void withdrawRequest(pendingRequest)}>Rút yêu cầu hủy</button>
+                  <small>Đang chờ nhân viên duyệt</small>
+                </> : requestable ? <>
+                  <button type="button" className="secondary" disabled={togglingId !== null} onClick={() => void requestCancellation(membership)}>Yêu cầu hủy gói</button>
+                  <small>Hạn gửi: hết ngày {formatDate(lastRequestDay(membership.startDate))}</small>
+                </> : membership.id === cancellableId ? <small>Đã quá hạn yêu cầu hủy</small> : null}
+              </div>
+            </div>;
+          })}</div>}
+        {membershipChain.length > 0 && <ul className="mm-chain-notes">
+          <li>Tự gia hạn áp dụng cho gói cuối: {RENEWAL_NOTICE_DAYS} ngày trước khi hết hạn, hệ thống tạo yêu cầu gia hạn và báo cho bạn. Bạn cần thanh toán (tại quầy hoặc VNPay) để gia hạn; chưa thanh toán thì yêu cầu tự hủy.</li>
+          <li>Gói đang chạy không hủy, không hoàn tiền. Gói chưa bắt đầu có thể gửi yêu cầu hủy (từ gói sau cùng) chậm nhất {CANCELLATION_NOTICE_HOURS} giờ trước ngày bắt đầu; được duyệt thì hoàn 100% tại quầy.</li>
+        </ul>}
       </section>
 
       {!loading && upgrade?.currentMembershipId && <section className="dash-card">

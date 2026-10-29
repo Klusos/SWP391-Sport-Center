@@ -411,14 +411,20 @@ class PersonalTrainingBookingIntegrationTest {
     }
 
     @Test
-    void membersCannotCancelAConfirmedSessionWithin24HoursButStaffCan() {
+    void membersCannotCancelAConfirmedSessionWithin24HoursOnlyAdminCanAndReceptionistsNever() throws Exception {
         LocalDateTime soon = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")).plusHours(10).withSecond(0).withNano(0);
         var booking = service.create(jwt, request(coach, sport, soon));
         payAtCounter(booking.id());
 
         IllegalArgumentException tooLate = assertThrows(IllegalArgumentException.class, () -> service.cancel(jwt, booking.id()));
         assertTrue(tooLate.getMessage().contains("24 hours"));
-        assertEquals("CANCELLED", service.cancel(jwt(receptionist()), booking.id()).status());
+        ResponseStatusException receptionistRefused = assertThrows(ResponseStatusException.class,
+                () -> service.cancel(jwt(receptionist()), booking.id()));
+        assertEquals(403, receptionistRefused.getStatusCode().value());
+        mvc.perform(patch("/api/pt-bookings/" + booking.id() + "/cancel")
+                        .header("Authorization", "Bearer " + tokens.generateToken(receptionist())))
+                .andExpect(status().isForbidden());
+        assertEquals("CANCELLED", service.cancel(jwt(admin()), booking.id()).status());
     }
 
     @Test
@@ -447,6 +453,11 @@ class PersonalTrainingBookingIntegrationTest {
         CounterPaymentRequest counter = new CounterPaymentRequest();
         counter.setSuccess(true);
         return paymentService.processAtCounter(created.getId(), counter, jwt(receptionist()));
+    }
+
+    private User admin() {
+        return users.findAll().stream().filter(u -> "ADMIN".equals(u.getRole())).findFirst()
+                .orElseGet(() -> user("ADMIN", "ACTIVE", "admin-pt"));
     }
 
     private User receptionist() {

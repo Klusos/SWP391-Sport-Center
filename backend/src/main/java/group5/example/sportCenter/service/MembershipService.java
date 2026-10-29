@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -153,11 +154,14 @@ public class MembershipService {
                 .orElseThrow(() -> new ResourceNotFoundException("Membership plan not found with id: " + planId));
 
         LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
-        LocalDate startDate = membershipRepository
+        Optional<Membership> lastInChain = membershipRepository
                 .findByMemberIdAndStatusAndEndDateGreaterThan(memberId, "ACTIVE", today).stream()
-                .map(Membership::getEndDate)
-                .max(LocalDate::compareTo)
-                .orElse(today);
+                .max(Comparator.comparing(Membership::getEndDate));
+        LocalDate startDate = lastInChain.map(Membership::getEndDate).orElse(today);
+        // Auto-renew is a setting of the whole chain: a queued renewal keeps it on when the chain had it on.
+        if (lastInChain.isPresent() && Boolean.TRUE.equals(lastInChain.get().getAutoRenew())) {
+            autoRenew = true;
+        }
 
         Membership membership = new Membership();
         membership.setMember(member);
@@ -171,18 +175,18 @@ public class MembershipService {
     }
 
     /**
-     * Huỷ gói trực tiếp (staff). Gói chưa bắt đầu: ADMIN/RECEPTIONIST huỷ được, khoản đã mua gói chuyển
-     * REFUND_REQUIRED để lễ tân hoàn 100%. Gói đang chạy: chỉ ADMIN, bắt buộc lý do, không tự hoàn tiền.
-     * Member không huỷ trực tiếp mà gửi yêu cầu huỷ (MembershipCancellationRequestService).
+     * Huỷ gói trực tiếp, chỉ ADMIN. Gói chưa bắt đầu: khoản đã mua gói chuyển REFUND_REQUIRED để lễ tân
+     * hoàn 100%. Gói đang chạy: bắt buộc lý do, không tự hoàn tiền.
+     * Member gửi yêu cầu huỷ và lễ tân chỉ duyệt/từ chối yêu cầu đó (MembershipCancellationRequestService).
      * Chỉ huỷ được gói cuối trong chuỗi, để các gói còn lại không bị hở ngày.
      */
     @Transactional
     public MembershipResponse cancelMembership(Integer id, String reason, Jwt callerJwt) {
         User actor = currentActor(callerJwt);
         String role = actor.getRole().toUpperCase(Locale.ROOT);
-        if (!role.equals("ADMIN") && !role.equals("RECEPTIONIST")) {
+        if (!role.equals("ADMIN")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Members cannot cancel directly; send a cancellation request for staff to review");
+                    "Only ADMIN can cancel a membership directly; members send a cancellation request for staff to review");
         }
         Membership membership = membershipRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Membership not found with id: " + id));
@@ -191,10 +195,6 @@ public class MembershipService {
         String trimmedReason = reason == null || reason.isBlank() ? null : reason.trim();
         boolean upcoming = membership.getStartDate().isAfter(today);
         if (!upcoming) {
-            if (!role.equals("ADMIN")) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                        "A running membership is not cancellable or refundable; turn off auto-renew instead. Only ADMIN can cancel it in special cases");
-            }
             if (trimmedReason == null) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A reason is required to cancel a running membership");
             }
@@ -213,7 +213,7 @@ public class MembershipService {
                     request.setStatus(MembershipCancellationRequestStatus.APPROVED);
                     request.setDecidedBy(actor);
                     request.setDecidedAt(LocalDateTime.now(clock.withZone(BUSINESS_ZONE)));
-                    request.setDecisionNote("Nhân viên đã huỷ gói trực tiếp");
+                    request.setDecisionNote("Quản trị viên đã huỷ gói trực tiếp");
                     cancellationRequestRepository.save(request);
                 });
         return toResponse(applyCancellation(membership,
@@ -284,21 +284,33 @@ public class MembershipService {
         return updateAutoRenew(id, true, callerJwt);
     }
 
+    /**
+     * Tự gia hạn là cài đặt của cả chuỗi gói còn hiệu lực: bật/tắt ở một gói áp dụng cho mọi gói ACTIVE
+     * chưa hết hạn của member, vì chỉ gói cuối trong chuỗi mới thực sự được gia hạn.
+     */
     private MembershipResponse updateAutoRenew(Integer id, boolean enabled, Jwt callerJwt) {
         User actor = currentActor(callerJwt);
         Membership membership = membershipRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Membership not found with id: " + id));
         requireOwnMembershipOrStaff(actor, membership.getMember().getId());
         validateActiveMembership(membership);
-        membership.setAutoRenew(enabled);
-        Membership saved = membershipRepository.save(membership);
-        // Turning it on inside the notice window creates the renewal request now instead of at midnight.
-        if (enabled) {
-            autoRenewalService.createIfDue(saved);
-        } else {
-            autoRenewalService.cancelPendingFor(saved);
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        List<Membership> chain = membershipRepository.findByMemberIdAndStatusAndEndDateGreaterThan(
+                membership.getMember().getId(), "ACTIVE", today);
+        if (chain.stream().noneMatch(item -> item.getId().equals(membership.getId()))) {
+            chain = List.of(membership);
         }
-        return toResponse(saved);
+        chain.forEach(item -> item.setAutoRenew(enabled));
+        List<Membership> saved = membershipRepository.saveAll(chain);
+        // Turning it on inside the notice window creates the renewal request now instead of at midnight.
+        for (Membership item : saved) {
+            if (enabled) {
+                autoRenewalService.createIfDue(item);
+            } else {
+                autoRenewalService.cancelPendingFor(item);
+            }
+        }
+        return toResponse(saved.stream().filter(item -> item.getId().equals(id)).findFirst().orElse(membership));
     }
 
     /** Chạy job tự gia hạn ngay (ADMIN), giống job lúc nửa đêm; dùng cho demo và kiểm tra. */

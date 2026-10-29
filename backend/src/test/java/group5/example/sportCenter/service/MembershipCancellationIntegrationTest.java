@@ -271,7 +271,7 @@ class MembershipCancellationIntegrationTest {
         Membership otherUpcoming = memberships.save(copy(other, standard, upcoming.getStartDate().plusDays(10),
                 upcoming.getStartDate().plusDays(40)));
         Integer otherRequest = requestCancellation(other, otherUpcoming, null);
-        mvc.perform(patch("/api/memberships/" + otherUpcoming.getId() + "/cancel").header("Authorization", bearer(receptionist)))
+        mvc.perform(patch("/api/memberships/" + otherUpcoming.getId() + "/cancel").header("Authorization", bearer(admin)))
                 .andExpect(status().isOk());
         MembershipCancellationRequest answered = requestRows.findById(otherRequest).orElseThrow();
         assertEquals(MembershipCancellationRequestStatus.APPROVED, answered.getStatus());
@@ -284,9 +284,9 @@ class MembershipCancellationIntegrationTest {
         Membership firstUpcoming = latest();
         membership(standard, firstUpcoming.getEndDate(), firstUpcoming.getEndDate().plusMonths(1));
 
-        mvc.perform(patch("/api/memberships/" + firstUpcoming.getId() + "/cancel").header("Authorization", bearer(receptionist)))
+        mvc.perform(patch("/api/memberships/" + firstUpcoming.getId() + "/cancel").header("Authorization", bearer(admin)))
                 .andExpect(status().isConflict());
-        mvc.perform(patch("/api/memberships/" + current.getId() + "/cancel").header("Authorization", bearer(receptionist)))
+        mvc.perform(patch("/api/memberships/" + current.getId() + "/cancel").header("Authorization", bearer(admin)))
                 .andExpect(status().isConflict());
         mvc.perform(post(REQUESTS_URL).header("Authorization", bearer(member)).contentType("application/json")
                         .content("{\"membershipId\":" + firstUpcoming.getId() + "}"))
@@ -327,8 +327,13 @@ class MembershipCancellationIntegrationTest {
         upcomingSoon = memberships.save(upcomingSoon);
         Payment renewal = autoRenewal.createIfDue(upcomingSoon).orElseThrow();
 
+        // Receptionists only review member requests; direct cancellation is ADMIN-only.
         mvc.perform(patch("/api/memberships/" + upcomingSoon.getId() + "/cancel").header("Authorization", bearer(receptionist)))
-                .andExpect(status().isOk());
+                .andExpect(status().isForbidden());
+        assertEquals("ACTIVE", memberships.findById(upcomingSoon.getId()).orElseThrow().getStatus());
+        mvc.perform(patch("/api/memberships/" + upcomingSoon.getId() + "/cancel").header("Authorization", bearer(admin)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cancelReason").value("Cancelled by ADMIN before it started"));
         assertEquals(PaymentStatus.CANCELLED, paymentRows.findById(renewal.getId()).orElseThrow().getStatus());
     }
 

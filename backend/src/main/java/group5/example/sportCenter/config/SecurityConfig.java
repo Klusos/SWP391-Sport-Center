@@ -137,7 +137,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/pt-bookings/eligible-coaches", "/api/pt-bookings/me").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.POST, "/api/pt-bookings").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/pt-bookings/assigned").hasRole("COACH")
-                .requestMatchers(HttpMethod.PATCH, "/api/pt-bookings/*/cancel").hasAnyRole("MEMBER", "ADMIN", "RECEPTIONIST")
+                .requestMatchers(HttpMethod.PATCH, "/api/pt-bookings/*/cancel").hasAnyRole("MEMBER", "ADMIN")
                 .requestMatchers("/api/pt-bookings", "/api/pt-bookings/**").denyAll()
 
                 .requestMatchers(HttpMethod.GET, "/api/payments/online/callback",
@@ -188,9 +188,9 @@ public class SecurityConfig {
                     .hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
                 .requestMatchers(HttpMethod.PATCH,
                         "/api/memberships/*/cancel-renewal",
-                        "/api/memberships/*/enable-auto-renew",
-                        "/api/memberships/*/cancel")
+                        "/api/memberships/*/enable-auto-renew")
                     .hasAnyRole("ADMIN", "RECEPTIONIST", "MEMBER")
+                .requestMatchers(HttpMethod.PATCH, "/api/memberships/*/cancel").hasRole("ADMIN")
                 .requestMatchers("/api/memberships", "/api/memberships/**").denyAll()
 
                 .requestMatchers(HttpMethod.GET, "/api/coaches", "/api/coaches/**").authenticated()
