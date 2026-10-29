@@ -19,7 +19,7 @@ import {
   canRequestCancellation, CANCELLATION_NOTICE_HOURS, cancellationRequestErrorMessage, formatDate, formatDateTime, lastRequestDay,
   paymentMethodLabel, paymentPurposeLabel, paymentStatusLabel, requestStatusLabel,
 } from "../membershipCancellation";
-import { isMembershipEffective, todayInVietnam } from "../membershipDates";
+import { hasOverlappingEffectiveMemberships, membershipSections, todayInVietnam } from "../membershipDates";
 import { activeMembershipChain, autoRenewalOnlineReplacementPayload, cancellableMembershipId, isAutoRenewalPayment, RENEWAL_NOTICE_DAYS } from "../membershipRenewal";
 import { membershipPurchaseErrorMessage } from "../membershipPurchase";
 import { isMembershipPayment, upgradeBlockedMessage, upgradeErrorMessage } from "../membershipUpgrade";
@@ -285,11 +285,38 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
   }
 
   const today = todayInVietnam();
-  const currentMemberships = (memberships || []).filter(isMembershipEffective);
+  const sections = membershipSections(memberships, today);
+  const currentMemberships = sections.current;
   const membershipChain = activeMembershipChain(memberships, today);
   const cancellableId = cancellableMembershipId(membershipChain, today);
   const pendingRequestFor = (membershipId) => cancellationRequests.find(
     (request) => request.membershipId === membershipId && request.status === "PENDING");
+  const renderMembershipRows = (items) => items.map((membership) => {
+    const last = membership.id === membershipChain[membershipChain.length - 1]?.id;
+    const running = currentMemberships.some((item) => item.id === membership.id);
+    const pendingRequest = membership.id === cancellableId ? pendingRequestFor(membership.id) : null;
+    const requestable = membership.id === cancellableId && !pendingRequest && canRequestCancellation(membership, today);
+    return <div className="mm-chain-row" key={membership.id}>
+      <div className="mm-chain-plan"><b>{membership.planName || "Membership"}</b>
+        <small>{formatDate(membership.startDate)} → {formatDate(membership.endDate)}</small></div>
+      <span className={"mm-chain-status " + (running ? "running" : "upcoming")}>{running ? statusLabel[membership.status] || membership.status : "Sắp có hiệu lực — chưa có hiệu lực hôm nay"}</span>
+      <div className="mm-chain-renew">
+        {last ? <button type="button" className={membership.autoRenew ? "" : "secondary"} disabled={togglingId !== null}
+          aria-pressed={Boolean(membership.autoRenew)} onClick={() => void toggleAutoRenew(membership)}>
+          {togglingId === membership.id ? "Đang lưu…" : membership.autoRenew ? "Tự gia hạn: Bật" : "Tự gia hạn: Tắt"}
+        </button> : <small>Đã có gói nối tiếp</small>}
+      </div>
+      <div className="mm-chain-cancel">
+        {pendingRequest ? <>
+          <button type="button" className="secondary" disabled={togglingId !== null} onClick={() => void withdrawRequest(pendingRequest)}>Rút yêu cầu hủy</button>
+          <small>Đang chờ nhân viên duyệt</small>
+        </> : requestable ? <>
+          <button type="button" className="secondary" disabled={togglingId !== null} onClick={() => void requestCancellation(membership)}>Yêu cầu hủy gói</button>
+          <small>Hạn gửi: hết ngày {formatDate(lastRequestDay(membership.startDate))}</small>
+        </> : membership.id === cancellableId ? <small>Đã quá hạn yêu cầu hủy</small> : null}
+      </div>
+    </div>;
+  });
 
   return <div className="layout">
     <Sidebar role={role} activePage="member-membership" onLogout={onLogout} onNavigate={onNavigate} />
@@ -302,41 +329,44 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
       {notice && <div className="banner success" role="status">{notice}</div>}
 
       <section className="dash-card">
-        <h2>Gói của tôi</h2>
-        {loading ? <p role="status">Đang tải thông tin…</p> : membershipChain.length === 0
-          ? <p className="dash-empty">Bạn chưa có gói đang hoạt động.</p>
-          : <div className="mm-chain">{membershipChain.map((membership, index) => {
-            const last = index === membershipChain.length - 1;
-            const running = isMembershipEffective(membership);
-            const pendingRequest = membership.id === cancellableId ? pendingRequestFor(membership.id) : null;
-            const requestable = membership.id === cancellableId && !pendingRequest && canRequestCancellation(membership, today);
-            return <div className="mm-chain-row" key={membership.id}>
-              <div className="mm-chain-plan"><b>{membership.planName || "Gói thành viên"}</b>
-                <small>{formatDate(membership.startDate)} → {formatDate(membership.endDate)}</small></div>
-              <span className={"mm-chain-status " + (running ? "running" : "upcoming")}>{running ? statusLabel[membership.status] || membership.status : "Sắp bắt đầu"}</span>
-              <div className="mm-chain-renew">
-                {last ? <button type="button" className={membership.autoRenew ? "" : "secondary"} disabled={togglingId !== null}
-                  aria-pressed={Boolean(membership.autoRenew)} onClick={() => void toggleAutoRenew(membership)}>
-                  {togglingId === membership.id ? "Đang lưu…" : membership.autoRenew ? "Tự gia hạn: Bật" : "Tự gia hạn: Tắt"}
-                </button> : <small>Đã có gói nối tiếp</small>}
-              </div>
-              <div className="mm-chain-cancel">
-                {pendingRequest ? <>
-                  <button type="button" className="secondary" disabled={togglingId !== null} onClick={() => void withdrawRequest(pendingRequest)}>Rút yêu cầu hủy</button>
-                  <small>Đang chờ nhân viên duyệt</small>
-                </> : requestable ? <>
-                  <button type="button" className="secondary" disabled={togglingId !== null} onClick={() => void requestCancellation(membership)}>Yêu cầu hủy gói</button>
-                  <small>Hạn gửi: hết ngày {formatDate(lastRequestDay(membership.startDate))}</small>
-                </> : membership.id === cancellableId ? <small>Đã quá hạn yêu cầu hủy</small> : null}
-              </div>
-            </div>;
-          })}</div>}
-        {membershipChain.length > 0 && <ul className="mm-chain-notes">
-          <li>Tự gia hạn áp dụng cho gói cuối: {RENEWAL_NOTICE_DAYS} ngày trước khi hết hạn, hệ thống tạo yêu cầu gia hạn và báo cho bạn. Bạn cần thanh toán (tại quầy hoặc VNPay) để gia hạn; chưa thanh toán thì yêu cầu tự hủy.</li>
-          <li>Gói đang chạy không hủy, không hoàn tiền. Gói chưa bắt đầu có thể gửi yêu cầu hủy (từ gói sau cùng) chậm nhất {CANCELLATION_NOTICE_HOURS} giờ trước ngày bắt đầu; được duyệt thì hoàn 100% tại quầy.</li>
-        </ul>}
+        <h2>Gói đang có hiệu lực</h2>
+        {loading ? <p role="status">Đang tải thông tin…</p> : sections.current.length === 0
+          ? <p className="dash-empty">Hôm nay bạn không có gói thành viên nào đang có hiệu lực.</p>
+          : <div className="mm-chain">{renderMembershipRows(sections.current)}</div>}
+        {hasOverlappingEffectiveMemberships(sections) && <p className="banner info" role="status">
+          Có nhiều gói thành viên cùng có hiệu lực hôm nay. Dữ liệu có thể bị chồng lấn; hệ thống không tự thay đổi gói nào.
+        </p>}
       </section>
 
+      <section className="dash-card">
+        <h2>Gói sắp có hiệu lực</h2>
+        {loading ? <p role="status">Đang tải thông tin…</p> : sections.upcoming.length === 0
+          ? <p className="dash-empty">Không có gói nào đang chờ đến ngày bắt đầu.</p>
+          : <><p className="subtitle">Các gói này được xếp lịch cho ngày trong tương lai và chưa có hiệu lực hôm nay.</p>
+            <div className="mm-chain">{renderMembershipRows(sections.upcoming)}</div></>}
+      </section>
+
+      <section className="dash-card">
+        <h2>Lịch sử gói thành viên</h2>
+        {loading ? <p role="status">Đang tải thông tin…</p> : sections.history.length === 0
+          ? <p className="dash-empty">Chưa có gói thành viên trong lịch sử.</p>
+          : <div className="mm-chain">{sections.history.map((membership) => <div className="mm-chain-row" key={membership.id}>
+            <div className="mm-chain-plan"><b>{membership.planName || "Membership"}</b>
+              <small>{formatDate(membership.startDate)} → {formatDate(membership.endDate)}</small></div>
+            <span className="mm-chain-status">{String(membership.status).toUpperCase() === "ACTIVE" && membership.endDate && String(membership.endDate) <= today
+              ? `Hết hiệu lực (trạng thái ${membership.status})`
+              : statusLabel[String(membership.status).toUpperCase()] || membership.status || "Không rõ trạng thái"}</span>
+            <small>Gói trong lịch sử</small>
+          </div>)}</div>}
+      </section>
+
+      {membershipChain.length > 0 && <section className="dash-card">
+        <h2>Tự gia hạn và yêu cầu hủy</h2>
+        <ul className="mm-chain-notes">
+          <li>Tự gia hạn áp dụng cho gói cuối: {RENEWAL_NOTICE_DAYS} ngày trước khi hết hạn, hệ thống tạo yêu cầu gia hạn và báo cho bạn. Bạn cần thanh toán tại quầy hoặc qua VNPay; chưa thanh toán thì yêu cầu tự hủy.</li>
+          <li>Gói đang có hiệu lực không thể hủy và không hoàn tiền. Có thể yêu cầu hủy gói chưa bắt đầu (gói cuối) chậm nhất {CANCELLATION_NOTICE_HOURS} giờ trước ngày bắt đầu; nếu được duyệt sẽ hoàn 100% tại quầy.</li>
+        </ul>
+      </section>}
       {!loading && upgrade?.currentMembershipId && <section className="dash-card">
         <h2>Nâng cấp gói</h2>
         <p className="subtitle">Gói mới có hiệu lực ngay và giữ nguyên ngày hết hạn {upgrade.currentEndDate}. Bạn chỉ trả phần chênh lệch cho {upgrade.remainingDays} ngày còn lại (tính tháng 30 ngày, làm tròn lên 1.000 ₫). Không hạ cấp giữa kỳ và không hoàn tiền phần chênh lệch.</p>
