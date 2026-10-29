@@ -43,8 +43,10 @@ import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.server.ResponseStatusException;
 
 import group5.example.sportCenter.dto.CreateCourseRegistrationRequest;
+import group5.example.sportCenter.dto.UpdateClassRequest;
 import group5.example.sportCenter.entity.ClassSession;
 import group5.example.sportCenter.entity.Coach;
+import group5.example.sportCenter.entity.CoachSport;
 import group5.example.sportCenter.entity.Course;
 import group5.example.sportCenter.entity.CourseClass;
 import group5.example.sportCenter.entity.CourseOffering;
@@ -59,6 +61,7 @@ import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.ClassSessionRepository;
 import group5.example.sportCenter.repository.CoachRepository;
+import group5.example.sportCenter.repository.CoachSportRepository;
 import group5.example.sportCenter.repository.CourseClassRepository;
 import group5.example.sportCenter.repository.CourseOfferingRepository;
 import group5.example.sportCenter.repository.CourseRegistrationRepository;
@@ -86,6 +89,7 @@ class CourseRegistrationIntegrationTest {
     }
 
     @Autowired CourseRegistrationService service;
+    @Autowired CourseClassService courseClassService;
     @Autowired CourseRegistrationExpirationService registrationExpiration;
     @Autowired MembershipService membershipService;
     @Autowired CourseRegistrationRepository registrations;
@@ -99,6 +103,7 @@ class CourseRegistrationIntegrationTest {
     @Autowired CourseClassRepository classes;
     @Autowired ClassSessionRepository sessions;
     @Autowired CoachRepository coaches;
+    @Autowired CoachSportRepository coachSports;
     @Autowired JwtService tokens;
     @Autowired WebApplicationContext context;
     @Autowired FilterChainProxy security;
@@ -571,6 +576,146 @@ class CourseRegistrationIntegrationTest {
         assertEquals("CANCELLED", service.cancel(response.id(), jwt(member)).status());
         assertEquals(0, registrations.countOccupiedSeats(selected.getId(), CourseRegistrationStatus.CONFIRMED,
                 CourseRegistrationStatus.PENDING_PAYMENT, now));
+    }
+
+    @Test
+    void rejectsCapacityReductionBelowConfirmedOccupancyAndPreservesExistingState() {
+        CourseClass selected = classFor(course(sport, "BEGINNER", "ACTIVE"), 3);
+        registration(member, selected, CourseRegistrationStatus.CONFIRMED, null);
+        registration(user("MEMBER", "ACTIVE"), selected, CourseRegistrationStatus.CONFIRMED, null);
+        prepareClassForUpdate(selected);
+
+        ResponseStatusException conflict = assertThrows(ResponseStatusException.class,
+                () -> courseClassService.updateClass(selected.getId(), updateCapacity(selected, 1)));
+
+        assertEquals(409, conflict.getStatusCode().value());
+        assertTrue(conflict.getReason().contains("2 seats"));
+        assertEquals(3, classes.findById(selected.getId()).orElseThrow().getCapacity());
+        assertEquals(CourseRegistrationStatus.CONFIRMED,
+                registrations.findByMemberIdAndCourseClassIdAndStatus(member.getId(), selected.getId(),
+                        CourseRegistrationStatus.CONFIRMED).orElseThrow().getStatus());
+    }
+
+    @Test
+    void validPendingPaymentReservationCountsWhenReducingCapacity() {
+        CourseClass selected = classFor(course(sport, "BEGINNER", "ACTIVE"), 3);
+        registration(member, selected, CourseRegistrationStatus.CONFIRMED, null);
+        User pendingMember = user("MEMBER", "ACTIVE");
+        LocalDateTime businessNow = LocalDateTime.now(clock.withZone(ZoneId.of("Asia/Ho_Chi_Minh")));
+        registration(pendingMember, selected, CourseRegistrationStatus.PENDING_PAYMENT, businessNow.plusSeconds(1));
+        prepareClassForUpdate(selected);
+
+        ResponseStatusException conflict = assertThrows(ResponseStatusException.class,
+                () -> courseClassService.updateClass(selected.getId(), updateCapacity(selected, 1)));
+
+        assertEquals(409, conflict.getStatusCode().value());
+        assertTrue(conflict.getReason().contains("2 seats currently occupied"));
+        assertEquals(3, classes.findById(selected.getId()).orElseThrow().getCapacity());
+        assertEquals(1, registrations.countByClassIdAndStatus(selected.getId(), CourseRegistrationStatus.CONFIRMED));
+        assertEquals(1, registrations.countByClassIdAndStatus(selected.getId(), CourseRegistrationStatus.PENDING_PAYMENT));
+    }
+
+    @Test
+    void capacityEqualToOccupiedSeatsAndCapacityIncreaseAreAllowedWhileInactiveRegistrationsDoNotOccupySeats() {
+        CourseClass selected = classFor(course(sport, "BEGINNER", "ACTIVE"), 5);
+        User confirmedMember = user("MEMBER", "ACTIVE");
+        User pendingMember = user("MEMBER", "ACTIVE");
+        LocalDateTime businessNow = LocalDateTime.now(clock.withZone(ZoneId.of("Asia/Ho_Chi_Minh")));
+        registration(confirmedMember, selected, CourseRegistrationStatus.CONFIRMED, null);
+        registration(pendingMember, selected, CourseRegistrationStatus.PENDING_PAYMENT, businessNow.plusSeconds(1));
+        registration(user("MEMBER", "ACTIVE"), selected, CourseRegistrationStatus.PENDING_PAYMENT, businessNow);
+        registration(user("MEMBER", "ACTIVE"), selected, CourseRegistrationStatus.PENDING_PAYMENT, businessNow.minusNanos(1));
+        registration(user("MEMBER", "ACTIVE"), selected, CourseRegistrationStatus.CANCELLED, businessNow.plusDays(1));
+        registration(user("MEMBER", "ACTIVE"), selected, CourseRegistrationStatus.EXPIRED, businessNow.plusDays(1));
+        prepareClassForUpdate(selected);
+
+        assertEquals(2, registrations.countOccupiedSeats(selected.getId(), CourseRegistrationStatus.CONFIRMED,
+                CourseRegistrationStatus.PENDING_PAYMENT, businessNow));
+        courseClassService.updateClass(selected.getId(), updateCapacity(selected, 2));
+        assertEquals(2, classes.findById(selected.getId()).orElseThrow().getCapacity());
+        courseClassService.updateClass(selected.getId(), updateCapacity(selected, 4));
+        assertEquals(4, classes.findById(selected.getId()).orElseThrow().getCapacity());
+    }
+
+    @Test
+    void concurrentRegistrationAndCapacityReductionSerializeOnCourseClassRow() throws Exception {
+        LocalDateTime businessNow = LocalDateTime.now(clock.withZone(ZoneId.of("Asia/Ho_Chi_Minh")));
+        Course course = course(sport, "BEGINNER", "ACTIVE");
+        CourseOffering offering = offering(course, "OPEN", businessNow.plusHours(1));
+        offering.setStartDate(businessNow.toLocalDate().minusDays(1));
+        offering.setEndDate(businessNow.toLocalDate().plusDays(30));
+        offering.setRegistrationDeadline(businessNow.plusHours(1));
+        offering.setCancellationDeadline(businessNow.plusHours(1));
+        offerings.saveAndFlush(offering);
+        CourseClass selected = courseClass(offering, "ACTIVE", 2);
+        prepareClassForUpdate(selected);
+        registration(user("MEMBER", "ACTIVE"), selected, CourseRegistrationStatus.CONFIRMED, null);
+        User newMember = user("MEMBER", "ACTIVE");
+        UpdateClassRequest reduce = updateCapacity(selected, 1);
+
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<String> capacityUpdate = pool.submit(() -> raceCapacityUpdate(selected.getId(), reduce, ready, start));
+            Future<String> registration = pool.submit(() -> raceRegister(newMember, selected, ready, start));
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            List<String> outcomes = List.of(capacityUpdate.get(15, TimeUnit.SECONDS),
+                    registration.get(15, TimeUnit.SECONDS));
+
+            assertTrue(outcomes.equals(List.of("200", "409")) || outcomes.equals(List.of("409", "201")),
+                    outcomes.toString());
+            CourseClass saved = classes.findById(selected.getId()).orElseThrow();
+            long occupied = registrations.countOccupiedSeats(selected.getId(), CourseRegistrationStatus.CONFIRMED,
+                    CourseRegistrationStatus.PENDING_PAYMENT, businessNow);
+            assertTrue(occupied <= saved.getCapacity(), "occupied=" + occupied + ", capacity=" + saved.getCapacity());
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    private String raceCapacityUpdate(Integer classId, UpdateClassRequest request,
+            CountDownLatch ready, CountDownLatch start) throws Exception {
+        ready.countDown();
+        if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("start timeout");
+        try {
+            courseClassService.updateClass(classId, request);
+            return "200";
+        } catch (ResponseStatusException ex) {
+            return Integer.toString(ex.getStatusCode().value());
+        }
+    }
+
+    private UpdateClassRequest updateCapacity(CourseClass selected, int capacity) {
+        UpdateClassRequest request = new UpdateClassRequest();
+        request.setCoachId(selected.getCoach().getId());
+        request.setName(selected.getName());
+        request.setCapacity(capacity);
+        request.setStatus(selected.getStatus());
+        return request;
+    }
+
+    private void prepareClassForUpdate(CourseClass selected) {
+        CoachSport qualification = new CoachSport();
+        qualification.setCoach(selected.getCoach());
+        qualification.setSport(selected.getCourseOffering().getCourse().getSport());
+        qualification.setExperienceYears(1);
+        coachSports.saveAndFlush(qualification);
+    }
+
+    private CourseRegistration registration(User owner, CourseClass selected,
+            CourseRegistrationStatus status, LocalDateTime paymentDeadline) {
+        CourseRegistration registration = new CourseRegistration();
+        registration.setMember(owner);
+        registration.setCourseClass(selected);
+        registration.setStatus(status);
+        registration.setRegisteredAt(now);
+        registration.setPaymentDeadline(paymentDeadline);
+        registration.setOriginalPrice(new BigDecimal("100.00"));
+        registration.setMembershipDiscount(BigDecimal.ZERO.setScale(2));
+        registration.setFinalPrice(new BigDecimal("100.00"));
+        return registrations.saveAndFlush(registration);
     }
 
     @Test
