@@ -1,6 +1,7 @@
 package group5.example.sportCenter.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -386,6 +387,20 @@ class PaymentIntegrationTest {
         assertEquals(CourseRegistrationStatus.EXPIRED,
                 registrations.findById(registration.getId()).orElseThrow().getStatus());
         assertEquals(0L, occupiedSeats(registration), "late settlement must not reclaim an expired seat");
+    }
+
+    @Test
+    void expiredPendingRegistrationCannotCreateANewPayment() {
+        CourseRegistration registration = registration(member, "200000.00", "0.00");
+        setDeadline(registration, now());
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                        registration.getId(), PaymentMethod.COUNTER), jwt(member)));
+        assertFalse(payments.existsByPurposeAndReferenceIdAndStatus(PaymentPurpose.COURSE_REGISTRATION,
+                registration.getId(), PaymentStatus.PENDING));
+        assertEquals(CourseRegistrationStatus.PENDING_PAYMENT,
+                registrations.findById(registration.getId()).orElseThrow().getStatus());
     }
 
     @Test

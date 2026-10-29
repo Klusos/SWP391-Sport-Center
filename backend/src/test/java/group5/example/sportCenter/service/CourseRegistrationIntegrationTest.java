@@ -2,6 +2,8 @@ package group5.example.sportCenter.service;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -90,7 +92,7 @@ class CourseRegistrationIntegrationTest {
 
     @Autowired CourseRegistrationService service;
     @Autowired CourseClassService courseClassService;
-    @Autowired CourseRegistrationExpirationService registrationExpiration;
+    @MockitoSpyBean CourseRegistrationExpirationService registrationExpiration;
     @Autowired MembershipService membershipService;
     @Autowired CourseRegistrationRepository registrations;
     @Autowired CourseRepository courses;
@@ -635,6 +637,34 @@ class CourseRegistrationIntegrationTest {
         assertEquals(2, classes.findById(selected.getId()).orElseThrow().getCapacity());
         courseClassService.updateClass(selected.getId(), updateCapacity(selected, 4));
         assertEquals(4, classes.findById(selected.getId()).orElseThrow().getCapacity());
+    }
+
+    @Test
+    void memberHistoryGetProjectsExpiredPendingHoldsReadOnlyAndPreservesOtherStatuses() throws Exception {
+        CourseClass selected = classFor(course(sport, "BEGINNER", "ACTIVE"), 2);
+        User validMember = user("MEMBER", "ACTIVE");
+        CourseRegistration confirmed = registration(member, selected, CourseRegistrationStatus.CONFIRMED, null);
+        CourseRegistration cancelled = registration(member, selected, CourseRegistrationStatus.CANCELLED, now.plusDays(1));
+        CourseRegistration expiredHold = registration(member, selected, CourseRegistrationStatus.PENDING_PAYMENT,
+                now.minusSeconds(1));
+        registration(validMember, selected, CourseRegistrationStatus.PENDING_PAYMENT,
+                now.plusSeconds(60));
+
+        mvc.perform(get("/api/course-registrations/me").header("Authorization", bearer(member)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(expiredHold.getId()))
+                .andExpect(jsonPath("$[0].status").value("EXPIRED"))
+                .andExpect(jsonPath("$.length()").value(3));
+
+        assertEquals(CourseRegistrationStatus.PENDING_PAYMENT,
+                registrations.findById(expiredHold.getId()).orElseThrow().getStatus());
+        assertEquals(CourseRegistrationStatus.CONFIRMED,
+                registrations.findById(confirmed.getId()).orElseThrow().getStatus());
+        assertEquals(CourseRegistrationStatus.CANCELLED,
+                registrations.findById(cancelled.getId()).orElseThrow().getStatus());
+        assertEquals(2, registrations.countOccupiedSeats(selected.getId(), CourseRegistrationStatus.CONFIRMED,
+                CourseRegistrationStatus.PENDING_PAYMENT, now));
+        verify(registrationExpiration, never()).expireForMember(member.getId(), now);
     }
 
     @Test
