@@ -7,6 +7,12 @@ import java.math.BigDecimal;
  *
  * @param amount        số tiền cổng báo đã thanh toán; null nếu cổng không gửi (mock)
  * @param failureReason ghi chú khi thất bại (vd. mã lỗi của VNPay); null nếu không có
+ * @param verifiedPaymentTime provider payment time retained only after callback signature verification
  */
-public record GatewayCallback(String transactionCode, boolean success, BigDecimal amount, String failureReason) {
+public record GatewayCallback(
+        String transactionCode,
+        boolean success,
+        BigDecimal amount,
+        String failureReason,
+        String verifiedPaymentTime) {
 }

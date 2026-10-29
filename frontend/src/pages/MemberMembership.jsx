@@ -20,7 +20,7 @@ import {
   paymentMethodLabel, paymentPurposeLabel, paymentStatusLabel, requestStatusLabel,
 } from "../membershipCancellation";
 import { isMembershipEffective, todayInVietnam } from "../membershipDates";
-import { activeMembershipChain, cancellableMembershipId, isAutoRenewalPayment, RENEWAL_NOTICE_DAYS } from "../membershipRenewal";
+import { activeMembershipChain, autoRenewalOnlineReplacementPayload, cancellableMembershipId, isAutoRenewalPayment, RENEWAL_NOTICE_DAYS } from "../membershipRenewal";
 import { membershipPurchaseErrorMessage } from "../membershipPurchase";
 import { isMembershipPayment, upgradeBlockedMessage, upgradeErrorMessage } from "../membershipUpgrade";
 import "./Portal.css";
@@ -230,12 +230,7 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
     setNotice("");
     try {
       await cancelPaymentApi(token, payment.id);
-      const online = await createPaymentApi(token, {
-        method: "ONLINE",
-        purpose: "MEMBERSHIP",
-        referenceId: Number(payment.referenceId),
-        autoRenew: isAutoRenewalPayment(payment),
-      });
+      const online = await createPaymentApi(token, autoRenewalOnlineReplacementPayload(payment));
       if (!validVnpayUrl(online.paymentUrl)) {
         await load();
         setError(`Đã tạo thanh toán #${online.id}, nhưng máy chủ không trả về liên kết VNPay Sandbox hợp lệ. Hãy làm mới trạng thái hoặc liên hệ lễ tân.`);

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addTrainingExerciseApi, completeTrainingSessionApi, deleteTrainingExerciseApi, evaluateProgressApi, getMyTrainingApi, getTrainingClassesApi, getTrainingPlanApi, getTrainingProgressApi, getTrainingResultSheetApi, getTrainingSessionsApi, recordTrainingResultApi, saveTrainingPlanApi, updateTrainingExerciseApi } from "../src/api.js";
+import { addTrainingExerciseApi, completeTrainingSessionApi, createIndividualTrainingPlanApi, deleteTrainingExerciseApi, evaluateProgressApi, getClassIndividualTrainingPlansApi, getIndividualTrainingPlanApi, getIndividualTrainingPlanRevisionsApi, getMyIndividualTrainingPlansApi, getMyTrainingApi, getTrainingClassesApi, getTrainingPlanApi, getTrainingProgressApi, getTrainingResultSheetApi, getTrainingSessionsApi, recordTrainingResultApi, saveTrainingPlanApi, updateIndividualTrainingPlanApi, updateTrainingExerciseApi } from "../src/api.js";
 
 async function withFetch(run) {
   const old = globalThis.fetch;
@@ -23,6 +23,13 @@ test("Training API helpers match the backend route and method contract", async (
     await getTrainingProgressApi("token", 8);
     await evaluateProgressApi("token", 8, 12, { rating: 4, comment: "Good" });
     await getMyTrainingApi("token");
+    const individualPayload = { goal: "Mobility", description: null, weeks: [{ weekNumber: 1, exercises: [] }] };
+    await createIndividualTrainingPlanApi("token", 8, 12, individualPayload);
+    await getClassIndividualTrainingPlansApi("token", 8);
+    await updateIndividualTrainingPlanApi("token", 31, individualPayload);
+    await getMyIndividualTrainingPlansApi("token");
+    await getIndividualTrainingPlanApi("token", 31);
+    await getIndividualTrainingPlanRevisionsApi("token", 31);
     assert.deepEqual(calls.map(({ url, options }) => [url, options.method || "GET"]), [
       ["http://localhost:8080/api/training/classes", "GET"],
       ["http://localhost:8080/api/training/classes/8/plan", "GET"],
@@ -37,11 +44,20 @@ test("Training API helpers match the backend route and method contract", async (
       ["http://localhost:8080/api/training/classes/8/progress", "GET"],
       ["http://localhost:8080/api/training/classes/8/members/12/evaluations", "POST"],
       ["http://localhost:8080/api/training/me", "GET"],
+      ["http://localhost:8080/api/training/classes/8/members/12/individual-plan", "POST"],
+      ["http://localhost:8080/api/training/classes/8/individual-plans", "GET"],
+      ["http://localhost:8080/api/training/individual-plans/31", "PUT"],
+      ["http://localhost:8080/api/training/me/individual-plans", "GET"],
+      ["http://localhost:8080/api/training/individual-plans/31", "GET"],
+      ["http://localhost:8080/api/training/individual-plans/31/revisions", "GET"],
     ]);
     assert.equal(calls[2].options.headers.Authorization, "Bearer token");
     assert.deepEqual(JSON.parse(calls[2].options.body), { goal: "Balance" });
     assert.deepEqual(JSON.parse(calls[9].options.body), { score: 8, notes: null });
     assert.deepEqual(JSON.parse(calls[11].options.body), { rating: 4, comment: "Good" });
+    assert.deepEqual(JSON.parse(calls[13].options.body), individualPayload);
+    assert.deepEqual(JSON.parse(calls[15].options.body), individualPayload);
+    assert.equal(calls[13].options.headers.Authorization, "Bearer token");
   });
 });
 test("Training API surfaces authorization and validation errors", async () => {

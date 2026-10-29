@@ -22,6 +22,13 @@ public interface CourseRegistrationRepository extends JpaRepository<CourseRegist
     Optional<CourseRegistration> findByMemberIdAndCourseClassIdAndStatus(
             Integer memberId, Integer classId, CourseRegistrationStatus status);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select registration from CourseRegistration registration where registration.member.id = :memberId "
+            + "and registration.courseClass.id = :classId and registration.status = :status")
+    Optional<CourseRegistration> findByMemberIdAndCourseClassIdAndStatusForUpdate(
+            @Param("memberId") Integer memberId, @Param("classId") Integer classId,
+            @Param("status") CourseRegistrationStatus status);
+
     /** Serializes concurrent payments for the same registration (Flow 3). */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select registration from CourseRegistration registration where registration.id = :id")

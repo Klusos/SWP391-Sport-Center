@@ -5,6 +5,17 @@ export const RENEWAL_NOTICE_DAYS = 3;
 export const isAutoRenewalPayment = (payment) =>
   payment?.purpose === "MEMBERSHIP" && String(payment?.note || "").startsWith(AUTO_RENEWAL_NOTE_PREFIX);
 
+export const autoRenewalOnlineReplacementPayload = (payment) => {
+  const isAutoRenewal = isAutoRenewalPayment(payment);
+  return {
+    method: "ONLINE",
+    purpose: "MEMBERSHIP",
+    referenceId: Number(payment.referenceId),
+    autoRenew: isAutoRenewal,
+    ...(isAutoRenewal ? { renewalSourcePaymentId: Number(payment.id) } : {}),
+  };
+};
+
 // Only the last membership of the chain may be cancelled, and members may cancel it only before it starts.
 export function cancellableMembershipId(chain, today, { staffCanCancelRunning = false } = {}) {
   const last = chain[chain.length - 1];

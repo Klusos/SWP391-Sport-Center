@@ -119,7 +119,8 @@ public class VnpayPaymentGateway implements PaymentGateway {
         String failureReason = success ? null
                 : "VNPay payment failed (response code " + responseCode + ", status " + transactionStatus + ")";
         return Optional.of(new GatewayCallback(
-                fromTxnRef(signed.get("vnp_TxnRef")), success, amount, failureReason));
+                fromTxnRef(signed.get("vnp_TxnRef")), success, amount, failureReason,
+                signed.get("vnp_PayDate")));
     }
 
     /** vnp_TxnRef chỉ nên chứa chữ và số: "TXN-ABC123" -> "TXNABC123". */

@@ -4,6 +4,10 @@ import java.math.BigDecimal;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.Optional;
@@ -27,19 +31,24 @@ import org.springframework.web.server.ResponseStatusException;
 @ConditionalOnProperty(name = "app.payment.provider", havingValue = "mock", matchIfMissing = true)
 public class MockPaymentGateway implements PaymentGateway {
 
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    private static final DateTimeFormatter PAYMENT_TIME = DateTimeFormatter.ofPattern("uuuuMMddHHmmss");
+
     private static final Profiles ALLOWED_PROFILES =
             Profiles.of("demo", "dev", "development", "test", "phase1");
 
     private final String secret;
     private final String callbackBaseUrl;
     private final boolean enabled;
+    private final Clock clock;
 
     public MockPaymentGateway(
             @Value("${app.payment.callback-secret:}") String secret,
             @Value("${app.payment.callback-base-url:http://localhost:8080/api/payments/online/callback}")
             String callbackBaseUrl,
             @Value("${app.payment.mock-gateway.enabled:false}") boolean enabled,
-            Environment environment) {
+            Environment environment,
+            Clock clock) {
         this.enabled = enabled && environment.acceptsProfiles(ALLOWED_PROFILES)
                 && !environment.acceptsProfiles(Profiles.of("prod", "production"));
         if (this.enabled && (secret == null || secret.isBlank())) {
@@ -47,6 +56,7 @@ public class MockPaymentGateway implements PaymentGateway {
         }
         this.secret = secret == null ? "" : secret;
         this.callbackBaseUrl = callbackBaseUrl;
+        this.clock = clock;
         if (this.enabled) {
             validateLocalCallbackUrl(callbackBaseUrl);
         }
@@ -56,15 +66,18 @@ public class MockPaymentGateway implements PaymentGateway {
     public String createPaymentUrl(String transactionCode, BigDecimal amount, String clientIp) {
         requireEnabled();
         // Demo only: opening this local URL simulates success; it is not proof of real settlement.
+        String paymentTime = LocalDateTime.now(clock.withZone(BUSINESS_ZONE)).format(PAYMENT_TIME);
         return callbackBaseUrl + "?transactionCode=" + transactionCode
-                + "&success=true&signature=" + sign(transactionCode, true);
+                + "&success=true&paymentTime=" + paymentTime
+                + "&signature=" + sign(transactionCode, true, paymentTime);
     }
 
-    /** Callback dạng ?transactionCode=...&success=true|false&signature=... */
+    /** Demo callback signs its simulated payment time together with the transaction outcome. */
     @Override
     public Optional<GatewayCallback> verifyCallback(Map<String, String> params) {
         String transactionCode = params.get("transactionCode");
         String successParam = params.get("success");
+        String paymentTime = params.get("paymentTime");
         String signature = params.get("signature");
         if (!enabled || transactionCode == null || signature == null
                 || !("true".equals(successParam) || "false".equals(successParam))) {
@@ -72,10 +85,10 @@ public class MockPaymentGateway implements PaymentGateway {
         }
         boolean success = Boolean.parseBoolean(successParam);
         boolean valid = MessageDigest.isEqual(
-                sign(transactionCode, success).getBytes(StandardCharsets.UTF_8),
+                sign(transactionCode, success, paymentTime).getBytes(StandardCharsets.UTF_8),
                 signature.getBytes(StandardCharsets.UTF_8));
         return valid
-                ? Optional.of(new GatewayCallback(transactionCode, success, null, null))
+                ? Optional.of(new GatewayCallback(transactionCode, success, null, null, paymentTime))
                 : Optional.empty();
     }
 
@@ -98,11 +111,12 @@ public class MockPaymentGateway implements PaymentGateway {
         }
     }
 
-    private String sign(String transactionCode, boolean success) {
+    private String sign(String transactionCode, boolean success, String paymentTime) {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-            byte[] raw = mac.doFinal((transactionCode + "|" + success).getBytes(StandardCharsets.UTF_8));
+            byte[] raw = mac.doFinal((transactionCode + "|" + success + "|" + paymentTime)
+                    .getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(raw);
         } catch (Exception e) {
             throw new IllegalStateException("Cannot sign payment callback", e);

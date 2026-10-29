@@ -55,6 +55,7 @@ import group5.example.sportCenter.entity.CourseRegistration;
 import group5.example.sportCenter.entity.CourseRegistrationStatus;
 import group5.example.sportCenter.entity.Membership;
 import group5.example.sportCenter.entity.MembershipPlan;
+import group5.example.sportCenter.entity.MembershipUpgrade;
 import group5.example.sportCenter.entity.Payment;
 import group5.example.sportCenter.entity.PaymentStatus;
 import group5.example.sportCenter.entity.PaymentMethod;
@@ -72,6 +73,7 @@ import group5.example.sportCenter.repository.CourseRegistrationRepository;
 import group5.example.sportCenter.repository.CourseRepository;
 import group5.example.sportCenter.repository.MembershipPlanRepository;
 import group5.example.sportCenter.repository.MembershipRepository;
+import group5.example.sportCenter.repository.MembershipUpgradeRepository;
 import group5.example.sportCenter.repository.NotificationRepository;
 import group5.example.sportCenter.repository.PaymentRepository;
 import group5.example.sportCenter.repository.PersonalTrainingBookingRepository;
@@ -79,7 +81,7 @@ import group5.example.sportCenter.repository.SportRepository;
 import group5.example.sportCenter.repository.UserRepository;
 import group5.example.sportCenter.security.JwtService;
 
-@SpringBootTest
+@SpringBootTest(properties = "app.payment.provider=mock")
 @ActiveProfiles("phase1")
 @Import(PaymentIntegrationTest.TestClockConfiguration.class)
 class PaymentIntegrationTest {
@@ -98,6 +100,7 @@ class PaymentIntegrationTest {
     @Autowired CoachSportRepository coachSports;
     @Autowired MembershipPlanRepository plans;
     @Autowired MembershipRepository memberships;
+    @Autowired MembershipUpgradeRepository membershipUpgrades;
     @Autowired PersonalTrainingBookingRepository bookings;
     @Autowired ClassSessionRepository classSessions;
     @Autowired CourseRegistrationRepository registrations;
@@ -1015,6 +1018,131 @@ class PaymentIntegrationTest {
     }
 
     @Test
+    void actionablePendingSummaryExcludesExpiredAndOverdueCourseHoldsWithoutChangingHistory() throws Exception {
+        var valid = registration(member, "500000.00", "50000.00");
+        var validPayment = service.createPayment(
+                request(PaymentPurpose.COURSE_REGISTRATION, valid.getId(), PaymentMethod.COUNTER), jwt(member));
+
+        var expired = registration(member, "250000.00", "0.00");
+        expired.setStatus(CourseRegistrationStatus.EXPIRED);
+        registrations.saveAndFlush(expired);
+        var expiredPayment = courseQueueFixture(expired, PaymentMethod.ONLINE,
+                PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.PENDING);
+
+        var overdue = registration(member, "250000.00", "0.00");
+        overdue.setPaymentDeadline(now().minusSeconds(1));
+        registrations.saveAndFlush(overdue); // Status intentionally remains PENDING_PAYMENT.
+        var overduePayment = courseQueueFixture(overdue, PaymentMethod.COUNTER,
+                PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.PENDING);
+
+        var anotherMembersRegistration = registration(otherMember, "250000.00", "0.00");
+        var mismatchedOwnerPayment = queueFixture(member, PaymentMethod.COUNTER,
+                PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.PENDING);
+        mismatchedOwnerPayment.setReferenceId(anotherMembersRegistration.getId());
+        payments.saveAndFlush(mismatchedOwnerPayment);
+
+        var otherMembersPayment = queueFixture(otherMember, PaymentMethod.COUNTER,
+                PaymentPurpose.MEMBERSHIP, PaymentStatus.PENDING);
+        otherMembersPayment.setReferenceId(plan.getId());
+        payments.saveAndFlush(otherMembersPayment);
+
+        mvc.perform(get("/api/payments/me/actionable-summary").header("Authorization", bearer(member)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(1))
+                .andExpect(jsonPath("$.totalAmount").value(450000));
+
+        // The summary is read-only. Reconciliation history still reports the original pending attempts.
+        assertEquals(CourseRegistrationStatus.EXPIRED, registrations.findById(expired.getId()).orElseThrow().getStatus());
+        assertEquals(CourseRegistrationStatus.PENDING_PAYMENT, registrations.findById(overdue.getId()).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.PENDING, payments.findById(expiredPayment.getId()).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.PENDING, payments.findById(overduePayment.getId()).orElseThrow().getStatus());
+        mvc.perform(get("/api/payments/me").header("Authorization", bearer(member)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(4));
+
+        mvc.perform(get("/api/payments/me/actionable-summary").header("Authorization", bearer(otherMember)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(1))
+                .andExpect(jsonPath("$.totalAmount").value(300000));
+        mvc.perform(get("/api/payments/me/actionable-summary"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void actionablePendingSummaryChecksMembershipPtUpgradeAndOnlineLinkExpiry() throws Exception {
+        var membershipPayment = queueFixture(member, PaymentMethod.COUNTER,
+                PaymentPurpose.MEMBERSHIP, PaymentStatus.PENDING);
+        membershipPayment.setReferenceId(plan.getId());
+        payments.saveAndFlush(membershipPayment);
+
+        var validBooking = booking(now().plusMinutes(10));
+        var validPtPayment = queueFixture(member, PaymentMethod.COUNTER,
+                PaymentPurpose.PT_BOOKING, PaymentStatus.PENDING);
+        validPtPayment.setReferenceId(validBooking.getId());
+        validPtPayment.setAmount(validBooking.getFinalPrice());
+        payments.saveAndFlush(validPtPayment);
+
+        var expiredBooking = booking(now().minusSeconds(1));
+        var expiredPtPayment = queueFixture(member, PaymentMethod.COUNTER,
+                PaymentPurpose.PT_BOOKING, PaymentStatus.PENDING);
+        expiredPtPayment.setReferenceId(expiredBooking.getId());
+        payments.saveAndFlush(expiredPtPayment);
+
+        Membership source = new Membership();
+        source.setMember(member);
+        source.setPlan(plan);
+        source.setAutoRenew(false);
+        source.setStartDate(LocalDate.now().minusDays(10));
+        source.setEndDate(LocalDate.now().plusDays(20));
+        source.setStatus("ACTIVE");
+        source = memberships.saveAndFlush(source);
+
+        var validUpgradePayment = queueFixture(member, PaymentMethod.COUNTER,
+                PaymentPurpose.UPGRADE, PaymentStatus.PENDING);
+        validUpgradePayment.setReferenceId(plan.getId());
+        payments.saveAndFlush(validUpgradePayment);
+        MembershipUpgrade validUpgrade = new MembershipUpgrade();
+        validUpgrade.setPayment(validUpgradePayment);
+        validUpgrade.setSourceMembership(source);
+        validUpgrade.setTargetPlan(plan);
+        validUpgrade.setRemainingDays(20);
+        validUpgrade.setExpiresAt(now().plusMinutes(10));
+        validUpgrade.setCreatedAt(now());
+        membershipUpgrades.saveAndFlush(validUpgrade);
+
+        var expiredUpgradePayment = queueFixture(member, PaymentMethod.COUNTER,
+                PaymentPurpose.UPGRADE, PaymentStatus.PENDING);
+        expiredUpgradePayment.setReferenceId(plan.getId());
+        payments.saveAndFlush(expiredUpgradePayment);
+        MembershipUpgrade expiredUpgrade = new MembershipUpgrade();
+        expiredUpgrade.setPayment(expiredUpgradePayment);
+        expiredUpgrade.setSourceMembership(source);
+        expiredUpgrade.setTargetPlan(plan);
+        expiredUpgrade.setRemainingDays(20);
+        expiredUpgrade.setExpiresAt(now().minusSeconds(1));
+        expiredUpgrade.setCreatedAt(now().minusMinutes(1));
+        membershipUpgrades.saveAndFlush(expiredUpgrade);
+
+        mvc.perform(get("/api/payments/me/actionable-summary").header("Authorization", bearer(member)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(3))
+                .andExpect(jsonPath("$.totalAmount").value(1025000));
+        assertEquals(PaymentStatus.PENDING, payments.findById(expiredPtPayment.getId()).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.PENDING, payments.findById(expiredUpgradePayment.getId()).orElseThrow().getStatus());
+
+        var onlinePayment = queueFixture(member, PaymentMethod.ONLINE,
+                PaymentPurpose.MEMBERSHIP, PaymentStatus.PENDING);
+        onlinePayment.setReferenceId(plan.getId());
+        onlinePayment = payments.saveAndFlush(onlinePayment);
+        mvc.perform(get("/api/payments/me/actionable-summary").header("Authorization", bearer(member)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.count").value(4));
+        clock.setInstant(clock.instant().plusSeconds(16 * 60));
+        mvc.perform(get("/api/payments/me/actionable-summary").header("Authorization", bearer(member)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.count").value(1));
+        assertEquals(PaymentStatus.PENDING, payments.findById(onlinePayment.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
     void canceledCourseHoldIsNeverRevivedByExplicitReceipt() {
         var hold = registration(member, "200000.00", "0.00");
         var payment = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION, hold.getId(), PaymentMethod.COUNTER), jwt(member));
@@ -1053,6 +1181,7 @@ class PaymentIntegrationTest {
     private void cleanDatabase() {
         jdbc.update("delete from audit_log");
         notifications.deleteAllInBatch();
+        membershipUpgrades.deleteAllInBatch();
         // Memberships reference the payment that bought them.
         memberships.deleteAll();
         payments.deleteAll();

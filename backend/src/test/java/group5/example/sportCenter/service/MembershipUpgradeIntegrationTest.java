@@ -54,7 +54,7 @@ import group5.example.sportCenter.repository.PaymentRepository;
 import group5.example.sportCenter.repository.UserRepository;
 import group5.example.sportCenter.security.JwtService;
 
-@SpringBootTest
+@SpringBootTest(properties = "app.payment.provider=mock")
 @ActiveProfiles("phase1")
 @Import(MembershipUpgradeIntegrationTest.TestClockConfiguration.class)
 class MembershipUpgradeIntegrationTest {

@@ -33,7 +33,29 @@ public interface PaymentRepository extends JpaRepository<Payment, Integer> {
 
     boolean existsByMember_IdAndPurposeInAndStatus(Integer memberId, List<PaymentPurpose> purposes, PaymentStatus status);
 
+    @Query("select case when count(p) > 0 then true else false end from Payment p "
+            + "where p.status = :status and p.purpose = :purpose "
+            + "and (p.note = :sourceMarker or p.note like concat(:sourceMarker, ' %'))")
+    boolean existsSuccessfulAutoRenewalForSource(@Param("status") PaymentStatus status,
+            @Param("purpose") PaymentPurpose purpose, @Param("sourceMarker") String sourceMarker);
+
     List<Payment> findByStatusAndPurposeAndNoteStartingWith(PaymentStatus status, PaymentPurpose purpose, String notePrefix);
+
+    @Query("select new group5.example.sportCenter.repository.PendingAutoRenewalLockRow(p.id, p.member.id, p.note) "
+            + "from Payment p where p.status = :status and p.purpose = :purpose and p.note like concat(:notePrefix, '%') "
+            + "order by p.id")
+    List<PendingAutoRenewalLockRow> findPendingAutoRenewalLockRows(
+            @Param("status") PaymentStatus status, @Param("purpose") PaymentPurpose purpose,
+            @Param("notePrefix") String notePrefix);
+
+    @Query("select new group5.example.sportCenter.repository.PendingAutoRenewalLockRow(p.id, p.member.id, p.note) "
+            + "from Payment p where p.transactionCode = :transactionCode")
+    Optional<PendingAutoRenewalLockRow> findCallbackLockRow(
+            @Param("transactionCode") String transactionCode);
+
+    @Query("select new group5.example.sportCenter.repository.PendingAutoRenewalLockRow(p.id, p.member.id, p.note) "
+            + "from Payment p where p.id = :paymentId")
+    Optional<PendingAutoRenewalLockRow> findPaymentLockRow(@Param("paymentId") Integer paymentId);
 
     // Scalar projection avoids lazy-loading member/course/class entities for each queue row.
     // referenceId is purpose-scoped; it is not a mapped Payment -> registration association.
@@ -88,6 +110,9 @@ public interface PaymentRepository extends JpaRepository<Payment, Integer> {
     Page<PendingPtPaymentResponse> findPendingPtPayments(@Param("now") LocalDateTime now, Pageable pageable);
 
     List<Payment> findByMemberIdOrderByCreatedAtDesc(Integer memberId);
+
+    List<Payment> findByMemberIdAndStatusOrderByCreatedAtDesc(
+            Integer memberId, PaymentStatus status);
 
     Optional<Payment> findByTransactionCode(String transactionCode);
 

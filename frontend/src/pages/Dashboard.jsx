@@ -12,7 +12,7 @@ import {
   getPublicMembershipPlansApi, getAssignedPtBookingsApi, getMySkillAssessmentAssignmentsApi,
     getMyPtBookingsApi, getMyMemberSportLevelsApi,
     getCurrentUserApi, getMembershipsByMemberApi, getMyClassSessionsApi,
-  getMyAttendanceApi, getMyPaymentsApi, getAdminRevenueReportApi,
+  getMyAttendanceApi, getMyActionablePendingPaymentSummaryApi, getAdminRevenueReportApi,
   getTrainingClassesApi, getCoachAttendanceSessionsApi,
 } from "../api";
 import { confirmedEnrollmentCount, upcomingTeachingSessions } from "../coachDashboard.js";
@@ -45,7 +45,8 @@ const LOADERS = {
   },
   MEMBER: {
     bookings: getMyPtBookingsApi, sessions: getMyClassSessionsApi,
-    levels: getMyMemberSportLevelsApi, attendance: getMyAttendanceApi, payments: getMyPaymentsApi,
+    levels: getMyMemberSportLevelsApi, attendance: getMyAttendanceApi,
+    actionablePayments: getMyActionablePendingPaymentSummaryApi,
     profile: async (t) => {
       const user = await getCurrentUserApi(t);
       const memberships = list(await getMembershipsByMemberApi(t, user.id));
@@ -315,8 +316,9 @@ function Member({ d, errors = {}, onNavigate }) {
     .sort((a, b) => new Date(b.when) - new Date(a.when));
   const month = att.filter((a) => a.when && new Date(a.when).getMonth() === now.getMonth() && new Date(a.when).getFullYear() === now.getFullYear());
   const attended = month.filter((a) => /PRESENT|ON_TIME|LATE/i.test(a.status || "")).length;
-  const pendingBills = list(d.payments).filter((p) => p.status === "PENDING");
-  const billTotal = pendingBills.reduce((a, p) => a + Number(p.amount || 0), 0);
+  const actionablePayments = d.actionablePayments;
+  const pendingBillCount = actionablePayments?.count;
+  const pendingBillTotal = actionablePayments?.totalAmount;
   const levels = list(d.levels);
 
   return (<>
@@ -358,9 +360,10 @@ function Member({ d, errors = {}, onNavigate }) {
         sub={scheduledClassIds.size ? "Từ các buổi học đã đăng ký" : "Chưa có buổi học đăng ký"} />
       <MStat icon={ICON.ok} tone="purple" label="Điểm danh tháng này" value={<>{attended}<em> / {month.length}</em></>}
         sub={month.length ? "Đạt " + Math.round((attended / month.length) * 100) + "% số buổi" : "Chưa có buổi nào trong tháng"} />
-      <MStat icon={ICON.bill} tone={pendingBills.length ? "orange" : "gray"} label="Hóa đơn chờ thanh toán"
-        value={<>{pendingBills.length}{pendingBills.length > 0 && <em> ({vnd(billTotal)})</em>}</>}
-        sub="Không có hóa đơn nào đang chờ" action={pendingBills.length ? "Xem gói / thanh toán" : ""} onAction={() => onNavigate("member-membership")} />
+      <MStat icon={ICON.bill} tone={pendingBillCount > 0 ? "orange" : "gray"} label="Khoản có thể thanh toán"
+        value={actionablePayments == null ? "—" : <>{pendingBillCount}{pendingBillCount > 0 && <em> ({vnd(pendingBillTotal)})</em>}</>}
+        sub={errors.actionablePayments ? "Không tải được trạng thái thanh toán: " + errors.actionablePayments
+          : pendingBillCount > 0 ? "Gồm các khoản còn hạn của gói, khóa học hoặc PT" : "Không có khoản nào còn đủ điều kiện thanh toán"} />
     </div>
 
     <div className="md-grid">

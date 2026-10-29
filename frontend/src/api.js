@@ -464,6 +464,10 @@ export function getMyPaymentsApi(token) {
   return request("/api/payments/me", { headers: authenticatedHeaders(token) });
 }
 
+export function getMyActionablePendingPaymentSummaryApi(token) {
+  return request("/api/payments/me/actionable-summary", { headers: authenticatedHeaders(token) });
+}
+
 export function getMemberPaymentsApi(token, memberId) {
   return request("/api/payments/member/" + encodeURIComponent(memberId), {
     headers: authenticatedHeaders(token),
@@ -891,4 +895,35 @@ export function evaluateProgressApi(token, classId, memberId, payload) {
 
 export function getMyTrainingApi(token) {
   return request("/api/training/me", { headers: authenticatedHeaders(token) });
+}
+
+export function createIndividualTrainingPlanApi(token, classId, memberId, payload) {
+  return request(`/api/training/classes/${encodeURIComponent(classId)}/members/${encodeURIComponent(memberId)}/individual-plan`,
+    trainingJson(token, "POST", payload));
+}
+
+export function getClassIndividualTrainingPlansApi(token, classId) {
+  return request(`/api/training/classes/${encodeURIComponent(classId)}/individual-plans`, {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function updateIndividualTrainingPlanApi(token, planId, payload) {
+  return request(`/api/training/individual-plans/${encodeURIComponent(planId)}`, trainingJson(token, "PUT", payload));
+}
+
+export function getMyIndividualTrainingPlansApi(token) {
+  return request("/api/training/me/individual-plans", { headers: authenticatedHeaders(token) });
+}
+
+export function getIndividualTrainingPlanApi(token, planId) {
+  return request(`/api/training/individual-plans/${encodeURIComponent(planId)}`, {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function getIndividualTrainingPlanRevisionsApi(token, planId) {
+  return request(`/api/training/individual-plans/${encodeURIComponent(planId)}/revisions`, {
+    headers: authenticatedHeaders(token),
+  });
 }

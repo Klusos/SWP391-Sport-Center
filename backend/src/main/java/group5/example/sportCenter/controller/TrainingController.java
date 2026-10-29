@@ -24,6 +24,10 @@ import group5.example.sportCenter.dto.TrainingClassResponse;
 import group5.example.sportCenter.dto.TrainingExerciseRequest;
 import group5.example.sportCenter.dto.TrainingExerciseResponse;
 import group5.example.sportCenter.dto.TrainingPlanResponse;
+import group5.example.sportCenter.dto.IndividualTrainingPlanRequest;
+import group5.example.sportCenter.dto.IndividualTrainingPlanResponse;
+import group5.example.sportCenter.dto.IndividualTrainingPlanRevisionResponse;
+import group5.example.sportCenter.service.IndividualTrainingPlanService;
 import group5.example.sportCenter.dto.TrainingResultResponse;
 import group5.example.sportCenter.dto.TrainingResultSheetResponse;
 import group5.example.sportCenter.dto.TrainingSessionResponse;
@@ -36,9 +40,11 @@ import jakarta.validation.Valid;
 public class TrainingController {
 
     private final TrainingService trainingService;
+    private final IndividualTrainingPlanService individualTrainingPlans;
 
-    public TrainingController(TrainingService trainingService) {
+    public TrainingController(TrainingService trainingService, IndividualTrainingPlanService individualTrainingPlans) {
         this.trainingService = trainingService;
+        this.individualTrainingPlans = individualTrainingPlans;
     }
 
     @GetMapping("/classes")
@@ -113,5 +119,42 @@ public class TrainingController {
     @GetMapping("/me")
     public List<MemberTrainingClassResponse> mine(@AuthenticationPrincipal Jwt jwt) {
         return trainingService.mine(jwt);
+    }
+
+    @PostMapping("/classes/{classId}/members/{memberId}/individual-plan")
+    @ResponseStatus(HttpStatus.CREATED)
+    public IndividualTrainingPlanResponse createIndividualPlan(@PathVariable Integer classId,
+            @PathVariable Integer memberId, @Valid @RequestBody IndividualTrainingPlanRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        return individualTrainingPlans.create(classId, memberId, request, jwt);
+    }
+
+    @GetMapping("/classes/{classId}/individual-plans")
+    public List<IndividualTrainingPlanResponse> individualPlansForClass(@PathVariable Integer classId,
+            @AuthenticationPrincipal Jwt jwt) {
+        return individualTrainingPlans.forClass(classId, jwt);
+    }
+
+    @GetMapping("/me/individual-plans")
+    public List<IndividualTrainingPlanResponse> myIndividualPlans(@AuthenticationPrincipal Jwt jwt) {
+        return individualTrainingPlans.mine(jwt);
+    }
+
+    @GetMapping("/individual-plans/{planId}")
+    public IndividualTrainingPlanResponse individualPlan(@PathVariable Integer planId,
+            @AuthenticationPrincipal Jwt jwt) {
+        return individualTrainingPlans.detail(planId, jwt);
+    }
+
+    @PutMapping("/individual-plans/{planId}")
+    public IndividualTrainingPlanResponse reviseIndividualPlan(@PathVariable Integer planId,
+            @Valid @RequestBody IndividualTrainingPlanRequest request, @AuthenticationPrincipal Jwt jwt) {
+        return individualTrainingPlans.revise(planId, request, jwt);
+    }
+
+    @GetMapping("/individual-plans/{planId}/revisions")
+    public List<IndividualTrainingPlanRevisionResponse> individualPlanHistory(@PathVariable Integer planId,
+            @AuthenticationPrincipal Jwt jwt) {
+        return individualTrainingPlans.history(planId, jwt);
     }
 }

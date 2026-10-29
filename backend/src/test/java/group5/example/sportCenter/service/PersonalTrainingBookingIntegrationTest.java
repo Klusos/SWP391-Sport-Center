@@ -76,6 +76,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @TestPropertySource(properties = "app.pt.session-base-price=500000")
 class PersonalTrainingBookingIntegrationTest {
     @Autowired PersonalTrainingBookingService service;
+    @Autowired ClassSessionService classSessionService;
     @Autowired PtBookingExpirationService expirationService;
     @Autowired UserRepository users;
     @Autowired JdbcTemplate jdbc;
@@ -87,6 +88,7 @@ class PersonalTrainingBookingIntegrationTest {
     @Autowired MembershipRepository memberships;
     @Autowired PersonalTrainingBookingRepository bookings;
     @Autowired ClassSessionRepository classSessions;
+    @Autowired CoachScheduleConflictService coachScheduleConflicts;
     @Autowired CourseClassRepository classes;
     @Autowired CourseOfferingRepository offerings;
     @Autowired CourseRepository courses;
@@ -297,6 +299,76 @@ class PersonalTrainingBookingIntegrationTest {
     }
 
     @Test
+    void concurrentPtAndClassSessionCreationSerializeOnTheCoachLock() throws Exception {
+        Course course = new Course();
+        course.setSport(sport);
+        course.setName("Cross-flow schedule course");
+        course.setStatus("ACTIVE");
+        course = courses.saveAndFlush(course);
+        CourseOffering offering = new CourseOffering();
+        offering.setCourse(course);
+        offering.setName("Cross-flow schedule offering");
+        offering.setPrice(new BigDecimal("100.00"));
+        offering.setSessionDuration(60);
+        offering.setPlannedSessions(1);
+        offering.setStartDate(slot.toLocalDate());
+        offering.setEndDate(slot.toLocalDate().plusDays(1));
+        offering.setRegistrationDeadline(slot.minusDays(1));
+        offering.setCancellationDeadline(slot.minusDays(1));
+        offering.setStatus("OPEN");
+        offering = offerings.saveAndFlush(offering);
+        CourseClass group = new CourseClass();
+        group.setCourseOffering(offering);
+        group.setCoach(coach);
+        group.setName("Cross-flow schedule class");
+        group.setCapacity(10);
+        group.setStatus("ACTIVE");
+        group = classes.saveAndFlush(group);
+
+        Integer classId = group.getId();
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try (ExecutorService pool = Executors.newFixedThreadPool(2)) {
+            Future<String> pt = pool.submit(() -> crossFlowAttempt(start, ready, () ->
+                    service.create(jwt, request(coach, sport, slot))));
+            Future<String> classSession = pool.submit(() -> crossFlowAttempt(start, ready, () -> {
+                var create = new group5.example.sportCenter.dto.CreateClassSessionRequest();
+                create.setClassId(classId);
+                create.setStartTime(slot);
+                create.setEndTime(slot.plusHours(1));
+                create.setStatus("SCHEDULED");
+                return classSessionService.create(create);
+            }));
+            assertTrue(ready.await(5, TimeUnit.SECONDS), "both scheduling transactions must reach the start gate");
+            start.countDown();
+            List<String> outcomes = List.of(pt.get(15, TimeUnit.SECONDS), classSession.get(15, TimeUnit.SECONDS));
+            assertEquals(1, outcomes.stream().filter("CREATED"::equals).count(), outcomes.toString());
+            assertEquals(1, outcomes.stream().filter("CONFLICT"::equals).count(), outcomes.toString());
+        }
+
+        LocalDateTime end = slot.plusHours(2);
+        int activePt = bookings.existsCoachOverlap(coach.getId(), slot, end, LocalDateTime.now(clock)) ? 1 : 0;
+        int activeClass = classSessions.existsByCourseClass_Coach_IdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThan(
+                coach.getId(), "CANCELLED", end, slot) ? 1 : 0;
+        assertEquals(1, activePt + activeClass, "exactly one committed reservation may occupy the slot");
+    }
+
+    private String crossFlowAttempt(CountDownLatch start, CountDownLatch ready, java.util.concurrent.Callable<?> action)
+            throws Exception {
+        ready.countDown();
+        assertTrue(start.await(5, TimeUnit.SECONDS), "cross-flow start gate was not released");
+        try {
+            action.call();
+            return "CREATED";
+        } catch (ResponseStatusException exception) {
+            if (exception.getStatusCode().value() == 409) return "CONFLICT";
+            throw exception;
+        } catch (IllegalArgumentException exception) {
+            return "CONFLICT";
+        }
+    }
+
+    @Test
     void rejectsUnqualifiedCoachAndPastBooking() {
         Sport other = new Sport();
         other.setName("Other PT Sport");
@@ -430,7 +502,7 @@ class PersonalTrainingBookingIntegrationTest {
     @Test
     void missingBasePriceFailsClearlyInsteadOfSubstitutingAValue() {
         PersonalTrainingBookingService unconfigured = new PersonalTrainingBookingService(bookings, users, coaches,
-                coachSports, sports, memberships, classSessions, payments, notificationService, clock, "");
+                coachSports, sports, memberships, coachScheduleConflicts, payments, notificationService, clock, "");
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> unconfigured.eligibleCoaches(jwt, sport.getId(), slot));
         assertEquals(503, exception.getStatusCode().value());

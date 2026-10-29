@@ -2,6 +2,8 @@ package group5.example.sportCenter.service;
 
 import java.util.List;
 import java.util.Objects;
+import java.time.Clock;
+import java.time.LocalDateTime;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +17,7 @@ import group5.example.sportCenter.entity.CourseOffering;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.CoachRepository;
 import group5.example.sportCenter.repository.CoachSportRepository;
+import group5.example.sportCenter.repository.ClassSessionRepository;
 import group5.example.sportCenter.repository.CourseClassRepository;
 import group5.example.sportCenter.repository.CourseOfferingRepository;
 
@@ -26,6 +29,9 @@ public class CourseClassService {
     private final CourseOfferingRepository courseOfferingRepository;
     private final CoachRepository coachRepository;
     private final CoachSportRepository coachSportRepository;
+    private final ClassSessionRepository classSessionRepository;
+    private final CoachScheduleConflictService coachScheduleConflicts;
+    private final Clock clock;
     private final ApplicationEventPublisher events;
 
     public CourseClassService(
@@ -33,13 +39,19 @@ public class CourseClassService {
             CourseOfferingRepository courseOfferingRepository,
             CoachRepository coachRepository,
             CoachSportRepository coachSportRepository,
-            ApplicationEventPublisher events) {
+            ApplicationEventPublisher events,
+            ClassSessionRepository classSessionRepository,
+            CoachScheduleConflictService coachScheduleConflicts,
+            Clock clock) {
 
         this.courseClassRepository = courseClassRepository;
         this.courseOfferingRepository = courseOfferingRepository;
         this.coachRepository = coachRepository;
         this.coachSportRepository = coachSportRepository;
         this.events = events;
+        this.classSessionRepository = classSessionRepository;
+        this.coachScheduleConflicts = coachScheduleConflicts;
+        this.clock = clock;
     }
 
     @Transactional
@@ -176,6 +188,28 @@ public class CourseClassService {
 
             throw new IllegalArgumentException(
                     "Coach is not qualified for this sport");
+        }
+
+        if (!Objects.equals(previousCoachId, coach.getId())) {
+            LocalDateTime now = LocalDateTime.now(clock);
+            List<group5.example.sportCenter.entity.ClassSession> relevantSessions = classSessionRepository
+                    .findByCourseClassId(courseClass.getId()).stream()
+                    .filter(session -> !"CANCELLED".equalsIgnoreCase(session.getStatus()))
+                    .filter(session -> session.getEndTime().isAfter(now))
+                    .toList();
+            for (int i = 0; i < relevantSessions.size(); i++) {
+                var session = relevantSessions.get(i);
+                for (int j = i + 1; j < relevantSessions.size(); j++) {
+                    var other = relevantSessions.get(j);
+                    if (session.getStartTime().isBefore(other.getEndTime())
+                            && session.getEndTime().isAfter(other.getStartTime())) {
+                        throw new IllegalArgumentException(
+                                "The CourseClass contains overlapping sessions and cannot be reassigned to this coach");
+                    }
+                }
+                coachScheduleConflicts.requireNoConflict(coach.getId(), session.getStartTime(),
+                        session.getEndTime(), session.getId());
+            }
         }
 
         courseClass.setCoach(coach);

@@ -34,6 +34,12 @@ public interface MembershipRepository extends JpaRepository<Membership, Integer>
     List<Membership> findActiveAndValidForPt(@Param("memberId") Integer memberId,
             @Param("sessionDate") LocalDate sessionDate);
 
+    @Query("select m from Membership m join fetch m.plan where m.member.id = :memberId "
+            + "and upper(m.status) = 'ACTIVE' and m.startDate <= :today and m.endDate > :today "
+            + "and m.plan.allowPersonalTrainingPlan = true")
+    List<Membership> findEffectivePersonalTrainingPlanMemberships(@Param("memberId") Integer memberId,
+            @Param("today") LocalDate today);
+
     // Các gói sắp hết hạn (phục vụ nhắc gia hạn / report)
     List<Membership> findByStatusAndEndDateBetween(String status, LocalDate from, LocalDate to);
     
