@@ -25,4 +25,7 @@ public class CreatePaymentRequest {
 
     /** Dùng khi purpose = MEMBERSHIP; mặc định false. */
     private Boolean autoRenew;
+
+    /** Only for replacing a cancelled auto-renew COUNTER request with VNPay. */
+    private Integer renewalSourcePaymentId;
 }

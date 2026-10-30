@@ -4,15 +4,18 @@ import Sidebar from "../components/Sidebar";
 import RevenueBars from "../components/RevenueBars";
 import { defaultRevenueRange, formatVnd } from "../revenueReport";
 import { upcomingPtBookings } from "../ptBooking";
+import { isMembershipEffective, todayInVietnam } from "../membershipDates";
 import "./Dashboard.css";
 import "./Membertheme.css";
 import {
   getUsersApi, getSportsApi, getCoachesApi, getConsultationRequestsApi,
   getPublicMembershipPlansApi, getAssignedPtBookingsApi, getMySkillAssessmentAssignmentsApi,
-  getMyPtBookingsApi, getMyMemberSportLevelsApi, getMySkillAssessmentsApi,
-  getMyConsultationRequestsApi, getCurrentUserApi, getMembershipsByMemberApi, getMyClassSessionsApi,
-  getMyRegistrationsApi, getMyAttendanceApi, getMyPaymentsApi, getAdminRevenueReportApi,
+    getMyPtBookingsApi, getMyMemberSportLevelsApi,
+    getCurrentUserApi, getMembershipsByMemberApi, getMyClassSessionsApi,
+  getMyAttendanceApi, getMyActionablePendingPaymentSummaryApi, getAdminRevenueReportApi,
+  getTrainingClassesApi, getCoachAttendanceSessionsApi,
 } from "../api";
+import { confirmedEnrollmentCount, upcomingTeachingSessions } from "../coachDashboard.js";
 
 /* ---------- helpers ---------- */
 const list = (d) => (Array.isArray(d) ? d : d?.content ?? []);
@@ -34,18 +37,26 @@ const LOADERS = {
     members: memberUsers, sports: getSportsApi, plans: getPublicMembershipPlansApi,
     requests: (t) => getConsultationRequestsApi(t, { size: 100 }),
   },
-  COACH: { bookings: getAssignedPtBookingsApi, assessments: getMySkillAssessmentAssignmentsApi },
+  COACH: {
+    bookings: getAssignedPtBookingsApi,
+    assessments: getMySkillAssessmentAssignmentsApi,
+    classes: getTrainingClassesApi,
+    teachingSessions: getCoachAttendanceSessionsApi,
+  },
   MEMBER: {
-    bookings: getMyPtBookingsApi, sessions: getMyClassSessionsApi, regs: getMyRegistrationsApi,
-    levels: getMyMemberSportLevelsApi, attendance: getMyAttendanceApi, payments: getMyPaymentsApi,
-    profile: (t) => getCurrentUserApi(t).then(async (user) => ({
-      user, memberships: list(await getMembershipsByMemberApi(t, user.id).catch(() => [])),
-    })),
+    bookings: getMyPtBookingsApi, sessions: getMyClassSessionsApi,
+    levels: getMyMemberSportLevelsApi, attendance: getMyAttendanceApi,
+    actionablePayments: getMyActionablePendingPaymentSummaryApi,
+    profile: async (t) => {
+      const user = await getCurrentUserApi(t);
+      const memberships = list(await getMembershipsByMemberApi(t, user.id));
+      return { user, memberships };
+    },
   },
 };
 
 function useLoad(token, role) {
-  const [state, setState] = useState({ data: {}, loading: true });
+  const [state, setState] = useState({ data: {}, errors: {}, loading: true });
   useEffect(() => {
     let off = false;
     const loaders = LOADERS[role] || {};
@@ -53,8 +64,15 @@ function useLoad(token, role) {
     Promise.allSettled(keys.map((k) => loaders[k](token))).then((rs) => {
       if (off) return;
       const data = {};
-      keys.forEach((k, i) => { data[k] = rs[i].status === "fulfilled" ? rs[i].value : null; });
-      setState({ data, loading: false });
+      const errors = {};
+      keys.forEach((k, i) => {
+        if (rs[i].status === "fulfilled") data[k] = rs[i].value;
+        else {
+          data[k] = null;
+          errors[k] = rs[i].reason?.message || "Không thể tải dữ liệu.";
+        }
+      });
+      setState({ data, errors, loading: false });
     });
     return () => { off = true; };
   }, [token, role]);
@@ -183,22 +201,43 @@ function BookingList({ items, who }) {
   );
 }
 
-function Coach({ d }) {
+function Coach({ d, errors = {} }) {
   const up = upcoming(d.bookings);
   const pending = list(d.assessments).filter((a) => !/COMPLETED|CANCEL/i.test(a.status || ""));
+  const classes = list(d.classes);
+  const teachingSessions = upcomingTeachingSessions(d.teachingSessions);
+  const upcomingPt = up;
   return (<>
     <Stats items={[
-      { label: "Buổi PT được giao", value: total(d.bookings), color: "blue" },
-      { label: "Sắp diễn ra", value: d.bookings == null ? "—" : up.length, color: "green" },
+      { label: "Lớp được phân công", value: total(d.classes), color: "blue" },
+      { label: "Lượt đăng ký lớp đã xác nhận", value: d.classes == null ? "—" : confirmedEnrollmentCount(classes), color: "green" },
+      { label: "Buổi dạy sắp tới", value: d.teachingSessions == null ? "—" : teachingSessions.length, color: "orange" },
+      { label: "Buổi PT sắp tới", value: d.bookings == null ? "—" : upcomingPt.length, color: "blue" },
       { label: "Đánh giá cần làm", value: d.assessments == null ? "—" : pending.length, color: "orange" },
-      { label: "Tổng đánh giá", value: total(d.assessments), color: "blue" },
     ]} />
     <div className="dash-grid wide">
-      <Card title="Buổi huấn luyện sắp tới">
-        <BookingList items={up} who={(b) => b.memberName || b.memberFullName || b.member?.fullName || ""} />
+      <Card title="Lớp được phân công" note={errors.classes ? "" : `${classes.length} lớp`}>
+        {errors.classes ? <p className="dash-error" role="alert">Không tải được danh sách lớp: {errors.classes}</p>
+          : classes.length === 0 ? <Empty>Chưa có lớp nào được phân công.</Empty>
+            : <ul className="dash-rows">{classes.slice(0, 6).map((item) => <li key={item.classId}>
+              <span><b>{item.className || `Lớp #${item.classId}`}</b><br /><small>{[item.courseName, item.sportName].filter(Boolean).join(" · ")}</small></span>
+              <em>{Number(item.confirmedMembers || 0)} học viên</em>
+            </li>)}</ul>}
+        <Link className="coach-dashboard-link" to="/coach/training">Mở quản lý giáo án</Link>
+      </Card>
+      <Card title="Lịch dạy sắp tới" note="Lớp học">
+        {errors.teachingSessions ? <p className="dash-error" role="alert">Không tải được lịch dạy: {errors.teachingSessions}</p>
+          : <TeachingSessionList items={teachingSessions} />}
+        <Link className="coach-dashboard-link" to="/coach/schedule">Mở lịch trình</Link>
+      </Card>
+      <Card title="Buổi PT sắp tới">
+        {errors.bookings ? <p className="dash-error" role="alert">Không tải được lịch PT: {errors.bookings}</p>
+          : <BookingList items={upcomingPt} who={(b) => b.memberName || b.memberFullName || b.member?.fullName || ""} />}
+        <Link className="coach-dashboard-link" to="/coach/pt-sessions">Mở các buổi PT</Link>
       </Card>
       <Card title="Đánh giá kỹ năng cần làm">
-        {pending.length === 0 ? <Empty>Không có đánh giá nào đang chờ.</Empty> : (
+        {errors.assessments ? <p className="dash-error" role="alert">Không tải được đánh giá: {errors.assessments}</p>
+          : pending.length === 0 ? <Empty>Không có đánh giá nào đang chờ.</Empty> : (
           <ul className="dash-rows">
             {pending.slice(0, 5).map((a) => (
               <li key={a.id}><span>{a.memberName || a.memberFullName || "Học viên"}</span><em>{a.sportName || a.sport?.name || ""}</em></li>
@@ -208,6 +247,15 @@ function Coach({ d }) {
       </Card>
     </div>
   </>);
+}
+
+function TeachingSessionList({ items }) {
+  if (items.length === 0) return <Empty>Không có buổi dạy sắp tới.</Empty>;
+  return <ul className="dash-sessions">{items.slice(0, 5).map((session) => <li key={session.classSessionId}>
+    <div><small>{fmt(session.startTime)}</small><b>{session.courseClassName || "Lớp học"}</b></div>
+    <span>{[session.courseName, session.sportName].filter(Boolean).join(" · ")}</span>
+    <em>{session.sessionStatus || "SCHEDULED"}</em>
+  </li>)}</ul>;
 }
 
 const ICON = {
@@ -242,10 +290,11 @@ function MStat({ icon, tone, label, value, sub, action, onAction }) {
   );
 }
 
-function Member({ d, onNavigate }) {
+function Member({ d, errors = {}, onNavigate }) {
   const user = d.profile?.user;
   const memberships = d.profile?.memberships || [];
-  const active = memberships.filter((m) => m.status === "ACTIVE").sort((a, b) => String(b.endDate).localeCompare(String(a.endDate)))[0];
+  const active = memberships.filter((membership) => isMembershipEffective(membership, todayInVietnam()))
+    .sort((a, b) => String(b.endDate).localeCompare(String(a.endDate)))[0];
   const now = new Date();
 
   let left = 0, totalDays = 1;
@@ -262,15 +311,15 @@ function Member({ d, onNavigate }) {
     ...classUp.map((s) => ({ id: "cs" + s.id, start: s.startTime, end: s.endTime, title: s.className || "Lớp #" + s.classId, tag: "Lớp học", place: s.facilityName || "", person: "", status: s.status })),
   ].sort((a, b) => new Date(a.start) - new Date(b.start)).slice(0, 4);
 
-  const regs = list(d.regs).filter((r) => !r.status || r.status === "CONFIRMED");
+  const scheduledClassIds = new Set(list(d.sessions).map((session) => session.classId).filter((id) => id != null));
   const att = list(d.attendance).map((a) => ({ ...a, when: pick(a, "startTime", "sessionStartTime", "markedAt", "date", "createdAt"), name: pick(a, "className", "sessionName", "courseName") }))
     .sort((a, b) => new Date(b.when) - new Date(a.when));
   const month = att.filter((a) => a.when && new Date(a.when).getMonth() === now.getMonth() && new Date(a.when).getFullYear() === now.getFullYear());
   const attended = month.filter((a) => /PRESENT|ON_TIME|LATE/i.test(a.status || "")).length;
-  const pendingBills = list(d.payments).filter((p) => p.status === "PENDING");
-  const billTotal = pendingBills.reduce((a, p) => a + Number(p.amount || 0), 0);
+  const actionablePayments = d.actionablePayments;
+  const pendingBillCount = actionablePayments?.count;
+  const pendingBillTotal = actionablePayments?.totalAmount;
   const levels = list(d.levels);
-  const nextOne = schedule[0];
 
   return (<>
     <header className="md-greet">
@@ -298,8 +347,8 @@ function Member({ d, onNavigate }) {
           <button type="button" className="md-ghost" onClick={() => onNavigate("member-membership")}><Ic d={ICON.renew} size={18} /> Gia hạn gói</button>
         </div>
       </>) : (<>
-        <h2>Bạn chưa có gói thành viên</h2>
-        <p>Chọn một gói để mở khóa ưu đãi khóa học và huấn luyện viên cá nhân.</p>
+        <h2>{errors.profile ? "Không tải được trạng thái gói hội viên" : "Bạn chưa có gói thành viên"}</h2>
+        <p>{errors.profile ? errors.profile : "Chọn một gói để mở khóa ưu đãi khóa học và huấn luyện viên cá nhân."}</p>
         <div className="md-hero-bottom"><span /><button type="button" className="md-ghost" onClick={() => onNavigate("member-membership")}>Xem các gói</button></div>
       </>)}
     </section>
@@ -307,13 +356,14 @@ function Member({ d, onNavigate }) {
     <div className="md-stats">
       <MStat icon={ICON.pt} tone="blue" label="Buổi PT sắp tới" value={ptUp.length}
         sub={ptUp[0] ? "Buổi tiếp theo: " + hm(ptUp[0].startTime) + " " + WD[new Date(ptUp[0].startTime).getDay()] : "Chưa có buổi nào"} />
-      <MStat icon={ICON.cls} tone="green" label="Lớp đang học" value={regs.length}
-        sub={regs.slice(0, 3).map((r) => r.className).filter(Boolean).join(", ") || "Chưa đăng ký lớp"} />
+      <MStat icon={ICON.cls} tone="green" label="Lớp có buổi học" value={scheduledClassIds.size}
+        sub={scheduledClassIds.size ? "Từ các buổi học đã đăng ký" : "Chưa có buổi học đăng ký"} />
       <MStat icon={ICON.ok} tone="purple" label="Điểm danh tháng này" value={<>{attended}<em> / {month.length}</em></>}
         sub={month.length ? "Đạt " + Math.round((attended / month.length) * 100) + "% số buổi" : "Chưa có buổi nào trong tháng"} />
-      <MStat icon={ICON.bill} tone={pendingBills.length ? "orange" : "gray"} label="Hóa đơn chờ thanh toán"
-        value={<>{pendingBills.length}{pendingBills.length > 0 && <em> ({vnd(billTotal)})</em>}</>}
-        sub="Không có hóa đơn nào đang chờ" action={pendingBills.length ? "Thanh toán ngay" : ""} onAction={() => onNavigate("member-payments")} />
+      <MStat icon={ICON.bill} tone={pendingBillCount > 0 ? "orange" : "gray"} label="Khoản có thể thanh toán"
+        value={actionablePayments == null ? "—" : <>{pendingBillCount}{pendingBillCount > 0 && <em> ({vnd(pendingBillTotal)})</em>}</>}
+        sub={errors.actionablePayments ? "Không tải được trạng thái thanh toán: " + errors.actionablePayments
+          : pendingBillCount > 0 ? "Gồm các khoản còn hạn của gói, khóa học hoặc PT" : "Không có khoản nào còn đủ điều kiện thanh toán"} />
     </div>
 
     <div className="md-grid">
@@ -382,7 +432,7 @@ const TITLES = {
 };
 
 export default function Dashboard({ token, role, onLogout, onNavigate }) {
-  const { data, loading } = useLoad(token, role);
+  const { data, errors, loading } = useLoad(token, role);
   const [title, sub] = TITLES[role] || TITLES.MEMBER;
   const View = { ADMIN: Admin, RECEPTIONIST: Receptionist, COACH: Coach, MEMBER: Member }[role] || Member;
 
@@ -392,7 +442,7 @@ export default function Dashboard({ token, role, onLogout, onNavigate }) {
       <main className="main dash-main">
         {role !== "MEMBER" && <><h1>{title}</h1>
         <p className="subtitle">{sub || "Hôm nay: " + today}</p></>}
-        {loading ? <div className="queue-state">Đang tải dữ liệu…</div> : <View d={data} onNavigate={onNavigate} token={token} />}
+        {loading ? <div className="queue-state">Đang tải dữ liệu…</div> : <View d={data} errors={errors} onNavigate={onNavigate} token={token} />}
       </main>
     </div>
   );

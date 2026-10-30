@@ -12,6 +12,10 @@ SET NUMERIC_ROUNDABORT OFF;
 SET XACT_ABORT ON;
 SET NOCOUNT ON;
 
+IF CONVERT(nvarchar(128), SERVERPROPERTY('ServerName')) <> N'sportcenter-recovery-sql'
+    THROW 51001, 'Unexpected SQL Server instance. Expected sportcenter-recovery-sql.', 1;
+IF @@SERVERNAME <> N'sportcenter-recovery-sql'
+    THROW 51002, 'Unexpected @@SERVERNAME. Expected sportcenter-recovery-sql.', 1;
 IF DB_NAME() <> N'SportCenterDB'
     THROW 51003, 'Unexpected database. Select SportCenterDB before running the Flow 4 Training migration.', 1;
 IF DATABASEPROPERTYEX(DB_NAME(), 'Status') <> N'ONLINE'

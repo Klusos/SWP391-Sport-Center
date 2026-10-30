@@ -905,6 +905,35 @@
   color: var(--success);
 }
 
+.pt-main .pt-payment-actions { display:grid; gap:10px; margin-top:10px; }
+.pt-main .pt-payment-choice,.pt-main .pt-payment-state { display:grid; justify-items:start; gap:8px; padding:12px; border:1px solid var(--border); border-radius:10px; background:#f8fbff; }
+.pt-main .pt-payment-choice button,.pt-main .pt-secondary-button { padding:8px 12px; border:1px solid #1769a0; border-radius:8px; background:#1769a0; color:#fff; cursor:pointer; }
+.pt-main .pt-payment-choice button:disabled,.pt-main .pt-secondary-button:disabled { opacity:.55; cursor:default; }
+.pt-main .pt-payment-choice button:focus-visible,.pt-main .pt-secondary-button:focus-visible { outline:3px solid #dfaa23; outline-offset:3px; }
+
+.pt-actionable-card { border-color:#e7b94d; box-shadow:0 10px 28px rgba(126,88,15,.1); }
+.pt-actionable-list,.pt-compact-history { display:grid; gap:10px; }
+.pt-booking-summary { display:grid; grid-template-columns:minmax(0,1fr) minmax(220px,.75fr); gap:18px; padding:16px 18px; border:1px solid var(--border); border-radius:12px; background:#fff; }
+.pt-booking-summary.is-actionable { border-color:#e8c66f; background:linear-gradient(110deg,#fffdf7,#fff); }
+.pt-booking-summary-main,.pt-booking-summary-side { display:grid; align-content:start; justify-items:start; gap:8px; min-width:0; }
+.pt-booking-summary-main > strong { color:var(--navy); }
+.pt-booking-summary-main > span:not(.pt-status),.pt-booking-summary-main > small { color:var(--text-sub); }
+.pt-booking-summary-main > .pt-expired-hold { color:#986318; }
+.pt-booking-summary-side > strong { color:var(--navy); font-size:1.05rem; }
+.pt-history-controls { display:grid; grid-template-columns:minmax(200px,1fr) minmax(180px,.45fr); gap:12px; margin-bottom:14px; }
+.pt-history-controls label { display:grid; gap:6px; color:var(--text-sub); font-size:13px; font-weight:700; }
+.pt-history-controls input,.pt-history-controls select { min-height:40px; width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:#fff; color:var(--text); }
+.pt-history-controls input:focus-visible,.pt-history-controls select:focus-visible { outline:3px solid #dfaa23; outline-offset:2px; }
+.pt-history-payment-details { width:100%; margin-top:4px; }
+.pt-history-payment-details summary { color:#1769a0; cursor:pointer; font-size:13px; font-weight:700; }
+.pt-history-pagination { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:14px; color:var(--text-sub); font-size:13px; }
+.pt-history-pagination > div { display:flex; gap:8px; }
+@media(max-width:700px) {
+  .pt-booking-summary { grid-template-columns:1fr; gap:12px; padding:14px; }
+  .pt-history-controls { grid-template-columns:1fr; }
+  .pt-history-pagination { align-items:flex-start; flex-direction:column; }
+}
+
 @media (max-width: 1000px) {
   .pt-main .pt-form {
     grid-template-columns: 1fr 1fr;

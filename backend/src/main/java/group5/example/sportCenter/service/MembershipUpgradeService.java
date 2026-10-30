@@ -198,6 +198,11 @@ public class MembershipUpgradeService {
         if (!"ACTIVE".equals(source.getStatus()) || source.getStartDate().isAfter(today) || !source.getEndDate().isAfter(today)) {
             return Optional.of("The membership being upgraded is no longer active");
         }
+        if (membershipRepository.existsByMemberIdAndStatusAndStartDateGreaterThan(memberId, "ACTIVE", today)
+                || paymentRepository.existsByMember_IdAndPurposeInAndStatus(memberId,
+                        List.of(PaymentPurpose.MEMBERSHIP), PaymentStatus.PENDING)) {
+            return Optional.of("A queued membership or pending membership purchase prevents this upgrade");
+        }
 
         source.setStatus(UPGRADED);
         membershipRepository.save(source);

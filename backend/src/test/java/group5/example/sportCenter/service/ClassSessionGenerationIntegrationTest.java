@@ -15,6 +15,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.LinkedHashSet;
 import java.util.UUID;
@@ -50,14 +51,21 @@ import group5.example.sportCenter.entity.CourseOffering;
 import group5.example.sportCenter.entity.Facility;
 import group5.example.sportCenter.entity.Sport;
 import group5.example.sportCenter.entity.User;
+import group5.example.sportCenter.entity.CoachSport;
+import group5.example.sportCenter.entity.PersonalTrainingBooking;
+import group5.example.sportCenter.entity.PersonalTrainingBookingStatus;
+import group5.example.sportCenter.dto.UpdateClassRequest;
+import group5.example.sportCenter.dto.UpdateClassSessionRequest;
 import group5.example.sportCenter.repository.ClassSessionRepository;
 import group5.example.sportCenter.repository.CoachRepository;
+import group5.example.sportCenter.repository.CoachSportRepository;
 import group5.example.sportCenter.repository.CourseClassRepository;
 import group5.example.sportCenter.repository.CourseOfferingRepository;
 import group5.example.sportCenter.repository.CourseRepository;
 import group5.example.sportCenter.repository.FacilityRepository;
 import group5.example.sportCenter.repository.SportRepository;
 import group5.example.sportCenter.repository.UserRepository;
+import group5.example.sportCenter.repository.PersonalTrainingBookingRepository;
 import group5.example.sportCenter.security.JwtService;
 
 @SpringBootTest
@@ -68,6 +76,7 @@ class ClassSessionGenerationIntegrationTest {
 
     @Autowired ClassSessionGenerationService generation;
     @Autowired ClassSessionService classSessions;
+    @Autowired CourseClassService courseClassService;
     @Autowired FacilityService facilityService;
     @MockitoSpyBean ClassSessionRepository sessionRows;
     @Autowired CourseClassRepository classRows;
@@ -77,6 +86,8 @@ class ClassSessionGenerationIntegrationTest {
     @Autowired CoachRepository coachRows;
     @Autowired FacilityRepository facilityRows;
     @Autowired UserRepository userRows;
+    @Autowired CoachSportRepository coachSportRows;
+    @Autowired PersonalTrainingBookingRepository ptBookingRows;
     @Autowired JwtService jwtService;
     @Autowired JdbcTemplate jdbc;
     @Autowired EntityManager entityManager;
@@ -96,6 +107,7 @@ class ClassSessionGenerationIntegrationTest {
     @BeforeEach
     void setUp() {
         mvc = MockMvcBuilders.webAppContextSetup(context).addFilters(security).build();
+        ptBookingRows.deleteAll();
         admin = user("ADMIN");
         receptionist = user("RECEPTIONIST");
         member = user("MEMBER");
@@ -280,6 +292,109 @@ class ClassSessionGenerationIntegrationTest {
         var conflict = assertThrows(ResponseStatusException.class,
                 () -> facilityService.updateFacility(facility.getId(), update));
         assertEquals(409, conflict.getStatusCode().value());
+    }
+
+    @Test
+    void pendingPtBookingBlocksManualAndGeneratedClassSessions() {
+        LocalDateTime start = START.atTime(10, 0);
+        ptBooking(coach, start, start.plusHours(1), PersonalTrainingBookingStatus.PENDING_PAYMENT,
+                LocalDateTime.now().plusMinutes(15));
+
+        ClassSessionGenerationRequest request = request(List.of(DayOfWeek.MONDAY), LocalTime.of(10, 0), START, 1, null);
+        var preview = generation.preview(request);
+        assertFalse(preview.canGenerate());
+        assertTrue(preview.candidates().getFirst().conflicts().stream().anyMatch(text -> text.contains("PT Booking")));
+        assertThrows(ResponseStatusException.class, () -> generation.generate(request));
+        assertThrows(IllegalArgumentException.class,
+                () -> classSessions.create(createSession(start, null)));
+    }
+
+    @Test
+    void reschedulingAnExistingClassSessionIntoAnActivePtBookingIsRejected() {
+        LocalDateTime originalStart = START.atTime(10, 0);
+        ClassSession existing = sessionRows.saveAndFlush(
+                session(originalStart, originalStart.plusHours(1), "SCHEDULED", null));
+        Integer existingId = existing.getId();
+        LocalDateTime conflictStart = START.plusDays(7).atTime(10, 0);
+        ptBooking(coach, conflictStart, conflictStart.plusHours(1), PersonalTrainingBookingStatus.CONFIRMED, null);
+
+        UpdateClassSessionRequest update = new UpdateClassSessionRequest();
+        update.setClassId(courseClass.getId());
+        update.setStartTime(conflictStart);
+        update.setEndTime(conflictStart.plusHours(1));
+
+        assertThrows(IllegalArgumentException.class, () -> classSessions.update(existingId, update));
+    }
+
+    @Test
+    void adjacentPtAndClassTimesAreAllowedAndInactivePtBookingsDoNotBlock() {
+        LocalDateTime classStart = START.atTime(11, 0);
+        ptBooking(coach, START.atTime(10, 0), classStart, PersonalTrainingBookingStatus.CONFIRMED, null);
+        ptBooking(coach, classStart, classStart.plusHours(1), PersonalTrainingBookingStatus.CANCELLED, null);
+        ptBooking(coach, classStart, classStart.plusHours(1), PersonalTrainingBookingStatus.PENDING_PAYMENT,
+                LocalDateTime.now().minusSeconds(1));
+
+        var preview = generation.preview(request(List.of(DayOfWeek.MONDAY), LocalTime.of(11, 0), START, 1, null));
+        assertTrue(preview.canGenerate());
+        assertEquals(1, generation.generate(request(List.of(DayOfWeek.MONDAY), LocalTime.of(11, 0), START, 1, null))
+                .createdCount());
+    }
+
+    @Test
+    void coachReassignmentRejectsConflictingPtBookingButAllowsConflictFreeCoach() {
+        Coach target = qualifiedCoach("reassign-conflict");
+        LocalDateTime start = START.atTime(10, 0);
+        ClassSession existing = session(start, start.plusHours(1), "SCHEDULED", null);
+        sessionRows.saveAndFlush(existing);
+        ptBooking(target, start, start.plusHours(1), PersonalTrainingBookingStatus.CONFIRMED, null);
+
+        UpdateClassRequest update = updateClass(target, "Reassigned class");
+        assertThrows(IllegalArgumentException.class, () -> courseClassService.updateClass(courseClass.getId(), update));
+
+        Coach clearCoach = qualifiedCoach("reassign-clear");
+        var result = courseClassService.updateClass(courseClass.getId(), updateClass(clearCoach, "Reassigned class"));
+        assertEquals(clearCoach.getId(), result.getCoachId());
+    }
+
+    private Coach qualifiedCoach(String suffix) {
+        User user = user("COACH");
+        user.setName(suffix);
+        userRows.saveAndFlush(user);
+        Coach candidate = new Coach();
+        candidate.setUser(user);
+        candidate.setStatus("ACTIVE");
+        candidate = coachRows.saveAndFlush(candidate);
+        CoachSport qualification = new CoachSport();
+        qualification.setCoach(candidate);
+        qualification.setSport(offering.getCourse().getSport());
+        qualification.setExperienceYears(1);
+        coachSportRows.saveAndFlush(qualification);
+        return candidate;
+    }
+
+    private PersonalTrainingBooking ptBooking(Coach assignedCoach, LocalDateTime start, LocalDateTime end,
+            PersonalTrainingBookingStatus status, LocalDateTime paymentDeadline) {
+        PersonalTrainingBooking booking = new PersonalTrainingBooking();
+        booking.setMember(member);
+        booking.setCoach(assignedCoach);
+        booking.setSport(offering.getCourse().getSport());
+        booking.setStartTime(start);
+        booking.setEndTime(end);
+        booking.setOriginalPrice(new BigDecimal("100.00"));
+        booking.setDiscount(BigDecimal.ZERO);
+        booking.setFinalPrice(new BigDecimal("100.00"));
+        booking.setStatus(status);
+        booking.setPaymentExpiresAt(paymentDeadline);
+        return ptBookingRows.saveAndFlush(booking);
+    }
+
+    private UpdateClassRequest updateClass(Coach assignedCoach, String name) {
+        UpdateClassRequest request = new UpdateClassRequest();
+        request.setCoachId(assignedCoach.getId());
+        request.setName(name);
+        request.setCapacity(courseClass.getCapacity());
+        request.setStatus("ACTIVE");
+        return request;
     }
 
     @Test

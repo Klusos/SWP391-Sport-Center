@@ -54,7 +54,7 @@ import group5.example.sportCenter.repository.PaymentRepository;
 import group5.example.sportCenter.repository.UserRepository;
 import group5.example.sportCenter.security.JwtService;
 
-@SpringBootTest
+@SpringBootTest(properties = "app.payment.provider=mock")
 @ActiveProfiles("phase1")
 @Import(MembershipUpgradeIntegrationTest.TestClockConfiguration.class)
 class MembershipUpgradeIntegrationTest {
@@ -153,13 +153,36 @@ class MembershipUpgradeIntegrationTest {
     }
 
     @Test
+    void upgradeSettlementRechecksAndReconcilesWhenAQueueAppearsAfterPaymentCreation() {
+        PaymentResponse payment = payments.createPayment(upgrade(premium, PaymentMethod.COUNTER), jwt(member));
+        Membership queued = membership(member, standard, current.getEndDate(), current.getEndDate().plusMonths(1));
+
+        PaymentResponse result = payments.processAtCounter(payment.getId(), counter(true), jwt(receptionist));
+
+        assertEquals("REFUND_REQUIRED", result.getStatus());
+        assertEquals("ACTIVE", memberships.findById(current.getId()).orElseThrow().getStatus());
+        assertEquals(today.minusDays(10), memberships.findById(current.getId()).orElseThrow().getStartDate());
+        assertEquals(today.plusDays(20), memberships.findById(current.getId()).orElseThrow().getEndDate());
+        assertEquals("ACTIVE", memberships.findById(queued.getId()).orElseThrow().getStatus());
+        assertTrue(upgrades.findByPaymentId(payment.getId()).orElseThrow().getResultMembership() == null);
+    }
+
+    @Test
     void onlineUpgradeAppliesWithinTheQuoteAndRefundsAfterItExpires() throws Exception {
         PaymentResponse onTime = payments.createPayment(upgrade(premium, PaymentMethod.ONLINE), jwt(member));
         clock.advance(Duration.ofMinutes(14));
+        var successfulSettlementTime = java.time.LocalDateTime.now(clock.withZone(BUSINESS_ZONE));
         mvc.perform(get(callbackPath(onTime.getPaymentUrl())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("SUCCESS"));
+        assertEquals(successfulSettlementTime, paymentRows.findById(onTime.getId()).orElseThrow().getPaidAt(),
+                "Upgrade success keeps callback processing time as paidAt");
         assertEquals(premium.getId(), activePlanId(member));
+        clock.advance(Duration.ofSeconds(10));
+        mvc.perform(get(callbackPath(onTime.getPaymentUrl())))
+                .andExpect(status().isOk());
+        assertEquals(successfulSettlementTime, paymentRows.findById(onTime.getId()).orElseThrow().getPaidAt(),
+                "Duplicate callback cannot overwrite paidAt");
 
         Membership otherCurrent = membership(otherMember, standard, today.minusDays(5), today.plusDays(25));
         PaymentResponse late = payments.createPayment(upgrade(premium, PaymentMethod.ONLINE), jwt(otherMember));
@@ -194,6 +217,11 @@ class MembershipUpgradeIntegrationTest {
         // A downgrade or a plan that drops a benefit is refused.
         assertConflict(() -> payments.createPayment(upgrade(deluxe, PaymentMethod.COUNTER), jwt(member)));
 
+        // An unresolved ordinary purchase also blocks creating an upgrade quote/payment.
+        PaymentResponse pendingPurchase = payments.createPayment(purchase(standard), jwt(member));
+        assertConflict(() -> payments.createPayment(upgrade(premium, PaymentMethod.COUNTER), jwt(member)));
+        payments.cancelPayment(pendingPurchase.getId(), jwt(member));
+
         // One pending upgrade at a time, and no plan purchase while it is pending.
         payments.createPayment(upgrade(premium, PaymentMethod.COUNTER), jwt(member));
         assertConflict(() -> payments.createPayment(upgrade(premium, PaymentMethod.ONLINE), jwt(member)));
@@ -204,6 +232,7 @@ class MembershipUpgradeIntegrationTest {
         // A plan already bought to start after the current one blocks mid-term upgrades.
         Membership queuedOwner = membership(otherMember, standard, today.minusDays(5), today.plusDays(25));
         membership(otherMember, standard, queuedOwner.getEndDate(), queuedOwner.getEndDate().plusMonths(1));
+        assertConflict(() -> payments.createPayment(upgrade(premium, PaymentMethod.COUNTER), jwt(otherMember)));
         mvc.perform(get(url).header("Authorization", bearer(otherMember)))
                 .andExpect(jsonPath("$.blockedReason").value("QUEUED_MEMBERSHIP"));
 
