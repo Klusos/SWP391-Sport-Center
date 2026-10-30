@@ -564,10 +564,16 @@ class MembershipAutoRenewalIntegrationTest {
         Payment counter = autoRenewal.createIfDue(current).orElseThrow();
         payments.cancelPayment(counter.getId(), jwt(member));
         PaymentResponse online = createOnlineReplacement(counter);
+        LocalDateTime verifiedPaymentTime = LocalDateTime.now(clock.withZone(BUSINESS_ZONE));
 
         mvc.perform(get(callbackPath(online.getPaymentUrl()))).andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("SUCCESS"));
+        assertEquals(verifiedPaymentTime, paymentRows.findById(online.getId()).orElseThrow().getPaidAt(),
+                "Marked Auto-renew success uses the verified provider payment time");
+        clock.advance(java.time.Duration.ofMinutes(1));
         mvc.perform(get(callbackPath(online.getPaymentUrl()))).andExpect(status().isOk());
+        assertEquals(verifiedPaymentTime, paymentRows.findById(online.getId()).orElseThrow().getPaidAt(),
+                "Duplicate callback cannot overwrite Auto-renew paidAt");
         assertEquals(0, autoRenewal.runDaily().created());
         assertEquals(0, autoRenewal.runDaily().cancelled());
         List<Membership> rows = memberships.findByMemberId(member.getId()).stream()

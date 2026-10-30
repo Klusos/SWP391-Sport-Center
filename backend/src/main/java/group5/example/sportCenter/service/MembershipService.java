@@ -107,7 +107,7 @@ public class MembershipService {
                     "Membership assignment requires ADMIN; front-desk purchases must use /api/payments");
         }
 
-        User member = userRepository.findById(request.getMemberId())
+        User member = userRepository.findByIdForBookingUpdate(request.getMemberId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "User not found with id: " + request.getMemberId()));
         if (!"MEMBER".equalsIgnoreCase(member.getRole())) {
@@ -143,7 +143,7 @@ public class MembershipService {
      * bắt đầu đúng ngày gói hiện tại kết thúc (endDate là mốc loại trừ), không sửa gói cũ.
      */
     @Transactional
-    public Membership activateOrRenewFromPayment(Payment payment) {
+    public Optional<String> activateOrRenewFromPayment(Payment payment) {
         Integer memberId = payment.getMember().getId();
         Integer planId = payment.getReferenceId();
         boolean autoRenew = Boolean.TRUE.equals(payment.getAutoRenew());
@@ -154,6 +154,9 @@ public class MembershipService {
                 .orElseThrow(() -> new ResourceNotFoundException("Membership plan not found with id: " + planId));
 
         LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        if (membershipRepository.existsByMemberIdAndStatusAndStartDateGreaterThan(memberId, "ACTIVE", today)) {
+            return Optional.of("Member already has a future membership period");
+        }
         Optional<Membership> lastInChain = membershipRepository
                 .findByMemberIdAndStatusAndEndDateGreaterThan(memberId, "ACTIVE", today).stream()
                 .max(Comparator.comparing(Membership::getEndDate));
@@ -171,7 +174,8 @@ public class MembershipService {
         membership.setAutoRenew(autoRenew);
         membership.setStatus("ACTIVE");
         membership.setPurchasePayment(payment);
-        return membershipRepository.save(membership);
+        membershipRepository.save(membership);
+        return Optional.empty();
     }
 
     /** Activate a marked Auto-renew payment from its source period, not callback arrival date. */

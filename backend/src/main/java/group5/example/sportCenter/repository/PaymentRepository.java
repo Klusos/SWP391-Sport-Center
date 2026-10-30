@@ -41,19 +41,19 @@ public interface PaymentRepository extends JpaRepository<Payment, Integer> {
 
     List<Payment> findByStatusAndPurposeAndNoteStartingWith(PaymentStatus status, PaymentPurpose purpose, String notePrefix);
 
-    @Query("select new group5.example.sportCenter.repository.PendingAutoRenewalLockRow(p.id, p.member.id, p.note) "
+    @Query("select new group5.example.sportCenter.repository.PendingAutoRenewalLockRow(p.id, p.member.id, p.note, p.purpose) "
             + "from Payment p where p.status = :status and p.purpose = :purpose and p.note like concat(:notePrefix, '%') "
             + "order by p.id")
     List<PendingAutoRenewalLockRow> findPendingAutoRenewalLockRows(
             @Param("status") PaymentStatus status, @Param("purpose") PaymentPurpose purpose,
             @Param("notePrefix") String notePrefix);
 
-    @Query("select new group5.example.sportCenter.repository.PendingAutoRenewalLockRow(p.id, p.member.id, p.note) "
+    @Query("select new group5.example.sportCenter.repository.PendingAutoRenewalLockRow(p.id, p.member.id, p.note, p.purpose) "
             + "from Payment p where p.transactionCode = :transactionCode")
     Optional<PendingAutoRenewalLockRow> findCallbackLockRow(
             @Param("transactionCode") String transactionCode);
 
-    @Query("select new group5.example.sportCenter.repository.PendingAutoRenewalLockRow(p.id, p.member.id, p.note) "
+    @Query("select new group5.example.sportCenter.repository.PendingAutoRenewalLockRow(p.id, p.member.id, p.note, p.purpose) "
             + "from Payment p where p.id = :paymentId")
     Optional<PendingAutoRenewalLockRow> findPaymentLockRow(@Param("paymentId") Integer paymentId);
 

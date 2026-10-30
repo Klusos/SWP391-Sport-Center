@@ -5,6 +5,8 @@ import java.time.LocalDate;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.ResolverStyle;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -45,6 +47,7 @@ import group5.example.sportCenter.payment.OnlineCallbackResult;
 import group5.example.sportCenter.payment.PaymentGateway;
 import group5.example.sportCenter.payment.PtBookingPaymentHandler;
 import group5.example.sportCenter.repository.MembershipPlanRepository;
+import group5.example.sportCenter.repository.MembershipRepository;
 import group5.example.sportCenter.repository.MembershipUpgradeRepository;
 import group5.example.sportCenter.repository.CourseRegistrationRepository;
 import group5.example.sportCenter.repository.PersonalTrainingBookingRepository;
@@ -56,10 +59,13 @@ import group5.example.sportCenter.repository.UserRepository;
 public class PaymentService {
 
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    private static final DateTimeFormatter VNPAY_PAYMENT_TIME =
+            DateTimeFormatter.ofPattern("uuuuMMddHHmmss").withResolverStyle(ResolverStyle.STRICT);
 
     private final PaymentRepository paymentRepository;
     private final UserRepository userRepository;
     private final MembershipPlanRepository membershipPlanRepository;
+    private final MembershipRepository membershipRepository;
     private final MembershipUpgradeRepository membershipUpgradeRepository;
     private final CourseRegistrationRepository courseRegistrationRepository;
     private final PersonalTrainingBookingRepository personalTrainingBookingRepository;
@@ -77,6 +83,7 @@ public class PaymentService {
             PaymentRepository paymentRepository,
             UserRepository userRepository,
             MembershipPlanRepository membershipPlanRepository,
+            MembershipRepository membershipRepository,
             MembershipUpgradeRepository membershipUpgradeRepository,
             CourseRegistrationRepository courseRegistrationRepository,
             PersonalTrainingBookingRepository personalTrainingBookingRepository,
@@ -92,6 +99,7 @@ public class PaymentService {
         this.paymentRepository = paymentRepository;
         this.userRepository = userRepository;
         this.membershipPlanRepository = membershipPlanRepository;
+        this.membershipRepository = membershipRepository;
         this.membershipUpgradeRepository = membershipUpgradeRepository;
         this.courseRegistrationRepository = courseRegistrationRepository;
         this.personalTrainingBookingRepository = personalTrainingBookingRepository;
@@ -160,11 +168,18 @@ public class PaymentService {
         MembershipUpgradeService.Quote upgradeQuote = request.getPurpose() == PaymentPurpose.UPGRADE
                 ? membershipUpgradeService.quote(member, request.getReferenceId()) : null;
         BigDecimal amount = upgradeQuote != null ? upgradeQuote.amount() : resolveAmountAndValidate(request, member);
-        if (request.getPurpose() == PaymentPurpose.MEMBERSHIP
-                && paymentRepository.existsByMember_IdAndPurposeAndReferenceIdAndStatus(
-                        member.getId(), PaymentPurpose.MEMBERSHIP, request.getReferenceId(), PaymentStatus.PENDING)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "A pending membership payment already exists for this member and plan");
+        if (request.getPurpose() == PaymentPurpose.MEMBERSHIP) {
+            LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+            if (membershipRepository.existsByMemberIdAndStatusAndStartDateGreaterThan(
+                    member.getId(), "ACTIVE", today)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "A future membership period already exists for this member");
+            }
+            if (paymentRepository.existsByMember_IdAndPurposeInAndStatus(
+                    member.getId(), List.of(PaymentPurpose.MEMBERSHIP), PaymentStatus.PENDING)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "A pending membership payment already exists for this member");
+            }
         }
         if (request.getPurpose() == PaymentPurpose.MEMBERSHIP
                 && paymentRepository.existsByMember_IdAndPurposeInAndStatus(
@@ -212,7 +227,7 @@ public class PaymentService {
 
         PendingAutoRenewalLockRow candidate = paymentRepository.findPaymentLockRow(paymentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + paymentId));
-        if (MembershipAutoRenewalService.sourceMembershipId(candidate.note()) != null) {
+        if (requiresMemberFirstLock(candidate)) {
             userRepository.findByIdForBookingUpdate(candidate.memberId())
                     .orElseThrow(() -> new ResourceNotFoundException("Member not found"));
         }
@@ -248,8 +263,8 @@ public class PaymentService {
         if (candidate.isEmpty()) {
             return new OnlineCallbackResult(OnlineCallbackResult.Status.NOT_FOUND, null);
         }
-        boolean autoRenewal = MembershipAutoRenewalService.sourceMembershipId(candidate.get().note()) != null;
-        if (autoRenewal) {
+        boolean memberFirstLock = requiresMemberFirstLock(candidate.get());
+        if (memberFirstLock) {
             userRepository.findByIdForBookingUpdate(candidate.get().memberId())
                     .orElseThrow(() -> new ResourceNotFoundException("Member not found"));
         }
@@ -264,22 +279,33 @@ public class PaymentService {
         if (callback.amount() != null && payment.getAmount().compareTo(callback.amount()) != 0) {
             return new OnlineCallbackResult(OnlineCallbackResult.Status.AMOUNT_MISMATCH, null);
         }
+        boolean autoRenewal = MembershipAutoRenewalService.sourceMembershipId(payment) != null;
         if (autoRenewal && callback.success()
                 && (payment.getStatus() == PaymentStatus.PENDING || payment.getStatus() == PaymentStatus.CANCELLED)) {
             return settleAutoRenewalCallback(payment, callback);
         }
         if (payment.getStatus() == PaymentStatus.CANCELLED && callback.success()) {
             // Member đã huỷ nhưng cổng vẫn báo trừ tiền: không áp dụng, chuyển sang hoàn tiền.
+            boolean membershipPayment = payment.getPurpose() == PaymentPurpose.MEMBERSHIP
+                    || payment.getPurpose() == PaymentPurpose.UPGRADE;
+            LocalDateTime verifiedPaidAt = membershipPayment
+                    ? parseVerifiedProviderPaymentTime(callback.verifiedPaymentTime()) : null;
             return new OnlineCallbackResult(OnlineCallbackResult.Status.APPLIED,
-                    toResponse(markRefundRequired(payment, "Payment succeeded after it was cancelled"), null));
+                    toResponse(markRefundRequired(payment, "Payment succeeded after it was cancelled",
+                            verifiedPaidAt, membershipPayment ? callback.verifiedPaymentTime() : null), null));
         }
         if (payment.getStatus() != PaymentStatus.PENDING) {
             // callback lặp lại: bỏ qua (idempotent)
             return new OnlineCallbackResult(OnlineCallbackResult.Status.ALREADY_PROCESSED, toResponse(payment, null));
         }
         String failureNote = callback.failureReason() != null ? callback.failureReason() : "Online payment failed";
+        boolean membershipPayment = payment.getPurpose() == PaymentPurpose.MEMBERSHIP
+                || payment.getPurpose() == PaymentPurpose.UPGRADE;
+        LocalDateTime verifiedPaidAt = callback.success() && membershipPayment
+                ? parseVerifiedProviderPaymentTime(callback.verifiedPaymentTime()) : null;
         return new OnlineCallbackResult(OnlineCallbackResult.Status.APPLIED, toResponse(
-                finalizePayment(payment, callback.success(), callback.success() ? null : failureNote, null), null));
+                finalizePayment(payment, callback.success(), callback.success() ? null : failureNote,
+                        verifiedPaidAt), null));
     }
 
     /** Huỷ payment đang PENDING (member huỷ của mình, hoặc staff huỷ). */
@@ -327,8 +353,7 @@ public class PaymentService {
             case MEMBERSHIP -> {
                 Integer sourceId = MembershipAutoRenewalService.sourceMembershipId(payment);
                 if (sourceId == null) {
-                    membershipService.activateOrRenewFromPayment(payment);
-                    yield Optional.empty();
+                    yield membershipService.activateOrRenewFromPayment(payment);
                 } else {
                     var settlement = membershipAutoRenewalService.validateVerifiedSettlement(
                             payment, verifiedPaidAt, now());
@@ -347,12 +372,12 @@ public class PaymentService {
                 return markAutoRenewalRefundRequired(payment, refundReason.get(),
                         providerPaymentTimeFromNote(note), verifiedPaidAt);
             }
-            return markRefundRequired(payment, refundReason.get());
+            return markRefundRequired(payment, refundReason.get(), verifiedPaidAt, note);
         }
 
         payment.setStatus(PaymentStatus.SUCCESS);
-        payment.setPaidAt(verifiedPaidAt == null ? now() : verifiedPaidAt);
         Integer renewalSourceId = MembershipAutoRenewalService.sourceMembershipId(payment);
+        payment.setPaidAt(renewalSourceId != null && verifiedPaidAt != null ? verifiedPaidAt : now());
         if (renewalSourceId != null && (note == null || note.isBlank()
                 || !note.startsWith(MembershipAutoRenewalService.NOTE_PREFIX))) {
             payment.setNote(MembershipAutoRenewalService.NOTE_PREFIX + renewalSourceId
@@ -419,10 +444,31 @@ public class PaymentService {
     }
 
     private Payment markRefundRequired(Payment payment, String reason) {
+        return markRefundRequired(payment, reason, null, null);
+    }
+
+    private Payment markRefundRequired(Payment payment, String reason,
+            LocalDateTime verifiedPaidAt, String providerPaymentTime) {
         payment.setStatus(PaymentStatus.REFUND_REQUIRED);
-        payment.setPaidAt(now());
-        payment.setNote(reason);
+        payment.setPaidAt(verifiedPaidAt == null ? now() : verifiedPaidAt);
+        payment.setNote(reason + (providerPaymentTime == null || providerPaymentTime.isBlank()
+                ? "" : " | Verified provider payment time=" + providerPaymentTime));
         return paymentRepository.save(payment);
+    }
+
+    private LocalDateTime parseVerifiedProviderPaymentTime(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return LocalDateTime.parse(value, VNPAY_PAYMENT_TIME);
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private boolean requiresMemberFirstLock(PendingAutoRenewalLockRow candidate) {
+        return candidate.purpose() == PaymentPurpose.MEMBERSHIP
+                || candidate.purpose() == PaymentPurpose.UPGRADE
+                || MembershipAutoRenewalService.sourceMembershipId(candidate.note()) != null;
     }
 
     /** Hàng đợi khoản cần hoàn tiền (mọi purpose), cũ nhất trước. */

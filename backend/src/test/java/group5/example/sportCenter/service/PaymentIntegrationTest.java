@@ -2,6 +2,7 @@ package group5.example.sportCenter.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -45,6 +46,7 @@ import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.server.ResponseStatusException;
 
 import group5.example.sportCenter.dto.CounterPaymentRequest;
+import group5.example.sportCenter.dto.CreateMembershipRequest;
 import group5.example.sportCenter.dto.CreatePaymentRequest;
 import group5.example.sportCenter.dto.PaymentResponse;
 import group5.example.sportCenter.dto.RevenueGrouping;
@@ -81,6 +83,7 @@ import group5.example.sportCenter.repository.PersonalTrainingBookingRepository;
 import group5.example.sportCenter.repository.SportRepository;
 import group5.example.sportCenter.repository.UserRepository;
 import group5.example.sportCenter.security.JwtService;
+import group5.example.sportCenter.payment.PaymentGateway;
 
 @SpringBootTest(properties = "app.payment.provider=mock")
 @ActiveProfiles("phase1")
@@ -90,6 +93,7 @@ class PaymentIntegrationTest {
     private static final String EMAIL_DOMAIN = "@payment.example.test";
 
     @Autowired PaymentService service;
+    @Autowired PaymentGateway paymentGateway;
     @Autowired CourseRegistrationExpirationService registrationExpiration;
     @Autowired PaymentReportService reports;
     @Autowired PaymentRepository payments;
@@ -102,6 +106,7 @@ class PaymentIntegrationTest {
     @Autowired MembershipPlanRepository plans;
     @Autowired MembershipRepository memberships;
     @Autowired MembershipUpgradeRepository membershipUpgrades;
+    @Autowired MembershipService membershipService;
     @Autowired PersonalTrainingBookingRepository bookings;
     @Autowired ClassSessionRepository classSessions;
     @Autowired CourseRegistrationRepository registrations;
@@ -169,11 +174,15 @@ class PaymentIntegrationTest {
                 PaymentMethod.ONLINE), jwt(member));
         assertEquals("PENDING", first.getStatus());
         assertEquals(new BigDecimal("300000.00"), first.getAmount());
+        clock.setInstant(clock.instant().plusSeconds(120));
+        LocalDateTime successfulSettlementTime = now();
 
         // The callback is public and authenticated only by the gateway signature.
         mvc.perform(get(callbackPath(first.getPaymentUrl())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("SUCCESS"));
+        assertEquals(successfulSettlementTime, payments.findById(first.getId()).orElseThrow().getPaidAt(),
+                "Ordinary Membership success keeps callback processing time as paidAt");
 
         LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
         List<Membership> afterFirst = memberships.findByMemberId(member.getId());
@@ -182,7 +191,10 @@ class PaymentIntegrationTest {
         assertEquals(today.plusMonths(1), afterFirst.get(0).getEndDate());
 
         // Replaying the same signed callback must not activate a second membership.
+        clock.setInstant(clock.instant().plusSeconds(120));
         mvc.perform(get(callbackPath(first.getPaymentUrl()))).andExpect(status().isOk());
+        assertEquals(successfulSettlementTime, payments.findById(first.getId()).orElseThrow().getPaidAt(),
+                "Duplicate success callback cannot overwrite the first paidAt");
         assertEquals(1, memberships.findByMemberId(member.getId()).size());
 
         PaymentResponse renewal = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
@@ -194,6 +206,188 @@ class PaymentIntegrationTest {
         assertEquals(2, afterRenewal.size());
         assertEquals(today.plusMonths(1), afterRenewal.get(1).getStartDate());
         assertEquals(today.plusMonths(2), afterRenewal.get(1).getEndDate());
+        assertEquals(1, afterRenewal.stream().filter(row -> row.getStartDate().isAfter(today)).count());
+        assertEquals(today.plusMonths(1), afterRenewal.get(0).getEndDate(),
+                "The original paid period remains unchanged after queue settlement");
+    }
+
+    @Test
+    void ordinaryPurchaseAllowsOneQueuedPeriodButRejectsAnotherAcrossPlans() {
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        MembershipPlan anotherPlan = additionalPlan("Pay alternate");
+        Membership current = membership(member, plan, today.minusDays(5), today.plusDays(25));
+
+        PaymentResponse queued = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        assertEquals("SUCCESS", service.processAtCounter(queued.getId(), counter(true), jwt(receptionist)).getStatus());
+        Membership future = memberships.findByMemberId(member.getId()).stream()
+                .filter(row -> row.getStartDate().isAfter(today)).findFirst().orElseThrow();
+        assertEquals(current.getEndDate(), future.getStartDate());
+
+        ResponseStatusException duplicate = assertThrows(ResponseStatusException.class,
+                () -> service.createPayment(request(PaymentPurpose.MEMBERSHIP, anotherPlan.getId(),
+                        PaymentMethod.COUNTER), jwt(member)));
+        assertEquals(409, duplicate.getStatusCode().value());
+        assertEquals(2, memberships.findByMemberId(member.getId()).size());
+    }
+
+    @Test
+    void pendingMembershipPaymentBlocksAnotherPlanAndConcurrentPurchaseAttempts() throws Exception {
+        MembershipPlan anotherPlan = additionalPlan("Pay alternate pending");
+        service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(), PaymentMethod.COUNTER), jwt(member));
+        ResponseStatusException conflict = assertThrows(ResponseStatusException.class,
+                () -> service.createPayment(request(PaymentPurpose.MEMBERSHIP, anotherPlan.getId(),
+                        PaymentMethod.ONLINE), jwt(member)));
+        assertEquals(409, conflict.getStatusCode().value());
+        assertEquals(1, payments.findByMemberIdOrderByCreatedAtDesc(member.getId()).stream()
+                .filter(row -> row.getPurpose() == PaymentPurpose.MEMBERSHIP
+                        && row.getStatus() == PaymentStatus.PENDING).count());
+
+        User concurrentMember = user("MEMBER", "concurrent-membership-pay");
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            java.util.concurrent.Callable<Boolean> buy = () -> {
+                ready.countDown();
+                await(start);
+                try {
+                    service.createPayment(request(PaymentPurpose.MEMBERSHIP, anotherPlan.getId(),
+                            PaymentMethod.COUNTER), jwt(concurrentMember));
+                    return true;
+                } catch (ResponseStatusException exception) {
+                    if (exception.getStatusCode().value() != 409) throw exception;
+                    return false;
+                }
+            };
+            Future<Boolean> first = pool.submit(buy);
+            Future<Boolean> second = pool.submit(buy);
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            assertEquals(1, (first.get(10, TimeUnit.SECONDS) ? 1 : 0)
+                    + (second.get(10, TimeUnit.SECONDS) ? 1 : 0));
+        } finally {
+            pool.shutdownNow();
+        }
+        assertEquals(1, payments.findByMemberIdOrderByCreatedAtDesc(concurrentMember.getId()).stream()
+                .filter(row -> row.getPurpose() == PaymentPurpose.MEMBERSHIP
+                        && row.getStatus() == PaymentStatus.PENDING).count());
+    }
+
+    @Test
+    void concurrentDistinctMembershipSettlementsCreateOneFuturePeriodAndReconcileTheOther() throws Exception {
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        Membership current = membership(member, plan, today.minusDays(5), today.plusDays(25));
+        MembershipPlan anotherPlan = additionalPlan("Pay competing settlement");
+        Payment first = queueFixture(member, PaymentMethod.COUNTER, PaymentPurpose.MEMBERSHIP, PaymentStatus.PENDING);
+        Payment second = queueFixture(member, PaymentMethod.COUNTER, PaymentPurpose.MEMBERSHIP, PaymentStatus.PENDING);
+        second.setReferenceId(anotherPlan.getId());
+        second = payments.saveAndFlush(second);
+        Integer firstId = first.getId();
+        Integer secondId = second.getId();
+
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            java.util.concurrent.Callable<String> settleFirst = () -> {
+                ready.countDown(); await(start);
+                return service.processAtCounter(firstId, counter(true), jwt(receptionist)).getStatus();
+            };
+            java.util.concurrent.Callable<String> settleSecond = () -> {
+                ready.countDown(); await(start);
+                return service.processAtCounter(secondId, counter(true), jwt(receptionist)).getStatus();
+            };
+            Future<String> firstResult = pool.submit(settleFirst);
+            Future<String> secondResult = pool.submit(settleSecond);
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            List<String> statuses = List.of(firstResult.get(10, TimeUnit.SECONDS),
+                    secondResult.get(10, TimeUnit.SECONDS));
+            assertEquals(1, statuses.stream().filter("SUCCESS"::equals).count());
+            assertEquals(1, statuses.stream().filter("REFUND_REQUIRED"::equals).count());
+        } finally {
+            pool.shutdownNow();
+        }
+
+        List<Membership> rows = memberships.findByMemberId(member.getId());
+        assertEquals(2, rows.size());
+        assertEquals(1, rows.stream().filter(row -> row.getStartDate().isAfter(today)).count());
+        Membership unchanged = memberships.findById(current.getId()).orElseThrow();
+        assertEquals(today.minusDays(5), unchanged.getStartDate());
+        assertEquals(today.plusDays(25), unchanged.getEndDate());
+        Payment refund = payments.findById(firstId).orElseThrow().getStatus() == PaymentStatus.REFUND_REQUIRED
+                ? payments.findById(firstId).orElseThrow() : payments.findById(secondId).orElseThrow();
+        assertNotNull(refund.getPaidAt(), "Verified counter receipt time is retained for reconciliation");
+        assertTrue(refund.getNote().contains("future membership period"));
+    }
+
+    @Test
+    void verifiedOnlineCaptureWithFullQueueIsReconciledWithoutCreatingAnotherMembership() throws Exception {
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        Membership current = membership(member, plan, today.minusDays(5), today.plusDays(25));
+        membership(member, plan, current.getEndDate(), current.getEndDate().plusMonths(1));
+        Payment payment = queueFixture(member, PaymentMethod.ONLINE, PaymentPurpose.MEMBERSHIP,
+                PaymentStatus.PENDING);
+        String callbackUrl = paymentGateway.createPaymentUrl(payment.getTransactionCode(), payment.getAmount(),
+                "127.0.0.1");
+        LocalDateTime verifiedPaymentTime = now();
+        clock.setInstant(clock.instant().plusSeconds(120));
+
+        mvc.perform(get(callbackPath(callbackUrl)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REFUND_REQUIRED"));
+
+        assertEquals(PaymentStatus.REFUND_REQUIRED, payments.findById(payment.getId()).orElseThrow().getStatus());
+        assertEquals(verifiedPaymentTime, payments.findById(payment.getId()).orElseThrow().getPaidAt(),
+                "REFUND_REQUIRED retains verified provider payment time as reconciliation evidence");
+        assertTrue(payments.findById(payment.getId()).orElseThrow().getNote()
+                .contains("future membership period"));
+        assertEquals(2, memberships.findByMemberId(member.getId()).size());
+    }
+
+    @Test
+    void membershipEndingTodayIsExclusiveWhenASettledPurchaseStarts() {
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        Membership expiredToday = membership(member, plan, today.minusMonths(1), today);
+        PaymentResponse payment = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        assertEquals("SUCCESS", service.processAtCounter(payment.getId(), counter(true), jwt(receptionist)).getStatus());
+
+        Membership activated = memberships.findByMemberId(member.getId()).stream()
+                .filter(row -> !row.getId().equals(expiredToday.getId())).findFirst().orElseThrow();
+        assertEquals(today, activated.getStartDate());
+        assertEquals(2, memberships.findByMemberId(member.getId()).size());
+    }
+
+    @Test
+    void concurrentAdminAssignmentsSerializeOnMemberAndPreserveTheExistingPeriod() throws Exception {
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        CreateMembershipRequest request = assignment(otherMember, today.plusDays(10));
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            java.util.concurrent.Callable<Boolean> assign = () -> {
+                ready.countDown(); await(start);
+                try {
+                    membershipService.createMembership(request, jwt(admin));
+                    return true;
+                } catch (IllegalArgumentException conflict) {
+                    return false;
+                }
+            };
+            Future<Boolean> first = pool.submit(assign);
+            Future<Boolean> second = pool.submit(assign);
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            assertEquals(1, (first.get(10, TimeUnit.SECONDS) ? 1 : 0)
+                    + (second.get(10, TimeUnit.SECONDS) ? 1 : 0));
+        } finally {
+            pool.shutdownNow();
+        }
+        assertEquals(1, memberships.findByMemberId(otherMember.getId()).size());
+        assertTrue(memberships.findByMemberId(otherMember.getId()).get(0).getStartDate().isAfter(today));
     }
 
     @Test
@@ -315,14 +509,20 @@ class PaymentIntegrationTest {
     void successAfterMemberCancelledIsRoutedToRefund() throws Exception {
         PaymentResponse payment = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
                 PaymentMethod.ONLINE), jwt(member));
+        LocalDateTime verifiedPaymentTime = now();
         mvc.perform(patch("/api/payments/" + payment.getId() + "/cancel").header("Authorization", bearer(member)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"));
+        clock.setInstant(clock.instant().plusSeconds(120));
 
         mvc.perform(get(callbackPath(payment.getPaymentUrl())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("REFUND_REQUIRED"));
         assertTrue(memberships.findByMemberId(member.getId()).isEmpty());
+        Payment reconciled = payments.findById(payment.getId()).orElseThrow();
+        assertEquals(verifiedPaymentTime, reconciled.getPaidAt(),
+                "Refund reconciliation retains verified provider payment time");
+        assertTrue(reconciled.getNote().contains("Verified provider payment time="));
     }
 
     // ------------------------------------------------------- course registration
@@ -1185,6 +1385,39 @@ class PaymentIntegrationTest {
         payment.setStatus(state);
         payment.setTransactionCode("QUEUE-" + java.util.UUID.randomUUID().toString().substring(0, 20));
         return payments.save(payment);
+    }
+
+    private MembershipPlan additionalPlan(String name) {
+        MembershipPlan result = new MembershipPlan();
+        result.setName(name + " " + System.nanoTime());
+        result.setPrice(new BigDecimal("450000.00"));
+        result.setDurationMonths(1);
+        result.setCourseDiscountPercent(BigDecimal.ZERO);
+        result.setPersonalTrainingDiscountPercent(BigDecimal.ZERO);
+        result.setAllowPersonalTrainingPlan(false);
+        result.setAllowOneOnOneCoaching(false);
+        result.setStatus("ACTIVE");
+        return plans.save(result);
+    }
+
+    private Membership membership(User owner, MembershipPlan membershipPlan, LocalDate start, LocalDate end) {
+        Membership row = new Membership();
+        row.setMember(owner);
+        row.setPlan(membershipPlan);
+        row.setAutoRenew(false);
+        row.setStartDate(start);
+        row.setEndDate(end);
+        row.setStatus("ACTIVE");
+        return memberships.saveAndFlush(row);
+    }
+
+    private CreateMembershipRequest assignment(User owner, LocalDate start) {
+        CreateMembershipRequest result = new CreateMembershipRequest();
+        result.setMemberId(owner.getId());
+        result.setPlanId(plan.getId());
+        result.setStartDate(start);
+        result.setAutoRenew(false);
+        return result;
     }
 
     // ---------------------------------------------------------------- fixtures
