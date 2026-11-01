@@ -18,9 +18,9 @@ import lombok.Setter;
 
 @Entity
 @Table(name = "audit_log", indexes = {
-        @Index(name = "ix_audit_log_created", columnList = "created_at,id"),
-        @Index(name = "ix_audit_log_actor_created", columnList = "actor_user_id,created_at,id"),
-        @Index(name = "ix_audit_log_entity", columnList = "entity_type,entity_id,created_at,id")
+        @Index(name = "ix_audit_log_created", columnList = "created_at DESC,id DESC"),
+        @Index(name = "ix_audit_log_actor_created", columnList = "actor_user_id ASC,created_at DESC,id DESC"),
+        @Index(name = "ix_audit_log_entity", columnList = "entity_type ASC,entity_id ASC,created_at DESC,id DESC")
 })
 @Getter
 @Setter
