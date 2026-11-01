@@ -15,7 +15,7 @@ import {
   getMyAttendanceApi, getMyActionablePendingPaymentSummaryApi, getAdminRevenueReportApi,
   getTrainingClassesApi, getCoachAttendanceSessionsApi,
 } from "../api";
-import { confirmedEnrollmentCount, upcomingTeachingSessions } from "../coachDashboard.js";
+import { coachAssessmentSummary, confirmedEnrollmentCount, pendingCoachAssessments, upcomingTeachingSessions } from "../coachDashboard.js";
 
 /* ---------- helpers ---------- */
 const list = (d) => (Array.isArray(d) ? d : d?.content ?? []);
@@ -40,6 +40,7 @@ const LOADERS = {
   COACH: {
     bookings: getAssignedPtBookingsApi,
     assessments: getMySkillAssessmentAssignmentsApi,
+    sports: getSportsApi,
     classes: getTrainingClassesApi,
     teachingSessions: getCoachAttendanceSessionsApi,
   },
@@ -203,8 +204,9 @@ function BookingList({ items, who }) {
 
 function Coach({ d, errors = {} }) {
   const up = upcoming(d.bookings);
-  const pending = list(d.assessments).filter((a) => !/COMPLETED|CANCEL/i.test(a.status || ""));
+  const pending = pendingCoachAssessments(d.assessments);
   const classes = list(d.classes);
+  const sports = list(d.sports);
   const teachingSessions = upcomingTeachingSessions(d.teachingSessions);
   const upcomingPt = up;
   return (<>
@@ -239,11 +241,21 @@ function Coach({ d, errors = {} }) {
         {errors.assessments ? <p className="dash-error" role="alert">Không tải được đánh giá: {errors.assessments}</p>
           : pending.length === 0 ? <Empty>Không có đánh giá nào đang chờ.</Empty> : (
           <ul className="dash-rows">
-            {pending.slice(0, 5).map((a) => (
-              <li key={a.id}><span>{a.memberName || a.memberFullName || "Học viên"}</span><em>{a.sportName || a.sport?.name || ""}</em></li>
-            ))}
+            {pending.slice(0, 5).map((a) => {
+              const summary = coachAssessmentSummary(a, sports);
+              return <li className="dash-assessment-row" key={a.id}>
+                <span className="dash-assessment-info">
+                  <b>{summary.member}</b>
+                  <small>{summary.sport} · Assessment #{a.id}</small>
+                  <small>{summary.assignment}</small>
+                </span>
+                <em className="dash-assessment-status">{summary.status}</em>
+              </li>;
+            })}
           </ul>
         )}
+        {errors.sports && pending.length > 0 && <p className="dash-assessment-note">Không tải được tên bộ môn; đang hiển thị mã bộ môn.</p>}
+        <Link className="coach-dashboard-link" to="/coach/skill-assessments">Mở trang đánh giá kỹ năng</Link>
       </Card>
     </div>
   </>);
