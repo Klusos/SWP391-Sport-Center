@@ -3,12 +3,13 @@ import { Link } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import "./Dashboard.css";
 import "./MemberTheme.css";
+import "./CoachTheme.css";
 import {
   getUsersApi, getSportsApi, getCoachesApi, getConsultationRequestsApi,
   getPublicMembershipPlansApi, getAssignedPtBookingsApi, getMySkillAssessmentAssignmentsApi,
   getMyPtBookingsApi, getMyMemberSportLevelsApi, getMySkillAssessmentsApi,
   getMyConsultationRequestsApi, getCurrentUserApi, getMembershipsByMemberApi, getMyClassSessionsApi,
-  getMyRegistrationsApi, getMyAttendanceApi, getMyPaymentsApi,
+  getMyRegistrationsApi, getMyAttendanceApi, getMyPaymentsApi, getCoachAttendanceSessionsApi, getCoachSportsApi,
 } from "../api";
 
 /* ---------- helpers ---------- */
@@ -32,7 +33,14 @@ const LOADERS = {
     members: memberUsers, sports: getSportsApi, plans: getPublicMembershipPlansApi,
     requests: (t) => getConsultationRequestsApi(t, { size: 100 }),
   },
-  COACH: { bookings: getAssignedPtBookingsApi, assessments: getMySkillAssessmentAssignmentsApi },
+  COACH: {
+    me: getCurrentUserApi, sports: getSportsApi, classSessions: getCoachAttendanceSessionsApi,
+    bookings: getAssignedPtBookingsApi, assessments: getMySkillAssessmentAssignmentsApi,
+    coachSports: (t) => Promise.all([getCurrentUserApi(t), getCoachesApi(t)]).then(([u, cs]) => {
+      const c = list(cs).find((x) => x.userId === u.id);
+      return c ? getCoachSportsApi(t, c.id) : [];
+    }),
+  },
   MEMBER: {
     bookings: getMyPtBookingsApi, sessions: getMyClassSessionsApi, regs: getMyRegistrationsApi,
     levels: getMyMemberSportLevelsApi, attendance: getMyAttendanceApi, payments: getMyPaymentsApi,
@@ -160,29 +168,166 @@ function BookingList({ items, who }) {
   );
 }
 
-function Coach({ d }) {
-  const up = upcoming(d.bookings);
-  const pending = list(d.assessments).filter((a) => !/COMPLETED|CANCEL/i.test(a.status || ""));
+const CI = {
+  users: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75",
+  board: "M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2 M9 2h6v4H9z M9 14l2 2 4-4",
+  award: "M12 15a6 6 0 1 0 0-12 6 6 0 0 0 0 12 M8.2 13.9 7 22l5-3 5 3-1.2-8.1",
+  chev: "M9 18l6-6-6-6",
+  arrow: "M5 12h14 M12 5l7 7-7 7",
+  calx: "M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M10 14l4 4 M14 14l-4 4",
+  check: "M22 11.08V12a10 10 0 1 1-5.93-9.14 M22 4 12 14.01l-3-3",
+  cal: "M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
+};
+const PT_STATUS = { CONFIRMED: ["Đã xác nhận", "ok"], PENDING_PAYMENT: ["Chờ thanh toán", "warn"], COMPLETED: ["Hoàn thành", "ok"] };
+const CLASS_STATUS = { SCHEDULED: ["Đã lên lịch", "ok"], COMPLETED: ["Đã hoàn thành", "ok"], CANCELLED: ["Đã hủy", "bad"] };
+
+function CStat({ icon, tone, label, value, sub, pct }) {
+  return (
+    <article className={"md-stat " + tone}>
+      <header><span>{label}</span><i><Ic d={icon} /></i></header>
+      <div className="cd-stat-row"><strong>{value}</strong><small>{sub}</small></div>
+      <div className="cd-line"><i style={{ width: pct + "%" }} /></div>
+    </article>
+  );
+}
+
+function Coach({ d, onNavigate }) {
+  const now = new Date();
+  const sameDay = (v) => v && new Date(v).toDateString() === now.toDateString();
+  const byStart = (a, b) => new Date(a.start) - new Date(b.start);
+  const sportName = new Map(list(d.sports).map((x) => [Number(x.id), x.name]));
+  const mySports = list(d.coachSports).map((x) => x.sportName).filter(Boolean);
+
+  const classes = list(d.classSessions);
+  const todayClass = classes.filter((x) => sameDay(x.startTime) && x.sessionStatus !== "CANCELLED");
+  const ptAll = list(d.bookings);
+  const ptToday = ptAll.filter((b) => sameDay(b.startTime) && !/CANCEL|EXPIRED/i.test(b.status || ""));
+  const ptUp = upcoming(d.bookings).filter((b) => b.status !== "EXPIRED");
+  const pending = list(d.assessments).filter((a) => a.status === "PENDING");
+  const done = list(d.assessments).filter((a) => a.status === "COMPLETED");
+  const toMark = todayClass.filter((x) => x.sessionStatus === "SCHEDULED" && new Date(x.startTime) <= now);
+  const unpaid = ptAll.filter((b) => b.status === "PENDING_PAYMENT");
+
+  const schedule = [
+    ...todayClass.map((x) => ({ id: "c" + x.classSessionId, start: x.startTime, end: x.endTime, kind: "class", title: x.courseClassName || x.courseName || "Lớp học", sub: [x.courseName, x.sportName].filter(Boolean).join(" · "), st: CLASS_STATUS[x.sessionStatus] || [x.sessionStatus, "warn"], canMark: x.sessionStatus === "SCHEDULED" && new Date(x.startTime) <= now })),
+    ...ptToday.map((b) => ({ id: "p" + b.id, start: b.startTime, end: b.endTime, kind: "pt", title: "PT 1-1 · " + (b.sportName || ""), sub: b.memberName || "", st: PT_STATUS[b.status] || [b.status, "warn"] })),
+  ].sort(byStart);
+  const nextClass = [...todayClass].sort((a, b) => new Date(a.startTime) - new Date(b.startTime)).find((x) => new Date(x.startTime) > now);
+
+  const tasks = [
+    { icon: CI.check, title: "Điểm danh buổi học đang diễn ra", ok: toMark.length === 0, text: toMark.length ? toMark.length + " buổi đã bắt đầu, chờ bạn điểm danh" : "Không có buổi nào cần điểm danh", go: "coach-attendance" },
+    { icon: CI.board, title: "Hoàn tất đánh giá kỹ năng", ok: pending.length === 0, text: pending.length ? pending.length + " học viên đang chờ đánh giá" : "Bạn đã xử lý hết các đánh giá", go: "coach-assessments" },
+    { icon: CI.users, title: "Theo dõi thanh toán buổi PT", ok: unpaid.length === 0, text: unpaid.length ? unpaid.length + " buổi chờ học viên thanh toán" : "Tất cả buổi PT đã được thanh toán", go: "coach-pt-sessions" },
+  ];
+  const doneCount = tasks.filter((t) => t.ok).length;
+
   return (<>
-    <Stats items={[
-      { label: "Buổi PT được giao", value: total(d.bookings), color: "blue" },
-      { label: "Sắp diễn ra", value: d.bookings == null ? "—" : up.length, color: "green" },
-      { label: "Đánh giá cần làm", value: d.assessments == null ? "—" : pending.length, color: "orange" },
-      { label: "Tổng đánh giá", value: total(d.assessments), color: "blue" },
-    ]} />
-    <div className="dash-grid wide">
-      <Card title="Buổi huấn luyện sắp tới">
-        <BookingList items={up} who={(b) => b.memberName || b.memberFullName || b.member?.fullName || ""} />
-      </Card>
-      <Card title="Đánh giá kỹ năng cần làm">
-        {pending.length === 0 ? <Empty>Không có đánh giá nào đang chờ.</Empty> : (
-          <ul className="dash-rows">
-            {pending.slice(0, 5).map((a) => (
-              <li key={a.id}><span>{a.memberName || a.memberFullName || "Học viên"}</span><em>{a.sportName || a.sport?.name || ""}</em></li>
+    <section className="cd-welcome">
+      <div>
+        <h1>Xin chào, Coach {d.me?.name || ""} 👋 {mySports.length > 0 && <span className="md-badge">{mySports.join(" · ")}</span>}</h1>
+        <p>Chúc bạn một ngày tràn đầy năng lượng! Dưới đây là tổng quan công việc của bạn hôm nay.</p>
+      </div>
+      <div className="cd-actions">
+        <span className="cd-date"><Ic d={CI.cal} size={16} /> Hôm nay: {now.toLocaleDateString("vi-VN")}</span>
+        <button type="button" className="cd-ghost" onClick={() => onNavigate("coach-attendance")}><Ic d={CI.check} size={16} /> Điểm danh</button>
+        <button type="button" className="md-cta" onClick={() => onNavigate("coach-pt-sessions")}><Ic d={CI.users} size={16} /> Buổi PT cá nhân</button>
+      </div>
+    </section>
+
+    <div className="md-stats">
+      <CStat icon={CI.users} tone="blue" label="Buổi lớp hôm nay" value={todayClass.length}
+        sub={nextClass ? "Kế tiếp: " + hm(nextClass.startTime) : "Chưa có lịch phân công"}
+        pct={todayClass.length ? (todayClass.filter((x) => x.sessionStatus === "COMPLETED").length / todayClass.length) * 100 : 0} />
+      <CStat icon={ICON.pt} tone="green" label="Buổi PT sắp tới" value={ptUp.length}
+        sub={ptUp[0] ? "Kế tiếp: " + hm(ptUp[0].startTime) : "Chưa có học viên đặt lịch"} pct={ptUp.length ? 100 : 0} />
+      <CStat icon={CI.board} tone={pending.length ? "orange" : "green"} label="Đánh giá cần làm" value={pending.length}
+        sub={pending.length ? "Cần đánh giá sớm" : "Tuyệt vời! Không tồn đọng"} pct={pending.length ? 100 : 100} />
+      <CStat icon={CI.award} tone="purple" label="Đã hoàn tất đánh giá" value={done.length}
+        sub={done.length ? "Tổng số đã xử lý" : "Bắt đầu sau buổi học đầu"}
+        pct={done.length + pending.length ? (done.length / (done.length + pending.length)) * 100 : 0} />
+    </div>
+
+    <div className="md-grid">
+      <section className="md-card">
+        <div className="md-card-head"><h2>Lịch dạy hôm nay <span className="cd-count">{schedule.length} ca</span></h2>
+          <button type="button" className="md-link" onClick={() => onNavigate("coach-schedule")}>Xem lịch cả tuần →</button></div>
+        {schedule.length === 0 ? (
+          <div className="cd-empty"><i><Ic d={CI.calx} size={34} /></i><h3>Hôm nay bạn không có buổi dạy nào!</h3>
+            <p>Hãy tận dụng thời gian này để nghỉ ngơi hoặc chuẩn bị giáo án cho các buổi sắp tới. Lịch sẽ tự cập nhật khi trung tâm phân ca.</p>
+            <button type="button" className="md-cta" onClick={() => onNavigate("coach-schedule")}><Ic d={CI.cal} size={16} /> Xem lịch cả tuần</button></div>
+        ) : (
+          <ul className="md-timeline">
+            {schedule.map((x) => (
+              <li key={x.id}>
+                <div className="cd-time"><b>{hm(x.start)}</b><span>{x.end ? hm(x.end) : ""}</span></div>
+                <div className="md-info">
+                  <h3>{x.title} <span className={"md-tag " + (x.kind === "pt" ? "pt" : "cls")}>{x.kind === "pt" ? "PT 1-1" : "Lớp học"}</span></h3>
+                  {x.sub && <p>{x.sub}</p>}
+                </div>
+                <div className="cd-row-end">
+                  <span className={"md-chip " + x.st[1]}>{x.st[0]}</span>
+                  {x.kind === "class" && <button type="button" className="cd-mini" disabled={!x.canMark} onClick={() => onNavigate("coach-attendance")}>{x.canMark ? "Điểm danh" : "Chưa đến giờ"}</button>}
+                </div>
+              </li>
             ))}
           </ul>
         )}
-      </Card>
+      </section>
+
+      <section className="md-card">
+        <div className="md-card-head"><h2>Đánh giá kỹ năng đang chờ <span className={"cd-count " + (pending.length ? "warn" : "ok")}>{pending.length} chờ đánh giá</span></h2></div>
+        {pending.length === 0 ? (
+          <div className="cd-empty ok"><i><Ic d={CI.check} size={34} /></i><h3>Tuyệt vời!</h3>
+            <p>Bạn đã hoàn thành tất cả đánh giá kỹ năng. Không có hồ sơ nào đang chờ xử lý.</p></div>
+        ) : (
+          <ul className="cd-list">
+            {pending.slice(0, 5).map((a) => (
+              <li key={a.id}>
+                <span className="cd-avatar">{String(a.memberId).slice(-2)}</span>
+                <div><b>Học viên #{a.memberId}</b><small>{sportName.get(Number(a.sportId)) || "Bộ môn #" + a.sportId} · giao ngày {a.createdAt ? new Date(a.createdAt).toLocaleDateString("vi-VN") : "—"}</small></div>
+                <button type="button" className="cd-mini" onClick={() => onNavigate("coach-assessments")}>Mở đánh giá</button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+
+    <div className="md-grid cd-grid2">
+      <section className="md-card">
+        <div className="md-card-head"><h2>Buổi PT sắp tới <span className="cd-count">Sắp tới</span></h2>
+          <button type="button" className="md-link" onClick={() => onNavigate("coach-pt-sessions")}>Xem tất cả →</button></div>
+        {ptUp.length === 0 ? (
+          <div className="cd-empty small"><i><Ic d={CI.calx} size={28} /></i><h3>Chưa có buổi PT nào sắp tới</h3>
+            <p>Các buổi tập mới sẽ xuất hiện tại đây khi học viên đặt lịch với bạn.</p></div>
+        ) : (
+          <ul className="md-timeline">
+            {ptUp.slice(0, 4).map((b) => {
+              const st = PT_STATUS[b.status] || [b.status, "warn"];
+              return (
+                <li key={b.id}>
+                  <div className="md-date"><small>{WD[new Date(b.startTime).getDay()]}</small><b>{new Date(b.startTime).getDate()}</b><span>{hm(b.startTime)}</span></div>
+                  <div className="md-info"><h3>{b.memberName || "Học viên"}</h3><p>{b.sportName}{b.durationMinutes ? " · " + b.durationMinutes + " phút" : ""}</p></div>
+                  <span className={"md-chip " + st[1]}>{st[0]}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
+      <section className="md-card">
+        <div className="md-card-head"><h2>Việc cần làm <span className="cd-count">Hôm nay</span></h2><span className="cd-muted">{doneCount}/{tasks.length} hoàn tất</span></div>
+        <div className="cd-tasks">
+          {tasks.map((t) => (
+            <button type="button" key={t.title} className={"cd-task" + (t.ok ? " ok" : "")} onClick={() => onNavigate(t.go)}>
+              <i><Ic d={t.ok ? CI.check : t.icon} size={20} /></i>
+              <span><b>{t.title}</b><small>{t.text}</small></span>
+              <Ic d={CI.chev} size={18} />
+            </button>
+          ))}
+        </div>
+      </section>
     </div>
   </>);
 }
@@ -367,7 +512,7 @@ export default function Dashboard({ token, role, onLogout, onNavigate }) {
     <div className="layout">
       <Sidebar role={role} activePage="dashboard" onLogout={onLogout} onNavigate={onNavigate} />
       <main className="main dash-main">
-        {role !== "MEMBER" && <><h1>{title}</h1>
+        {role !== "MEMBER" && role !== "COACH" && <><h1>{title}</h1>
         <p className="subtitle">{sub || "Hôm nay: " + today}</p></>}
         {loading ? <div className="queue-state">Đang tải dữ liệu…</div> : <View d={data} onNavigate={onNavigate} />}
       </main>
