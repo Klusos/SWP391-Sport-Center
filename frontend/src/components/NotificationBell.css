@@ -21,3 +21,46 @@
 .notification-pagination button { padding: 6px 9px; border: 1px solid #dbe3f0; border-radius: 6px; background: #fff; color: #203b56; cursor: pointer; }
 .notification-pagination button:disabled { opacity: .45; cursor: not-allowed; }
 @media (max-width: 600px) { .notification-widget { top: 10px; right: 12px; } .notification-bell { width: 42px; height: 42px; } .notification-panel { right: -2px; max-height: calc(100vh - 68px); } }
+
+.notification-widget { isolation: isolate; }
+.notification-bell {
+  border-radius: 13px;
+  color: #173e65;
+  box-shadow: 0 5px 18px rgb(9 31 56 / 10%);
+  transition: border-color .16s ease, background .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+.notification-bell:hover { transform: translateY(-1px); box-shadow: 0 8px 22px rgb(9 31 56 / 14%); }
+.notification-count { top: -6px; right: -6px; min-width: 21px; border: 2px solid #fff; box-shadow: 0 2px 6px rgb(9 31 56 / 18%); }
+.notification-panel {
+  border-color: #d5e1ed;
+  border-radius: 16px;
+  box-shadow: 0 20px 54px rgb(9 31 56 / 20%);
+}
+.notification-panel-header { background: linear-gradient(120deg, #f2f8ff, #fff); }
+.notification-panel-header > button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 9px;
+}
+.notification-panel-header > button:hover { background: #eaf2fb; color: #173e65; }
+.notification-read-all { min-height: 36px; padding: 0 10px; border-radius: 8px; }
+.notification-read-all:hover:not(:disabled) { background: #eff6ff; }
+.notification-error { padding: 10px 12px; border-radius: 9px; background: #fff1f0; line-height: 1.5; }
+.notification-item { position: relative; gap: 7px; transition: background .14s ease; }
+.notification-item.is-unread { padding-left: 22px; background: #f0f6ff; }
+.notification-item.is-unread::before { position: absolute; top: 19px; left: 10px; width: 6px; height: 6px; border-radius: 50%; background: #1767d2; content: ""; }
+.notification-item.is-unread:hover:not(:disabled) { background: #e6f1ff; }
+.notification-item.is-read { color: #52677d; }
+.notification-pagination { gap: 10px; background: #fbfdff; }
+.notification-pagination button { min-height: 36px; border-radius: 8px; font: inherit; font-weight: 650; }
+.notification-pagination button:hover:not(:disabled) { border-color: #9bbce0; background: #f2f8ff; }
+.notification-widget button:focus-visible { outline: 3px solid rgb(23 103 210 / 28%); outline-offset: 3px; }
+@media (max-width: 600px) {
+  .notification-panel { right: -3px; width: min(390px, calc(100vw - 20px)); border-radius: 13px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .notification-bell, .notification-item { transition: none; }
+  .notification-bell:hover { transform: none; }
+}

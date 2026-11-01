@@ -6,6 +6,7 @@ import {
   getMySkillAssessmentAssignmentsApi,
   getSportsApi,
 } from "../api";
+import "./CoachSkillAssessments.css";
 
 const LEVELS = ["BEGINNER", "INTERMEDIATE", "ADVANCED"];
 const LEVEL_RANK = { BEGINNER: 0, INTERMEDIATE: 1, ADVANCED: 2 };
@@ -23,6 +24,8 @@ export default function CoachSkillAssessments({ token, role, onLogout, onNavigat
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [sportsError, setSportsError] = useState("");
+  const [activeTab, setActiveTab] = useState("pending");
+  const [sportFilter, setSportFilter] = useState("all");
   const [selected, setSelected] = useState(null);
   const [levelRecord, setLevelRecord] = useState(null);
   const [levelLoading, setLevelLoading] = useState(false);
@@ -41,6 +44,9 @@ export default function CoachSkillAssessments({ token, role, onLogout, onNavigat
   const isDowngrade = Boolean(assessedLevel && LEVEL_RANK[assessedLevel] < LEVEL_RANK[currentLevel]);
   const pending = useMemo(() => assignments.filter((item) => item.status === "PENDING"), [assignments]);
   const history = useMemo(() => assignments.filter((item) => item.status === "COMPLETED" || item.status === "CANCELLED"), [assignments]);
+  const sportOptions = useMemo(() => [...new Set(assignments.map((item) => Number(item.sportId)))].sort((a, b) => a - b), [assignments]);
+  const visiblePending = useMemo(() => pending.filter((item) => sportFilter === "all" || Number(item.sportId) === Number(sportFilter)), [pending, sportFilter]);
+  const visibleHistory = useMemo(() => history.filter((item) => sportFilter === "all" || Number(item.sportId) === Number(sportFilter)), [history, sportFilter]);
 
   const loadAssignments = useCallback(async () => {
     setLoading(true);
@@ -177,7 +183,7 @@ export default function CoachSkillAssessments({ token, role, onLogout, onNavigat
 
   return <div className="layout">
     <Sidebar role={role} activePage="coach-assessments" onNavigate={onNavigate} onLogout={onLogout} />
-    <main className="main">
+    <main className="main coach-skill-assessments-page">
       <header className="page-header"><p className="eyebrow">SPORTCENTER / COACH</p><h1>Quản lý đánh giá kỹ năng</h1>
         <p className="subtitle">Xem các assessment được phân công và cập nhật trình độ sau khi đánh giá Member.</p></header>
       {notice && <p className="banner success" role="status">{notice}</p>}
@@ -187,12 +193,27 @@ export default function CoachSkillAssessments({ token, role, onLogout, onNavigat
         <button type="button" onClick={() => void loadAssignments()} disabled={loading}>{loading ? "Đang tải…" : "Làm mới"}</button></div>
 
       {loading ? <div className="queue-state" role="status">Đang tải assignment…</div> : !error && <>
-        <section className="coach-assessment-group"><h2>Đang chờ đánh giá</h2>
-          {pending.length === 0 ? <p className="queue-state">Không có assessment PENDING được phân công.</p> : <div className="coach-assessment-list">{pending.map(renderAssessment)}</div>}
-        </section>
-        <section className="coach-assessment-group"><h2>Lịch sử assessment</h2>
-          {history.length === 0 ? <p className="queue-state">Chưa có assessment COMPLETED hoặc CANCELLED.</p> : <div className="coach-assessment-list">{history.map(renderAssessment)}</div>}
-        </section>
+        <div className="coach-assessment-tabs" role="group" aria-label="Lọc danh sách đánh giá">
+          <button type="button" aria-pressed={activeTab === "pending"} className={activeTab === "pending" ? "is-active" : ""} onClick={() => setActiveTab("pending")}>
+            Đang chờ <span>{pending.length}</span>
+          </button>
+          <button type="button" aria-pressed={activeTab === "history"} className={activeTab === "history" ? "is-active" : ""} onClick={() => setActiveTab("history")}>
+            Lịch sử <span>{history.length}</span>
+          </button>
+        </div>
+        {sportOptions.length > 1 && <label className="coach-assessment-sport-filter">
+          Bộ môn
+          <select value={sportFilter} onChange={(event) => setSportFilter(event.target.value)} aria-label="Lọc theo bộ môn">
+            <option value="all">Tất cả bộ môn</option>
+            {sportOptions.map((sportId) => <option key={sportId} value={sportId}>{sportNames.get(sportId) || `Bộ môn #${sportId}`}</option>)}
+          </select>
+        </label>}
+        {activeTab === "pending" && <section className="coach-assessment-group"><h2>Đang chờ đánh giá</h2>
+          {visiblePending.length === 0 ? <p className="queue-state">Không có assessment PENDING phù hợp với bộ lọc.</p> : <div className="coach-assessment-list">{visiblePending.map(renderAssessment)}</div>}
+        </section>}
+        {activeTab === "history" && <section className="coach-assessment-group"><h2>Lịch sử assessment</h2>
+          {visibleHistory.length === 0 ? <p className="queue-state">Chưa có assessment lịch sử phù hợp với bộ lọc.</p> : <div className="coach-assessment-list">{visibleHistory.map(renderAssessment)}</div>}
+        </section>}
       </>}
 
       {selected && <section className="coach-assessment-detail" aria-labelledby="coach-assessment-detail-title">

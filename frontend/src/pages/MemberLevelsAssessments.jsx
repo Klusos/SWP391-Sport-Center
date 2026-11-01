@@ -6,6 +6,7 @@ import {
   getMySkillAssessmentsApi,
   getPublicSportsApi,
 } from "../api";
+import "./MemberLevelsAssessments.css";
 
 const ASSESSMENT_STATUS = {
   PENDING: "Đang chờ Coach đánh giá",
