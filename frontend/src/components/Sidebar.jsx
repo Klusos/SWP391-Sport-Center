@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 function Item({ page, activePage, onNavigate, children }) {
   return (
     <button
@@ -8,6 +10,88 @@ function Item({ page, activePage, onNavigate, children }) {
     >
       {children}
     </button>
+  );
+}
+
+const adminGroups = [
+  {
+    id: "oversight-exceptions",
+    title: "GIÁM SÁT & NGOẠI LỆ",
+    pages: [
+      ["admin-membership-sales", "Quản lý gói thành viên"],
+      ["course-payments", "Thanh toán khóa học"],
+      ["pt-payments", "Thanh toán PT"],
+      ["attendance", "Điểm danh lớp học"],
+      ["admin-training", "Quản lý tập luyện"],
+    ],
+  },
+  {
+    id: "catalog-management",
+    title: "Quản lý danh mục",
+    pages: [
+      ["sports", "Quản lý bộ môn"],
+      ["courses", "Quản lý khóa học"],
+      ["classes", "Quản lý lớp học"],
+      ["facilities", "Quản lý cơ sở vật chất"],
+      ["membership-plans", "Gói hội viên"],
+    ],
+  },
+  {
+    id: "administration",
+    title: "Quản trị hệ thống",
+    pages: [
+      ["members", "Thành viên"],
+      ["staff", "Quản lý nhân sự"],
+      ["register", "Đăng ký thành viên"],
+      ["reports", "Báo cáo và thống kê"],
+      ["audit-logs", "Audit Logs"],
+      ["notification-broadcast", "Gửi thông báo"],
+    ],
+  },
+];
+
+const adminPageByGroup = new Map(
+  adminGroups.flatMap((group) => group.pages.map(([page]) => [page, group.id])),
+);
+
+function AdminNavigation({ activePage, onNavigate }) {
+  const activeAdminGroup = adminPageByGroup.get(activePage);
+  const [expandedAdminGroup, setExpandedAdminGroup] = useState(activeAdminGroup);
+
+  return (
+    <>
+      <Item page="dashboard" activePage={activePage} onNavigate={onNavigate}>
+        Tổng quan
+      </Item>
+      {adminGroups.map((group) => {
+        const expanded = expandedAdminGroup === group.id;
+        return (
+          <section className="admin-nav-group" key={group.id}>
+            <button
+              className={`admin-nav-group-toggle${activeAdminGroup === group.id ? " active-group" : ""}`}
+              type="button"
+              aria-expanded={expanded}
+              aria-controls={`admin-nav-${group.id}`}
+              onClick={() => setExpandedAdminGroup(expanded ? null : group.id)}
+            >
+              <span>{group.title}</span>
+              <span className="admin-nav-chevron" aria-hidden="true">{expanded ? "−" : "+"}</span>
+            </button>
+            <div
+              className="admin-nav-group-items"
+              id={`admin-nav-${group.id}`}
+              hidden={!expanded}
+            >
+              {group.pages.map(([page, text]) => (
+                <Item key={page} page={page} activePage={activePage} onNavigate={onNavigate}>
+                  {text}
+                </Item>
+              ))}
+            </div>
+          </section>
+        );
+      })}
+    </>
   );
 }
 
@@ -81,11 +165,19 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
     <aside className="sidebar">
       <div className="brand"><strong>SPORTS CENTER</strong><span>{label}</span></div>
       <nav aria-label={`${role} navigation`}>
-        {links.map(([page, text]) => (
-          <Item key={page} page={page} activePage={activePage} onNavigate={onNavigate}>
-            {text}
-          </Item>
-        ))}
+        {role === "ADMIN" ? (
+          <AdminNavigation
+            key={activePage}
+            activePage={activePage}
+            onNavigate={onNavigate}
+          />
+        ) : (
+          links.map(([page, text]) => (
+            <Item key={page} page={page} activePage={activePage} onNavigate={onNavigate}>
+              {text}
+            </Item>
+          ))
+        )}
       </nav>
       <div className="nav-footer">
         <button className="nav-item clickable logout-button" type="button" onClick={onLogout}>
