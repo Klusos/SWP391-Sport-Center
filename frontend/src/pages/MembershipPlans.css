@@ -196,6 +196,47 @@
   .membership-main .form-card { border-radius: 14px; }
 }
 
+/* Keep the existing plan table and editor while borrowing the source page's stronger hierarchy. */
+.membership-main > h1 {
+  position: relative;
+  padding-left: 15px;
+}
+.membership-main > h1::before {
+  position: absolute;
+  top: .12em;
+  bottom: .12em;
+  left: 0;
+  width: 4px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #20a7d8, #1767d2);
+  content: "";
+}
+.membership-main .member-list-toolbar {
+  padding: 12px;
+  border: 1px solid #e0e8f2;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .82);
+  box-shadow: 0 5px 18px rgba(24, 54, 91, .035);
+}
+.membership-main .member-list-toolbar > span {
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: #edf5ff;
+  color: #174f8f;
+  font-size: 13px;
+}
+.membership-main .queue-table-wrap {
+  border-color: #d8e4f1;
+  box-shadow: 0 14px 34px rgba(20, 48, 82, .075);
+}
+.membership-main .queue-table tbody tr:hover td {
+  background: #f5f9ff;
+}
+.membership-main button:focus-visible {
+  outline: 3px solid rgba(23, 103, 210, .25);
+  outline-offset: 2px;
+}
+
 /* Form tạo / chỉnh sửa gói hội viên */
 .membership-main .form-card {
   position: relative;

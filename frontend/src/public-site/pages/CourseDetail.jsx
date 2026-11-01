@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import PageHero from "../components/PageHero.jsx";
 import Sidebar from "../../components/Sidebar.jsx";
 import "../../pages/MemberCourseDetail.css";
+import "./CourseDetail.css";
 import {
   createCourseRegistrationApi,
   createMemberConsultationRequestApi,

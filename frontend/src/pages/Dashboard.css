@@ -60,3 +60,35 @@
   .dash-search { flex-direction: column; }
   .dash-sessions li { grid-template-columns: 1fr; }
 }
+
+/* Shared dashboard visual polish; role-specific data and actions stay in Dashboard.jsx. */
+.dash-main > h1 {
+  margin-bottom: 4px;
+  color: var(--navy);
+  font-size: clamp(1.65rem, 2.2vw, 2rem);
+  font-weight: 800;
+  letter-spacing: -.035em;
+}
+.dash-main .dash-stat {
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 5px 18px rgba(20, 48, 82, .045);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.dash-main .dash-stat:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(20, 48, 82, .09);
+}
+.dash-main .dash-card {
+  box-shadow: 0 6px 22px rgba(20, 48, 82, .045);
+}
+.dash-main .dash-card > h2 {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #edf2f7;
+  color: var(--navy);
+  font-weight: 750;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dash-main .dash-stat { transition: none; }
+  .dash-main .dash-stat:hover { transform: none; }
+}

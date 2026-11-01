@@ -1,3 +1,69 @@
 .member-membership-header{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;margin-bottom:22px}.member-membership-header h1{margin:0 0 8px;color:#123b63}.member-membership-header button,.pf-plan button,.dash-rows li>button{border:0;border-radius:8px;padding:10px 14px;background:#0878bd;color:#fff;font-weight:700;cursor:pointer}.member-membership-header button:disabled,.pf-plan button:disabled,.dash-rows li>button:disabled{opacity:.55;cursor:wait}.pf-plan button{justify-self:start;margin-top:8px}.dash-rows li>button{background:#64778a;white-space:nowrap}@media(max-width:650px){.member-membership-header{display:block}.member-membership-header button{margin-top:8px}.dash-rows li{align-items:flex-start}.dash-rows li>button{white-space:normal}}
 .member-payment-history{overflow-x:auto}.member-payment-history table{width:100%;border-collapse:collapse;font-size:14px}.member-payment-history th,.member-payment-history td{padding:9px 10px;border-bottom:1px solid #e3ebf2;text-align:left;vertical-align:top}.member-payment-history th{color:#60758c;font-weight:650;white-space:nowrap}.member-payment-history td small{display:block;margin-top:3px;color:#60758c}.member-payment-status{display:inline-block;padding:2px 8px;border-radius:999px;font-size:13px;font-weight:650;background:#eef2f6;color:#435d75}.member-payment-status.success{background:#d1e7dd;color:#0f5132}.member-payment-status.pending{background:#fff3cd;color:#664d03}.member-payment-status.refund_required{background:#f8d7da;color:#842029}.member-payment-status.refunded{background:#cfe2ff;color:#084298}.dash-rows li>small{color:#60758c}
 .mm-chain{display:grid;gap:0}.mm-chain-row{display:grid;grid-template-columns:minmax(150px,1.4fr) minmax(110px,.8fr) minmax(150px,1fr) minmax(170px,1.1fr);align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid #e3ebf2}.mm-chain-row:last-child{border-bottom:0}.mm-chain-plan{display:grid;gap:3px}.mm-chain-plan small,.mm-chain-renew small,.mm-chain-cancel small{color:#60758c}.mm-chain-status{justify-self:start;padding:3px 10px;border-radius:999px;font-size:13px;font-weight:650}.mm-chain-status.running{background:#d1e7dd;color:#0f5132}.mm-chain-status.upcoming{background:#e7f1fb;color:#0b5394}.mm-chain-renew,.mm-chain-cancel{display:grid;justify-items:start;gap:4px}.mm-chain-row button{border:0;border-radius:8px;padding:9px 14px;background:#0878bd;color:#fff;font-weight:700;cursor:pointer;white-space:nowrap}.mm-chain-row button.secondary{background:#64778a}.mm-chain-row button:disabled{opacity:.55;cursor:wait}.mm-chain-notes{margin:12px 0 0;padding-left:18px;color:#60758c;font-size:14px;line-height:1.5}@media(max-width:760px){.mm-chain-row{grid-template-columns:1fr 1fr}.mm-chain-renew,.mm-chain-cancel{grid-column:span 1}}@media(max-width:480px){.mm-chain-row{grid-template-columns:1fr}.mm-chain-row button{white-space:normal}}
+
+.member-membership-page {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+.member-membership-page > .member-membership-header {
+  align-items: center;
+  margin: 0;
+  padding: clamp(18px, 2.5vw, 28px);
+  border: 1px solid #dce8f5;
+  border-radius: 18px;
+  background: linear-gradient(120deg, #eef6ff 0%, #fff 72%);
+  box-shadow: 0 8px 26px rgba(20, 48, 82, .055);
+}
+.member-membership-page .member-membership-header h1 {
+  color: #102a4c;
+  font-size: clamp(26px, 2.4vw, 34px);
+  font-weight: 800;
+  letter-spacing: -.035em;
+}
+.member-membership-page > .dash-card {
+  margin: 0;
+  padding: clamp(17px, 2vw, 24px);
+  border: 1px solid #e0e8f2;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 7px 22px rgba(20, 48, 82, .045);
+}
+.member-membership-page > .dash-card > h2 {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #edf2f7;
+  color: #123b63;
+  font-size: 17px;
+  font-weight: 750;
+}
+.member-membership-page .mm-chain-row {
+  margin-bottom: 10px;
+  padding: 15px;
+  border: 1px solid #e2eaf4;
+  border-radius: 12px;
+  background: #fbfdff;
+}
+.member-membership-page .mm-chain-row:last-child { margin-bottom: 0; }
+.member-membership-page .mm-chain-plan b { color: #16365d; }
+.member-membership-page .pf-plan {
+  border: 1px solid #dce7f4;
+  border-radius: 15px;
+  box-shadow: 0 8px 22px rgba(20, 48, 82, .055);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.member-membership-page .pf-plan:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 13px 28px rgba(20, 48, 82, .1);
+}
+.member-membership-page .member-payment-history th {
+  background: #f5f9ff;
+  color: #526a86;
+}
+.member-membership-page .member-payment-history tbody tr:hover td { background: #fbfdff; }
+@media (max-width: 760px) {
+  .member-membership-page > .member-membership-header { align-items: flex-start; }
+  .member-membership-page .mm-chain-row { grid-template-columns: 1fr; }
+  .member-membership-page .pf-plan:hover { transform: none; }
+}
