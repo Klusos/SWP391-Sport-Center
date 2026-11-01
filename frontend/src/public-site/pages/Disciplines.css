@@ -1,0 +1,161 @@
+.disciplines-page {
+  --discipline-ink: #102f4b;
+  --discipline-muted: #63798e;
+  --discipline-line: #dce7f1;
+  --discipline-blue: #176ed9;
+}
+
+.disciplines-page .page-hero {
+  display: flex;
+  min-height: 250px;
+  align-items: center;
+  background-position: center 42%;
+}
+
+.disciplines-section {
+  padding-top: clamp(38px, 5vw, 66px);
+  padding-bottom: clamp(52px, 7vw, 86px);
+  background: linear-gradient(180deg, #f7faff 0%, #fff 260px);
+}
+
+.disciplines-content { max-width: 1210px; }
+
+.disciplines-back { margin: 0 0 18px; }
+
+.disciplines-back .link-arrow {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--discipline-line);
+  border-radius: 999px;
+  background: #fff;
+  text-decoration: none;
+}
+
+.disciplines-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 26px;
+}
+
+.disciplines-eyebrow {
+  color: var(--discipline-blue);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .14em;
+}
+
+.disciplines-heading h2 {
+  margin: 7px 0 6px;
+  color: var(--discipline-ink);
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 800;
+  letter-spacing: -.025em;
+}
+
+.disciplines-heading p { margin: 0; color: var(--discipline-muted); line-height: 1.65; }
+
+.disciplines-count {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: baseline;
+  gap: 7px;
+  padding: 10px 15px;
+  border: 1px solid var(--discipline-line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--discipline-blue);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.disciplines-count small { color: var(--discipline-muted); font-size: 11px; font-weight: 650; }
+.disciplines-error { margin-bottom: 20px; }
+
+.disciplines-state {
+  display: flex;
+  min-height: 150px;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 26px;
+  border: 1px dashed #cbd9e7;
+  border-radius: 16px;
+  background: #fff;
+  color: var(--discipline-muted);
+  text-align: center;
+}
+
+.disciplines-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #d7e7f7;
+  border-top-color: var(--discipline-blue);
+  border-radius: 50%;
+  animation: disciplines-spin .8s linear infinite;
+}
+
+.disciplines-empty { display: flex; flex-direction: column; gap: 8px; }
+.disciplines-empty > span { font-size: 28px; }
+.disciplines-empty h3 { margin: 0; color: var(--discipline-ink); font-size: 18px; }
+.disciplines-empty p { margin: 0; color: var(--discipline-muted); }
+
+.disciplines-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.disciplines-grid-item { width: auto; max-width: none; padding: 0; }
+
+.disciplines-sport-card,
+.disciplines-course-card {
+  overflow: hidden;
+  border: 1px solid var(--discipline-line);
+  border-radius: 17px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgb(16 47 75 / 5%);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.disciplines-sport-card:hover,
+.disciplines-course-card:hover {
+  transform: translateY(-3px);
+  border-color: #b7cfe5;
+  box-shadow: 0 14px 30px rgb(16 47 75 / 10%);
+}
+
+.disciplines-sport-card { color: inherit; text-decoration: none; }
+.disciplines-sport-image { overflow: hidden; aspect-ratio: 16 / 10; background: #eef4fa; }
+.disciplines-sport-image .catalog-image { width: 100%; height: 100%; object-fit: cover; transition: transform 220ms ease; }
+.disciplines-sport-card:hover .catalog-image { transform: scale(1.035); }
+.disciplines-sport-copy { display: grid; gap: 12px; padding: 20px 22px 22px; }
+.disciplines-sport-copy .sport-badge { width: auto; min-width: 44px; height: 28px; border-radius: 999px; font-size: 10px; }
+.disciplines-sport-copy h3,
+.disciplines-course-card h3 { margin: 0; color: var(--discipline-ink); font-size: 19px; font-weight: 800; }
+.disciplines-sport-copy .link-arrow { margin: 0; text-decoration: none; }
+
+.disciplines-course-card { display: flex; flex-direction: column; gap: 16px; padding: 22px; }
+.disciplines-course-top { display: flex; align-items: center; justify-content: space-between; }
+.disciplines-course-top .sport-badge { width: auto; min-width: 62px; height: 28px; border-radius: 999px; font-size: 10px; }
+.disciplines-course-top small { color: #9aabbb; font-size: 12px; font-weight: 800; }
+.disciplines-course-card .muted { flex: 1; margin: 0; color: var(--discipline-muted); line-height: 1.65; }
+.disciplines-course-card .link-arrow { display: inline-flex; align-items: center; gap: 8px; margin: 0; text-decoration: none; }
+.disciplines-course-card .link-arrow i { transition: transform 160ms ease; }
+.disciplines-course-card:hover .link-arrow i { transform: translateX(3px); }
+
+@keyframes disciplines-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 900px) {
+  .disciplines-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 600px) {
+  .disciplines-page .page-hero { min-height: 210px; background-position: 62% center; }
+  .disciplines-grid { grid-template-columns: 1fr; gap: 14px; }
+  .disciplines-heading { align-items: flex-start; flex-direction: column; }
+  .disciplines-count { font-size: 15px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .disciplines-spinner { animation-duration: 1.6s; }
+  .disciplines-sport-card, .disciplines-course-card, .disciplines-sport-image .catalog-image { transition: none; }
+}

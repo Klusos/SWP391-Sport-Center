@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import PageHero from '../components/PageHero.jsx'
 import Img from '../components/Img.jsx'
 import { getPublicCoursesBySportApi, getPublicSportsApi } from '../../api.js'
+import './Disciplines.css'
 export default function Disciplines() {
   const { sportId } = useParams()
   const [sports, setSports] = useState([])
@@ -26,29 +27,35 @@ export default function Disciplines() {
     return () => { active = false }
   }, [sportId])
   const selectedSport = sports.find((sport) => String(sport.id) === sportId)
-  return <>
+  return <div className="disciplines-page">
     <PageHero title={sportId ? (selectedSport?.name || 'KHÓA HỌC') : 'BỘ MÔN'}
       subtitle={sportId ? 'Các khóa học hiện có thuộc bộ môn đã chọn.' : 'Chọn môn thể thao để xem các khóa học đang mở.'}
       image="/images/disciplines-hero.png" />
-    <section className="section"><div className="container-xl">
-      {sportId && <p className="mb-4"><Link to="/bo-mon" className="link-arrow">← Tất cả bộ môn</Link></p>}
-      {error && <p className="banner error" role="alert">{error}</p>}
-      {sportId ? (courseLoading ? <p role="status">Đang tải khóa học…</p> : courses.length === 0
-        ? <p>Chưa có khóa học đang hoạt động cho bộ môn này.</p>
-        : <div className="row g-4">{courses.map((course) => <div className="col-md-6 col-lg-4" key={course.id}>
-          <article className="sport-card h-100"><div><span className="sport-badge">{course.level || 'COURSE'}</span>
-            <h5 className="mt-3">{course.name}</h5><p className="muted small">{course.description || course.learningOutcome || 'Thông tin chi tiết khóa học.'}</p>
+    <section className="section disciplines-section"><div className="container-xl disciplines-content">
+      {sportId && <p className="disciplines-back"><Link to="/bo-mon" className="link-arrow">← Tất cả bộ môn</Link></p>}
+      <div className="disciplines-heading"><div><span className="disciplines-eyebrow">SPORTS CENTER</span>
+        <h2>{sportId ? `Khám phá khóa học${selectedSport?.name ? ` · ${selectedSport.name}` : ''}` : 'Khám phá các bộ môn'}</h2>
+        <p>{sportId ? 'Chọn chương trình phù hợp với trình độ và mục tiêu luyện tập của bạn.' : 'Chọn một bộ môn để xem các chương trình và khóa học hiện có.'}</p></div>
+        {!sportId && !sportLoading && sports.length > 0 && <span className="disciplines-count">{sports.length}<small>bộ môn</small></span>}
+        {sportId && !courseLoading && courses.length > 0 && <span className="disciplines-count">{courses.length}<small>khóa học</small></span>}
+      </div>
+      {error && <p className="banner error disciplines-error" role="alert">{error}</p>}
+      {sportId ? (courseLoading ? <p className="disciplines-state" role="status">Đang tải khóa học…</p> : courses.length === 0
+        ? <p className="disciplines-state disciplines-empty">Chưa có khóa học đang hoạt động cho bộ môn này.</p>
+        : <div className="row g-4 disciplines-grid">{courses.map((course) => <div className="col-md-6 col-lg-4 disciplines-grid-item" key={course.id}>
+          <article className="sport-card h-100 disciplines-course-card"><div><span className="sport-badge">{course.level || 'COURSE'}</span>
+            <h3>{course.name}</h3><p className="muted small">{course.description || course.learningOutcome || 'Thông tin chi tiết khóa học.'}</p>
             <Link to={'/khoa-hoc/' + course.id} className="link-arrow">Xem chi tiết <i className="bi bi-arrow-right" /></Link>
           </div></article></div>)}</div>)
-        : sportLoading ? <p role="status">Đang tải bộ môn…</p> : sports.length === 0
-          ? <p>Hiện chưa có bộ môn nào đang hoạt động.</p>
-          : <div className="row g-4">{sports.map((sport) => <div className="col-md-6 col-lg-4" key={sport.id}>
-            <Link to={'/bo-mon/' + sport.id} className="sport-card sport-catalog-card d-block h-100 text-decoration-none">
+        : sportLoading ? <p className="disciplines-state" role="status">Đang tải bộ môn…</p> : sports.length === 0
+          ? <p className="disciplines-state disciplines-empty">Hiện chưa có bộ môn nào đang hoạt động.</p>
+          : <div className="row g-4 disciplines-grid">{sports.map((sport) => <div className="col-md-6 col-lg-4 disciplines-grid-item" key={sport.id}>
+            <Link to={'/bo-mon/' + sport.id} className="sport-card sport-catalog-card d-block h-100 text-decoration-none disciplines-sport-card">
               <Img src={sport.imageUrl} alt={sport.name} label={sport.name} className="catalog-image" />
-              <div className="sport-catalog-copy"><span className="sport-badge">{sport.name.slice(0, 3).toUpperCase()}</span>
-                <h5 className="mt-3">{sport.name}</h5><span className="link-arrow">Xem khóa học <i className="bi bi-arrow-right" /></span>
+              <div className="sport-catalog-copy disciplines-sport-copy"><span className="sport-badge">{sport.name.slice(0, 3).toUpperCase()}</span>
+                <h3>{sport.name}</h3><span className="link-arrow">Xem khóa học <i className="bi bi-arrow-right" /></span>
               </div>
             </Link></div>)}</div>}
     </div></section>
-  </>
+  </div>
 }
