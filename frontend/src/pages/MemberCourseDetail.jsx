@@ -7,6 +7,7 @@ import {
 
 import Sidebar from "../components/Sidebar";
 import "./Portal.css";
+import "./MemberCourseDetail.css";
 
 import {
   createCourseRegistrationApi,
@@ -1104,9 +1105,7 @@ export default function MemberCourseDetail({
 
           <div className="course-hero-decoration">
             <div className="hero-decoration-circle">
-              <span>
-                🏸
-              </span>
+            <span className="hero-sport-symbol">✦</span>
             </div>
           </div>
         </section>

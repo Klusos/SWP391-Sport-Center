@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import "./Portal.css";
+import "./MemberCourses.css";
 import { getPublicSportsApi, getPublicCoursesBySportApi } from "../api";
 
 const list = (d) => (Array.isArray(d) ? d : d?.content ?? []);
@@ -14,6 +15,8 @@ export default function MemberCourses({ role, onLogout, onNavigate }) {
   const [loadingSports, setLoadingSports] = useState(true);
   const [loadingCourses, setLoadingCourses] = useState(false);
   const [error, setError] = useState("");
+
+  const selectedSport = sports.find((sport) => sport.id === sportId) ?? null;
 
   useEffect(() => {
     let active = true;
@@ -80,118 +83,162 @@ export default function MemberCourses({ role, onLogout, onNavigate }) {
       />
 
       <main className="main member-courses-page">
-        <div className="courses-header">
-          <div>
-            <span className="page-eyebrow">SPORTS CENTER</span>
-            <h1>Khóa học</h1>
-            <p className="subtitle">
-              Khám phá các khóa học phù hợp và đăng ký lớp bạn yêu thích.
-            </p>
-          </div>
-        </div>
+        <div className="member-courses-shell">
+          <header className="member-courses-hero">
+            <div className="member-courses-hero-copy">
+              <span className="page-eyebrow">SPORTS CENTER</span>
+              <h1>Khám phá khóa học</h1>
+              <p>
+                Khám phá các chương trình đào tạo theo bộ môn và tìm khóa học phù hợp với mục tiêu của bạn.
+              </p>
 
-        {error && (
-          <div className="banner error" role="alert">
-            {error}
-          </div>
-        )}
-
-        <section className="courses-section">
-          <div className="section-heading">
-            <div>
-              <h2>Chọn bộ môn</h2>
-              <p>Lựa chọn môn thể thao bạn muốn tham gia.</p>
             </div>
-          </div>
 
-          {loadingSports ? (
-            <div className="queue-state">Đang tải bộ môn…</div>
-          ) : sports.length === 0 ? (
-            <div className="courses-empty">
-              Chưa có bộ môn công khai.
+            <div className="member-courses-hero-summary" aria-label="Bộ môn đang chọn">
+              <span className="hero-summary-label">Đang xem</span>
+              <strong>{selectedSport?.name || "Khóa học thể thao"}</strong>
+              <small>
+                {loadingCourses
+                  ? "Đang cập nhật danh sách…"
+                  : `${courses.length} khóa học hiện có`}
+              </small>
             </div>
-          ) : (
-            <div
-              className="sport-tabs"
-              role="tablist"
-              aria-label="Bộ môn"
-            >
-              {sports.map((sport) => (
-                <button
-                  key={sport.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={sport.id === sportId}
-                  className={`sport-tab ${
-                    sport.id === sportId ? "active" : ""
-                  }`}
-                  onClick={() => setSportId(sport.id)}
-                >
-                  {sport.name}
-                </button>
-              ))}
+          </header>
+
+          {error && (
+            <div className="banner error member-courses-error" role="alert">
+              {error}
             </div>
           )}
-        </section>
 
-        <section className="courses-section course-list-section">
-          <div className="section-heading">
-            <div>
-              <h2>Khóa học dành cho bạn</h2>
-              <p>Xem thông tin chi tiết trước khi đăng ký.</p>
+          <section className="member-course-filter-card" aria-labelledby="sport-filter-title">
+            <div className="member-course-section-head">
+              <div>
+                <h2 id="sport-filter-title">Bộ môn</h2>
+                <p>Khám phá khóa học theo môn thể thao bạn quan tâm.</p>
+              </div>
+
+              {!loadingSports && sports.length > 0 && (
+                <span className="member-course-total">
+                  {sports.length} bộ môn
+                </span>
+              )}
             </div>
 
-            {!loadingCourses && courses.length > 0 && (
-              <span className="course-count">
-                {courses.length} khóa học
-              </span>
-            )}
-          </div>
+            {loadingSports ? (
+              <div className="member-course-inline-loading">
+                <span className="member-course-spinner" />
+                Đang tải bộ môn…
+              </div>
+            ) : sports.length === 0 ? (
+              <div className="member-course-empty compact">
+                Chưa có bộ môn công khai.
+              </div>
+            ) : (
+              <div
+                className="member-sport-tabs"
+                role="tablist"
+                aria-label="Bộ môn"
+              >
+                {sports.map((sport) => {
+                  const active = sport.id === sportId;
 
-          {loadingCourses ? (
-            <div className="courses-loading">
-              <div className="loading-spinner" />
-              <span>Đang tải khóa học…</span>
-            </div>
-          ) : !loadingSports &&
-            sportId != null &&
-            courses.length === 0 ? (
-            <div className="courses-empty">
-              <div className="empty-icon">🏸</div>
-              <h3>Chưa có khóa học</h3>
-              <p>Bộ môn này hiện chưa có khóa học để đăng ký.</p>
-            </div>
-          ) : (
-            <div className="course-grid">
-              {courses.map((course) => (
-                <article className="course-card" key={course.id}>
-                  <div className="course-card-top">
-                    <span className="course-badge">Khóa học</span>
-                  </div>
-
-                  <div className="course-card-body">
-                    <h3>{course.name}</h3>
-
-                    <p>
-                      {course.description ||
-                        "Khám phá khóa học và lựa chọn lớp phù hợp với bạn."}
-                    </p>
-                  </div>
-
-                  <div className="course-card-footer">
-                    <Link
-                      className="course-detail-btn"
-                      to={`/member/courses/${course.id}`}
+                  return (
+                    <button
+                      key={sport.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      className={`member-sport-tab ${active ? "is-active" : ""}`}
+                      onClick={() => setSportId(sport.id)}
                     >
-                      <span>Xem chi tiết</span>
-                      <span aria-hidden="true">→</span>
-                    </Link>
-                  </div>
-                </article>
-              ))}
+                      <span className="member-sport-tab-dot" aria-hidden="true" />
+                      <span>{sport.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section
+            className="member-course-list-card"
+            aria-labelledby="member-course-list-title"
+          >
+            <div className="member-course-section-head list-head">
+              <div>
+                <h2 id="member-course-list-title">Danh sách khóa học</h2>
+                <p>
+                  {selectedSport
+                    ? `Các chương trình hiện có thuộc bộ môn ${selectedSport.name}.`
+                    : "Khám phá các khóa học hiện có."}
+                </p>
+              </div>
+
+              {!loadingCourses && courses.length > 0 && (
+                <span className="member-course-count">
+                  {courses.length} khóa học
+                </span>
+              )}
             </div>
-          )}
-        </section>
+
+            {loadingCourses ? (
+              <div className="member-course-loading-panel">
+                <span className="member-course-spinner large" />
+                <strong>Đang tải khóa học</strong>
+                <small>Danh sách sẽ xuất hiện ngay khi dữ liệu sẵn sàng.</small>
+              </div>
+            ) : !loadingSports &&
+              sportId != null &&
+              courses.length === 0 ? (
+              <div className="member-course-empty">
+                <div className="member-course-empty-icon" aria-hidden="true">
+                  ○
+                </div>
+                <h3>Chưa có khóa học</h3>
+                <p>Bộ môn này hiện chưa có khóa học để đăng ký.</p>
+              </div>
+            ) : (
+              <div className="member-course-grid">
+                {courses.map((course, index) => (
+                  <article className="member-course-card" key={course.id}>
+                    <div className="member-course-card-accent" aria-hidden="true" />
+
+                    <div className="member-course-card-top">
+                      <span className="member-course-badge">Khóa học</span>
+                      <span className="member-course-number" aria-hidden="true">
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+                    </div>
+
+                    <div className="member-course-card-body">
+                      <h3>{course.name}</h3>
+                      <p>
+                        {course.description ||
+                          "Khám phá khóa học và lựa chọn lớp phù hợp với bạn."}
+                      </p>
+                    </div>
+
+                    <div className="member-course-card-footer">
+                      <Link
+                        className="member-course-detail-btn"
+                        to={`/member/courses/${course.id}`}
+                      >
+                        <span>
+                          <small>Tìm hiểu thêm</small>
+                          <strong>Xem chi tiết khóa học</strong>
+                        </span>
+                        <span className="member-course-arrow" aria-hidden="true">
+                          →
+                        </span>
+                      </Link>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
       </main>
     </div>
   );
