@@ -18,12 +18,18 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.web.FilterChainProxy;
 import org.springframework.test.context.ActiveProfiles;
@@ -43,6 +49,8 @@ import group5.example.sportCenter.entity.CourseRegistration;
 import group5.example.sportCenter.entity.CourseRegistrationStatus;
 import group5.example.sportCenter.entity.Membership;
 import group5.example.sportCenter.entity.MembershipPlan;
+import group5.example.sportCenter.entity.Payment;
+import group5.example.sportCenter.entity.PaymentStatus;
 import group5.example.sportCenter.entity.PaymentMethod;
 import group5.example.sportCenter.entity.PaymentPurpose;
 import group5.example.sportCenter.entity.PersonalTrainingBooking;
@@ -58,6 +66,7 @@ import group5.example.sportCenter.repository.CourseRegistrationRepository;
 import group5.example.sportCenter.repository.CourseRepository;
 import group5.example.sportCenter.repository.MembershipPlanRepository;
 import group5.example.sportCenter.repository.MembershipRepository;
+import group5.example.sportCenter.repository.NotificationRepository;
 import group5.example.sportCenter.repository.PaymentRepository;
 import group5.example.sportCenter.repository.PersonalTrainingBookingRepository;
 import group5.example.sportCenter.repository.SportRepository;
@@ -71,9 +80,12 @@ class PaymentIntegrationTest {
     private static final String EMAIL_DOMAIN = "@payment.example.test";
 
     @Autowired PaymentService service;
+    @Autowired CourseRegistrationExpirationService registrationExpiration;
     @Autowired PaymentReportService reports;
     @Autowired PaymentRepository payments;
+    @Autowired NotificationRepository notifications;
     @Autowired UserRepository users;
+    @Autowired JdbcTemplate jdbc;
     @Autowired SportRepository sports;
     @Autowired CoachRepository coaches;
     @Autowired CoachSportRepository coachSports;
@@ -196,6 +208,87 @@ class PaymentIntegrationTest {
     }
 
     @Test
+    void receptionistMembershipSaleActivatesOnlyAfterCounterPaymentConfirmation() throws Exception {
+        String paymentBody = "{\"memberId\":" + member.getId()
+                + ",\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"referenceId\":" + plan.getId()
+                + ",\"autoRenew\":false}";
+
+        var created = mvc.perform(post("/api/payments").header("Authorization", bearer(receptionist))
+                        .contentType("application/json").content(paymentBody))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.amount").value(300000.0))
+                .andReturn();
+        Integer paymentId = com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.id");
+        assertTrue(memberships.findByMemberId(member.getId()).isEmpty());
+
+        mvc.perform(patch("/api/payments/" + paymentId + "/counter")
+                        .header("Authorization", bearer(receptionist))
+                        .contentType("application/json")
+                        .content("{\"success\":true,\"note\":\"Payment received at front desk\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCESS"));
+        assertEquals(1, memberships.findByMemberId(member.getId()).size());
+        assertEquals("ACTIVE", memberships.findByMemberId(member.getId()).get(0).getStatus());
+    }
+
+    @Test
+    void memberSelfServicePurchaseUsesJwtAndPreventsRepeatedPendingPlanRequests() throws Exception {
+        String body = "{\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"referenceId\":"
+                + plan.getId() + ",\"autoRenew\":false}";
+        var created = mvc.perform(post("/api/payments").header("Authorization", bearer(member))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.memberId").value(member.getId()))
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.amount").value(300000.0))
+                .andReturn();
+        Integer paymentId = com.jayway.jsonpath.JsonPath.read(created.getResponse().getContentAsString(), "$.id");
+        assertTrue(memberships.findByMemberId(member.getId()).isEmpty());
+
+        mvc.perform(get("/api/payments/me").header("Authorization", bearer(member)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(paymentId))
+                .andExpect(jsonPath("$[0].status").value("PENDING"));
+
+        mvc.perform(post("/api/payments").header("Authorization", bearer(member))
+                        .contentType("application/json")
+                        .content("{\"memberId\":" + otherMember.getId()
+                                + ",\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"referenceId\":"
+                                + plan.getId() + "}"))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(post("/api/payments").header("Authorization", bearer(member))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isConflict());
+        assertEquals(1, payments.findByMemberIdOrderByCreatedAtDesc(member.getId()).size());
+    }
+
+    @Test
+    void membershipPurchaseRejectsInactivePlanServerSide() throws Exception {
+        assertTrue(payments.findByMemberIdOrderByCreatedAtDesc(member.getId()).isEmpty());
+        plan.setStatus("INACTIVE");
+        plans.saveAndFlush(plan);
+        mvc.perform(post("/api/payments").header("Authorization", bearer(member))
+                        .contentType("application/json")
+                        .content("{\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"referenceId\":"
+                                + plan.getId() + "}"))
+                .andExpect(status().isConflict());
+        assertTrue(payments.findByMemberIdOrderByCreatedAtDesc(member.getId()).isEmpty());
+        assertTrue(memberships.findByMemberId(member.getId()).isEmpty());
+    }
+
+    @Test
+    void receptionistCannotUseLegacyMembershipCreationToBypassPayment() throws Exception {
+        String body = "{\"memberId\":" + member.getId() + ",\"planId\":" + plan.getId()
+                + ",\"startDate\":\"" + LocalDate.now() + "\",\"autoRenew\":false}";
+        mvc.perform(post("/api/memberships").header("Authorization", bearer(receptionist))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isForbidden());
+        assertTrue(memberships.findByMemberId(member.getId()).isEmpty());
+    }
+
+    @Test
     void failedCounterPaymentIsCancelledAndDoesNotActivate() {
         PaymentResponse payment = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
                 PaymentMethod.COUNTER), jwt(member));
@@ -230,6 +323,8 @@ class PaymentIntegrationTest {
                 registration.getId(), PaymentMethod.COUNTER), jwt(member));
         assertEquals(new BigDecimal("450000.00"), payment.getAmount());
         assertEquals("SUCCESS", service.processAtCounter(payment.getId(), counter(true), jwt(receptionist)).getStatus());
+        assertEquals(CourseRegistrationStatus.CONFIRMED,
+                registrations.findById(registration.getId()).orElseThrow().getStatus());
 
         assertThrows(IllegalArgumentException.class, () -> service.createPayment(
                 request(PaymentPurpose.COURSE_REGISTRATION, registration.getId(), PaymentMethod.COUNTER), jwt(member)));
@@ -254,6 +349,65 @@ class PaymentIntegrationTest {
     }
 
     @Test
+    void paymentAtTheRegistrationDeadlineCannotReclaimExpiredSeat() {
+        CourseRegistration registration = registration(member, "200000.00", "0.00");
+        PaymentResponse payment = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                registration.getId(), PaymentMethod.COUNTER), jwt(member));
+        CourseRegistration persisted = registrations.findById(registration.getId()).orElseThrow();
+        persisted.setPaymentDeadline(now());
+        registrations.saveAndFlush(persisted);
+
+        assertEquals("REFUND_REQUIRED",
+                service.processAtCounter(payment.getId(), counter(true), jwt(receptionist)).getStatus());
+        assertEquals(CourseRegistrationStatus.EXPIRED,
+                registrations.findById(registration.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void concurrentRegistrationExpirationAndPaymentSettlementLeaveExpiredHoldUnconfirmed() throws Exception {
+        CourseRegistration registration = registration(member, "200000.00", "0.00");
+        PaymentResponse payment = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                registration.getId(), PaymentMethod.COUNTER), jwt(member));
+        CourseRegistration persisted = registrations.findById(registration.getId()).orElseThrow();
+        persisted.setPaymentDeadline(now());
+        registrations.saveAndFlush(persisted);
+
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<?> settlement = pool.submit(() -> {
+                ready.countDown();
+                await(start);
+                service.processAtCounter(payment.getId(), counter(true), jwt(receptionist));
+            });
+            Future<?> expiry = pool.submit(() -> {
+                ready.countDown();
+                await(start);
+                registrationExpiration.expireDueRegistrations();
+            });
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            settlement.get(10, TimeUnit.SECONDS);
+            expiry.get(10, TimeUnit.SECONDS);
+        } finally {
+            pool.shutdownNow();
+        }
+        assertEquals(CourseRegistrationStatus.EXPIRED,
+                registrations.findById(registration.getId()).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.REFUND_REQUIRED, payments.findById(payment.getId()).orElseThrow().getStatus());
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            if (!latch.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("start timeout");
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    @Test
     void memberCannotPayForAnotherMembersRegistration() {
         CourseRegistration registration = registration(otherMember, "200000.00", "0.00");
         ResponseStatusException error = assertThrows(ResponseStatusException.class, () -> service.createPayment(
@@ -266,12 +420,61 @@ class PaymentIntegrationTest {
     @Test
     void ptBookingPaymentWithinHoldConfirmsBooking() {
         PersonalTrainingBooking booking = booking(now().plusMinutes(15));
+        assertEquals(0, notifications.count(), "PENDING_PAYMENT booking creation must not send confirmation notices");
         PaymentResponse payment = service.createPayment(request(PaymentPurpose.PT_BOOKING, booking.getId(),
                 PaymentMethod.COUNTER), jwt(member));
         assertEquals(new BigDecimal("425000.00"), payment.getAmount());
 
         assertEquals("SUCCESS", service.processAtCounter(payment.getId(), counter(true), jwt(receptionist)).getStatus());
         assertEquals(PersonalTrainingBookingStatus.CONFIRMED, bookings.findById(booking.getId()).orElseThrow().getStatus());
+        assertEquals(1, notifications.countByUserIdAndReadFalse(member.getId()));
+        assertEquals(1, notifications.countByUserIdAndReadFalse(coach.getUser().getId()),
+                "Coach notification belongs to linked User.id, not Coach.id");
+        assertEquals(2, notifications.count());
+        assertEquals(false, coach.getId().equals(coach.getUser().getId()),
+                "Fixture must use distinct Coach and User identifiers");
+    }
+
+    @Test
+    void replayedSuccessfulPtPaymentCallbackDoesNotDuplicateConfirmationNotices() throws Exception {
+        PersonalTrainingBooking booking = booking(now().plusMinutes(15));
+        PaymentResponse payment = service.createPayment(request(PaymentPurpose.PT_BOOKING, booking.getId(),
+                PaymentMethod.ONLINE), jwt(member));
+
+        mvc.perform(get(callbackPath(payment.getPaymentUrl()))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCESS"));
+        assertEquals(2, notifications.count());
+        mvc.perform(get(callbackPath(payment.getPaymentUrl()))).andExpect(status().isOk());
+        assertEquals(2, notifications.count());
+        assertEquals(1, notifications.countByUserIdAndReadFalse(member.getId()));
+        assertEquals(1, notifications.countByUserIdAndReadFalse(coach.getUser().getId()));
+    }
+
+    @Test
+    void failedPtPaymentDoesNotSendConfirmationNotices() {
+        PersonalTrainingBooking booking = booking(now().plusMinutes(15));
+        PaymentResponse payment = service.createPayment(request(PaymentPurpose.PT_BOOKING, booking.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+
+        assertEquals("CANCELLED", service.processAtCounter(payment.getId(), counter(false), jwt(receptionist)).getStatus());
+        assertEquals(PersonalTrainingBookingStatus.PENDING_PAYMENT,
+                bookings.findById(booking.getId()).orElseThrow().getStatus());
+        assertEquals(0, notifications.count());
+    }
+
+    @Test
+    void inactiveCoachUserDoesNotReceivePtConfirmationNotification() {
+        PersonalTrainingBooking booking = booking(now().plusMinutes(15));
+        PaymentResponse payment = service.createPayment(request(PaymentPurpose.PT_BOOKING, booking.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        coach.getUser().setStatus("INACTIVE");
+        users.saveAndFlush(coach.getUser());
+
+        service.processAtCounter(payment.getId(), counter(true), jwt(receptionist));
+
+        assertEquals(1, notifications.countByUserIdAndReadFalse(member.getId()));
+        assertEquals(0, notifications.countByUserIdAndReadFalse(coach.getUser().getId()));
+        assertEquals(1, notifications.count());
     }
 
     @Test
@@ -287,6 +490,7 @@ class PaymentIntegrationTest {
         PaymentResponse result = service.processAtCounter(payment.getId(), counter(true), jwt(receptionist));
         assertEquals("REFUND_REQUIRED", result.getStatus());
         assertEquals(PersonalTrainingBookingStatus.EXPIRED, bookings.findById(booking.getId()).orElseThrow().getStatus());
+        assertEquals(0, notifications.count());
 
         LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
         assertEquals(0, BigDecimal.ZERO.compareTo(reports.revenueReport(today, today, jwt(admin)).getTotalRevenue()));
@@ -306,6 +510,10 @@ class PaymentIntegrationTest {
         PaymentResponse payment = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
                 PaymentMethod.COUNTER), jwt(member));
 
+        mvc.perform(post("/api/payments").contentType("application/json")
+                        .content("{\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"referenceId\":"
+                                + plan.getId() + "}"))
+                .andExpect(status().isUnauthorized());
         mvc.perform(patch("/api/payments/" + payment.getId() + "/counter").header("Authorization", bearer(member))
                         .contentType("application/json").content("{\"success\":true}"))
                 .andExpect(status().isForbidden());
@@ -322,11 +530,19 @@ class PaymentIntegrationTest {
         mvc.perform(get("/api/reports/revenue").param("from", "2026-01-01").param("to", "2026-12-31")
                         .header("Authorization", bearer(admin)))
                 .andExpect(status().isOk());
+        mvc.perform(patch("/api/payments/" + payment.getId() + "/cancel")
+                        .header("Authorization", bearer(member)))
+                .andExpect(status().isOk());
         mvc.perform(post("/api/payments").header("Authorization", bearer(member)).contentType("application/json")
                         .content("{\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"referenceId\":" + plan.getId()
                                 + ",\"amount\":1}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.amount").value(300000.0));
+        mvc.perform(post("/api/payments").header("Authorization", bearer(coach.getUser()))
+                        .contentType("application/json")
+                        .content("{\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"memberId\":"
+                                + member.getId() + ",\"referenceId\":" + plan.getId() + "}"))
+                .andExpect(status().isForbidden());
     }
 
     @Test
@@ -339,6 +555,102 @@ class PaymentIntegrationTest {
                 payments.findById(payment.getId()).orElseThrow().getProcessedBy().getId());
     }
 
+    @Test
+    void pendingMembershipQueueIsStaffOnly() throws Exception {
+        String path = "/api/payments/pending-memberships";
+        for (User staff : List.of(admin, receptionist)) {
+            mvc.perform(get(path).header("Authorization", bearer(staff)))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.content").isArray());
+        }
+        for (User forbidden : List.of(member, coach.getUser())) {
+            mvc.perform(get(path).header("Authorization", bearer(forbidden)))
+                    .andExpect(status().isForbidden());
+        }
+        mvc.perform(get(path)).andExpect(status().isUnauthorized());
+        mvc.perform(get(path + "?page=-1").header("Authorization", bearer(admin)))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get(path + "?size=101").header("Authorization", bearer(admin)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void pendingMembershipQueueFiltersAndPaginatesNewestFirst() throws Exception {
+        var newer = queueFixture(otherMember, PaymentMethod.COUNTER, PaymentPurpose.MEMBERSHIP,
+                PaymentStatus.PENDING);
+        var older = queueFixture(member, PaymentMethod.COUNTER, PaymentPurpose.MEMBERSHIP,
+                PaymentStatus.PENDING);
+        // Explicit timestamps also prove creation order, rather than relying on generated IDs.
+        jdbc.update("update Payment set created_at = ? where id = ?", LocalDateTime.of(2026, 1, 1, 0, 0), newer.getId());
+        jdbc.update("update Payment set created_at = ? where id = ?", LocalDateTime.of(2025, 1, 1, 0, 0), older.getId());
+        queueFixture(member, PaymentMethod.ONLINE, PaymentPurpose.MEMBERSHIP,
+                PaymentStatus.PENDING);
+        queueFixture(member, PaymentMethod.COUNTER, PaymentPurpose.COURSE_REGISTRATION,
+                PaymentStatus.PENDING);
+        queueFixture(member, PaymentMethod.COUNTER, PaymentPurpose.PT_BOOKING,
+                PaymentStatus.PENDING);
+        for (var state : List.of(PaymentStatus.SUCCESS,
+                PaymentStatus.CANCELLED,
+                PaymentStatus.REFUND_REQUIRED)) {
+            queueFixture(member, PaymentMethod.COUNTER, PaymentPurpose.MEMBERSHIP, state);
+        }
+        mvc.perform(get("/api/payments/pending-memberships?size=1").header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.totalPages").value(2)).andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(newer.getId()))
+                .andExpect(jsonPath("$.content[0].memberId").value(otherMember.getId()))
+                .andExpect(jsonPath("$.content[0].referenceId").value(plan.getId()))
+                .andExpect(jsonPath("$.content[0].amount").value(300000));
+        mvc.perform(get("/api/payments/pending-memberships?size=1&page=1").header("Authorization", bearer(admin)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.content[0].id").value(older.getId()));
+        mvc.perform(get("/api/payments/pending-memberships?page=2&size=1").header("Authorization", bearer(admin)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.content.length()").value(0));
+    }
+
+    @Test
+    void queueConfirmationActivatesOnceAndCancellationNeverActivates() throws Exception {
+        var payment = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(), PaymentMethod.COUNTER), jwt(member));
+        assertEquals(0, memberships.count());
+        String path = "/api/payments/" + payment.getId() + "/counter";
+        mvc.perform(patch(path).header("Authorization", bearer(receptionist))
+                        .contentType("application/json").content("{\"success\":true}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("SUCCESS"));
+        assertEquals(1, memberships.count());
+        Membership activated = memberships.findAll().get(0);
+        assertEquals(member.getId(), activated.getMember().getId());
+        assertEquals(plan.getId(), activated.getPlan().getId());
+        assertEquals("ACTIVE", activated.getStatus());
+        mvc.perform(get("/api/payments/pending-memberships").header("Authorization", bearer(admin)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0));
+        mvc.perform(patch(path).header("Authorization", bearer(admin))
+                        .contentType("application/json").content("{\"success\":true}"))
+                .andExpect(status().isConflict());
+        assertEquals(1, memberships.count());
+        var cancelled = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(), PaymentMethod.COUNTER), jwt(otherMember));
+        String cancelledPath = "/api/payments/" + cancelled.getId() + "/counter";
+        mvc.perform(patch(cancelledPath).header("Authorization", bearer(admin))
+                        .contentType("application/json").content("{\"success\":false}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("CANCELLED"));
+        mvc.perform(patch(cancelledPath).header("Authorization", bearer(receptionist))
+                        .contentType("application/json").content("{\"success\":true}"))
+                .andExpect(status().isConflict());
+        assertEquals(1, memberships.count());
+        mvc.perform(get("/api/payments/pending-memberships").header("Authorization", bearer(admin)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0));
+    }
+
+    private Payment queueFixture(User owner, PaymentMethod method,
+            PaymentPurpose purpose, PaymentStatus state) {
+        var payment = new Payment();
+        payment.setMember(owner);
+        payment.setAmount(plan.getPrice());
+        payment.setReferenceId(plan.getId());
+        payment.setMethod(method);
+        payment.setPurpose(purpose);
+        payment.setStatus(state);
+        payment.setTransactionCode("QUEUE-" + java.util.UUID.randomUUID().toString().substring(0, 20));
+        return payments.save(payment);
+    }
+
     // ---------------------------------------------------------------- fixtures
 
     /**
@@ -346,6 +658,8 @@ class PaymentIntegrationTest {
      * created them: other test classes may leave rows (e.g. member sport levels) that reference theirs.
      */
     private void cleanDatabase() {
+        jdbc.update("delete from audit_log");
+        notifications.deleteAllInBatch();
         payments.deleteAll();
         bookings.deleteAll();
         classSessions.deleteAll();
@@ -393,7 +707,9 @@ class PaymentIntegrationTest {
         CourseRegistration registration = new CourseRegistration();
         registration.setMember(owner);
         registration.setCourseClass(courseClass);
-        registration.setStatus(CourseRegistrationStatus.CONFIRMED);
+        registration.setStatus(CourseRegistrationStatus.PENDING_PAYMENT);
+        registration.setRegisteredAt(now());
+        registration.setPaymentDeadline(now().plusHours(24));
         registration.setOriginalPrice(new BigDecimal(originalPrice));
         registration.setMembershipDiscount(new BigDecimal(discount));
         registration.setFinalPrice(new BigDecimal(originalPrice).subtract(new BigDecimal(discount)));

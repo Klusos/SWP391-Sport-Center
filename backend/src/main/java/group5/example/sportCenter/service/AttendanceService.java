@@ -41,6 +41,7 @@ public class AttendanceService {
     private final CourseRegistrationRepository registrationRepository;
     private final AssessmentAccess access;
     private final Clock clock;
+    private final AuditLogService auditLogs;
 
     public AttendanceService(
             AttendanceRepository attendanceRepository,
@@ -48,13 +49,15 @@ public class AttendanceService {
             ClassSessionRepository classSessionRepository,
             CourseRegistrationRepository registrationRepository,
             AssessmentAccess access,
-            Clock clock) {
+            Clock clock,
+            AuditLogService auditLogs) {
         this.attendanceRepository = attendanceRepository;
         this.historyRepository = historyRepository;
         this.classSessionRepository = classSessionRepository;
         this.registrationRepository = registrationRepository;
         this.access = access;
         this.clock = clock;
+        this.auditLogs = auditLogs;
     }
 
     public List<AttendanceSessionResponse> coachSessions(Jwt jwt) {
@@ -102,7 +105,7 @@ public class AttendanceService {
         User actor = access.actor(jwt);
         ClassSession session = classSessionRepository.findByIdForAttendanceUpdate(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("ClassSession not found with id: " + sessionId));
-        authorizeSessionAccess(actor, session);
+        authorizeMarkAccess(actor, session);
         validateSessionCanBeMarked(session);
 
         var confirmedRegistration = registrationRepository.findByMemberIdAndCourseClassIdAndStatus(
@@ -123,6 +126,7 @@ public class AttendanceService {
             created.setNote(trimToNull(request.note()));
             created = attendanceRepository.saveAndFlush(created);
             appendHistory(created, null, request.status(), actor, now, null);
+            auditLogs.record("MARK", "ATTENDANCE", created.getId(), "Attendance marked as " + created.getStatus().name() + ".");
             return attendanceResponse(created);
         }
 
@@ -146,6 +150,8 @@ public class AttendanceService {
         }
         Attendance saved = attendanceRepository.saveAndFlush(existing);
         appendHistory(saved, previous, request.status(), actor, now, reason);
+        auditLogs.record("CORRECT", "ATTENDANCE", saved.getId(), "Attendance corrected from "
+                + previous.name() + " to " + saved.getStatus().name() + ".");
         return attendanceResponse(saved);
     }
 
@@ -183,6 +189,14 @@ public class AttendanceService {
         var coach = access.coach(actor);
         if (!coach.getId().equals(session.getCourseClass().getCoach().getId())) {
             throw error(HttpStatus.FORBIDDEN, "Only the assigned Coach can access attendance for this ClassSession");
+        }
+    }
+
+    private void authorizeMarkAccess(User actor, ClassSession session) {
+        if ("ADMIN".equalsIgnoreCase(actor.getRole())) return;
+        var coach = access.coach(actor);
+        if (!coach.getId().equals(session.getCourseClass().getCoach().getId())) {
+            throw error(HttpStatus.FORBIDDEN, "Only the assigned Coach or ADMIN can mark attendance");
         }
     }
 

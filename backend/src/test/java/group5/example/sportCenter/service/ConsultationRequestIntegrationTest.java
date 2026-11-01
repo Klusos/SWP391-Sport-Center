@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.web.FilterChainProxy;
@@ -53,7 +54,9 @@ import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.repository.CoachRepository;
 import group5.example.sportCenter.repository.CoachSportRepository;
 import group5.example.sportCenter.repository.ConsultationRequestRepository;
+import group5.example.sportCenter.repository.AuditLogRepository;
 import group5.example.sportCenter.repository.MemberSportLevelRepository;
+import group5.example.sportCenter.repository.NotificationRepository;
 import group5.example.sportCenter.repository.SkillAssessmentRepository;
 import group5.example.sportCenter.repository.SportRepository;
 import group5.example.sportCenter.repository.UserRepository;
@@ -69,6 +72,9 @@ class ConsultationRequestIntegrationTest {
     @MockitoSpyBean SkillAssessmentRepository assessments;
     @Autowired MemberSportLevelRepository levels;
     @Autowired UserRepository users;
+    @Autowired NotificationRepository notifications;
+    @Autowired AuditLogRepository auditLogs;
+    @Autowired JdbcTemplate jdbc;
     @Autowired SportRepository sports;
     @Autowired CoachRepository coaches;
     @Autowired CoachSportRepository qualifications;
@@ -90,6 +96,8 @@ class ConsultationRequestIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        jdbc.update("delete from audit_log");
+        notifications.deleteAllInBatch();
         assessments.deleteAll();
         consultations.deleteAll();
         levels.deleteAll();
@@ -163,6 +171,8 @@ class ConsultationRequestIntegrationTest {
         assertNotNull(completed.completedAt());
         assertEquals(0, assessments.count(), "Completing the consultation conversation must not require or create an assessment");
         assertEquals(0, levels.count(), "Consultation completion must not create a member sport level");
+        assertEquals(1, auditCount(created.id(), "TAKE"));
+        assertEquals(1, auditCount(created.id(), "COMPLETE"));
     }
 
     @Test
@@ -177,6 +187,8 @@ class ConsultationRequestIntegrationTest {
         assertNotNull(cancelled.cancelledAt());
         assertEquals(0, assessments.count());
         assertEquals(0, levels.count());
+        assertEquals(1, auditCount(created.id(), "TAKE"));
+        assertEquals(1, auditCount(created.id(), "CANCEL"));
     }
 
     @Test
@@ -193,6 +205,8 @@ class ConsultationRequestIntegrationTest {
         service.take(second.id(), jwt(admin));
         ConsultationResponse cancelled = service.cancel(second.id(), new CancelConsultationRequest("Closed"), jwt(admin));
         assertStatus(409, () -> service.complete(cancelled.id(), new CompleteConsultationRequest(null), jwt(admin)));
+        assertEquals(1, auditCount(first.id(), "COMPLETE"), "only the successful completion is audited");
+        assertEquals(0, auditCount(completed.id(), "CANCEL"));
     }
 
     @Test
@@ -554,6 +568,13 @@ class ConsultationRequestIntegrationTest {
 
     private void assertStatus(int expected, org.junit.jupiter.api.function.Executable operation) {
         assertEquals(expected, assertThrows(ResponseStatusException.class, operation).getStatusCode().value());
+    }
+
+    private long auditCount(Integer consultationId, String action) {
+        return auditLogs.count((root, query, cb) -> cb.and(
+                cb.equal(root.get("entityType"), "CONSULTATION_REQUEST"),
+                cb.equal(root.get("entityId"), consultationId.toString()),
+                cb.equal(root.get("action"), action)));
     }
 
     private int takeResult(Integer id, User handler) {

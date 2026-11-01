@@ -1,0 +1,15 @@
+﻿.notification-broadcast-main { padding-top: 82px; }
+.notification-broadcast-card { max-width: 760px; }
+.notification-audience { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 22px; padding: 14px; border: 1px solid #cfe0fb; border-radius: 9px; background: #f0f6ff; color: #203b56; }
+.notification-audience > i { color: #0a61f2; font-size: 20px; }
+.notification-audience span { display: flex; flex-direction: column; gap: 4px; font-size: 13px; line-height: 1.5; }
+.notification-broadcast-card .banner { margin-bottom: 16px; }
+.notification-field { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; margin: 18px 0; }
+.notification-field label { grid-column: 1 / -1; color: #203b56; font-size: 13px; font-weight: 650; }
+.notification-field label span { color: #b42318; }
+.notification-field input, .notification-field textarea { width: 100%; padding: 11px 12px; border: 1px solid #cbd6e4; border-radius: 8px; color: #142b45; font: inherit; font-size: 14px; }
+.notification-field textarea { resize: vertical; min-height: 150px; }
+.notification-field input:focus, .notification-field textarea:focus { outline: 2px solid #0a61f2; outline-offset: 1px; }
+.notification-field small { align-self: center; color: #617085; font-size: 12px; }
+.notification-submit { max-width: 210px; margin-top: 6px; }
+@media (max-width: 700px) { .notification-broadcast-main { padding-top: 28px; } .notification-broadcast-card { padding: 20px; } .notification-submit { max-width: none; } }

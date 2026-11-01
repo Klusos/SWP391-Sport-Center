@@ -1,0 +1,454 @@
+/* =====================================================================
+   GIAO DIỆN LỄ TÂN (ATHLETIC FRONT-DESK SYSTEM)
+   Màu và hình khối theo DESIGN.md:
+   Primary: #1e60d5, Navy: #0b192c, Canvas: #f8fafc, Green: #059669
+   ===================================================================== */
+
+:root {
+  --rc-primary: #1e60d5;
+  --rc-primary-dark: #1852b8;
+  --rc-primary-press: #14449b;
+  --rc-navy: #0b192c;
+  --rc-canvas: #f8fafc;
+  --rc-line: #e2e8f0;
+  --rc-line-strong: #cbd5e1;
+  --rc-text: #1e293b;
+  --rc-sub: #64748b;
+  --rc-muted: #94a3b8;
+  --rc-green: #059669;
+  --rc-green-bg: #ecfdf5;
+  --rc-amber: #d97706;
+  --rc-amber-bg: #fef3c7;
+  --rc-shadow: 0 1px 3px rgba(11, 25, 44, .04), 0 4px 12px rgba(11, 25, 44, .02);
+  --rc-shadow-hover: 0 6px 18px rgba(30, 96, 213, .08);
+}
+
+/* =====================================================================
+   TOPBAR CHUẨN DÀNH CHO TẤT CẢ TRANG LỄ TÂN
+   (Tổng quan, Thành viên, Gói hội viên, Bán gói, Tư vấn)
+   ===================================================================== */
+.rc-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 64px;
+  height: 64px;
+  padding: 0 88px 0 32px; /* Chừa chỗ cho chuông thông báo thật ở góc phải */
+  background: #ffffff;
+  border-bottom: 1px solid var(--rc-line);
+  box-shadow: 0 1px 3px rgba(11, 25, 44, 0.03);
+}
+
+.rc-crumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--rc-sub);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rc-crumb i {
+  font-style: normal;
+  color: var(--rc-line-strong);
+  font-size: 12px;
+}
+
+.rc-crumb b {
+  color: var(--rc-primary);
+  font-weight: 700;
+}
+
+.rc-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rc-user .rc-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #dae2ff;
+  color: #0048af;
+  font-size: 13px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(0, 72, 175, 0.15);
+  flex-shrink: 0;
+}
+
+.rc-user > div {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.rc-user b {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rc-navy);
+}
+
+.rc-user small {
+  color: var(--rc-sub);
+  font-size: 11px;
+}
+
+/* =====================================================================
+   SIDEBAR LỄ TÂN (.layout .sidebar.rc-sidebar)
+   ===================================================================== */
+.layout .sidebar.rc-sidebar {
+  width: 256px;
+  padding: 16px;
+  background: #0b192c !important;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.layout .sidebar.rc-sidebar .brand.rc-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 24px;
+  padding: 8px 8px 16px;
+  border-bottom: 1px solid rgba(211, 228, 254, .12);
+}
+
+.layout .sidebar.rc-sidebar .rc-logo {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: #1e60d5;
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .2);
+}
+
+.layout .sidebar.rc-sidebar .rc-brand-text {
+  display: grid;
+  min-width: 0;
+}
+
+.layout .sidebar.rc-sidebar .rc-brand-text strong {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.layout .sidebar.rc-sidebar .rc-brand-text span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 0;
+  color: rgba(211, 228, 254, .75);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.layout .sidebar.rc-sidebar .rc-brand-text span i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(211, 228, 254, .45);
+}
+
+.layout .sidebar.rc-sidebar nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.layout .sidebar.rc-sidebar .nav-button {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 11px 16px !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  background: transparent !important;
+  color: #d3e4fe !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  text-align: left !important;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.layout .sidebar.rc-sidebar .nav-button:hover {
+  background: rgba(255, 255, 255, .08) !important;
+  color: #fff !important;
+}
+
+.layout .sidebar.rc-sidebar .nav-button.active,
+.layout .sidebar.rc-sidebar .nav-button.active:hover {
+  background: #1e60d5 !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+  box-shadow: 0 2px 8px rgba(30, 96, 213, .35) !important;
+}
+
+.layout .sidebar.rc-sidebar .nav-button svg {
+  flex: none;
+}
+
+.layout .sidebar.rc-sidebar .nav-button .nav-badge {
+  float: none;
+  margin-left: auto;
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #0048af;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+.layout .sidebar.rc-sidebar .nav-button.active .nav-badge {
+  background: #fff;
+  color: #1e60d5;
+}
+
+.layout .sidebar.rc-sidebar .nav-footer {
+  margin-top: auto;
+  padding: 12px 0 0;
+  border-top: 1px solid rgba(211, 228, 254, .12);
+  display: flex;
+  flex-direction: column;
+}
+
+.layout .sidebar.rc-sidebar .rc-system-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(211, 228, 254, 0.1);
+  font-size: 11px;
+}
+
+.layout .sidebar.rc-sidebar .rc-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #d3e4fe;
+}
+
+.layout .sidebar.rc-sidebar .rc-status-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+}
+
+.layout .sidebar.rc-sidebar .rc-status-ver {
+  color: rgba(211, 228, 254, 0.45);
+  font-weight: 600;
+}
+
+.layout .sidebar.rc-sidebar .nav-footer .logout-button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 16px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(211, 228, 254, .85);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.layout .sidebar.rc-sidebar .nav-footer .logout-button:hover {
+  background: rgba(255, 255, 255, .08);
+  color: #fff;
+}
+
+/* =====================================================================
+   DASHBOARD TỔNG QUAN LỄ TÂN (.rc-main)
+   ===================================================================== */
+.main.rc-main {
+  padding: 0;
+  min-height: 100vh;
+  background: var(--rc-canvas);
+  color: var(--rc-text);
+  display: flex;
+  flex-direction: column;
+}
+.rc-main *, .rc-main *::before, .rc-main *::after { box-sizing: border-box; }
+.rc-main h1, .rc-main h2, .rc-main h3, .rc-main p, .rc-main ul { margin: 0; padding: 0; }
+.rc-main ul { list-style: none; }
+.rc-main svg { flex: none; }
+
+.rc-main .rc-content { display: grid; gap: 24px; padding: 32px; }
+
+/* ---------- Tiêu đề ---------- */
+.rc-main .rc-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.rc-main .rc-head h1 { font-size: 26px; line-height: 1.25; font-weight: 700; letter-spacing: -.01em; color: var(--rc-navy); }
+.rc-main .rc-head p { margin-top: 2px; color: var(--rc-sub); font-size: 14px; }
+.rc-main .rc-date {
+  display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px;
+  border: 1px solid var(--rc-line); border-radius: 10px; background: #fff; box-shadow: var(--rc-shadow);
+  color: var(--rc-primary); font-size: 13px;
+}
+.rc-main .rc-date b { color: var(--rc-text); font-weight: 600; }
+.rc-main .rc-date i { width: 6px; height: 6px; border-radius: 50%; background: #10b981; }
+.rc-main .rc-date small { color: var(--rc-sub); font-size: 11px; font-weight: 500; }
+
+/* ---------- KPI ---------- */
+.rc-main .rc-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
+.rc-main .rc-kpi {
+  display: grid; gap: 12px; padding: 20px 22px;
+  border: 1px solid var(--rc-line); border-radius: 14px; background: #fff; box-shadow: var(--rc-shadow);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.rc-main .rc-kpi:hover { transform: translateY(-2px); box-shadow: var(--rc-shadow-hover); }
+.rc-main .rc-kpi header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.rc-main .rc-kpi header span { font-size: 13px; font-weight: 600; color: var(--rc-sub); }
+.rc-main .rc-tile {
+  display: grid; place-items: center; width: 44px; height: 44px; border-radius: 10px;
+}
+.rc-main .rc-tile.blue { background: #eff4ff; color: var(--rc-primary); }
+.rc-main .rc-tile.green { background: var(--rc-green-bg); color: var(--rc-green); }
+.rc-main .rc-tile.amber { background: var(--rc-amber-bg); color: var(--rc-amber); }
+.rc-main .rc-kpi strong { font-size: 30px; line-height: 1; font-weight: 800; color: var(--rc-navy); letter-spacing: -.02em; }
+.rc-main .rc-kpi p { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: var(--rc-sub); }
+.rc-main .rc-kpi p span { width: 6px; height: 6px; border-radius: 50%; background: var(--rc-muted); }
+.rc-main .rc-kpi p.green { color: var(--rc-green); }
+.rc-main .rc-kpi p.green span { background: var(--rc-green); }
+.rc-main .rc-kpi p.amber { color: var(--rc-amber); }
+.rc-main .rc-kpi p.amber span { background: var(--rc-amber); }
+
+/* ---------- Quick actions ---------- */
+.rc-main .rc-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.rc-main .rc-action {
+  display: flex; align-items: center; gap: 16px; padding: 18px 20px;
+  border: 1px solid var(--rc-line); border-radius: 12px; background: #fff; box-shadow: var(--rc-shadow);
+  color: inherit; text-align: left; cursor: pointer; transition: all .15s ease;
+}
+.rc-main .rc-action:hover { border-color: var(--rc-primary); box-shadow: var(--rc-shadow-hover); transform: translateY(-1px); }
+.rc-main .rc-action .rc-tile { background: #eff4ff; color: var(--rc-primary); }
+.rc-main .rc-action div { display: grid; flex: 1; min-width: 0; line-height: 1.35; }
+.rc-main .rc-action b { font-size: 14px; font-weight: 600; color: var(--rc-navy); }
+.rc-main .rc-action small { font-size: 12px; color: var(--rc-sub); }
+.rc-main .rc-action > svg { color: var(--rc-muted); }
+.rc-main .rc-action:hover > svg { color: var(--rc-primary); }
+
+/* ---------- Hai cột: Tra cứu + Yêu cầu ---------- */
+.rc-main .rc-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 24px; align-items: start; }
+.rc-main .rc-card {
+  display: grid; gap: 18px; padding: 24px;
+  border: 1px solid var(--rc-line); border-radius: 14px; background: #fff; box-shadow: var(--rc-shadow);
+}
+.rc-main .rc-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.rc-main .rc-card-head h2 { font-size: 18px; font-weight: 700; color: var(--rc-navy); }
+.rc-main .rc-card-head p { margin-top: 3px; font-size: 13px; color: var(--rc-sub); }
+
+.rc-main .rc-count {
+  padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: #f1f5f9; color: var(--rc-sub);
+}
+.rc-main .rc-count.amber { background: var(--rc-amber-bg); color: var(--rc-amber); }
+
+.rc-main .rc-search { display: flex; gap: 10px; }
+.rc-main .rc-input-wrap {
+  position: relative; flex: 1; display: flex; align-items: center;
+}
+.rc-main .rc-input-wrap > svg { position: absolute; left: 14px; color: var(--rc-muted); pointer-events: none; }
+.rc-main .rc-input-wrap input {
+  width: 100%; height: 44px; padding: 0 14px 0 42px;
+  border: 1px solid var(--rc-line); border-radius: 10px; background: #f8fafc;
+  color: var(--rc-text); font-size: 14px; outline: none; transition: all .15s ease;
+}
+.rc-main .rc-input-wrap input:focus {
+  border-color: var(--rc-primary); background: #fff;
+  box-shadow: 0 0 0 3px rgba(30, 96, 213, .12);
+}
+.rc-main .rc-btn-primary {
+  height: 44px; padding: 0 20px; border: 0; border-radius: 10px;
+  background: var(--rc-primary); color: #fff; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: background .15s ease; white-space: nowrap;
+}
+.rc-main .rc-btn-primary:hover { background: var(--rc-primary-dark); }
+.rc-main .rc-search-tips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--rc-sub); }
+.rc-main .rc-search-tips kbd {
+  padding: 2px 7px; border: 1px solid var(--rc-line); border-radius: 5px;
+  background: #f8fafc; font-size: 11px; font-family: inherit; color: var(--rc-text);
+}
+
+.rc-main .rc-quick-list { display: grid; gap: 8px; }
+.rc-main .rc-quick-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 14px; border: 1px solid var(--rc-line); border-radius: 10px; background: #f8fafc;
+  font-size: 13px; color: inherit; cursor: pointer; transition: all .15s ease;
+}
+.rc-main .rc-quick-row:hover { background: #eff4ff; border-color: #bfdbfe; }
+.rc-main .rc-quick-row span { color: var(--rc-sub); font-size: 12px; }
+
+/* Danh sách yêu cầu tư vấn */
+.rc-main .rc-requests { display: grid; gap: 12px; }
+.rc-main .rc-requests li {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 14px 16px; border: 1px solid var(--rc-line); border-radius: 10px; background: #fff;
+  transition: all .15s ease;
+}
+.rc-main .rc-requests li:hover { border-color: var(--rc-primary); box-shadow: var(--rc-shadow-hover); }
+.rc-main .rc-req-body { display: grid; gap: 3px; }
+.rc-main .rc-req-body b { font-size: 14px; font-weight: 600; color: var(--rc-navy); }
+.rc-main .rc-req-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--rc-sub); }
+.rc-main .rc-btn-take {
+  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px;
+  border: 0; border-radius: 8px; background: var(--rc-primary); color: #fff;
+  font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s ease;
+}
+.rc-main .rc-btn-take:hover { background: var(--rc-primary-dark); }
+.rc-main .rc-btn-take:disabled { opacity: .6; cursor: wait; }
+
+.rc-main .rc-empty {
+  display: grid; place-items: center; gap: 8px; padding: 36px 16px;
+  border: 1px dashed var(--rc-line-strong); border-radius: 10px; background: #f8fafc;
+  color: var(--rc-sub); font-size: 13px; text-align: center;
+}
+.rc-main .rc-empty svg { color: var(--rc-muted); }
+
+.rc-main .rc-alert-err {
+  padding: 12px 16px; border-radius: 10px; background: #fef2f2; border: 1px solid #fecaca;
+  color: #991b1b; font-size: 13px;
+}
+
+@media (max-width: 1100px) {
+  .rc-main .rc-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rc-main .rc-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .rc-main .rc-content { padding: 20px 16px; }
+  .rc-main .rc-topbar { padding: 0 72px 0 16px; }
+  .rc-main .rc-kpis { grid-template-columns: 1fr; }
+  .rc-main .rc-search { flex-direction: column; align-items: stretch; }
+  .rc-main .rc-requests li { flex-wrap: wrap; }
+  .rc-main .rc-user > div { display: none; }
+}

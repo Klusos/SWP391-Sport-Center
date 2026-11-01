@@ -188,7 +188,7 @@ class CourseRegistrationSqlServerE2EIT {
         assertEquals(registrationsBefore, registrationCount(),
                 "Rejected registration must not persist a row");
 
-        // Competing MEMBERS race for the single remaining seat. Exactly one is confirmed.
+        // Competing MEMBERS race for the single remaining seat. A pending hold occupies it immediately.
         var executor = Executors.newFixedThreadPool(2);
         try {
             CountDownLatch ready = new CountDownLatch(2);
@@ -206,15 +206,18 @@ class CourseRegistrationSqlServerE2EIT {
             executor.shutdownNow();
         }
 
-        List<JsonNode> confirmed = confirmedRegistrations(capacityClass);
-        assertEquals(1, confirmed.size(), "Database capacity must remain at one confirmed registration");
-        JsonNode winningRegistration = confirmed.getFirst();
+        List<JsonNode> active = activeRegistrations(capacityClass);
+        assertEquals(1, active.size(), "Database capacity must remain at one active hold/registration");
+        JsonNode winningRegistration = active.getFirst();
+        assertEquals("PENDING_PAYMENT", winningRegistration.path("status").asText());
+        assertTrue(winningRegistration.path("paymentDeadline").isTextual());
         assertEquals(0, new BigDecimal("100.00").compareTo(winningRegistration.path("originalPrice").decimalValue()));
         assertEquals(0, BigDecimal.ZERO.compareTo(winningRegistration.path("membershipDiscount").decimalValue()));
         assertEquals(0, new BigDecimal("100.00").compareTo(winningRegistration.path("finalPrice").decimalValue()));
         int winningMemberId = winningRegistration.path("memberId").asInt();
         String winningToken = winningMemberId == memberAId ? tokens.get("memberA") : tokens.get("memberB");
         String losingToken = winningMemberId == memberAId ? tokens.get("memberB") : tokens.get("memberA");
+        confirmCounterCourseRegistration(winningToken, winningRegistration.path("id").asInt());
         assertFalse(containsClass(getJson("/api/course-registrations/me", losingToken), capacityClass),
                 "A MEMBER must not see the other MEMBER registration");
         assertEquals(409, postRegistration(winningToken, capacityClass).statusCode(),
@@ -239,6 +242,7 @@ class CourseRegistrationSqlServerE2EIT {
         assertEquals(201, adjacentResponse.statusCode(),
                 "Sessions meeting at an endpoint are adjacent, not overlapping");
         createdRecordIds.add("registration:" + adjacentResponse.body().path("id").asInt());
+        confirmCounterCourseRegistration(winningToken, adjacentResponse.body().path("id").asInt());
 
         JsonNode owned = getJson("/api/course-registrations/me", winningToken);
         assertTrue(containsClass(owned, capacityClass));
@@ -262,10 +266,12 @@ class CourseRegistrationSqlServerE2EIT {
         createdRecordIds.add("session:" + createSession(priceClass, today.plusDays(20).atTime(13, 0),
                 today.plusDays(20).atTime(14, 0)));
         JsonNode priced = postRegistration(tokens.get("priceMember"), priceClass).body();
+        assertEquals("PENDING_PAYMENT", priced.path("status").asText());
         assertEquals("999.99", priced.path("originalPrice").decimalValue().toPlainString());
         assertEquals("255.00", priced.path("membershipDiscount").decimalValue().toPlainString());
         assertEquals("744.99", priced.path("finalPrice").decimalValue().toPlainString());
         createdRecordIds.add("registration:" + priced.path("id").asInt());
+        confirmCounterCourseRegistration(tokens.get("priceMember"), priced.path("id").asInt());
 
         verifyRegistrationSnapshot(priced, priceMemberId, priceClass);
         assertEquals(403, postRegistration(tokens.get("admin"), capacityClass).statusCode(),
@@ -425,6 +431,7 @@ class CourseRegistrationSqlServerE2EIT {
         java.net.http.HttpRequest request = switch (method) {
             case "GET" -> builder.GET().build();
             case "POST" -> builder.POST(java.net.http.HttpRequest.BodyPublishers.ofString(body)).build();
+            case "PATCH" -> builder.method("PATCH", java.net.http.HttpRequest.BodyPublishers.ofString(body)).build();
             default -> throw new IllegalArgumentException("Unsupported E2E HTTP method");
         };
         java.net.http.HttpResponse<String> response = http.send(
@@ -453,14 +460,16 @@ class CourseRegistrationSqlServerE2EIT {
         return jdbc.queryForObject("SELECT COUNT(*) FROM dbo.course_registration", Integer.class);
     }
 
-    private List<JsonNode> confirmedRegistrations(int classId) throws Exception {
+    private List<JsonNode> activeRegistrations(int classId) throws Exception {
         String memberSql = "SELECT r.id, r.member_id, r.class_id, r.status, r.original_price, "
-                + "r.membership_discount, r.final_price FROM dbo.course_registration r "
-                + "WHERE r.class_id = ? AND r.status = 'CONFIRMED'";
+                + "r.membership_discount, r.final_price, r.payment_deadline FROM dbo.course_registration r "
+                + "WHERE r.class_id = ? AND (r.status = 'CONFIRMED' OR "
+                + "(r.status = 'PENDING_PAYMENT' AND r.payment_deadline > ?))";
         List<JsonNode> rows = new ArrayList<>();
         try (Connection connection = dataSource.getConnection();
                 PreparedStatement statement = connection.prepareStatement(memberSql)) {
             statement.setInt(1, classId);
+            statement.setTimestamp(2, java.sql.Timestamp.valueOf(LocalDateTime.now(BUSINESS_ZONE)));
             try (ResultSet result = statement.executeQuery()) {
                 while (result.next()) {
                     var row = objectMapper.createObjectNode();
@@ -468,6 +477,9 @@ class CourseRegistrationSqlServerE2EIT {
                     row.put("memberId", result.getInt("member_id"));
                     row.put("classId", result.getInt("class_id"));
                     row.put("status", result.getString("status"));
+                    if (result.getTimestamp("payment_deadline") != null) {
+                        row.put("paymentDeadline", result.getTimestamp("payment_deadline").toLocalDateTime().toString());
+                    }
                     row.put("originalPrice", result.getBigDecimal("original_price"));
                     row.put("membershipDiscount", result.getBigDecimal("membership_discount"));
                     row.put("finalPrice", result.getBigDecimal("final_price"));
@@ -498,6 +510,22 @@ class CourseRegistrationSqlServerE2EIT {
                 assertFalse(result.next());
             }
         }
+    }
+
+    private void confirmCounterCourseRegistration(String memberToken, int registrationId) throws Exception {
+        JsonNode payment = postJson("/api/payments", memberToken, Map.of(
+                "method", "COUNTER", "purpose", "COURSE_REGISTRATION", "referenceId", registrationId), 201);
+        int paymentId = payment.path("id").asInt();
+        createdRecordIds.add("payment:" + paymentId);
+        JsonNode settled = patchJson("/api/payments/" + paymentId + "/counter", tokens.get("receptionist"),
+                Map.of("success", true, "note", "Guarded E2E counter settlement"), 200);
+        assertEquals("SUCCESS", settled.path("status").asText());
+    }
+
+    private JsonNode patchJson(String path, String token, Object body, int expectedStatus) throws Exception {
+        HttpResult response = request("PATCH", path, token, json(body));
+        assertEquals(expectedStatus, response.statusCode(), "Unexpected status for PATCH " + path);
+        return response.body();
     }
 
     private boolean containsClass(JsonNode array, int classId) {

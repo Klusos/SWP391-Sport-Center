@@ -1,15 +1,17 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import "./Dashboard.css";
 import "./MemberTheme.css";
 import "./CoachTheme.css";
+import "./ReceptionTheme.css";
 import {
   getUsersApi, getSportsApi, getCoachesApi, getConsultationRequestsApi,
   getPublicMembershipPlansApi, getAssignedPtBookingsApi, getMySkillAssessmentAssignmentsApi,
   getMyPtBookingsApi, getMyMemberSportLevelsApi, getMySkillAssessmentsApi,
   getMyConsultationRequestsApi, getCurrentUserApi, getMembershipsByMemberApi, getMyClassSessionsApi,
   getMyRegistrationsApi, getMyAttendanceApi, getMyPaymentsApi, getCoachAttendanceSessionsApi, getCoachSportsApi,
+  takeConsultationRequestApi,
 } from "../api";
 
 /* ---------- helpers ---------- */
@@ -30,6 +32,7 @@ const LOADERS = {
     requests: (t) => getConsultationRequestsApi(t, { size: 100 }),
   },
   RECEPTIONIST: {
+    me: getCurrentUserApi,
     members: memberUsers, sports: getSportsApi, plans: getPublicMembershipPlansApi,
     requests: (t) => getConsultationRequestsApi(t, { size: 100 }),
   },
@@ -52,6 +55,7 @@ const LOADERS = {
 
 function useLoad(token, role) {
   const [state, setState] = useState({ data: {}, loading: true });
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     let off = false;
     const loaders = LOADERS[role] || {};
@@ -63,8 +67,9 @@ function useLoad(token, role) {
       setState({ data, loading: false });
     });
     return () => { off = true; };
-  }, [token, role]);
-  return state;
+  }, [token, role, tick]);
+  const reload = useCallback(() => setTick((t) => t + 1), []);
+  return { ...state, reload };
 }
 
 /* ---------- small pieces ---------- */
@@ -126,30 +131,182 @@ function Admin({ d }) {
   </>);
 }
 
-function Receptionist({ d, onNavigate }) {
-  const actions = [
-    ["Đăng ký thành viên", "Mới", "register"], ["Yêu cầu tư vấn", "Tiếp nhận", "consultations"],
-    ["Danh sách thành viên", "Tra cứu", "members"], ["Gói hội viên", "Bảng giá", "membership-plans"],
+/* ---------- Lễ tân ---------- */
+// Lưu ý: chỉ dùng chuỗi path thuần ở đây (không tham chiếu hằng khai báo phía dưới file).
+const RC = {
+  users: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75",
+  card: "M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z M2 10h20",
+  award: "M12 15a6 6 0 1 0 0-12 6 6 0 0 0 0 12 M8.2 13.9 7 22l5-3 5 3-1.2-8.1",
+  pending: "M16 4h2a2 2 0 0 1 2 2v4 M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4 M9 2h6v4H9z M17 22a5 5 0 1 0 0-10 5 5 0 0 0 0 10 M17 14.5V17l1.5 1",
+  search: "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16 M21 21l-4.35-4.35",
+  userSearch: "M10 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M7.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M21 21l-3.5-3.5 M17 18a3 3 0 1 0 0-6 3 3 0 0 0 0 6",
+  phone: "M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z",
+  clock: "M12 6v6l4 2 M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20",
+  chev: "M9 18l6-6-6-6",
+  arrow: "M5 12h14 M12 5l7 7-7 7",
+  cal: "M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
+  headset: "M3 18v-6a9 9 0 0 1 18 0v6 M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z",
+  bill: "M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8 M12 17.5v-11",
+  badge: "M16 2H8a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z M12 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4 M9 16a3 3 0 0 1 6 0",
+};
+const initialsOf = (name) => (name || "?").trim().split(/\s+/).slice(-2).map((w) => w[0]).join("").toUpperCase();
+const whenLabel = (s) => {
+  if (!s) return "";
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return "";
+  const isToday = d.toDateString() === new Date().toDateString();
+  return d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) + " " +
+    (isToday ? "Hôm nay" : d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }));
+};
+const planPeriod = (m) => (Number(m) === 12 ? "/ năm" : "/ " + m + " tháng");
+
+function Receptionist({ d, onNavigate, token, reload }) {
+  const [q, setQ] = useState("");
+  const [busyId, setBusyId] = useState(null);
+  const [message, setMessage] = useState("");
+
+  const plans = list(d.plans).filter((p) => !p.status || p.status === "ACTIVE");
+  const pending = list(d.requests)
+    .filter((r) => r.status === "PENDING")
+    .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  const requestsOk = d.requests != null;
+  const dateLabel = new Date().toLocaleDateString("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
+
+  const kpis = [
+    { label: "Tổng thành viên", value: total(d.members), icon: RC.users, tone: "blue", note: "Tài khoản hội viên" },
+    { label: "Gói hội viên", value: d.plans == null ? "—" : plans.length, icon: RC.card, tone: "green", note: "Đang mở bán" },
+    { label: "Bộ môn", value: total(d.sports), icon: RC.award, tone: "blue", note: "Đang giảng dạy" },
+    {
+      label: "Yêu cầu chờ xử lý", value: requestsOk ? pending.length : "—", icon: RC.pending,
+      tone: pending.length ? "amber" : "green",
+      note: !requestsOk ? "Không tải được dữ liệu" : pending.length ? "Cần tiếp nhận" : "Không có yêu cầu chờ",
+    },
   ];
+  const actions = [
+    { title: "Yêu cầu tư vấn", sub: "Tiếp nhận / tạo thành viên", page: "consultations", icon: RC.headset },
+    { title: "Bán gói hội viên", sub: "Thanh toán tại quầy", page: "membership-sales", icon: RC.bill },
+    { title: "Danh sách thành viên", sub: "Tra cứu", page: "members", icon: RC.badge },
+  ];
+
+  function search(event) {
+    event.preventDefault();
+    onNavigate("members", { q: q.trim() });
+  }
+
+  async function take(id) {
+    setBusyId(id);
+    setMessage("");
+    try {
+      await takeConsultationRequestApi(token, id);
+      onNavigate("consultations");
+    } catch (error) {
+      setMessage(error.status === 409
+        ? "Yêu cầu này đã được nhân viên khác tiếp nhận. Danh sách đã được làm mới."
+        : error.status === 403
+          ? "Tài khoản không có quyền tiếp nhận yêu cầu này."
+          : error.message || "Không thể tiếp nhận yêu cầu.");
+      if (error.status === 409) reload();
+      setBusyId(null);
+    }
+  }
+
   return (<>
-    <Stats items={[
-      { label: "Tổng thành viên", value: total(d.members), color: "blue" },
-      { label: "Gói hội viên", value: total(d.plans), color: "green" },
-      { label: "Bộ môn", value: total(d.sports), color: "orange" },
-      { label: "Yêu cầu chờ xử lý", value: count(d.requests, (r) => r.status === "PENDING"), color: "red" },
-    ]} />
-    <Card title="Tìm kiếm thành viên" className="narrow">
-      <div className="dash-search">
-        <input placeholder="Nhập tên, SĐT, mã thành viên..." aria-label="Tìm thành viên" />
-        <button className="dash-primary" type="button" onClick={() => onNavigate("members")}>Tìm kiếm</button>
+    <div className="rc-head">
+      <div>
+        <h1>Tổng quan lễ tân</h1>
+        <p>Quản lý thành viên, tư vấn và gói hội viên</p>
       </div>
-      <h3>Thao tác nhanh</h3>
-      <div className="dash-actions">
-        {actions.map(([t, s, p]) => (
-          <button key={p} type="button" onClick={() => onNavigate(p)}><b>{t}</b><span>{s}</span></button>
-        ))}
+      <span className="rc-date"><Ic d={RC.cal} size={18} /><b>{dateLabel}</b><i aria-hidden="true" /><small>Hôm nay</small></span>
+    </div>
+
+    <section className="rc-kpis" aria-label="Chỉ số nhanh">
+      {kpis.map((k) => (
+        <article key={k.label} className="rc-kpi">
+          <header><span>{k.label}</span><i className={"rc-tile " + k.tone}><Ic d={k.icon} size={21} /></i></header>
+          <strong>{k.value}</strong>
+          <p className={k.tone}><span aria-hidden="true" />{k.note}</p>
+        </article>
+      ))}
+    </section>
+
+    <div className="rc-grid">
+      <div className="rc-col">
+        <section className="rc-card">
+          <h2><Ic d={RC.userSearch} size={21} /> Tìm kiếm thành viên</h2>
+          <form className="rc-search" onSubmit={search}>
+            <label className="rc-field">
+              <Ic d={RC.search} size={18} />
+              <input className="rc-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nhập tên, SĐT, mã thành viên..." aria-label="Tìm thành viên" />
+            </label>
+            <button type="submit" className="rc-primary">Tìm kiếm</button>
+          </form>
+        </section>
+
+        <section className="rc-card">
+          <div className="rc-card-head">
+            <h2>Yêu cầu tư vấn đang chờ <span className="rc-count">{requestsOk ? pending.length : "—"}</span></h2>
+            <button type="button" className="rc-link" onClick={() => onNavigate("consultations")}>Xem tất cả <Ic d={RC.arrow} size={14} /></button>
+          </div>
+          {message && <p className="rc-alert" role="alert">{message}</p>}
+          {!requestsOk ? <p className="rc-empty">Không tải được danh sách yêu cầu tư vấn.</p>
+            : pending.length === 0 ? <p className="rc-empty">Không có yêu cầu nào đang chờ</p>
+              : (
+                <ul className="rc-requests">
+                  {pending.slice(0, 5).map((r, i) => (
+                    <li key={r.id}>
+                      <span className={"rc-avatar" + (i % 2 ? " alt" : "")}>{initialsOf(r.name)}</span>
+                      <div className="rc-req-main">
+                        <div><b>{r.name || "Khách hàng"}</b>{r.sportName && <em>{r.sportName}</em>}</div>
+                        <p>
+                          <span><Ic d={RC.phone} size={14} />{r.phone || "—"}</span>
+                          <i aria-hidden="true" />
+                          <span><Ic d={RC.clock} size={14} />{whenLabel(r.createdAt)}</span>
+                        </p>
+                      </div>
+                      <button type="button" className="rc-primary small" disabled={busyId !== null} onClick={() => take(r.id)}>
+                        {busyId === r.id ? "Đang tiếp nhận…" : "Tiếp nhận"}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+        </section>
       </div>
-    </Card>
+
+      <div className="rc-col">
+        <section className="rc-card">
+          <h2>Thao tác nhanh</h2>
+          <div className="rc-actions">
+            {actions.map((a) => (
+              <button key={a.page} type="button" className="rc-action" onClick={() => onNavigate(a.page)}>
+                <i><Ic d={a.icon} size={22} /></i>
+                <span><b>{a.title}</b><small>{a.sub}</small></span>
+                <Ic d={RC.chev} size={20} />
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="rc-card">
+          <div className="rc-card-head">
+            <h2>Gói hội viên đang áp dụng</h2>
+            <button type="button" className="rc-link" onClick={() => onNavigate("membership-plans")}>Xem chi tiết <Ic d={RC.arrow} size={14} /></button>
+          </div>
+          {d.plans == null ? <p className="rc-empty">Không tải được danh sách gói hội viên.</p>
+            : plans.length === 0 ? <p className="rc-empty">Chưa có gói hội viên nào.</p>
+              : (
+                <ul className="rc-plans">
+                  {plans.slice(0, 3).map((p) => (
+                    <li key={p.id}>
+                      <div><b>{p.name}</b><p>{p.description || "Chưa có mô tả."}</p></div>
+                      <span>{vnd(p.price)} <small>{planPeriod(p.durationMonths)}</small></span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+        </section>
+      </div>
+    </div>
   </>);
 }
 
@@ -504,9 +661,34 @@ const TITLES = {
 };
 
 export default function Dashboard({ token, role, onLogout, onNavigate }) {
-  const { data, loading } = useLoad(token, role);
+  const { data, loading, reload } = useLoad(token, role);
   const [title, sub] = TITLES[role] || TITLES.MEMBER;
   const View = { ADMIN: Admin, RECEPTIONIST: Receptionist, COACH: Coach, MEMBER: Member }[role] || Member;
+
+  if (role === "RECEPTIONIST") {
+    const pendingCount = data.requests == null ? 0 : list(data.requests).filter((r) => r.status === "PENDING").length;
+    return (
+      <div className="layout">
+        <Sidebar role={role} activePage="dashboard" onLogout={onLogout} onNavigate={onNavigate} badges={{ consultations: pendingCount }} />
+        <main className="main rc-main">
+          <header className="rc-topbar">
+            <nav className="rc-crumb" aria-label="Breadcrumb">
+              <span style={{ cursor: "pointer" }} onClick={() => onNavigate("dashboard")}>SPORTS CENTER</span><i>›</i><span>LỄ TÂN</span><i>›</i><b>TỔNG QUAN</b>
+            </nav>
+            <div className="rc-user">
+              <span className="rc-avatar">{initialsOf(data.me?.name)}</span>
+              <div><b>{data.me?.name || "Lê Minh Trang"}</b><small>Quầy lễ tân 01</small></div>
+            </div>
+          </header>
+          <div className="rc-content">
+            {loading
+              ? <div className="queue-state" role="status">Đang tải dữ liệu…</div>
+              : <View d={data} onNavigate={onNavigate} token={token} reload={reload} />}
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="layout">

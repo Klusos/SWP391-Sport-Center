@@ -2,7 +2,7 @@
 import { loginApi } from "../api";
 import { Link } from "react-router-dom";
 
-export default function Login({ onLoginSuccess }) {
+export default function Login({ onLoginSuccess, sessionExpired = false }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -38,6 +38,7 @@ export default function Login({ onLoginSuccess }) {
     <div className="login-screen">
       <form className="login-card" onSubmit={handleSubmit}>
         <h1>Sign in</h1>
+        {sessionExpired && <p className="error-text" role="status">Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.</p>}
         <p><Link to="/">← Quay về trang chủ</Link></p>
         <p>For SportCenter members and staff</p>
 

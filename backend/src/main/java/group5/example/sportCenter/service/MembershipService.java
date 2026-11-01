@@ -77,9 +77,9 @@ public class MembershipService {
         User actor = currentActor(callerJwt);
         // MEMBER phải mua qua POST /api/payments (purpose MEMBERSHIP); endpoint này chỉ để staff gán thủ công.
         String actorRole = actor.getRole().toUpperCase(Locale.ROOT);
-        if (!actorRole.equals("ADMIN") && !actorRole.equals("RECEPTIONIST")) {
+        if (!actorRole.equals("ADMIN")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Members must purchase a membership through /api/payments");
+                    "Membership assignment requires ADMIN; front-desk purchases must use /api/payments");
         }
 
         User member = userRepository.findById(request.getMemberId())

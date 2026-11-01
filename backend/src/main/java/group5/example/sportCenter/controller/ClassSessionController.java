@@ -14,10 +14,14 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import group5.example.sportCenter.dto.ClassSessionResponse;
+import group5.example.sportCenter.dto.ClassSessionGenerationPreviewResponse;
+import group5.example.sportCenter.dto.ClassSessionGenerationRequest;
+import group5.example.sportCenter.dto.ClassSessionGenerationResponse;
 import group5.example.sportCenter.dto.CreateClassSessionRequest;
 import group5.example.sportCenter.dto.UpdateClassSessionRequest;
 import group5.example.sportCenter.dto.UpdateClassSessionStatusRequest;
 import group5.example.sportCenter.service.ClassSessionService;
+import group5.example.sportCenter.service.ClassSessionGenerationService;
 import jakarta.validation.Valid;
 
 @RestController
@@ -25,9 +29,12 @@ import jakarta.validation.Valid;
 public class ClassSessionController {
 
     private final ClassSessionService classSessionService;
+    private final ClassSessionGenerationService generationService;
 
-    public ClassSessionController(ClassSessionService classSessionService) {
+    public ClassSessionController(ClassSessionService classSessionService,
+            ClassSessionGenerationService generationService) {
         this.classSessionService = classSessionService;
+        this.generationService = generationService;
     }
 
     @GetMapping
@@ -63,5 +70,18 @@ public class ClassSessionController {
             @PathVariable Integer id,
             @Valid @RequestBody UpdateClassSessionStatusRequest request) {
         return classSessionService.updateStatus(id, request);
+    }
+
+    @PostMapping("/generation/preview")
+    public ClassSessionGenerationPreviewResponse previewGeneration(
+            @Valid @RequestBody ClassSessionGenerationRequest request) {
+        return generationService.preview(request);
+    }
+
+    @PostMapping("/generation/confirm")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ClassSessionGenerationResponse confirmGeneration(
+            @Valid @RequestBody ClassSessionGenerationRequest request) {
+        return generationService.generate(request);
     }
 }

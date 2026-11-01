@@ -98,7 +98,7 @@ Profile values use height 50-250 cm, weight 10-500 kg, at most two decimal place
 
 ## Membership and MembershipPlan
 
-Membership ownership is checked in `MembershipService` using the authenticated JWT subject. ADMIN and RECEPTIONIST can act for any MEMBER. MEMBER can create, view, and change auto-renew only for their own Membership. COACH has no Membership access. Membership creation still sets status to `ACTIVE` immediately; no Payment entity or processing service was found, so the endpoint does not verify that payment occurred.
+Membership ownership is checked in `MembershipService` using the authenticated JWT subject. ADMIN and RECEPTIONIST can act for any MEMBER. MEMBER can view and change auto-renew only for their own Membership. COACH has no Membership access. Membership activation/renewal is payment-backed: it occurs only after a Payment reaches `SUCCESS`; the legacy `POST /api/memberships` assignment route is ADMIN-only.
 
 Membership validity uses an exclusive `endDate`: it is date-valid only when `startDate <= today < endDate`. The scheduled expiration job runs daily at midnight in `Asia/Ho_Chi_Minh`; the ADMIN expiration endpoint invokes the same service behavior. Every `ACTIVE` Membership with `today >= endDate` becomes `EXPIRED`, regardless of `autoRenew`. `autoRenew` is currently an intent flag only; it does not extend membership or trigger renewal/payment. Existing CourseRegistration discount and price snapshots are not recalculated when a Membership expires.
 
@@ -107,7 +107,7 @@ Membership validity uses an exclusive `endDate`: it is date-valid only when `sta
 | `GET /api/memberships` | ADMIN, RECEPTIONIST | None | 200, `MembershipResponse[]` | Not verified after authorization changes |
 | `GET /api/memberships/{id}` | ADMIN, RECEPTIONIST; MEMBER only for own membership | None | 200, `MembershipResponse` | Not verified after authorization changes |
 | `GET /api/memberships/member/{memberId}` | ADMIN, RECEPTIONIST; MEMBER only when memberId is own ID | None | 200, `MembershipResponse[]` | Not verified after authorization changes |
-| `POST /api/memberships` | ADMIN, RECEPTIONIST; MEMBER for self only | `CreateMembershipRequest` | 201, `MembershipResponse` | Not verified after authorization changes |
+| `POST /api/memberships` | ADMIN (manual assignment only) | `CreateMembershipRequest` | 201, `MembershipResponse` | Payment-backed purchase uses `POST /api/payments` |
 | `PATCH /api/memberships/{id}/cancel-renewal` | ADMIN, RECEPTIONIST; MEMBER only for own membership | None | 200, `MembershipResponse` | Not verified after authorization changes |
 | `PATCH /api/memberships/{id}/enable-auto-renew` | ADMIN, RECEPTIONIST; MEMBER only for own membership | None | 200, `MembershipResponse` | Not verified after authorization changes |
 | `POST /api/memberships/expire` | ADMIN | None | 200, text message | Not verified after authorization changes |
@@ -211,6 +211,24 @@ Course `level` is required on create and update and accepts `BEGINNER`, `INTERME
 
 CourseOffering create body: `courseId`, `name`, `price`, `plannedSessions`, `sessionDuration`, `startDate`, `endDate`, `registrationDeadline`, `cancellationDeadline`; update has the same fields plus `status` and no `courseId`.
 
+CourseOffering dates use timezone-less `LocalDate`/`LocalDateTime` values. A new offering must start today or later, end after it starts, and have future registration and cancellation deadlines no later than midnight at the start date. `registrationDeadline` must be on or before `cancellationDeadline`; this ordering is newly enforced. On update, unchanged historical dates and deadlines may remain in the past; changed start dates cannot be moved into the past, and changed deadlines must be future. Updating the date range cannot exclude existing ClassSessions. Changing `sessionDuration` is rejected if it would make any existing session in the offering use a different duration. Existing registration opening remains 30 days before `startDate`; registration and cancellation deadlines remain separate.
+
+CourseOffering numeric rules (approved): `plannedSessions` is required on creation and must be an integer from 1 through 60; `sessionDuration` is required on creation and must be an integer from 30 through 180 minutes. Updates enforce these ranges when the corresponding value changes. An unchanged legacy value outside the range (including a legacy null planned-session count) may remain during unrelated edits; changing it must set a valid value. Fractional JSON numbers are rejected rather than truncated. ClassSession duration continues to equal the persisted offering duration, and a duration update is rejected if any existing session would no longer match.
+
+Read-only SQL Server legacy-data review (physical names follow the project's `dbo.course_offering` mapping; verify against the target database metadata before use because the original core-schema bootstrap is not in this repository):
+
+```sql
+SELECT id, planned_sessions, session_duration
+FROM dbo.course_offering
+WHERE planned_sessions IS NULL
+   OR planned_sessions < 1 OR planned_sessions > 60
+   OR session_duration IS NULL
+   OR session_duration < 30 OR session_duration > 180
+ORDER BY id;
+```
+
+This query only identifies rows for manual review; no existing offering is changed automatically.
+
 Class create body: `courseOfferingId`, `coachId`, `name`, `capacity`; update body: `coachId`, `name`, `capacity`, `status`.
 
 Response samples: `CourseResponse` contains `id`, `sportId`, `sportName`, `name`, `description`, `targetAgeMin`, `targetAgeMax`, `level`, `learningOutcome`, `status`. `CourseOfferingResponse` contains `id`, course/sport IDs and names, `name`, `price`, `plannedSessions`, `sessionDuration`, `startDate`, `endDate`, registration/cancellation deadlines, and `status`. `CourseClassResponse` contains `id`, offering/course/sport/coach IDs and names, `name`, `capacity`, and `status`.
@@ -228,11 +246,11 @@ Facility GET endpoints permit all authenticated roles; mutations are ADMIN-only.
 | `GET /api/facilities` | None | 200, `FacilityResponse[]` | Not verified |
 | `GET /api/facilities/{id}` | None | 200, `FacilityResponse` | Not verified |
 | `GET /api/facilities/sport/{sportId}` | None | 200, `FacilityResponse[]` | Not verified |
-| `POST /api/facilities` | `CreateFacilityRequest` (`sportId`, `name`, `type`) | 201, `FacilityResponse` | Not verified |
-| `PUT /api/facilities/{id}` | `UpdateFacilityRequest` (`name`, `type`, `status`) | 200, `FacilityResponse` | Not verified |
+| `POST /api/facilities` | `CreateFacilityRequest` (`sportIds`, `name`, `type`; legacy single `sportId` remains accepted) | 201, `FacilityResponse` | Not verified |
+| `PUT /api/facilities/{id}` | `UpdateFacilityRequest` (`name`, `type`, `status`, `sportIds`) | 200, `FacilityResponse` | Not verified |
 | `PUT /api/facilities/{id}/image` | Multipart form field `file` | ADMIN; 200, updated `FacilityResponse` with `imageUrl` | H2 integration tested |
 
-Response sample: `{"id":5,"sportId":1,"sportName":"Swimming","name":"Main pool","type":"POOL","status":"ACTIVE","imageUrl":null}`.
+Response sample: `{"id":5,"sportId":1,"sportName":"Swimming","sports":[{"id":1,"name":"Swimming","status":"ACTIVE"},{"id":3,"name":"Water Polo","status":"ACTIVE"}],"name":"Main pool","type":"POOL","status":"ACTIVE","imageUrl":null}`. `sports` contains all supported Sport IDs, names and statuses for authenticated Facility responses; the public Facility response includes only ACTIVE supported Sports. `sportId`/`sportName` remain as compatibility fields for the first assigned Sport. At least one Sport is required. New assignments must reference distinct ACTIVE Sports; a currently assigned inactive Sport can remain during unrelated edits, but cannot be newly assigned. Removing an assignment is rejected with 409 while a future or ongoing non-CANCELLED ClassSession at that Facility uses the corresponding Course Sport. The existing required `facility.sport_id` column is retained and mirrors the first selected Sport pending a separately reviewed schema cleanup.
 
 ## Local entity images
 
@@ -254,6 +272,8 @@ The SQL Server migration `docs/sql/phase3-entity-image-urls.sql` adds nullable `
 | `POST /api/class-sessions` | ADMIN | `CreateClassSessionRequest` | 201, `ClassSessionResponse` | Not verified |
 | `PUT /api/class-sessions/{id}` | ADMIN | `UpdateClassSessionRequest` | 200, `ClassSessionResponse` | Not verified |
 | `PATCH /api/class-sessions/{id}/status` | ADMIN | `UpdateClassSessionStatusRequest` | 200, `ClassSessionResponse` | Not verified |
+| `POST /api/class-sessions/generation/preview` | ADMIN | `ClassSessionGenerationRequest` | 200, preview response; read-only | Isolated tests |
+| `POST /api/class-sessions/generation/confirm` | ADMIN | `ClassSessionGenerationRequest` | 201, `ClassSessionGenerationResponse` | Isolated tests |
 
 Create sample (status omitted to use the `SCHEDULED` default; `facilityId` may be null):
 
@@ -261,7 +281,25 @@ Create sample (status omitted to use the `SCHEDULED` default; `facilityId` may b
 {"classId":3,"facilityId":6,"startTime":"2026-10-12T10:00:00","endTime":"2026-10-12T11:00:00"}
 ```
 
-Update body is the same shape and must include `classId`, `startTime`, and `endTime`; `facilityId: null` clears the facility. Status update body: `{"status":"CANCELLED"}`. The response includes `id`, class/facility identifiers and names, start/end times, status, and non-blocking `warnings` (outside CourseOffering date range or the per-CourseClass planned-session threshold). Overlap or invalid state transitions return 409; missing referenced resources return 404; bean validation failures return 400.
+Update body is the same shape and must include `classId`, `startTime`, and `endTime`; `facilityId: null` clears the facility. Status update body: `{"status":"CANCELLED"}`. Both timestamps must fall within the offering's date range, including the whole end date, and their difference must exactly equal persisted CourseOffering `sessionDuration` in whole minutes. End must be strictly after start. Invalid dates or duration return 400; overlaps, planned-session target violations, and invalid state transitions return 409; missing referenced resources return 404. `SCHEDULED` can become `COMPLETED` only at/after `endTime`, or `CANCELLED` only before `startTime`; both terminal statuses remain terminal. There is no hard-delete route. `plannedSessions` is a target per CourseClass: all non-CANCELLED sessions count, while CANCELLED sessions do not. Manual creation and generated creation share this target.
+
+### Automatic weekly schedule generation
+
+Both generation endpoints are ADMIN-only and use the persisted CourseOffering's duration; the request cannot override it. Timestamps are timezone-less `LocalDateTime` wall-clock values. Weekdays are ISO Java weekday names (`MONDAY` through `SUNDAY`), the first eligible date defaults to the offering start date, and the requested count defaults to the selected CourseClass's remaining target slots. A date is eligible through the offering end date inclusive. Matching dates are traversed chronologically; each session ends exactly `sessionDuration` minutes after the requested daily start time.
+
+Request example:
+
+```json
+{"courseClassId":3,"weekdays":["MONDAY","WEDNESDAY"],"startTime":"18:30:00","facilityId":6,"firstEligibleDate":"2026-10-12","requestedSessionCount":8}
+```
+
+`POST /api/class-sessions/generation/preview` returns candidate timestamps, class/offering/Coach/Facility context, current and remaining target counts, candidate-specific conflicts, overall conflicts, and `canGenerate`. It does not persist sessions. A candidate conflict or too few eligible weekdays makes the preview non-confirmable; conflicting dates are not silently skipped.
+
+`POST /api/class-sessions/generation/confirm` accepts the same request, recomputes all candidates and validates current data again. On success it returns `{"courseClassId":3,"createdCount":8,"sessions":[...]}` with HTTP 201. The entire batch runs in one transaction and any validation or persistence failure rolls back every created session. It uses the normal ClassSession create validation for date range, duration, active Facility, planned target, and Coach/Facility overlaps. Expect 400 for malformed input, 404 for missing referenced records, and 409 when current business constraints prevent generation.
+
+The policy is per CourseClass, although the target is configured on CourseOffering. Existing non-CANCELLED rows count toward that class target regardless of whether they were created manually or automatically; CANCELLED rows are retained but free a slot. Generation never deletes or replaces existing rows. Manual ClassSession creation also cannot exceed the same target. If existing rows already exceed the target, further creation is rejected.
+
+Confirmation takes pessimistic locks in a consistent resource order: CourseClass, CourseOffering, optional Facility, then assigned Coach. ClassSession create/update and the corresponding CourseClass Coach reassignment, CourseOffering update, and Facility status update use the relevant locks to coordinate application writes. Preview is advisory and can become stale; confirm always revalidates. The API is not idempotent: a repeated request is a separate attempt and will normally be rejected when the target has already been filled. Database locks coordinate application operations, but direct SQL writes or other writers that do not follow this lock protocol can still race; there is no schema-level uniqueness constraint for overlapping time intervals.
 
 Response sample:
 
@@ -321,11 +359,13 @@ Marking is allowed at or after the scheduled start time, including after the ses
 
 `docs/sql/phase4b1-class-attendance.sql` creates the Attendance and AttendanceHistory tables. Apply it manually after the approved core schema, the ClassSession migration, and the CourseRegistration migration, and before starting the backend with `spring.jpa.hibernate.ddl-auto=validate`. The migration was not executed or tested against SQL Server as part of this implementation; review and back up the intended database before manual execution.
 
-Facility and Coach overlaps use half-open interval semantics (`existing.startTime < requested.endTime` and `existing.endTime > requested.startTime`), so sessions that only touch at an endpoint do not overlap. Cancelled sessions do not reserve facilities or coaches. Make-up sessions outside CourseOffering dates and counts above `plannedSessions` are saved with warnings; the current code interprets `plannedSessions` per CourseClass for warning purposes only, pending confirmation of the intended counting scope.
+Facility and Coach overlaps use half-open interval semantics (`existing.startTime < requested.endTime` and `existing.endTime > requested.startTime`), so sessions that only touch at an endpoint do not overlap. Cancelled sessions do not reserve facilities or coaches. Sessions outside CourseOffering dates are rejected. The per-CourseClass planned-session target is enforced for both manual and generated creation, counting every non-CANCELLED session. The Member default class schedule excludes CANCELLED sessions; authorized administrative GET routes retain historical visibility.
 
 Lifecycle transitions: `SCHEDULED` can become `COMPLETED` only when current time is at or after `endTime`, and can become `CANCELLED` only before `startTime`. `COMPLETED` and `CANCELLED` are terminal; repeating the same status is idempotent, but changing to another status returns 409. PUT schedule updates are allowed only for `SCHEDULED` sessions. Invalid status/time request data returns 400. Statuses change only through the API; there is no time-driven auto-transition.
 
 Facility status updates accept `ACTIVE` or `INACTIVE`, case-insensitively, and persist uppercase. Null, blank, or any other value returns 400. Switching from ACTIVE to INACTIVE returns 409 if a `SCHEDULED` ClassSession using the Facility has `endTime` later than the current time, covering sessions in progress and upcoming sessions. A session ending exactly now, an ended session, or a `COMPLETED`/`CANCELLED` session does not block deactivation. No session is deleted, cancelled, or edited by this operation. When a Facility is supplied on ClassSession POST or changed on PUT, its current status must be ACTIVE; missing Facility IDs return 404 and any other status returns 409. On PUT, a future `SCHEDULED` session cannot retain the same Facility if that Facility has become unavailable; choose another ACTIVE Facility or cancel the session. GET continues returning historical sessions and their Facility data regardless of Facility status. `FacilityService` creates facilities as ACTIVE.
+
+ClassSession POST/PUT and generation preview/confirm also require the selected Facility to support the Sport associated with the CourseOffering's Course. A null Facility remains allowed. Generation preview reports this as a candidate conflict; confirmation and manual writes reject incompatible assignments. Facility assignment edits share the Facility schedule row lock with session scheduling and cannot remove a Sport needed by a future or ongoing non-CANCELLED session. Cancelled and historical completed records are retained.
 
 ## Module coverage note
 
@@ -337,11 +377,11 @@ No Swagger/OpenAPI dependency or configuration was found in `pom.xml` or source.
 
 ## Pre-merge review items
 
-- Membership creation currently persists `ACTIVE` without a Payment record or processing step. This existing behavior was preserved; confirm the purchase/payment contract before production use.
+- Membership purchase is payment-backed through the Flow 3 `POST /api/payments` operation; pending payments do not activate memberships. See the Payment section for the current Member and receptionist workflows.
 - The application requires `DB_USERNAME`, `DB_PASSWORD`, and `JWT_SECRET`; configure them in the runtime environment. If the previously tracked SQL Server password was real or shared, rotate it because Git history may retain it.
 - Configure `CORS_ALLOWED_ORIGINS` for deployed frontend origins. Defaults permit only `http://localhost:5173` and `http://localhost:3000`.
 - The CourseClass registration revision passed the full isolated-H2 Maven suite and package build; Postman verification remains pending. SQL Server locking and migration behavior still need validation in a disposable database before deployment.
-- CourseClass registration is implemented under `/api/course-registrations`; no Payment/Bill or public account-registration endpoint is exposed.
+- CourseClass registration is implemented under `/api/course-registrations`; registration remains independent of payment, while a separate Payment may record successful payment for a confirmed registration. No public account-registration endpoint is exposed.
 
 
 ## Phase 1: Skill assessments and current sport levels (2026-10-12)
@@ -481,18 +521,23 @@ The registration unit is one `CourseClass` selected from the existing hierarchy 
 
 | Method | Endpoint | Allowed role | Behavior |
 |---|---|---|---|
-| POST | `/api/course-registrations` | MEMBER | Registers the JWT-authenticated member for the selected CourseClass; returns 201 and CONFIRMED registration |
-| GET | `/api/course-registrations/me` | MEMBER | Lists the caller's CONFIRMED registrations, identifying Course, CourseOffering, and CourseClass |
+| POST | `/api/course-registrations` | MEMBER | Reserves a seat for the JWT-authenticated member; returns 201 and a PENDING_PAYMENT registration with a payment deadline |
+| GET | `/api/course-registrations/me` | MEMBER | Lists the caller's registration history and lifecycle state |
+| POST | `/api/course-registrations/{id}/cancel` | MEMBER | Cancels only the caller's PENDING_PAYMENT registration; releases the seat |
 | GET | `/api/course-registrations/me/class-sessions` | MEMBER | Lists sessions only for CourseClasses in the caller's CONFIRMED registrations |
 | GET | `/api/course-registrations` | ADMIN, RECEPTIONIST | Lists registrations with Course, CourseOffering, and CourseClass identity |
 
-POST body: `{"classId":6}`. Client-supplied member/course/offering identifiers and prices are not part of the request contract; member identity comes from JWT, Course/Offering are derived from the selected CourseClass, and all prices are calculated by the server. Response fields also include the immutable enrollment-time snapshots `originalPrice`, `membershipDiscount` (money amount), and `finalPrice`. Example: `{"id":31,"memberId":4,"courseId":10,"courseName":"Beginner Swim","courseOfferingId":11,"courseOfferingName":"October Swim","classId":6,"className":"Morning group","sportId":3,"requiredLevel":"BEGINNER","status":"CONFIRMED","registeredAt":"2026-10-13T10:30:00","cancelledAt":null,"originalPrice":100.00,"membershipDiscount":10.00,"finalPrice":90.00}`.
+POST body: `{"classId":6}`. Client-supplied member/course/offering identifiers and prices are not accepted; member identity comes from JWT, Course/Offering are derived from the selected CourseClass, and prices are calculated by the server. The response includes the immutable price snapshots `originalPrice`, `membershipDiscount` (money amount), and `finalPrice`, plus `registeredAt` and `paymentDeadline`. Example: `{"id":31,"memberId":4,"courseId":10,"courseName":"Beginner Swim","courseOfferingId":11,"courseOfferingName":"October Swim","classId":6,"className":"Morning group","sportId":3,"requiredLevel":"BEGINNER","status":"PENDING_PAYMENT","registeredAt":"2026-10-13T10:30:00","paymentDeadline":"2026-10-14T10:30:00","cancelledAt":null,"originalPrice":100.00,"membershipDiscount":10.00,"finalPrice":90.00}`. The timestamp values are timezone-less ISO LocalDateTime fields interpreted in `Asia/Ho_Chi_Minh`.
 
-Registration requires an ACTIVE MEMBER, ACTIVE CourseClass, OPEN CourseOffering (the existing offering service uses `OPEN` as its registration-accepting status), ACTIVE Course and Sport, and a date on or after `CourseOffering.startDate.minusDays(30)`. It also requires the existing deadline to remain strictly in the future; registration is rejected at the exact deadline. Membership is optional. At registration time, an ACTIVE Membership whose exclusive validity interval contains the registration date (`startDate <= registrationDate < endDate`) contributes the highest eligible `courseDiscountPercent`; discounts do not stack, and one eligible Membership may discount multiple separate CourseRegistrations during its validity period. The monetary discount is rounded to two decimals using HALF_UP, and original price, discount amount, and final price are stored as snapshots. Membership expiry, renewal, Plan discount changes, and Offering price changes do not recalculate existing snapshots. Course age restrictions are enforced; if an age range exists, missing date of birth or an out-of-range age returns 409. A member without a coach-verified sport level may register only for BEGINNER; a verified level must meet or exceed the course requirement. Unsupported course-level values are rejected. Capacity is checked per CourseClass. A member may have only one CONFIRMED registration per CourseOffering, even if the offering contains multiple classes. Duplicate class/another class in the same offering, full capacity, insufficient level, age ineligibility, schedule conflicts, inactive resources, and closed/expired offerings return 409; missing CourseClass returns 404; malformed request returns 400; missing JWT/wrong role returns 401/403.
+Registration requires an ACTIVE MEMBER, ACTIVE CourseClass, OPEN CourseOffering (the existing offering service uses `OPEN` as its registration-accepting status), ACTIVE Course and Sport, and a date on or after `CourseOffering.startDate.minusDays(30)`. Registration must be strictly before `registrationDeadline`. A new hold deadline is `min(registeredAt + 24 hours, registrationDeadline)`; a non-positive hold is rejected. The existing timezone-less LocalDateTime deadline is treated as Vietnam wall time (`Asia/Ho_Chi_Minh`); API timestamps are interpreted in that zone and stored as `DATETIME2`, consistently with existing conventions. Membership is optional. At registration time, an ACTIVE Membership whose exclusive validity interval contains the registration date (`startDate <= registrationDate < endDate`) contributes the highest eligible `courseDiscountPercent`; discounts do not stack. Original price, discount amount, and final price remain server-calculated snapshots. Course age, verified sport level, and schedule eligibility continue to be enforced.
 
-Registration is transactional. It locks the member row first to serialize that member's offering and schedule checks, then locks the selected CourseClass row before counting seats. The SQL Server migration adds a filtered unique index on CONFIRMED `(member_id, class_id)` as a database guard for duplicate class registration. Schedule checks compare only future/ongoing SCHEDULED sessions in the selected class and the member's already registered classes; intervals that touch only at an endpoint do not conflict. Viewing sessions is scoped to registered classes, not every class in the same Course or Offering.
+`PENDING_PAYMENT` and `CONFIRMED` registrations occupy capacity; only a pending row with `paymentDeadline > now` occupies a seat. At or after the deadline, a hold is EXPIRED and does not count even if the scheduled worker has not run. Registration locks the MEMBER row and then CourseClass row before expiring due holds, checking duplicates/schedule and counting occupied seats. Payment settlement locks the Payment first and then its registration; the registration row is rechecked under lock. A successful verified Flow 3 payment confirms only a pending registration strictly before its deadline. At or after the deadline the registration becomes EXPIRED and Payment is recorded as `REFUND_REQUIRED`; no automatic refund or seat reclaim occurs. A callback received after deadline is conservatively treated as late because the current Payment contract carries no trusted provider settlement timestamp; Flow 3 must not later confirm the expired registration. The gateway owner should supply a verified settlement timestamp if business policy expects delayed callbacks to prove earlier settlement.
 
-Cancellation remains omitted because no CourseRegistration cancellation policy has been confirmed. Registration is independent of ConsultationRequest and SkillAssessment; no Payment or Bill operation is performed. The migration at `docs/sql/phase2-course-registrations.sql` is an idempotent manual SQL Server script including the three DECIMAL(12,2) snapshots and has not been executed. Automated tests/build and Postman status are recorded in `docs/IMPLEMENTATION_STATUS.md`.
+EXPIRED and CANCELLED registrations do not occupy seats. A member may cancel only their own PENDING_PAYMENT hold through the new cancel endpoint. Confirmed-registration cancellation/refund remains unsupported because no confirmed-course refund policy or endpoint existed in the inspected baseline; this phase does not invent one. A member may create a new hold after expiration/cancellation if eligibility, registration window, duplicate-offering rule and capacity checks pass. `/api/course-registrations/me/class-sessions` continues to include only CONFIRMED registrations.
+
+The scheduled expiration worker processes bounded batches and locks/rechecks each row; lazy expiration runs during capacity checks, member history reads and payment settlement, so correctness does not depend on scheduling. Existing registration creation price snapshots and discount behavior are preserved. Existing offering-level duplicates are serialized by the MEMBER row lock; filtered unique indexes protect duplicate pending and confirmed `(member_id, class_id)` rows.
+
+Registration remains separate from payment creation/collection. A member or staff client can use existing `POST /api/payments` with purpose `COURSE_REGISTRATION` and `referenceId` equal to the registration ID; the server quotes the persisted `finalPrice`. Only Flow 3's existing verified online callback or staff counter-processing can settle it. The manual hold migration is `docs/sql/phase8-7c-course-registration-holds.sql`, after `phase2-course-registrations.sql`; do not deploy this entity mapping before applying the migration. It preserves old confirmed rows with null deadlines and does not turn them into unpaid holds.
 
 
 # Personal Training (PT 1-on-1)
@@ -517,19 +562,110 @@ Payment is a separate operation from membership purchase, course registration an
 | `purpose` | `referenceId` | Amount charged | On successful payment |
 |---|---|---|---|
 | `MEMBERSHIP` | `MembershipPlan.id` (plan must be `ACTIVE`) | `plan.price` | Activates a new ACTIVE membership from today, or, if one is still valid, renews by adding a new membership that starts on the latest current `endDate` |
-| `COURSE_REGISTRATION` | `CourseRegistration.id` (own, `CONFIRMED`, not yet paid) | registration `finalPrice` snapshot | Records the registration as paid |
+| `COURSE_REGISTRATION` | `CourseRegistration.id` (own, `PENDING_PAYMENT`, deadline not reached) | registration `finalPrice` snapshot | Confirms the registration atomically with Payment success; late settlement becomes `REFUND_REQUIRED` and EXPIRED |
 | `PT_BOOKING` | `PersonalTrainingBooking.id` (own, `PENDING_PAYMENT`, hold not expired, not yet paid) | booking `finalPrice` | Confirms the booking (`PENDING_PAYMENT` -> `CONFIRMED`) |
 
 Payment status: `PENDING` -> `SUCCESS` | `CANCELLED` | `REFUND_REQUIRED`. `REFUND_REQUIRED` means money was received but could not be applied (PT hold expired first, registration no longer active, the reference was already paid by another payment, or the gateway reported success after the payment was cancelled). The booking is left `EXPIRED`; the refund itself is handled manually. `REFUND_REQUIRED` is excluded from revenue reports.
 
 Endpoints:
 - `POST /api/payments` - MEMBER (for self) or ADMIN/RECEPTIONIST (with `memberId`). Body `{"method":"ONLINE|COUNTER","purpose":"...","referenceId":1,"autoRenew":false}`; `autoRenew` applies to `MEMBERSHIP` only. `ONLINE` responses include `paymentUrl`.
-- `GET /api/payments/online/callback?transactionCode=&success=&signature=` - public; accepted only with a valid HMAC-SHA256 signature. Replays are idempotent. **Demo only:** `MockPaymentGateway` does not contact a payment provider or verify money settlement; opening its local callback URL simulates success. It is disabled by default and only works when explicitly enabled with `PAYMENT_MOCK_GATEWAY_ENABLED=true` under a demo/test profile. Do not enable it in production. A real gateway is not implemented.
+- `GET /api/payments/online/callback?transactionCode=&success=&signature=` - public; mock gateway only (`PAYMENT_PROVIDER=mock`). Accepted only with a valid HMAC-SHA256 signature. Replays are idempotent. **Demo only:** `MockPaymentGateway` does not contact a payment provider or verify money settlement; opening its local callback URL simulates success. It is disabled by default and only works when explicitly enabled with `PAYMENT_MOCK_GATEWAY_ENABLED=true` under a demo/test profile. Do not enable it in production.
+- `GET /api/payments/vnpay/return` - public; VNPay gateway only (`PAYMENT_PROVIDER=vnpay`). VNPay redirects the payer's browser here. The server verifies the HMAC-SHA512 signature, merchant code and amount, updates the payment, then responds `302` to `PAYMENT_FRONTEND_RESULT_URL` with `?paymentId=&paymentStatus=SUCCESS|CANCELLED|REFUND_REQUIRED|...`, or `?paymentStatus=ERROR&reason=INVALID_SIGNATURE|NOT_FOUND|NOT_ONLINE|AMOUNT_MISMATCH`. The frontend must treat these query values as display hints only and re-read `GET /api/payments/me`.
+- `GET /api/payments/vnpay/ipn` - public; VNPay server-to-server notification (needs a public URL such as ngrok, registered in the VNPay merchant portal). Responds `{"RspCode":"00|02|97|01|04|99","Message":"..."}`: `00` applied, `02` already processed, `97` invalid signature, `01` order not found, `04` amount mismatch, `99` unexpected error. Processing is shared with the return URL and is idempotent, so either may arrive first.
 - `PATCH /api/payments/{id}/counter` - ADMIN/RECEPTIONIST; body `{"success":true,"note":"..."}`. Records `processedBy`.
 - `PATCH /api/payments/{id}/cancel` - owner MEMBER or ADMIN/RECEPTIONIST; `PENDING` payments only.
 - `GET /api/payments/me` - MEMBER history. `GET /api/payments/member/{memberId}` - ADMIN/RECEPTIONIST.
 - `GET /api/reports/revenue|members|class-registrations?from=YYYY-MM-DD&to=YYYY-MM-DD` - ADMIN only; inclusive date range over `paidAt`, `SUCCESS` payments only.
 
-`POST /api/memberships` is now ADMIN/RECEPTIONIST only (manual assignment). MEMBER purchases a membership through `POST /api/payments`.
+`POST /api/memberships` is ADMIN-only (manual assignment). A MEMBER purchases for the JWT-authenticated account through `POST /api/payments`; omit `memberId` in a MEMBER request. The server checks that the account is active and has MEMBER role, requires an active plan, and derives amount from the plan. A pending payment does not activate a Membership. The Member UI uses `method: "COUNTER"` because no real online provider is available; it offers no simulated success action. The mock ONLINE capability remains restricted to explicit demo/test configuration. Payment confirmation remains a staff-only counter operation. A repeated pending purchase for the same member and plan returns 409, and the member may cancel their own pending payment through the existing cancel route before retrying. This prevents common repeated clicks but is not a general idempotency key.
 
-Configuration: simulated callbacks require `PAYMENT_CALLBACK_SECRET` (a long random string) and `PAYMENT_MOCK_GATEWAY_ENABLED=true` under an explicitly active `demo`, `dev`, `development`, `test`, or `phase1` profile; the callback URL must use loopback. Production profiles always disable the simulator. When disabled, ONLINE payment creation returns 503; COUNTER payments remain available. SQL Server: review and manually run `docs/sql/phase2-payment.sql` before starting with `ddl-auto=validate`; it has not been executed as part of this integration.
+The MEMBER membership page shows active memberships, pending payment requests, and active plans. It never confirms payment or activates a Membership from the client. Pending requests instruct the member to pay at reception; only a successful staff confirmation activates or renews the membership. The mock online gateway remains limited to its explicit demo/test configuration and is not a real payment provider.
+
+Receptionist membership sales are handled in one workflow at `/receptionist/membership-sales`: select an active MEMBER, review current memberships and payment history, choose an active plan, create a COUNTER payment, then explicitly record whether payment was received. The payment API remains the only purchase and confirmation implementation. The Consultation Queue already supports converting/linking a consultation to a MEMBER, so the receptionist sidebar no longer duplicates that path with standalone member registration. The legacy receptionist `/staff/register-member` URL redirects to `/staff/consultations`; ADMIN access to the registration page remains.
+
+Configuration: simulated callbacks require `PAYMENT_CALLBACK_SECRET` (a long random string) and `PAYMENT_MOCK_GATEWAY_ENABLED=true` under an explicitly active `demo`, `dev`, `development`, `test`, or `phase1` profile; the callback URL must use loopback. Production profiles always disable the simulator. When disabled, ONLINE payment creation returns 503; COUNTER payments remain available.
+
+VNPay sandbox: set `PAYMENT_PROVIDER=vnpay`, `VNPAY_TMN_CODE` and `VNPAY_HASH_SECRET` (from the sandbox registration email at https://sandbox.vnpayment.vn/devreg) in `backend/.env`; never commit them. Optional overrides: `VNPAY_PAY_URL` (default sandbox `vpcpay.html`), `VNPAY_RETURN_URL` (default `http://localhost:8080/api/payments/vnpay/return`), `PAYMENT_FRONTEND_RESULT_URL` (default `http://localhost:5173/member/membership`). The backend fails to start if the TMN code or hash secret is missing while `PAYMENT_PROVIDER=vnpay`. With VNPay, ONLINE `paymentUrl` is the VNPay payment page (amount sent as VND x 100, `vnp_TxnRef` is the transaction code without `-`, link valid for 15 minutes). Sandbox testing uses the NCB test card listed in the VNPay sandbox documentation. An abandoned ONLINE payment stays `PENDING` until the member or staff cancels it. SQL Server: review and manually run `docs/sql/phase2-payment.sql` before starting with `ddl-auto=validate`; it has not been executed as part of this integration.
+
+## Notifications (Phase 6.1A)
+
+All four authenticated roles (ADMIN, RECEPTIONIST, COACH, MEMBER) may read and update only notifications owned by the authenticated user. The owner comes from the JWT subject; no endpoint accepts a user ID. There is intentionally no public notification creation endpoint. Internal services may create notifications for future business-event integrations.
+
+| Method and path | Allowed caller | Request | Success |
+|---|---|---|---|
+| `GET /api/notifications?page=0&size=20` | All authenticated roles | Optional `page` (default 0) and `size` (default 20, maximum 100) | 200, Spring `Page` of notification DTOs, newest first (`createdAt`, then `id`, descending) |
+| `GET /api/notifications/unread-count` | All authenticated roles | None | 200, `{"unreadCount":2}` |
+| `PATCH /api/notifications/{id}/read` | All authenticated roles; owner only | None | 200, updated notification DTO; repeated reads are idempotent |
+| `PATCH /api/notifications/read-all` | All authenticated roles | None | 200, `{"updatedCount":2}`; count is unread rows changed by this request |
+
+Notification DTO fields are `id`, `title`, `message`, `isRead`, and `createdAt`. The list response uses Spring's standard paged JSON wrapper, with these fields among the wrapper metadata:
+
+```json
+{
+  "content": [
+    {"id": 42, "title": "Thông báo", "message": "Nội dung thông báo", "isRead": false, "createdAt": "2026-10-18T12:30:00"}
+  ],
+  "totalElements": 1,
+  "totalPages": 1,
+  "size": 20,
+  "number": 0,
+  "first": true,
+  "last": true
+}
+```
+
+Invalid pagination returns 400. A nonexistent notification and another user's notification both return 404 so ownership cannot be probed; missing/invalid authentication returns 401. An already-read row remains read and does not produce additional state changes. Mark-all updates only unread notifications belonging to the authenticated user, directly in the database. `createdAt` is generated by the backend and is not accepted from clients. This phase does not connect notifications to Payment, Attendance, Consultation, Membership, or other business events. The manual SQL Server migration is `docs/sql/phase6-1a-notifications.sql`; it has not been executed.
+
+### ADMIN broadcast (Phase 6.1B)
+
+`POST /api/admin/notifications/broadcast` is restricted to authenticated ADMIN accounts. It creates one unread personal Notification for each ACTIVE ADMIN, RECEPTIONIST, COACH, and MEMBER account, including the initiating ADMIN when active. Inactive accounts and accounts with other roles are excluded. The recipient set is selected by one database query within the write transaction; if account status changes concurrently after that query, an account deactivated during the broadcast can still receive it and a newly activated account can be omitted.
+
+Request fields are limited to `title` (required, nonblank, at most 150 characters) and `message` (required, nonblank, at most 5,000 characters):
+
+```http
+POST /api/admin/notifications/broadcast
+Authorization: Bearer <admin-access-token>
+Content-Type: application/json
+```
+
+```json
+{"title":"Center maintenance notice","message":"SportCenter will be temporarily closed for maintenance."}
+```
+
+The response is `200 OK` and `recipientCount` is the number of rows persisted by the transaction:
+
+```json
+{"recipientCount":100}
+```
+
+The operation uses a batched insert inside one transaction: database failure rolls back the whole broadcast. Invalid bodies return 400, unauthenticated callers receive 401, and non-ADMIN roles receive 403. Each accepted request is a distinct broadcast. Because the schema has no durable idempotency key, retrying after an uncertain network outcome may create duplicate notifications; the server does not deduplicate by title or message. No broadcast table or Notification schema change is used.
+
+### Automatic business notifications (Phase 6.1C)
+
+These are internal notifications; this phase adds no public endpoint and does not change the existing notification or ADMIN broadcast contracts. Typed application events are delivered after the successful business transaction commits. Notification persistence runs in a separate transaction. A delivery exception is logged and contained, so it does not roll back the consultation, PT booking/payment, or class operation.
+
+| Business event | Recipients | Notification condition |
+|---|---|---|
+| Consultation created as `PENDING` | Every ACTIVE RECEPTIONIST | GUEST and MEMBER submissions; one message includes only the persisted consultation ID. Inactive receptionists and other roles are excluded. |
+| Consultation transitions `IN_PROGRESS` -> `COMPLETED` | Linked ACTIVE MEMBER | Guest requests and inactive/non-MEMBER linked accounts are skipped. Rejected/repeated transitions do not notify. |
+| Consultation transitions `IN_PROGRESS` -> `CANCELLED` | Linked ACTIVE MEMBER | Guest requests and inactive/non-MEMBER linked accounts are skipped. Private cancellation details are omitted. |
+| PT booking transitions `PENDING_PAYMENT` -> `CONFIRMED` after verified successful payment | ACTIVE MEMBER and ACTIVE linked COACH User | The Coach is resolved through `Coach.user`; pending creation, failed/cancelled payment, expiration, `REFUND_REQUIRED`, and repeated confirmation do not notify. |
+| CourseClass created with Coach or reassigned to a different Coach | Newly assigned Coach's ACTIVE linked User | An unchanged Coach assignment and unrelated edits do not notify; the previous Coach is not notified. |
+
+The current Notification schema is sufficient; no migration is needed. Delivery is best-effort after commit, not a transactional outbox: a process crash after the business commit and before delivery can lose a notification, and there is no durable event ID for recovery or exactly-once deduplication. Successful transaction events are emitted once by the relevant state-transition code; retries that do not transition state do not emit another event. Recipients are resolved server-side from persisted entities and ACTIVE user/role status. No phone, email, private notes, password, or payment credentials are included. SQL Server migration validation and Postman/live API verification remain pending.
+
+## Audit Log (Phase 7.1)
+
+AuditLog is an append-only internal record of selected successful mutations. It stores the authenticated actor ID and role snapshot when an HTTP actor is present, action, logical entity type/ID, a controlled description, and a UTC `createdAt`. It does not store entity snapshots, request JSON, passwords, tokens, contact details, private consultation notes, payment payloads, or attendance free-text. The actor ID FK is nullable for trusted system-internal calls and uses NO ACTION on User deletion; physical deletion of a User referenced as an actor is rejected by UserService.
+
+Only the following operations are logged: ADMIN User creation and actual role/status changes; MembershipPlan creation, meaningful detail updates, actual status transitions including legacy DELETE soft-deactivation; ConsultationRequest TAKE/COMPLETE/CANCEL transitions; initial Attendance MARK and actual status CORRECT; and one BROADCAST record per successful ADMIN notification broadcast. Reads, User password changes, consultation submission, failed or repeated transitions, idempotent attendance marks, unchanged plan/user updates, and individual notification recipients are not logged. Attendance correction reason/note and broadcast message are not copied into audit descriptions.
+
+| Method and path | Access | Query parameters | Result |
+|---|---|---|---|
+| `GET /api/admin/audit-logs?page=0&size=20` | ADMIN only | Optional `actorUserId`, `action`, `entityType`, `entityId`, `from`, `to` | 200, Spring `Page<AuditLogResponse>`; size 1–100, newest first (`createdAt DESC`, then `id DESC`) |
+
+Response fields are `id`, `actorUserId`, `actorRole`, `action`, `entityType`, `entityId`, `description`, and `createdAt`. All filters are applied in the database before pagination. `action` and `entityType` are case-normalized; `entityId` is an exact trimmed match. `from` and `to` must be ISO-8601 date-times including `Z` or an explicit offset, for example `2026-10-18T09:00:00+07:00`. They are normalized to UTC; `from` is inclusive and `to` is exclusive. `from` later than `to` returns 400. AuditLog timestamp values are written as UTC into timezone-less `DATETIME2(6)` and serialized as local date-time values without a zone suffix, following the existing API convention.
+
+Unauthenticated callers receive 401; RECEPTIONIST, COACH, and MEMBER receive 403. Invalid pagination, date filters, or oversized filter values return 400. There are no create/update/delete AuditLog endpoints. Business mutation and audit insert share one transaction (`MANDATORY` audit write): business failure leaves no success audit, and audit failure rolls back the mutation. ADMIN broadcast notifications and its single audit row share the same transaction. User DELETE remains a soft business restriction only for MEMBER accounts as before; other Users referenced as audit actors now receive 409 rather than being physically removed.
+
+The single-table migration is `docs/sql/phase7-1-audit-log.sql`; it requires `dbo.users.id` as SQL Server INT and must be applied manually after the core schema, before startup with `ddl-auto=validate`. It has not been executed. The API is not available on `origin/main` yet: the implementation branch is `feature/notification-core`, currently ahead of main. H2 tests do not establish SQL Server migration compatibility. AuditLog is transactional, not an outbox: it records only the listed business changes and does not provide immutable database-level protection against a privileged DBA modifying rows.

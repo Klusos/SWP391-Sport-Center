@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 import group5.example.sportCenter.entity.Coach;
@@ -77,6 +78,15 @@ class ApiStabilizationIntegrationTest {
     }
 
     @Test
+    void receptionistCannotMutateClassSessionStatus() throws Exception {
+        mvc.perform(patch("/api/class-sessions/{id}/status", 12345)
+                .header("Authorization", bearer(receptionist))
+                .contentType("application/json")
+                .content("{\"status\":\"CANCELLED\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
     void relationshipBackedDtosMapWithOpenSessionInViewDisabled() throws Exception {
         User coachUser = user("COACH");
         Coach coach = new Coach();
@@ -119,6 +129,7 @@ class ApiStabilizationIntegrationTest {
 
         Facility facility = new Facility();
         facility.setSport(sport);
+        facility.setSports(new java.util.LinkedHashSet<>(List.of(sport)));
         facility.setName("Lazy mapping facility");
         facility.setType("Studio");
         facility.setStatus("ACTIVE");
@@ -269,6 +280,7 @@ class ApiStabilizationIntegrationTest {
 
         Facility facility = new Facility();
         facility.setSport(sport);
+        facility.setSports(new java.util.LinkedHashSet<>(List.of(sport)));
         facility.setName("Status validation facility");
         facility.setType("Studio");
         facility.setStatus("ACTIVE");

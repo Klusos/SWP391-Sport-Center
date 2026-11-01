@@ -1,0 +1,19 @@
+import { useState } from 'react';
+const courseData = [
+ { name: 'Yoga cơ bản', category: 'Yoga', duration: '8 tuần', description: 'Cải thiện độ dẻo dai, hít thở và cân bằng cơ thể.' },
+ { name: 'Gym nền tảng', category: 'Gym', duration: '12 tuần', description: 'Xây dựng nền tảng sức mạnh cùng huấn luyện viên.' },
+ { name: 'Cardio năng động', category: 'Cardio', duration: '6 tuần', description: 'Tăng sức bền và cải thiện thể lực toàn thân.' },
+];
+const classData = [
+ { name: 'Yoga sáng', course: 'Yoga cơ bản', coach: 'Nguyễn Minh', schedule: 'Thứ 2, 4 · 07:00', slots: '8 chỗ còn lại' },
+ { name: 'Gym chiều', course: 'Gym nền tảng', coach: 'Trần An', schedule: 'Thứ 3, 5 · 17:30', slots: '4 chỗ còn lại' },
+ { name: 'Cardio cuối tuần', course: 'Cardio năng động', coach: 'Lê Hùng', schedule: 'Thứ 7 · 09:00', slots: '10 chỗ còn lại' },
+];
+export default function MemberPage({ kind, title, subtitle }) {
+ const [profile,setProfile] = useState({ fullName:'Nguyễn Minh Anh', email:'minhanh@example.com', phone:'0901234567', address:'TP. Hồ Chí Minh' });
+ const [saved,setSaved] = useState(false);
+ if (kind === 'profile') return <><div className="page-intro"><div><h2>{title}</h2><p>{subtitle}</p></div></div><section className="panel profile-panel"><div className="profile-top"><div className="profile-avatar">{profile.fullName.charAt(0)}</div><div><h3>{profile.fullName}</h3><p>Hội viên Sport Center</p></div></div><form onSubmit={e=>{e.preventDefault();setSaved(true)}}><div className="form-grid">{[['fullName','Họ và tên'],['email','Email'],['phone','Số điện thoại'],['address','Địa chỉ']].map(([key,label])=><label key={key}>{label}<input required value={profile[key]} type={key==='email'?'email':'text'} onChange={e=>{setProfile({...profile,[key]:e.target.value});setSaved(false)}}/></label>)}</div><div className="modal-actions"><button className="btn-primary">Lưu thay đổi</button></div>{saved&&<p className="success-message">Đã cập nhật thông tin trên giao diện mẫu.</p>}</form></section></>;
+ if (kind === 'membership') return <><div className="page-intro"><div><h2>{title}</h2><p>{subtitle}</p></div></div><div className="membership-card"><span className="membership-label">GÓI HIỆN TẠI</span><h2>Premium</h2><p>Truy cập phòng tập và tham gia các lớp học theo quyền lợi gói.</p><div className="membership-details"><div><span>Ngày bắt đầu</span><b>01/10/2026</b></div><div><span>Ngày hết hạn</span><b>31/12/2026</b></div><div><span>Trạng thái</span><b className="green-text">Đang hoạt động</b></div></div><button className="btn-primary" onClick={()=>alert('Vui lòng kết nối API membership để đăng ký hoặc gia hạn gói.')}>Xem gói / Gia hạn</button></div><section className="panel"><h3>Quyền lợi hội viên</h3><div className="benefit-grid">{['Sử dụng khu vực tập luyện','Đăng ký lớp học theo lịch','Theo dõi lịch sử tham gia','Được hỗ trợ tại quầy lễ tân'].map(x=><div className="benefit" key={x}><span>✓</span>{x}</div>)}</div></section></>;
+ const isCourse = kind === 'member-courses'; const items = isCourse ? courseData : classData;
+ return <><div className="page-intro"><div><h2>{title}</h2><p>{subtitle}</p></div><span className="date-chip">{items.length} mục</span></div><div className="member-cards">{items.map((item,i)=><article className="member-card" key={item.name}><div className={`member-card-icon icon-${i%3}`}>{isCourse?'✦':'◷'}</div><span className="category-label">{isCourse?item.category:item.course}</span><h3>{item.name}</h3><p>{isCourse?item.description:`Huấn luyện viên: ${item.coach}`}</p><div className="member-card-bottom"><span>{isCourse?item.duration:item.schedule}</span><button className="btn-primary" onClick={()=>alert('Chức năng đăng ký cần kết nối API backend.')}>{isCourse?'Xem chi tiết':'Đăng ký lớp'}</button></div>{!isCourse&&<small>{item.slots}</small>}</article>)}</div></>;
+}

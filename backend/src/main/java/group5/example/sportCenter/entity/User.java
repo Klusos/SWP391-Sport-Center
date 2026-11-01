@@ -28,7 +28,6 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Nationalized
     @Column(nullable = false, length = 100)
     private String name;
 
@@ -62,10 +61,10 @@ public class User {
         }
 
         return Period.between(
-            dateOfBirth,
-            LocalDate.now()
-        ).getYears();
+                dateOfBirth,
+                LocalDate.now()).getYears();
     }
+
     @PrePersist
     void onCreate() {
         this.createdAt = LocalDateTime.now();
