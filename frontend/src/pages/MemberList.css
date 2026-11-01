@@ -1,0 +1,37 @@
+.member-list-main { --member-ink:#153451; --member-muted:#60758b; --member-line:#dce6f0; min-width:0; }
+.member-list-main > h1 { color:var(--member-ink); letter-spacing:-.025em; }
+.member-list-main > .subtitle { max-width:760px; color:var(--member-muted); }
+.member-list-main .member-list-toolbar { grid-template-columns:minmax(240px,1fr) auto auto; gap:10px 12px; padding:18px; border:1px solid var(--member-line); border-radius:14px; background:#fff; box-shadow:0 8px 24px rgb(22 53 81 / 5%); }
+.member-list-main .member-list-toolbar label { color:var(--member-muted); font-size:12px; font-weight:650; }
+.member-list-main .member-list-toolbar input { min-width:0; min-height:44px; padding:0 13px; border-color:#cbd8e5; border-radius:9px; color:var(--member-ink); outline:none; transition:border-color 160ms ease,box-shadow 160ms ease; }
+.member-list-main .member-list-toolbar input:focus { border-color:#397fbd; box-shadow:0 0 0 3px rgb(57 127 189 / 14%); }
+.member-list-main .member-list-toolbar button,.member-list-main .member-detail-heading button { min-height:40px; border-color:#cbd8e5; border-radius:9px; color:#244a6b; font-weight:650; transition:background 160ms ease,border-color 160ms ease; }
+.member-list-main .member-list-toolbar button:hover:not(:disabled),.member-list-main .member-detail-heading button:hover:not(:disabled) { border-color:#9ebbd5; background:#f2f7fc; }
+.member-list-main .queue-table-wrap { overflow:auto; border-color:var(--member-line); border-radius:14px; box-shadow:0 8px 24px rgb(22 53 81 / 5%); }
+.member-list-main .member-table { min-width:790px; border-collapse:separate; border-spacing:0; }
+.member-list-main .member-table th { padding-top:15px; padding-bottom:15px; background:#f3f7fb; color:#526a82; white-space:nowrap; }
+.member-list-main .member-table td { padding-top:15px; padding-bottom:15px; color:#29445e; }
+.member-list-main .member-table tbody tr:last-child td { border-bottom:0; }
+.member-list-main .member-table tbody tr:hover { background:#f6faff; }
+.member-list-main .member-table td:first-child { color:#60758b; font-variant-numeric:tabular-nums; font-weight:700; }
+.member-list-main .member-table td:last-child button { min-height:34px; padding:5px 12px; border:1px solid #cbd8e5; border-radius:8px; background:#fff; color:#245b89; font-weight:650; cursor:pointer; }
+.member-list-main .member-table td:last-child button:hover:not(:disabled) { border-color:#9ebbd5; background:#edf5fc; }
+.member-list-main .member-detail { padding:clamp(18px,2.5vw,28px); border-color:var(--member-line); border-radius:15px; box-shadow:0 10px 28px rgb(22 53 81 / 6%); }
+.member-list-main .member-detail-heading { padding-bottom:16px; border-bottom:1px solid #e8eef4; }
+.member-list-main .member-detail-heading h2 { color:var(--member-ink); letter-spacing:-.02em; }
+.member-list-main .member-detail-grid { gap:12px; margin:20px 0 0; }
+.member-list-main .member-detail-grid > div { min-width:0; padding:14px 15px; border:1px solid #e6edf4; border-radius:10px; background:#fbfdff; }
+.member-list-main .member-detail-grid dt { color:var(--member-muted); font-size:11px; font-weight:700; letter-spacing:.035em; text-transform:uppercase; }
+.member-list-main .member-detail-grid dd { margin-top:6px; color:#24415c; line-height:1.5; }
+.member-list-main .member-edit-grid { margin-top:20px; }
+.member-list-main .member-edit-grid > .form-card { min-width:0; padding:20px; border-color:#e3ebf3; border-radius:12px; background:#fbfdff; }
+@media (max-width:760px) {
+  .member-list-main .member-list-toolbar { grid-template-columns:minmax(0,1fr) minmax(0,auto); padding:14px; }
+  .member-list-main .member-list-toolbar label,.member-list-main .member-list-toolbar input { grid-column:1 / -1; }
+  .member-list-main .member-detail { padding:17px; }
+}
+@media (max-width:420px) {
+  .member-list-main .member-list-toolbar { grid-template-columns:1fr; }
+  .member-list-main .member-list-toolbar label,.member-list-main .member-list-toolbar input { grid-column:auto; }
+  .member-list-main .member-list-toolbar button { width:100%; }
+}

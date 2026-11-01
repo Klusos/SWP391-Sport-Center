@@ -3,6 +3,7 @@ import { getAssignedPtBookingsApi } from "../api";
 import Sidebar from "../components/Sidebar";
 import { formatPtTime, PT_HOLD_MINUTES, ptStatusClass, ptStatusLabel } from "../ptBooking";
 import "./PtBooking.css";
+import "./CoachPtSessions.css";
 
 export default function CoachPtSessions({ token, role, onLogout, onNavigate }) {
   const [rows, setRows] = useState([]);
