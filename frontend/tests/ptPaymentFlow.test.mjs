@@ -81,7 +81,13 @@ test("App and Sidebar expose the queue only through the staff area and add both 
   const sidebar = await readFile(new URL("components/Sidebar.jsx", root), "utf8");
   const page = await readFile(new URL("pages/ReceptionistPtPayments.jsx", root), "utf8");
   assert.match(app, /<Route element={<StaffRoute auth={auth} \/>}>[\s\S]*?<Route path="\/receptionist\/pt-payments"/);
-  assert.equal((sidebar.match(/\["pt-payments"/g) || []).length, 2);
+  const adminOversight = sidebar.match(/id: "oversight-exceptions",[\s\S]*?pages:\s*\[([\s\S]*?)\n    \],/)?.[1];
+  const receptionistNavigation = sidebar.match(/const receptionistLinks\s*=\s*\[([\s\S]*?)\n  \];/)?.[1];
+  assert.ok(adminOversight, "Admin oversight navigation group should exist");
+  assert.match(adminOversight, /\["pt-payments",\s*"[^"]+"\]/, "Admin oversight should include PT Payments");
+  assert.ok(receptionistNavigation, "Receptionist navigation should exist");
+  assert.match(receptionistNavigation, /\["pt-payments",\s*"[^"]+"\]/, "Receptionist navigation should include PT Payments");
+  assert.equal(app.match(/"pt-payments":\s*"([^"]+)"/)?.[1], "/receptionist/pt-payments");
   assert.match(page, /canViewPtPayments\(role\)/);
   assert.match(page, /<Navigate to="\/" replace \/>/);
 });
