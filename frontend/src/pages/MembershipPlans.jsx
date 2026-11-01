@@ -38,6 +38,22 @@ function formatPrice(value) {
     .format(Number(value || 0));
 }
 
+function PlanStatus({ status }) {
+  const active = status === "ACTIVE";
+  return <span className={"status-pill status-" + String(status).toLowerCase()}>
+    {active ? "Đang áp dụng" : "Ngừng áp dụng"}
+  </span>;
+}
+
+function PlanActions({ plan, statusSaving, onEdit, onChangeStatus }) {
+  return <div className="membership-plan-actions">
+    <button type="button" onClick={() => onEdit(plan)}>Sửa</button>
+    <button type="button" disabled={statusSaving === plan.id} onClick={() => void onChangeStatus(plan)}>
+      {statusSaving === plan.id ? "Đang lưu…" : plan.status === "ACTIVE" ? "Ngừng áp dụng" : "Kích hoạt"}
+    </button>
+  </div>;
+}
+
 export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
   const admin = role === "ADMIN";
   const [plans, setPlans] = useState([]);
@@ -46,6 +62,7 @@ export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
   const [statusSaving, setStatusSaving] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [viewMode, setViewMode] = useState("cards");
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -168,6 +185,12 @@ export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
 
         <div className="member-list-toolbar">
           <span>{plans.length} gói hội viên</span>
+          <div className="membership-view-switcher" role="group" aria-label="Kiểu hiển thị gói hội viên">
+            <button type="button" aria-pressed={viewMode === "cards"} className={viewMode === "cards" ? "is-selected" : ""}
+              onClick={() => setViewMode("cards")}>Thẻ</button>
+            <button type="button" aria-pressed={viewMode === "list"} className={viewMode === "list" ? "is-selected" : ""}
+              onClick={() => setViewMode("list")}>Danh sách</button>
+          </div>
           <button type="button" onClick={() => void load()} disabled={loading}>
             {loading ? "Đang tải…" : "Làm mới"}
           </button>
@@ -229,11 +252,29 @@ export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
         )}
 
         {loading ? <p role="status">Đang tải danh sách gói hội viên…</p>
-          : plans.length === 0 ? <p>Chưa có gói hội viên nào.</p>
-            : <div className="queue-table-wrap">
+          : plans.length === 0 ? <p className="membership-empty-state">Chưa có gói hội viên nào.</p>
+            : viewMode === "cards" ? <div className="membership-plan-grid">
+              {plans.map((plan) => (
+                <article className="membership-plan-card" key={plan.id}>
+                  <div className="membership-plan-card-heading">
+                    <div><h2>{plan.name}</h2><PlanStatus status={plan.status} /></div>
+                    <strong className="membership-plan-price">{formatPrice(plan.price)}</strong>
+                  </div>
+                  <p className="membership-plan-description">{plan.description || "Chưa có mô tả."}</p>
+                  <p className="membership-plan-duration">Thời hạn <strong>{plan.durationMonths} tháng</strong></p>
+                  <dl className="membership-plan-details">
+                    <div><dt>Ưu đãi khóa học</dt><dd>{plan.courseDiscountPercent}%</dd></div>
+                    <div><dt>Ưu đãi huấn luyện cá nhân</dt><dd>{plan.personalTrainingDiscountPercent}%</dd></div>
+                    <div><dt>Giáo án cá nhân</dt><dd>{plan.allowPersonalTrainingPlan ? "Được sử dụng" : "Không bao gồm"}</dd></div>
+                    <div><dt>Huấn luyện 1-1</dt><dd>{plan.allowOneOnOneCoaching ? "Được đăng ký" : "Không bao gồm"}</dd></div>
+                  </dl>
+                  {admin && <PlanActions plan={plan} statusSaving={statusSaving} onEdit={startEdit} onChangeStatus={changeStatus} />}
+                </article>
+              ))}
+            </div> : <div className="queue-table-wrap">
               <table className="queue-table">
                 <thead><tr>
-                  <th>Tên gói</th><th>Giá</th><th>Thời hạn</th><th>Ưu đãi</th><th>Trạng thái</th>{admin && <th>Thao tác</th>}
+                  <th>Tên gói</th><th>Giá</th><th>Thời hạn</th><th>Ưu đãi khóa học</th><th>Ưu đãi huấn luyện cá nhân</th><th>Giáo án cá nhân</th><th>Huấn luyện 1-1</th><th>Trạng thái</th>{admin && <th>Thao tác</th>}
                 </tr></thead>
                 <tbody>
                   {plans.map((plan) => (
@@ -241,18 +282,12 @@ export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
                       <td><strong>{plan.name}</strong><br /><small>{plan.description || "Chưa có mô tả."}</small></td>
                       <td>{formatPrice(plan.price)}</td>
                       <td>{plan.durationMonths} tháng</td>
-                      <td>Khóa học {plan.courseDiscountPercent}%<br />
-                        {plan.allowOneOnOneCoaching ? `Đặt PT 1-1 · giảm ${plan.personalTrainingDiscountPercent}%` : "Không đặt được PT 1-1"}
-                        {plan.allowPersonalTrainingPlan && <><br />Có giáo án cá nhân</>}</td>
-                      <td><span className={"status-pill status-" + String(plan.status).toLowerCase()}>{plan.status === "ACTIVE" ? "\u0110ang \u00e1p d\u1ee5ng" : "Ng\u1eebng \u00e1p d\u1ee5ng"}</span></td>
-                      {admin && <td>
-                        <div className="d-flex flex-wrap gap-2">
-                          <button type="button" onClick={() => startEdit(plan)}>Sửa</button>
-                          <button type="button" disabled={statusSaving === plan.id} onClick={() => void changeStatus(plan)}>
-                            {statusSaving === plan.id ? "\u0110ang l\u01b0u\u2026" : plan.status === "ACTIVE" ? "Ng\u1eebng \u00e1p d\u1ee5ng" : "K\u00edch ho\u1ea1t"}
-                          </button>
-                        </div>
-                      </td>}
+                      <td>{plan.courseDiscountPercent}%</td>
+                      <td>{plan.personalTrainingDiscountPercent}%</td>
+                      <td>{plan.allowPersonalTrainingPlan ? "Có" : "Không"}</td>
+                      <td>{plan.allowOneOnOneCoaching ? "Có" : "Không"}</td>
+                      <td><PlanStatus status={plan.status} /></td>
+                      {admin && <td><PlanActions plan={plan} statusSaving={statusSaving} onEdit={startEdit} onChangeStatus={changeStatus} /></td>}
                     </tr>
                   ))}
                 </tbody>
