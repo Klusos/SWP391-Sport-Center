@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 /* =====================================================================
    PART 1 - STAFF UI (login + .layout)
@@ -21,9 +21,17 @@
   --warning-bg: #fff5d9;
   --danger: #a52b2b;
   --danger-bg: #fff0ef;
+  --font-sans: "Plus Jakarta Sans", Inter, "Segoe UI", system-ui, sans-serif;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
   --radius-sm: 9px;
   --radius-md: 14px;
   --radius-lg: 18px;
+  --focus-ring: 0 0 0 3px rgba(23, 105, 210, 0.22);
   --shadow-card: 0 8px 24px rgba(21, 50, 82, 0.07);
   --shadow-menu: 0 14px 34px rgba(4, 22, 43, 0.16);
 }
@@ -38,7 +46,7 @@ body {
   text-rendering: optimizeLegibility;
   color: var(--text-main);
   background: var(--bg);
-  font-family: Inter, "Segoe UI", system-ui, sans-serif;
+  font-family: var(--font-sans);
   line-height: 1.5;
 }
 

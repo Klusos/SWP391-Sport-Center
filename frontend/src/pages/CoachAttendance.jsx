@@ -7,6 +7,7 @@ import {
   markAttendanceApi,
 } from "../api";
 import { attendanceRowKey, isCurrentAttendanceRosterRequest } from "../attendanceRequests";
+import { attendanceClassOptions, attendanceSessionsForClass } from "../coachAttendanceView.js";
 import "./CoachAttendance.css";
 
 const STATUS_LABELS = {
@@ -53,6 +54,7 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionsError, setSessionsError] = useState("");
   const [selectedSessionId, setSelectedSessionId] = useState("");
+  const [classFilter, setClassFilter] = useState("");
   const [roster, setRoster] = useState(null);
   const [rosterLoading, setRosterLoading] = useState(false);
   const [rosterError, setRosterError] = useState("");
@@ -77,6 +79,8 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
     () => sessions.find((session) => String(session.classSessionId) === String(selectedSessionId)) || null,
     [sessions, selectedSessionId],
   );
+  const classOptions = useMemo(() => attendanceClassOptions(sessions), [sessions]);
+  const filteredSessions = useMemo(() => attendanceSessionsForClass(sessions, classFilter), [sessions, classFilter]);
   const members = Array.isArray(roster?.members) ? roster.members : [];
   const sessionCancelled = String(roster?.sessionStatus || selectedSession?.sessionStatus || "").toUpperCase() === "CANCELLED";
 
@@ -168,6 +172,24 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
     setNotice("");
     setHistoryForMemberId(null);
     setHistory([]);
+  }
+
+  function chooseClass(classKey) {
+    if (String(selectedSessionIdRef.current) !== "") {
+      selectedSessionIdRef.current = "";
+      rosterRequestSequenceRef.current += 1;
+    }
+    setClassFilter(classKey);
+    setSelectedSessionId("");
+    setRoster(null);
+    setRosterLoading(false);
+    setRosterError("");
+    setRowErrors({});
+    setNotice("");
+    setHistoryForMemberId(null);
+    setHistoryMemberId(null);
+    setHistory([]);
+    setHistoryError("");
   }
 
   function setRowValue(setter, memberId, value) {
@@ -265,14 +287,29 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
 
           <section className="coach-attendance-panel" aria-labelledby="coach-attendance-sessions-title">
             <div className="coach-attendance-section-heading">
-              <h2 id="coach-attendance-sessions-title">Buổi học được phân công</h2>
-              <span>{sessions.length} buổi</span>
+              <div>
+                <h2 id="coach-attendance-sessions-title">Buổi học được phân công</h2>
+                <p>Chọn lớp trước, sau đó chọn buổi cần điểm danh.</p>
+              </div>
+              <span>{filteredSessions.length} buổi</span>
             </div>
             {sessionsLoading ? <p className="coach-attendance-empty" role="status">Đang tải danh sách buổi học…</p>
               : sessionsError ? null
                 : sessions.length === 0 ? <p className="coach-attendance-empty">Hiện chưa có buổi học nào được phân công.</p>
-                  : <div className="coach-attendance-sessions">
-                    {sessions.map((session) => {
+                  : <>
+                    <label className="coach-attendance-class-filter">
+                      <span>Lọc theo lớp</span>
+                      <select value={classFilter} onChange={(event) => chooseClass(event.target.value)}>
+                        <option value="">Chọn lớp để xem các buổi học</option>
+                        {classOptions.map((option) => <option key={option.key} value={option.key}>
+                          {option.name}{option.courseName ? ` · ${option.courseName}` : ""} · {option.sessionCount} buổi
+                        </option>)}
+                      </select>
+                    </label>
+                    {!classFilter ? <p className="coach-attendance-selection-hint">Hãy chọn một lớp để lọc danh sách buổi học được phân công.</p>
+                      : filteredSessions.length === 0 ? <p className="coach-attendance-empty">Lớp này hiện chưa có buổi học nào.</p>
+                        : <div className="coach-attendance-sessions">
+                    {filteredSessions.map((session) => {
                       const id = session?.classSessionId;
                       const active = String(id) === String(selectedSessionId);
                       return <button
@@ -299,6 +336,7 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
                       </button>;
                     })}
                   </div>}
+                  </>}
           </section>
 
           {selectedSessionId && <section className="coach-attendance-panel" aria-labelledby="coach-attendance-roster-title">

@@ -32,6 +32,20 @@ test("Member course cards display only catalog-provided level and target-age bad
   assert.equal(formatTargetAgeRange(null, undefined), "");
 });
 
+test("catalog registration badges reuse loaded member history and stay hidden while unavailable", async () => {
+  const courses = await read("../src/pages/MemberCourses.jsx");
+  const css = await read("../src/pages/MemberCourses.css");
+  assert.match(courses, /courseRegistrationStatus\(registrations, course\.id\)/);
+  assert.match(courses, /!registrationsLoading && !registrationsError/);
+  assert.match(courses, /registrationStatus === "PENDING_PAYMENT" \? "Chờ thanh toán" : "Đã đăng ký"/);
+  assert.match(courses, /member-course-registration-badge/);
+  assert.match(courses, /<div className="member-course-title-row"><h3>\{course\.name\}<\/h3>[\s\S]*?member-course-registration-badge[\s\S]*?<\/div>\s*\{\(course\.level/);
+  assert.match(css, /\.member-course-title-row \{ display: flex; flex-wrap: wrap;[^}]*gap:/);
+  assert.match(css, /\.member-course-card-body h3 \{ flex: 1 1 180px; min-width: 0;[^}]*overflow-wrap: anywhere/);
+  assert.match(css, /\.member-course-card \{[^}]*min-height: 245px/);
+  assert.match(courses, /getMyRegistrationsApi\(token\)/);
+});
+
 test("Member course grid uses a fluid shell and responsive one, two, and three-column layouts", async () => {
   const css = await read("../src/pages/MemberCourses.css");
   assert.match(css, /width: min\(1560px, 100%\)/);

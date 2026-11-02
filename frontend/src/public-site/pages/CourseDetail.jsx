@@ -4,6 +4,7 @@ import PageHero from "../components/PageHero.jsx";
 import Sidebar from "../../components/Sidebar.jsx";
 import CourseConsultationModal from "../../components/CourseConsultationModal.jsx";
 import { formatClassScheduleSummary, toggleExpandedClass } from "../../memberCoursePresentation.js";
+import { activeOfferingRegistration, courseRegistrationStatusLabel } from "../../memberCourseRegistration.js";
 import "../../pages/MemberCourseDetail.css";
 import "./CourseDetail.css";
 import {
@@ -114,8 +115,9 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
   const currentLevel = hasVerifiedLevel ? level.level : "BEGINNER";
   const selectedOffering = offerings.find((item) => String(item.id) === selectedOfferingId) || null;
   const selectedClass = classes.find((item) => String(item.id) === selectedClassId) || null;
-  const existingOfferingRegistration = registrations.find((item) =>
-    Number(item.courseOfferingId) === Number(selectedOfferingId) && ["CONFIRMED", "PENDING_PAYMENT"].includes(String(item.status).toUpperCase()));
+  const existingOfferingRegistration = memberRoute
+    ? activeOfferingRegistration(registrations, selectedOfferingId)
+    : null;
   const canRegister = Boolean(selectedClass && selectedOffering && isOfferingOpenNow(selectedOffering)
     && String(selectedClass.status).toUpperCase() === "ACTIVE" && !existingOfferingRegistration && !classesError);
 
@@ -341,10 +343,26 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
                 <span>Thời lượng mỗi buổi: <b>{selectedOffering.sessionDuration != null ? `${selectedOffering.sessionDuration} phút` : "—"}</b></span>
                 <span>Trạng thái: <b>{selectedOffering.status || "—"}</b></span>
               </div>}
-              {existingOfferingRegistration && <div className="course-registration-success" role="status">
-                Bạn đã có đăng ký {existingOfferingRegistration.status} cho đợt này: {existingOfferingRegistration.className || `Lớp #${existingOfferingRegistration.classId}`}.
-                <Link to={`/member/course-checkout/${existingOfferingRegistration.id}`}>Thanh toán / theo dõi đăng ký</Link>
-                {existingOfferingRegistration.status === "CONFIRMED" && <Link to="/member/schedule">Xem lịch học</Link>}
+              {existingOfferingRegistration && <div className={`member-course-registration-card ${String(existingOfferingRegistration.status).toUpperCase() === "PENDING_PAYMENT" ? "is-pending" : "is-confirmed"}`} role="status" aria-label={`Trạng thái đăng ký: ${courseRegistrationStatusLabel(String(existingOfferingRegistration.status).toUpperCase())}`}>
+                <div className="member-course-registration-card-heading">
+                  <span className={`member-course-registration-status ${String(existingOfferingRegistration.status).toUpperCase() === "PENDING_PAYMENT" ? "is-pending" : "is-confirmed"}`}>
+                    {courseRegistrationStatusLabel(String(existingOfferingRegistration.status).toUpperCase())}
+                  </span>
+                  <h3>{String(existingOfferingRegistration.status).toUpperCase() === "PENDING_PAYMENT" ? "Hoàn tất thanh toán để giữ chỗ" : "Bạn đã có lớp trong đợt học này"}</h3>
+                </div>
+                <dl className="member-course-registration-facts">
+                  <div><dt>Khóa học</dt><dd>{existingOfferingRegistration.courseName || course?.name}</dd></div>
+                  <div><dt>Đợt học</dt><dd>{existingOfferingRegistration.courseOfferingName || selectedOffering?.name || `Đợt #${existingOfferingRegistration.courseOfferingId}`}</dd></div>
+                  <div><dt>Lớp</dt><dd>{existingOfferingRegistration.className || `Lớp #${existingOfferingRegistration.classId}`}</dd></div>
+                  {String(existingOfferingRegistration.status).toUpperCase() === "PENDING_PAYMENT" && existingOfferingRegistration.paymentDeadline
+                    && <div><dt>Hạn thanh toán</dt><dd>{formatLocalDateTime(existingOfferingRegistration.paymentDeadline)}</dd></div>}
+                </dl>
+                <div className="member-course-registration-actions">
+                  {String(existingOfferingRegistration.status).toUpperCase() === "PENDING_PAYMENT"
+                    ? <Link className="member-course-registration-primary" to={`/member/course-checkout/${existingOfferingRegistration.id}`}>Tiếp tục thanh toán</Link>
+                    : <Link className="member-course-registration-primary" to="/member/schedule">Xem lịch học</Link>}
+                  <Link className="member-course-registration-secondary" to={`/member/course-checkout/${existingOfferingRegistration.id}`}>Xem chi tiết đăng ký</Link>
+                </div>
               </div>}
               {classesLoading ? <p role="status">Đang tải các lớp…</p>
                 : !classesError && classes.length === 0 ? <p className="queue-state">Đợt học này chưa có lớp.</p>
