@@ -31,6 +31,22 @@ function profileForm(profile) {
   };
 }
 
+function memberInitials(name) {
+  return String(name || "?").trim().split(/\s+/).filter(Boolean).slice(-2).map((part) => part[0]).join("").toUpperCase() || "?";
+}
+
+function ProfileIcon({ type }) {
+  const paths = {
+    email: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>,
+    phone: <path d="M7 3h3l2 5-2 2a15 15 0 0 0 4 4l2-2 5 2v3a2 2 0 0 1-2 2A16 16 0 0 1 5 5a2 2 0 0 1 2-2Z" />,
+    birth: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 11h18" /></>,
+    gender: <><circle cx="10" cy="8" r="5" /><path d="M10 13v8m-4-4h8" /></>,
+    height: <><path d="M12 3v18M8 7l4-4 4 4M8 17l4 4 4-4" /></>,
+    goal: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
+  };
+  return <svg className="member-profile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[type]}</svg>;
+}
+
 export default function MemberList({ token, role, onLogout, onNavigate }) {
   const [members, setMembers] = useState([]);
   const [profiles, setProfiles] = useState([]);
@@ -186,20 +202,22 @@ export default function MemberList({ token, role, onLogout, onNavigate }) {
     <div className="layout">
       <Sidebar role={role} activePage="members" onNavigate={onNavigate} onLogout={onLogout} />
       <main className="main member-list-main">
-        <h1>Danh sách thành viên</h1>
-        <p className="subtitle">Tra cứu tài khoản MEMBER và Member Profile.</p>
+        <header className="member-list-heading"><div><p className="member-list-eyebrow">SPORTCENTER / THÀNH VIÊN</p><h1>Danh sách thành viên</h1>
+          <p className="subtitle">{loading ? "Đang tải danh sách…" : `${filtered.length} thành viên phù hợp`}</p></div>
+          {isAdmin && <button className="member-list-create" type="button" onClick={() => onNavigate("register")}>Đăng ký MEMBER</button>}
+        </header>
         {!allowed && <div className="banner error" role="alert">Chỉ ADMIN và RECEPTIONIST được truy cập trang này.</div>}
         {notice && <div className="banner success" role="status">{notice}</div>}
         {error && <div className="banner error" role="alert">{error}</div>}
         {forbidden && <p className="queue-state">Danh sách thành viên hiện không khả dụng.</p>}
 
-        {allowed && <>
+        {allowed && <div className={`member-list-workspace${selected ? " has-selection" : ""}`}>
+          <section className="member-list-table-column">
           <div className="member-list-toolbar">
-            <label htmlFor="memberSearch">Tìm tên, email, số điện thoại, ID hoặc trạng thái</label>
-            <input id="memberSearch" type="search" value={query}
+            <label className="member-search-label" htmlFor="memberSearch">Tìm tên, email, số điện thoại, ID hoặc trạng thái</label>
+            <input id="memberSearch" type="search" placeholder="T\u00ecm t\u00ean, email, S\u0110T ho\u1eb7c ID" value={query}
               onChange={(event) => { setQuery(event.target.value); setPage(0); setSelected(null); }} />
             <button type="button" onClick={loadMembers} disabled={loading}>{loading ? "Đang tải…" : "Làm mới"}</button>
-            {isAdmin && <button type="button" onClick={() => onNavigate("register")}>Đăng ký MEMBER</button>}
           </div>
 
           {loading ? <div className="queue-state" role="status">Đang tải danh sách thành viên…</div>
@@ -210,8 +228,8 @@ export default function MemberList({ token, role, onLogout, onNavigate }) {
                     <thead><tr><th>ID</th><th>Họ tên</th><th>Email</th><th>Điện thoại</th><th>Tài khoản</th><th>Hồ sơ</th><th>Thao tác</th></tr></thead>
                     <tbody>{pageMembers.map((member) => {
                       const memberProfile = profiles.find((item) => item.memberId === member.id);
-                      return <tr key={member.id}>
-                        <td>#{member.id}</td><td>{member.name}</td><td>{member.email}</td><td>{member.phone || "—"}</td>
+                      return <tr key={member.id} className={selected?.user.id === member.id ? "member-row is-selected" : "member-row"} aria-selected={selected?.user.id === member.id}>
+                        <td>#{member.id}</td><td><span className="member-name-cell"><i className={`member-initials tone-${Number(member.id || 0) % 4}`}>{memberInitials(member.name)}</i><b>{member.name || `Thành viên #${member.id}`}</b></span></td><td className="member-contact-cell" title={member.email || undefined}>{member.email || "—"}</td><td className="member-contact-cell" title={member.phone || undefined}>{member.phone || "—"}</td>
                         <td><span className={"status-pill status-" + String(member.status).toLowerCase()}>{member.status === "ACTIVE" ? "Ho\u1ea1t \u0111\u1ed9ng" : "Ng\u1eebng ho\u1ea1t \u0111\u1ed9ng"}</span></td>
                         <td>{memberProfile ? "Có hồ sơ" : "Chưa có hồ sơ"}</td>
                         <td><button type="button" onClick={() => openDetail(member.id)} disabled={detailLoading}>Chi tiết</button></td>
@@ -227,29 +245,44 @@ export default function MemberList({ token, role, onLogout, onNavigate }) {
                   </div>
                 </div>
               </>}
-        </>}
+          </section>
 
+          <aside className="member-list-detail-column">
         {detailLoading && <div className="queue-state" role="status">Đang tải chi tiết…</div>}
         {detailError && <div className="banner error" role="alert">{detailError}</div>}
         {selected && <section className="member-detail form-card" aria-labelledby="member-detail-title">
           <div className="member-detail-heading">
-            <div><p className="subtitle">Tài khoản MEMBER #{selected.user.id}</p><h2 id="member-detail-title">{selected.user.name}</h2></div>
-            <div>
-              {isAdmin && <button type="button" onClick={() => setEditing((value) => !value)}>{editing ? "Đóng chỉnh sửa" : "Chỉnh sửa"}</button>}
-              {isAdmin && selected.user.status === "ACTIVE" && <button type="button" onClick={deactivate} disabled={deactivating}>{deactivating ? "Đang xử lý…" : "Vô hiệu hóa"}</button>}
-              <button type="button" onClick={() => setSelected(null)}>Đóng</button>
+            <div className="member-detail-identity">
+              <i className={`member-initials tone-${Number(selected.user.id || 0) % 4}`}>{memberInitials(selected.user.name)}</i>
+              <div className="member-detail-person">
+                <p className="member-detail-id">MEMBER #{selected.user.id}</p>
+                <h2 id="member-detail-title">{selected.user.name || `Th\u00e0nh vi\u00ean #${selected.user.id}`}</h2>
+                <span className={"status-pill status-" + String(selected.user.status).toLowerCase()}>{selected.user.status === "ACTIVE" ? "Ho\u1ea1t \u0111\u1ed9ng" : "Ng\u1eebng ho\u1ea1t \u0111\u1ed9ng"}</span>
+              </div>
+            </div>
+            <div className="member-detail-actions">
+              {isAdmin && <button type="button" onClick={() => setEditing((value) => !value)}>{editing ? "\u0110\u00f3ng ch\u1ec9nh s\u1eeda" : "Ch\u1ec9nh s\u1eeda"}</button>}
+              {isAdmin && selected.user.status === "ACTIVE" && <button type="button" onClick={deactivate} disabled={deactivating}>{deactivating ? "\u0110ang x\u1eed l\u00fd\u2026" : "V\u00f4 hi\u1ec7u h\u00f3a"}</button>}
+              <button className="member-detail-close" type="button" aria-label="\u0110\u00f3ng chi ti\u1ebft th\u00e0nh vi\u00ean" onClick={() => setSelected(null)}>{"\u00d7"}</button>
             </div>
           </div>
 
-          {!editing ? <dl className="member-detail-grid">
-            <div><dt>Email</dt><dd>{selected.user.email || "—"}</dd></div>
-            <div><dt>Điện thoại</dt><dd>{selected.user.phone || "—"}</dd></div>
-            <div><dt>Ngày sinh</dt><dd>{selected.user.dateOfBirth || "—"}</dd></div>
-            <div><dt>Giới tính</dt><dd>{selected.user.gender || "—"}</dd></div>
-            <div><dt>Trạng thái tài khoản</dt><dd><span className={"status-pill status-" + String(selected.user.status).toLowerCase()}>{selected.user.status === "ACTIVE" ? "Ho\u1ea1t \u0111\u1ed9ng" : "Ng\u1eebng ho\u1ea1t \u0111\u1ed9ng"}</span></dd></div>
-            <div><dt>Trình độ thể chất</dt><dd>{selected.profile ? `${selected.profile.height} cm · ${selected.profile.weight} kg` : "Chưa có hồ sơ"}</dd></div>
-            {selected.profile && <div><dt>Mục tiêu</dt><dd>{selected.profile.goal || "—"}</dd></div>}
-          </dl> : <div className="member-edit-grid">
+          {!editing ? <div className="member-detail-grid member-detail-sections">
+            <section className="member-detail-section" aria-labelledby="member-contact-title">
+              <h3 id="member-contact-title">{"Th\u00f4ng tin li\u00ean h\u1ec7"}</h3>
+              <div className="member-detail-field"><ProfileIcon type="email" /><div><span className="member-detail-label">Email</span><span className="member-detail-value" title={selected.user.email || undefined}>{selected.user.email || "Ch\u01b0a c\u1eadp nh\u1eadt"}</span></div></div>
+              <div className="member-detail-field"><ProfileIcon type="phone" /><div><span className="member-detail-label">{"\u0110i\u1ec7n tho\u1ea1i"}</span><span className="member-detail-value">{selected.user.phone || "Ch\u01b0a c\u1eadp nh\u1eadt"}</span></div></div>
+              <div className="member-detail-field"><ProfileIcon type="birth" /><div><span className="member-detail-label">{"Ng\u00e0y sinh"}</span><span className="member-detail-value">{selected.user.dateOfBirth || "Ch\u01b0a c\u1eadp nh\u1eadt"}</span></div></div>
+              <div className="member-detail-field"><ProfileIcon type="gender" /><div><span className="member-detail-label">{"Gi\u1edbi t\u00ednh"}</span><span className="member-detail-value">{selected.user.gender === "M" ? "Nam" : selected.user.gender === "F" ? "N\u1eef" : selected.user.gender || "Ch\u01b0a c\u1eadp nh\u1eadt"}</span></div></div>
+            </section>
+            <section className="member-detail-section" aria-labelledby="member-physical-title">
+              <h3 id="member-physical-title">{"H\u1ed3 s\u01a1 th\u1ec3 ch\u1ea5t"}</h3>
+              {selected.profile ? <>
+                <div className="member-detail-field"><ProfileIcon type="height" /><div><span className="member-detail-label">{"Chi\u1ec1u cao / C\u00e2n n\u1eb7ng"}</span><span className="member-detail-value">{selected.profile.height} cm \u00b7 {selected.profile.weight} kg</span></div></div>
+                <div className="member-detail-field"><ProfileIcon type="goal" /><div><span className="member-detail-label">{"M\u1ee5c ti\u00eau"}</span><span className="member-detail-value">{selected.profile.goal || "Ch\u01b0a c\u1eadp nh\u1eadt"}</span></div></div>
+              </> : <p className="member-detail-empty-note">Ch\u01b0a c\u00f3 h\u1ed3 s\u01a1 th\u1ec3 ch\u1ea5t.</p>}
+            </section>
+          </div> : <div className="member-edit-grid">
             <form className="form-card" onSubmit={saveAccount}>
               <h3>Thông tin tài khoản</h3>
               <label htmlFor="memberName">Họ tên</label>
@@ -276,6 +309,8 @@ export default function MemberList({ token, role, onLogout, onNavigate }) {
             </form>
           </div>}
         </section>}
+          </aside>
+        </div>}
       </main>
     </div>
   );

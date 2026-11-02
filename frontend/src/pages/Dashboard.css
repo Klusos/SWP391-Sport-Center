@@ -94,6 +94,26 @@
   color: var(--navy);
   font-weight: 750;
 }
+.admin-dashboard { display: grid; align-content: start; min-width: 0; }
+.admin-dashboard .dash-stats { gap: 18px; }
+.admin-dashboard .dash-stat {
+  min-height: 112px;
+  align-items: center;
+  border-color: #e3eaf4;
+  box-shadow: 0 8px 24px rgba(20, 48, 82, .055);
+}
+.admin-dashboard .dash-stat strong { font-size: clamp(1.45rem, 2vw, 1.8rem); }
+.admin-dashboard .dash-dot {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 7px rgba(255, 255, 255, .22);
+}
+.admin-dashboard .dash-grid.wide { align-items: stretch; }
+.admin-dashboard .dash-card { box-shadow: 0 8px 24px rgba(20, 48, 82, .055); }
+@media (max-width: 560px) {
+  .admin-dashboard .dash-stat { min-height: 92px; }
+}
 @media (prefers-reduced-motion: reduce) {
   .dash-main .dash-stat { transition: none; }
   .dash-main .dash-stat:hover { transform: none; }

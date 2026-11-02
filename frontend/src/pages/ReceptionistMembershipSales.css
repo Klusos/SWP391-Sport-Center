@@ -107,6 +107,24 @@
   color: #123b63;
   font-size: 1.1rem;
 }
+.membership-sales-page .membership-sales-plan-options { min-width:0; margin:0; padding:0; border:0; }
+.membership-sales-page .membership-sales-plan-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+.membership-sales-page .membership-sales-plan-choice { display:flex; min-width:0; gap:11px; padding:16px; border:1px solid #dfe8f1; border-radius:13px; background:#fff; cursor:pointer; transition:border-color .15s ease,background .15s ease,box-shadow .15s ease; }
+.membership-sales-page .membership-sales-plan-choice:hover { border-color:#9abce0; background:#fbfdff; }
+.membership-sales-page .membership-sales-plan-choice.is-selected { border-color:#1e60d5; background:#f2f7ff; box-shadow:0 0 0 2px rgb(30 96 213 / 10%); }
+.membership-sales-page .membership-sales-plan-choice > input { width:17px; height:17px; flex:none; margin:3px 0 0; accent-color:#1e60d5; }
+.membership-sales-page .membership-sales-plan-choice-body { display:grid; min-width:0; flex:1; gap:9px; }
+.membership-sales-page .membership-sales-plan-choice-heading { display:flex; min-width:0; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:7px; }
+.membership-sales-page .membership-sales-plan-choice-heading strong { overflow-wrap:anywhere; color:#0b192c; font-size:15px; }
+.membership-sales-page .membership-sales-plan-choice-heading em { padding:3px 8px; border-radius:999px; background:#ecfdf5; color:#059669; font-size:10px; font-style:normal; font-weight:700; }
+.membership-sales-page .membership-sales-plan-price { color:#1e60d5; font-size:19px; font-weight:800; }
+.membership-sales-page .membership-sales-plan-price small { color:#64748b; font-size:12px; font-weight:500; }
+.membership-sales-page .membership-sales-plan-description { color:#64748b; font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+.membership-sales-page .membership-sales-plan-benefits { display:grid; gap:6px; padding-top:9px; border-top:1px solid #e8eef5; }
+.membership-sales-page .membership-sales-plan-benefits > span { display:flex; justify-content:space-between; gap:8px; color:#64748b; font-size:11px; }
+.membership-sales-page .membership-sales-plan-benefits b { color:#1e293b; font-weight:700; text-align:right; }
+.membership-sales-page .membership-sales-plan-choice:has(input:disabled) { cursor:default; opacity:.78; }
+.membership-sales-page .membership-sales-plan small { display:block; margin-top:4px; color:#526a86; font-size:12px; }
 .membership-sales-page .membership-sales-payment dl > div {
   border: 1px solid #e6edf5;
   border-radius: 11px;
@@ -120,7 +138,44 @@
 }
 @media (max-width: 650px) {
   .membership-sales-page .membership-sales-header { align-items: flex-start; }
+  .membership-sales-page .membership-sales-plan-grid { grid-template-columns:minmax(0,1fr); }
   .membership-sales-page .membership-sales-history-row { grid-template-columns: 1fr; }
   .membership-sales-page .membership-sales-history-row > button,
   .membership-sales-page .membership-sales-actions > button { width: 100%; }
 }
+.membership-sales-page { max-width:1560px; margin-inline:auto; padding:clamp(18px,2.6vw,34px) clamp(16px,2.8vw,40px) 52px; }
+.membership-sales-page .membership-sales-checkout-layout { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(300px,.85fr); align-items:start; gap:18px; }
+.membership-sales-page .membership-sales-steps { display:grid; min-width:0; gap:14px; }
+.membership-sales-page .membership-sales-steps .membership-sales-card { margin:0; }
+.membership-sales-page .membership-sales-order-summary { position:sticky; top:20px; display:grid; min-width:0; gap:14px; padding:22px; border:1px solid #d7e7f7; border-radius:16px; background:linear-gradient(145deg,#f1f7ff,#fff 70%); box-shadow:0 10px 28px rgba(18,59,99,.065); }
+.membership-sales-page .membership-sales-order-kicker { margin:0; color:#1767d2; font-size:10px; font-weight:800; letter-spacing:.12em; }
+.membership-sales-page .membership-sales-order-summary h2 { margin:0; color:#102a4c; font-size:18px; }
+.membership-sales-page .membership-sales-order-row { display:grid; min-width:0; gap:4px; padding:12px 0; border-top:1px solid #e4edf7; }
+.membership-sales-page .membership-sales-order-row > span,.membership-sales-page .membership-sales-order-amount > span { color:#64748b; font-size:12px; }
+.membership-sales-page .membership-sales-order-row strong { color:#183957; overflow-wrap:anywhere; }
+.membership-sales-page .membership-sales-order-row small { color:#71859b; }
+.membership-sales-page .membership-sales-order-amount { display:grid; gap:5px; padding:15px; border:1px solid #dce9f7; border-radius:12px; background:#fff; }
+.membership-sales-page .membership-sales-order-amount strong { color:#1767d2; font-size:clamp(20px,2vw,26px); font-weight:850; overflow-wrap:anywhere; }
+.membership-sales-page .membership-sales-order-note { margin:0; color:#64748b; font-size:12px; line-height:1.55; }
+.membership-sales-page .membership-sales-order-summary .membership-sales-actions { margin:0; }
+.membership-sales-page .membership-sales-order-summary .membership-sales-actions button { width:100%; min-height:46px; }
+.membership-sales-page .membership-sales-payment { display:grid; min-width:0; gap:12px; }
+.membership-sales-page .membership-sales-payment h2 { padding:0; border:0; }
+.membership-sales-page .membership-sales-payment .membership-sales-actions { margin:0; }
+.membership-sales-page .membership-sales-payment .membership-sales-actions button { width:100%; }
+.membership-sales-page > .membership-sales-card { margin:0 0 14px; }
+@media (max-width:900px) {
+  .membership-sales-page .membership-sales-checkout-layout { grid-template-columns:minmax(0,1fr); }
+  .membership-sales-page .membership-sales-order-summary { position:static; }
+  .membership-sales-page .membership-sales-plan-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media (max-width:600px) {
+  .membership-sales-page .membership-sales-plan-grid { grid-template-columns:minmax(0,1fr); }
+}
+.membership-sales-page .membership-sales-selected-member { display:flex; min-width:0; align-items:center; gap:11px; padding:12px 14px; border:1px solid #b9d8f3; border-radius:12px; background:#f3f8ff; }
+.membership-sales-page .membership-sales-selected-check { display:grid; width:30px; height:30px; flex:none; place-items:center; border-radius:50%; background:#dceeff; color:#1767d2; font-weight:800; }
+.membership-sales-page .membership-sales-selected-member > div { display:grid; min-width:0; flex:1; gap:3px; }
+.membership-sales-page .membership-sales-selected-member strong { color:#183957; overflow-wrap:anywhere; }
+.membership-sales-page .membership-sales-selected-member small { color:#647b94; font-size:11px; overflow-wrap:anywhere; }
+.membership-sales-page .membership-sales-selected-tag { flex:none; padding:4px 8px; border-radius:999px; background:#e7f8ef; color:#12804b; font-size:10px; font-weight:750; }
+@media (max-width:480px) { .membership-sales-page .membership-sales-selected-tag { display:none; } }

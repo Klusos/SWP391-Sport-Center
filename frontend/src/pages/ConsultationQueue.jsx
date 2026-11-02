@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import "./ConsultationQueue.css";
 import {
@@ -372,25 +372,27 @@ export default function ConsultationQueue({ token, role, onLogout, onNavigate })
     <div className="layout">
       <Sidebar role={role} activePage="consultations" onNavigate={onNavigate} onLogout={onLogout} />
       <main className="main consultation-queue-page">
-        <h1>{"Y\u00eau c\u1ea7u t\u01b0 v\u1ea5n"}</h1>
-        <p className="subtitle">{"Ti\u1ebfp nh\u1eadn v\u00e0 theo d\u00f5i c\u00e1c y\u00eau c\u1ea7u t\u01b0 v\u1ea5n c\u1ee7a kh\u00e1ch h\u00e0ng."}</p>
+        <header className="consultation-page-header">
+          <div><p className="consultation-eyebrow">SPORTCENTER / RECEPTIONIST</p><h1>{"Y\u00eau c\u1ea7u t\u01b0 v\u1ea5n"}</h1><p className="subtitle">{"Ti\u1ebfp nh\u1eadn v\u00e0 theo d\u00f5i c\u00e1c y\u00eau c\u1ea7u t\u01b0 v\u1ea5n c\u1ee7a kh\u00e1ch h\u00e0ng."}</p></div>
+          <div className="consultation-summary" aria-live="polite"><strong>{result ? result.totalElements : "\u2014"}</strong><span>{status ? STATUS_LABELS[status] : "Y\u00eau c\u1ea7u theo b\u1ed9 l\u1ecdc"}</span></div>
+        </header>
         {!allowedRole && <div className="banner error" role="alert">Only Receptionist and Admin accounts can access this queue.</div>}
         {notice && <div className="banner success" role="status">{notice}</div>}
         {error && <div className="banner error" role="alert">{error}</div>}
-
         <div className="queue-toolbar">
-          <div className="field queue-filter">
-            <label htmlFor="consultationStatus">{"Tr\u1ea1ng th\u00e1i"}</label>
-            <select id="consultationStatus" value={status}
-              onChange={(event) => { setStatus(event.target.value); setPage(0); setNotice(""); }}
-              disabled={!allowedRole}>
-              {STATUSES.map((value) => <option key={value || "ALL"} value={value}>{value ? STATUS_LABELS[value] : "T\u1ea5t c\u1ea3 tr\u1ea1ng th\u00e1i"}</option>)}
-            </select>
+          <div className="consultation-filter-segments" role="group" aria-label={"L\u1ecdc theo tr\u1ea1ng th\u00e1i"}>
+            {STATUSES.map((value) => <button key={value || "ALL"} type="button"
+              className={status === value ? "active" : ""} aria-pressed={status === value}
+              onClick={() => { setStatus(value); setPage(0); setNotice(""); }} disabled={!allowedRole}>
+              {value ? STATUS_LABELS[value] : "T\u1ea5t c\u1ea3"}
+            </button>)}
           </div>
           <button className="queue-refresh" type="button" onClick={loadQueue} disabled={loading || !allowedRole}>
             {loading ? "\u0110ang t\u1ea3i\u2026" : "L\u00e0m m\u1edbi"}
           </button>
         </div>
+        <div className={`consultation-workspace${detail || detailLoading || detailError ? " has-detail" : ""}`}>
+          <section className="consultation-list-panel" aria-label={"Danh s\u00e1ch y\u00eau c\u1ea7u t\u01b0 v\u1ea5n"}>
 
         {loading ? (
           <div className="queue-state" role="status">{"\u0110ang t\u1ea3i danh s\u00e1ch y\u00eau c\u1ea7u t\u01b0 v\u1ea5n\u2026"}</div>
@@ -440,6 +442,8 @@ export default function ConsultationQueue({ token, role, onLogout, onNavigate })
             </div>
           </>
         )}
+          </section>
+          <aside className="consultation-detail-panel" aria-label={"Chi ti\u1ebft y\u00eau c\u1ea7u t\u01b0 v\u1ea5n"}>
 
         {detailLoading && <div className="queue-state" role="status">Đang tải chi tiết yêu cầu…</div>}
         {detailError && <div className="banner error" role="alert">{detailError}</div>}
@@ -575,6 +579,9 @@ export default function ConsultationQueue({ token, role, onLogout, onNavigate })
             )}
           </section>
         )}
+            {!detail && !detailLoading && !detailError && <div className="consultation-detail-empty">{"Ch\u1ecdn m\u1ed9t y\u00eau c\u1ea7u \u0111\u1ec3 xem th\u00f4ng tin v\u00e0 c\u00e1c thao t\u00e1c \u0111\u01b0\u1ee3c ph\u00e9p."}</div>}
+          </aside>
+        </div>
       </main>
     </div>
   );
