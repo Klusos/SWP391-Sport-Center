@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import PageHero from "../components/PageHero.jsx";
 import Sidebar from "../../components/Sidebar.jsx";
+import CourseConsultationModal from "../../components/CourseConsultationModal.jsx";
+import { formatClassScheduleSummary, toggleExpandedClass } from "../../memberCoursePresentation.js";
 import "../../pages/MemberCourseDetail.css";
 import "./CourseDetail.css";
 import {
@@ -91,6 +93,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
   const [profile, setProfile] = useState(null);
   const [profileError, setProfileError] = useState("");
   const [selectedClassId, setSelectedClassId] = useState("");
+  const [expandedScheduleClassId, setExpandedScheduleClassId] = useState(null);
   const [registering, setRegistering] = useState(false);
   const [registrationError, setRegistrationError] = useState("");
   const [registration, setRegistration] = useState(null);
@@ -100,6 +103,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
   const [consultationSubmitting, setConsultationSubmitting] = useState(false);
   const [consultationError, setConsultationError] = useState("");
   const [consultationSuccess, setConsultationSuccess] = useState(null);
+  const consultationSubmitLock = useRef(false);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [consultation, setConsultation] = useState({ name: "", phone: "", email: "", age: "", experience: "", note: "" });
 
@@ -120,7 +124,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
     Promise.resolve().then(() => {
       if (active) {
         setLoading(true); setError(""); setCourse(null); setRegistration(null); setRegistrations([]); setOfferings([]); setOfferingsLoading(true); setSelectedOfferingId("");
-        setClasses([]); setClassSchedules({}); setSelectedClassId(""); setConfirmingRegistration(false);
+        setClasses([]); setClassSchedules({}); setSelectedClassId(""); setExpandedScheduleClassId(null); setConfirmingRegistration(false);
         setRegistrationError(""); setConsultationAvailable(false); setConsultationOpen(false); setConsultationSuccess(null);
       }
       return getPublicCourseApi(courseId);
@@ -248,7 +252,8 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
 
   async function submitConsultation(event) {
     event.preventDefault();
-    if (!isMember || !course || consultationSubmitting) return;
+    if (!isMember || !course || consultationSubmitting || (memberRoute && consultationSubmitLock.current)) return;
+    if (memberRoute) consultationSubmitLock.current = true;
     setConsultationSubmitting(true); setConsultationError("");
     const contextNote = `Yêu cầu tư vấn về khóa học ${course.name} (ID ${course.id}), bộ môn ${course.sportName} (ID ${course.sportId}).`
       + (selectedClass ? ` Lớp quan tâm: ${selectedClass.name} (ID ${selectedClass.id}); đợt: ${selectedClass.offering?.name || selectedOffering?.name || ""}.` : "");
@@ -270,26 +275,49 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
         ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
         : requestError.message || "Không gửi được yêu cầu tư vấn. Vui lòng kiểm tra thông tin và thử lại.");
       if (requestError.status === 401) setSessionExpired(true);
-    } finally { setConsultationSubmitting(false); }
+    } finally { if (memberRoute) consultationSubmitLock.current = false; setConsultationSubmitting(false); }
   }
 
   const detailContent = <>
-    <p className="course-detail-back"><Link to={memberRoute ? "/member/courses" : course ? "/bo-mon/" + course.sportId : "/bo-mon"}>
-      ← {memberRoute ? "Quay lại danh sách khóa học" : "Quay lại bộ môn"}
-    </Link></p>
+    {!memberRoute && <p className="course-detail-back"><Link to={course ? "/bo-mon/" + course.sportId : "/bo-mon"}>
+      ← Quay lại bộ môn
+    </Link></p>}
     {loading ? <p role="status">Đang tải thông tin khóa học…</p>
       : error ? <div className="banner error" role="alert">{error}</div>
         : course && <>
-          <article className="course-detail-card">
-            <p className="label-blue">{course.sportName || "Bộ môn"}</p>
-            <h1>{course.name}</h1>
-            {course.level && <p><strong>Trình độ yêu cầu:</strong> {course.level}</p>}
-            {course.description && <p>{course.description}</p>}
+          <article className={`course-detail-card${memberRoute ? " member-course-overview" : ""}`}>
+            {!memberRoute && <p className="label-blue">{course.sportName || "Bộ môn"}</p>}
+            {!memberRoute && <h1>{course.name}</h1>}
+            {!memberRoute && course.level && <p><strong>Trình độ yêu cầu:</strong> {course.level}</p>}
+            {!memberRoute && course.description && <p>{course.description}</p>}
+            {memberRoute && <h2 className="member-course-overview-title">Thông tin khóa học</h2>}
+            {memberRoute && course.description && <p>{course.description}</p>}
             {course.learningOutcome && <div><h2>Kết quả mong đợi</h2><p>{course.learningOutcome}</p></div>}
-            {(course.targetAgeMin != null || course.targetAgeMax != null) && <p><strong>Độ tuổi:</strong> {course.targetAgeMin ?? "Không giới hạn"} – {course.targetAgeMax ?? "Không giới hạn"}</p>}
-            {isMember ? <button type="button" className="btn btn-cyan" onClick={openConsultation}>Yêu cầu tư vấn</button>
-              : <Link to="/tuyen-sinh" className="btn btn-cyan">Đăng ký tư vấn</Link>}
+            {!memberRoute && (course.targetAgeMin != null || course.targetAgeMax != null) && <p><strong>Độ tuổi:</strong> {course.targetAgeMin ?? "Không giới hạn"} – {course.targetAgeMax ?? "Không giới hạn"}</p>}
+            {!memberRoute && (isMember ? <button type="button" className="btn btn-cyan" onClick={openConsultation}>Yêu cầu tư vấn</button>
+              : <Link to="/tuyen-sinh" className="btn btn-cyan">Đăng ký tư vấn</Link>)}
           </article>
+
+          {memberRoute && <section className="member-course-consultation-card" aria-labelledby="member-course-consultation-title">
+            <div className="member-course-consultation-copy">
+              <span className="member-course-consultation-icon" aria-hidden="true">?</span>
+              <div><h2 id="member-course-consultation-title">Cần tư vấn trước khi đăng ký?</h2>
+                <p>Trao đổi với đội ngũ SportCenter để hiểu thêm về khóa học và lựa chọn phù hợp.</p></div>
+            </div>
+            {consultationAvailable && <div className="member-course-level-help">
+              <p><strong>Khóa học yêu cầu:</strong> {course.level || "—"}</p>
+              {levelsError ? <p role="status">Không tải được trình độ hiện tại.</p>
+                : levels ? <p><strong>Trình độ hiện tại:</strong> {currentLevel}{hasVerifiedLevel ? ` (Coach #${level.verifiedByCoachId} xác minh)` : " (Beginner mặc định; chưa được Coach xác minh)"}</p>
+                  : <p role="status">Đang tải trình độ hiện tại…</p>}
+              <p>Yêu cầu tư vấn không tự thay đổi trình độ và không tạo đăng ký.</p>
+            </div>}
+            <button type="button" className="btn btn-cyan member-course-consultation-button" onClick={openConsultation}>Yêu cầu tư vấn</button>
+            {consultationSuccess && <div className="course-registration-success member-course-consultation-success" role="status">
+              <strong>Đã gửi yêu cầu tư vấn #{consultationSuccess.id}.</strong>
+              <p>Yêu cầu này không đăng ký lớp và không tự thay đổi trình độ.</p>
+              <Link to="/member/levels-assessments">Xem lịch sử yêu cầu tư vấn</Link>
+            </div>}
+          </section>}
 
           {isMember ? <section className="course-registration-panel" aria-labelledby="course-registration-title">
             <div className="course-section-heading"><div><h2 id="course-registration-title">Đợt học và lớp</h2><p>Chọn một đợt để xem các lớp, lịch dự kiến và điều kiện đăng ký.</p></div></div>
@@ -300,7 +328,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
               <div className="member-offering-list" role="tablist" aria-label="Các đợt học">
                 {offerings.map((item) => <button type="button" role="tab" aria-selected={String(item.id) === selectedOfferingId}
                   className={String(item.id) === selectedOfferingId ? "selected" : ""} key={item.id}
-                  onClick={() => { setSelectedOfferingId(String(item.id)); setRegistrationError(""); setRegistration(null); setConfirmingRegistration(false); }}>
+                  onClick={() => { setSelectedOfferingId(String(item.id)); setRegistrationError(""); setRegistration(null); setExpandedScheduleClassId(null); setConfirmingRegistration(false); }}>
                   <strong>{item.name || `Đợt #${item.id}`}</strong><span>{item.startDate || "—"} – {item.endDate || "—"}</span>
                   <span>{formatPrice(item.price)} · {item.status || "Chưa rõ trạng thái"}</span>
                 </button>)}
@@ -324,19 +352,37 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
                     {classes.map((item) => {
                       const schedule = classSchedules[item.id] || [];
                       const classAvailable = String(item.status).toUpperCase() === "ACTIVE" && isOfferingOpenNow(selectedOffering);
-                      return <label className={`member-class-card${selectedClassId === String(item.id) ? " selected" : ""}`} key={item.id}>
-                        <input type="radio" name="selectedCourseClass" value={item.id} checked={selectedClassId === String(item.id)}
-                          disabled={!classAvailable || Boolean(existingOfferingRegistration) || registering}
-                          onChange={() => { setSelectedClassId(String(item.id)); setRegistrationError(""); setRegistration(null); setConfirmingRegistration(false); setConsultationAvailable(false); }} />
-                        <span className="member-class-card-content"><strong>{item.name || `Lớp #${item.id}`}</strong>
-                          <span>Coach: {item.coachName || `#${item.coachId ?? "—"}`} · Sức chứa: {item.capacity ?? "—"} người · Trạng thái: {item.status || "—"}</span>
-                          <span>{schedule.length ? "Lịch hiện có:" : "Lịch chưa được công bố."}</span>
-                          {schedule.map((session) => <small key={session.id}>
-                            {formatLocalDateTime(session.startTime)} – {formatLocalDateTime(session.endTime)} · {session.status || "—"}
-                          </small>)}
-                          {!classAvailable && <small>Lớp hoặc đợt học hiện chưa nhận đăng ký.</small>}
-                        </span>
-                      </label>;
+                      const expanded = expandedScheduleClassId === item.id;
+                      const scheduleId = `member-class-schedule-${item.id}`;
+                      return <div className={`member-class-option${selectedClassId === String(item.id) ? " selected" : ""}`} key={item.id}>
+                        <label className={`member-class-card${selectedClassId === String(item.id) ? " selected" : ""}`}>
+                          <input type="radio" name="selectedCourseClass" value={item.id} checked={selectedClassId === String(item.id)}
+                            disabled={!classAvailable || Boolean(existingOfferingRegistration) || registering}
+                            onChange={() => { setSelectedClassId(String(item.id)); setRegistrationError(""); setRegistration(null); setConfirmingRegistration(false); setConsultationAvailable(false); }} />
+                          <span className="member-class-card-content">
+                            <strong>{item.name || `Lớp #${item.id}`}</strong>
+                            <span className="member-class-card-summary">
+                              {item.coachName && <span><b>Coach</b> {item.coachName}</span>}
+                              <span><b>Sức chứa tối đa</b> {item.capacity ?? "—"} người</span>
+                              <span><b>Trạng thái</b> {item.status || "—"}</span>
+                              <span><b>Lịch</b> {formatClassScheduleSummary(schedule, formatLocalDateTime)}</span>
+                            </span>
+                            {!classAvailable && <small className="member-class-eligibility-note">Lớp hoặc đợt học hiện chưa nhận đăng ký.</small>}
+                          </span>
+                        </label>
+                        <div className="member-class-option-actions">
+                          <button type="button" className="member-class-schedule-toggle" aria-expanded={expanded} aria-controls={scheduleId}
+                            onClick={() => setExpandedScheduleClassId((current) => toggleExpandedClass(current, item.id))}>
+                            {expanded ? "Ẩn lịch học" : "Xem lịch học"}
+                          </button>
+                        </div>
+                        <div className="member-class-schedule-details" id={scheduleId} hidden={!expanded}>
+                          {schedule.length ? <ul>{schedule.map((session) => <li key={session.id}>
+                            <time>{formatLocalDateTime(session.startTime)} – {formatLocalDateTime(session.endTime)}</time>
+                            <span>{session.status || "—"}</span>
+                          </li>)}</ul> : <p>Lịch chưa được công bố.</p>}
+                        </div>
+                      </div>;
                     })}
                   </div>}
               {scheduleError && <p className="member-muted" role="status">{scheduleError} Thông tin lịch có thể chưa được công bố.</p>}
@@ -369,7 +415,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
               {registration.status === "EXPIRED" && <p role="status">The payment deadline passed; this registration no longer reserves a seat.</p>}
               <Link to="/member/schedule">Đi đến lịch học</Link>
             </div>}
-            {consultationAvailable && <div className="course-level-help">
+            {!memberRoute && consultationAvailable && <div className="course-level-help">
               <p><strong>Khóa học yêu cầu:</strong> {course.level || "—"}</p>
               {levelsError ? <p role="status">Không tải được trình độ hiện tại.</p>
                 : levels ? <p><strong>Trình độ hiện tại:</strong> {currentLevel}{hasVerifiedLevel ? ` (Coach #${level.verifiedByCoachId} xác minh)` : " (Beginner mặc định; chưa được Coach xác minh)"}</p>
@@ -377,12 +423,12 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
               <p>Yêu cầu tư vấn không tự thay đổi trình độ và không tạo đăng ký.</p>
               <button type="button" className="btn btn-cyan" onClick={openConsultation}>Yêu cầu tư vấn / đánh giá trình độ</button>
             </div>}
-            {consultationSuccess && <div className="course-registration-success" role="status">
+            {!memberRoute && consultationSuccess && <div className="course-registration-success" role="status">
               <strong>Đã gửi yêu cầu tư vấn #{consultationSuccess.id}.</strong>
               <p>Yêu cầu này không đăng ký lớp và không tự thay đổi trình độ.</p>
               <Link to="/member/levels-assessments">Xem lịch sử yêu cầu tư vấn</Link>
             </div>}
-            {consultationOpen && <form className="course-member-consult-form" onSubmit={submitConsultation}>
+            {!memberRoute && consultationOpen && <form className="course-member-consult-form" onSubmit={submitConsultation}>
               <div><h3>Yêu cầu tư vấn</h3><p>Khóa học: <strong>{course.name}</strong> · Bộ môn: <strong>{course.sportName}</strong></p>
                 <p>{profileError ? "Không tải được hồ sơ; vui lòng nhập thông tin liên hệ." : "Thông tin liên hệ được lấy từ hồ sơ nếu có; kiểm tra trước khi gửi."}</p></div>
               <label>Họ và tên<input required maxLength={100} value={consultation.name} onChange={(event) => setConsultation({ ...consultation, name: event.target.value })} /></label>
@@ -401,14 +447,31 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
             : <div className="course-registration-panel"><p>Đăng nhập bằng tài khoản Member để xem lớp và đăng ký khóa học.</p>
               <button type="button" className="btn btn-cyan" onClick={goToLogin}>Đăng nhập để đăng ký</button>
             </div>}
+          {memberRoute && consultationOpen && <CourseConsultationModal
+            course={course}
+            values={consultation}
+            onChange={setConsultation}
+            profileError={profileError}
+            error={consultationError}
+            submitting={consultationSubmitting}
+            onClose={() => setConsultationOpen(false)}
+            onSubmit={submitConsultation}
+          />}
         </>}
   </>;
 
   if (memberRoute) return <div className="layout">
     <Sidebar role="MEMBER" activePage="member-courses" onLogout={onLogout} onNavigate={onNavigate} />
-    <main className="main member-course-detail"><header className="member-course-page-header">
-      <p className="eyebrow">SPORTCENTER / MEMBER / KHÓA HỌC</p><h1>{course?.name || "Chi tiết khóa học"}</h1>
-      {course?.sportName && <p className="subtitle">{course.sportName}</p>}
+    <main className="main member-course-detail"><p className="member-course-back"><Link to="/member/courses"><span aria-hidden="true">←</span> Quay lại</Link></p><header className="member-course-page-header">
+      <p className="eyebrow">SPORTCENTER / MEMBER / KHÓA HỌC</p>
+      {course && <div className="member-course-detail-badges">
+        <span className="member-course-detail-badge sport">{course.sportName || (course.sportId != null ? `Bộ môn #${course.sportId}` : "Bộ môn")}</span>
+        {course.level && <span className="member-course-detail-badge level">Trình độ: {course.level}</span>}
+        {(course.targetAgeMin != null || course.targetAgeMax != null) && <span className="member-course-detail-badge age">
+          Độ tuổi: {course.targetAgeMin ?? "—"}–{course.targetAgeMax ?? "—"}
+        </span>}
+      </div>}
+      <h1>{course?.name || "Chi tiết khóa học"}</h1>
     </header>{detailContent}</main>
   </div>;
 

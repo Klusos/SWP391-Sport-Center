@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
+import { formatTargetAgeRange } from "../memberCoursePresentation.js";
 import "./Portal.css";
 import "./MemberCourses.css";
 import { cancelCourseRegistrationApi, getMyRegistrationsApi, getPublicSportsApi, getPublicCoursesBySportApi } from "../api";
@@ -76,7 +77,12 @@ export default function MemberCourses({ token, role, onLogout, onNavigate }) {
           : !loadingSports && sportId != null && courses.length === 0 ? <div className="member-course-empty"><span className="member-course-empty-icon" aria-hidden="true">○</span><h3>Chưa có khóa học</h3><p>Bộ môn này hiện chưa có khóa học.</p></div>
             : <div className="member-course-grid">{courses.map((course, index) => <article className="member-course-card" key={course.id}>
               <div className="member-course-card-accent" aria-hidden="true" /><div className="member-course-card-top"><span className="member-course-badge">Khóa học</span><span className="member-course-number" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span></div>
-              <div className="member-course-card-body"><h3>{course.name}</h3><p>{course.description || "Khám phá khóa học và lựa chọn lớp phù hợp với bạn."}</p></div>
+              <div className="member-course-card-body"><h3>{course.name}</h3>
+                {(course.level || course.targetAgeMin != null || course.targetAgeMax != null) && <div className="member-course-card-meta" aria-label="Trình độ và độ tuổi">
+                  {course.level && <span className="member-course-card-meta-badge">{course.level}</span>}
+                  {formatTargetAgeRange(course.targetAgeMin, course.targetAgeMax) && <span className="member-course-card-meta-badge age">{formatTargetAgeRange(course.targetAgeMin, course.targetAgeMax)}</span>}
+                </div>}
+                <p>{course.description || "Khám phá khóa học và lựa chọn lớp phù hợp với bạn."}</p></div>
               <div className="member-course-card-footer"><Link className="member-course-detail-btn" to={`/member/courses/${course.id}`}><span><small>Tìm hiểu thêm</small><strong>Xem chi tiết khóa học</strong></span><span className="member-course-arrow" aria-hidden="true">→</span></Link></div>
             </article>)}</div>}
       </section>
