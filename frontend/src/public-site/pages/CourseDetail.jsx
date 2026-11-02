@@ -462,17 +462,21 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
 
   if (memberRoute) return <div className="layout">
     <Sidebar role="MEMBER" activePage="member-courses" onLogout={onLogout} onNavigate={onNavigate} />
-    <main className="main member-course-detail"><p className="member-course-back"><Link to="/member/courses"><span aria-hidden="true">←</span> Quay lại</Link></p><header className="member-course-page-header">
-      <p className="eyebrow">SPORTCENTER / MEMBER / KHÓA HỌC</p>
-      {course && <div className="member-course-detail-badges">
-        <span className="member-course-detail-badge sport">{course.sportName || (course.sportId != null ? `Bộ môn #${course.sportId}` : "Bộ môn")}</span>
-        {course.level && <span className="member-course-detail-badge level">Trình độ: {course.level}</span>}
-        {(course.targetAgeMin != null || course.targetAgeMax != null) && <span className="member-course-detail-badge age">
-          Độ tuổi: {course.targetAgeMin ?? "—"}–{course.targetAgeMax ?? "—"}
-        </span>}
-      </div>}
-      <h1>{course?.name || "Chi tiết khóa học"}</h1>
-    </header>{detailContent}</main>
+    <main className="main member-course-detail"><div className="member-course-detail-shell">
+      <p className="member-course-back"><Link to="/member/courses"><span aria-hidden="true">←</span> Quay lại</Link></p>
+      <header className="member-course-page-header">
+        <p className="eyebrow">SPORTCENTER / MEMBER / KHÓA HỌC</p>
+        {course && <div className="member-course-detail-badges">
+          <span className="member-course-detail-badge sport">{course.sportName || (course.sportId != null ? `Bộ môn #${course.sportId}` : "Bộ môn")}</span>
+          {course.level && <span className="member-course-detail-badge level">Trình độ: {course.level}</span>}
+          {(course.targetAgeMin != null || course.targetAgeMax != null) && <span className="member-course-detail-badge age">
+            Độ tuổi: {course.targetAgeMin ?? "—"}–{course.targetAgeMax ?? "—"}
+          </span>}
+        </div>}
+        <h1>{course?.name || "Chi tiết khóa học"}</h1>
+      </header>
+      {detailContent}
+    </div></main>
   </div>;
 
   return <><PageHero title={course?.name || "CHI TIẾT KHÓA HỌC"} subtitle={course?.sportName || "Thông tin chương trình học"} />

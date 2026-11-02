@@ -97,9 +97,13 @@
 }
 
 /* Member-only course detail presentation; public CourseDetail styles stay unchanged. */
+.member-course-detail { width: 100%; max-width: none; min-width: 0; box-sizing: border-box; }
+.member-course-detail .member-course-detail-shell { width: min(1560px, 100%); min-width: 0; margin: 0 auto; }
 .member-course-detail .member-course-page-header {
-  max-width: 1060px;
-  margin: 0 auto 20px;
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  margin: 0 0 20px;
   padding: clamp(24px, 4vw, 40px);
   overflow: hidden;
   border: 1px solid #d5e4f2;
@@ -146,12 +150,12 @@
 .member-course-detail .member-course-detail-badge.sport { border-color: #c8ddf4; background: #eaf4ff; color: #1f5b91; }
 .member-course-detail .member-course-detail-badge.level { border-color: #d7d2fb; background: #f2f0ff; color: #56489d; }
 .member-course-detail .member-course-detail-badge.age { border-color: #d7e9dc; background: #eef8f0; color: #347147; }
-.member-course-detail .member-course-back { width: min(1060px, 100%); margin: 0 auto 12px; }
+.member-course-detail .member-course-back { width: 100%; margin: 0 0 12px; }
 .member-course-detail .member-course-back a { display: inline-flex; min-height: 38px; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 9px; color: #58728b; font-size: 13px; font-weight: 700; text-decoration: none; transition: background .15s ease, color .15s ease; }
 .member-course-detail .member-course-back a:hover { background: #edf4fa; color: #1b5685; }
 .member-course-detail .member-course-back a span { font-size: 17px; }
 .member-course-detail .member-course-overview,
-.member-course-detail .course-registration-panel { max-width: 1060px; margin: 0 auto 18px; }
+.member-course-detail .course-registration-panel { width: 100%; max-width: none; box-sizing: border-box; margin: 0 0 18px; }
 .member-course-detail .member-course-overview {
   padding: clamp(20px, 3vw, 30px);
   border: 1px solid #dce6f1;
@@ -159,10 +163,12 @@
   background: #fff;
   box-shadow: 0 8px 24px rgb(20 48 82 / 5%);
 }
+.member-course-detail .member-course-overview > p,
+.member-course-detail .member-course-overview > div > p { max-width: 920px; }
 .member-course-detail .member-course-overview-title { margin: 0 0 14px; color: #16365d; font-size: 18px; }
 .member-course-detail .member-course-overview h2:not(.member-course-overview-title) { margin-top: 18px; color: #234c73; font-size: 16px; }
 .member-course-detail .member-course-overview p { color: #526b84; line-height: 1.7; }
-.member-course-detail .member-course-consultation-card { display: grid; max-width: 1060px; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px 22px; margin: 0 auto 18px; padding: clamp(18px, 3vw, 26px); border: 1px solid #cddff0; border-radius: 17px; background: linear-gradient(125deg, #f1f8ff, #fff 70%); box-shadow: 0 8px 24px rgb(20 48 82 / 5%); }
+.member-course-detail .member-course-consultation-card { display: grid; width: 100%; max-width: none; box-sizing: border-box; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px 22px; margin: 0 0 18px; padding: clamp(18px, 3vw, 26px); border: 1px solid #cddff0; border-radius: 17px; background: linear-gradient(125deg, #f1f8ff, #fff 70%); box-shadow: 0 8px 24px rgb(20 48 82 / 5%); }
 .member-course-detail .member-course-consultation-copy { display: flex; min-width: 0; align-items: flex-start; gap: 13px; }
 .member-course-detail .member-course-consultation-icon { display: grid; width: 36px; height: 36px; flex: 0 0 36px; place-items: center; border-radius: 11px; background: #e0efff; color: #1765a4; font-size: 17px; font-weight: 850; }
 .member-course-detail .member-course-consultation-copy h2 { margin: 0 0 5px; color: #16365d; font-size: 17px; }
@@ -203,7 +209,7 @@
   border-radius: 13px;
   background: #f7faff;
 }
-.member-course-detail .member-class-list { gap: 9px; }
+.member-course-detail .member-class-list { width: min(1240px, 100%); gap: 9px; }
 .member-course-detail .member-class-option { overflow: hidden; border: 1px solid #dce6f1; border-radius: 12px; background: #fff; transition: border-color .16s ease, box-shadow .16s ease; }
 .member-course-detail .member-class-option.selected { border-color: #2478d2; box-shadow: 0 0 0 2px rgb(36 120 210 / 9%); }
 .member-course-detail .member-class-card { display: flex; align-items: flex-start; gap: 11px; padding: 12px 14px 8px; border: 0; border-radius: 0; background: transparent; cursor: pointer; }

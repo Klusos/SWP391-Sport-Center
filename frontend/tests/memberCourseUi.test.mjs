@@ -115,7 +115,7 @@ test("Member course back control is above the hero and returns to the course lis
     read("../src/public-site/pages/CourseDetail.jsx"),
     read("../src/public-site/pages/CourseDetail.css"),
   ]);
-  assert.match(detail, /<main className="main member-course-detail"><p className="member-course-back"><Link to="\/member\/courses"><span aria-hidden="true">←<\/span> Quay lại<\/Link><\/p><header className="member-course-page-header">/);
+  assert.match(detail, /<main className="main member-course-detail"><div className="member-course-detail-shell">\s*<p className="member-course-back"><Link to="\/member\/courses"><span aria-hidden="true">←<\/span> Quay lại<\/Link><\/p>\s*<header className="member-course-page-header">/);
   assert.ok(css.includes(".member-course-detail .member-course-back"));
   assert.match(detail, /!memberRoute && <p className="course-detail-back"/);
 });
@@ -160,4 +160,23 @@ test("Member-specific hero styling is scoped and public Course Detail remains on
   assert.ok(css.includes(".course-public-detail .course-detail-card"));
   assert.ok(css.includes(".member-course-detail .member-course-detail-badges"));
   assert.doesNotMatch(css, /(^|\n)\.member-course-detail-(?:badges|badge)\s*\{/);
+});
+
+test("Member Course Detail uses the same fluid max-width strategy without widening Public Course Detail", async () => {
+  const [detail, css, legacyCss] = await Promise.all([
+    read("../src/public-site/pages/CourseDetail.jsx"),
+    read("../src/public-site/pages/CourseDetail.css"),
+    read("../src/pages/MemberCourseDetail.css"),
+  ]);
+  assert.match(detail, /<main className="main member-course-detail"><div className="member-course-detail-shell">/);
+  assert.match(css, /\.member-course-detail \{ width: 100%; max-width: none; min-width: 0; box-sizing: border-box; \}/);
+  assert.match(css, /\.member-course-detail \.member-course-detail-shell \{ width: min\(1560px, 100%\)/);
+  assert.match(css, /\.member-course-detail \.member-course-page-header \{[\s\S]*?max-width: none/);
+  assert.match(css, /\.member-course-detail \.member-course-overview,[\s\S]*?\.member-course-detail \.course-registration-panel \{ width: 100%; max-width: none/);
+  assert.match(css, /\.member-course-detail \.member-course-consultation-card \{ display: grid; width: 100%; max-width: none/);
+  assert.match(css, /\.member-course-detail \.member-class-list \{ width: min\(1240px, 100%\)/);
+  assert.match(css, /\.member-course-overview > p,[\s\S]*?max-width: 920px/);
+  assert.match(css, /\.course-public-detail \{\s*max-width: 1120px;/);
+  assert.match(detail, /return <><PageHero title=\{course\?\.name[\s\S]*?course-public-detail/);
+  assert.match(legacyCss, /\.member-course-detail \{ width: 100%; max-width: 1280px; \}/);
 });
