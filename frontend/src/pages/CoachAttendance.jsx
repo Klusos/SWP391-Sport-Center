@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import {
   getAttendanceHistoryApi,
@@ -6,6 +6,7 @@ import {
   getCoachAttendanceSessionsApi,
   markAttendanceApi,
 } from "../api";
+import { attendanceRowKey, isCurrentAttendanceRosterRequest } from "../attendanceRequests";
 import "./CoachAttendance.css";
 
 const STATUS_LABELS = {
@@ -41,10 +42,6 @@ function statusLabel(value) {
   return STATUS_LABELS[value] || value || "Chưa xác định";
 }
 
-function attendanceKey(sessionId, memberId) {
-  return String(sessionId) + ":" + String(memberId);
-}
-
 function errorMessage(error, fallback) {
   if (error?.status === 401) return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
   if (error?.status === 403) return "Bạn không có quyền truy cập dữ liệu điểm danh này.";
@@ -71,6 +68,10 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
+  const selectedSessionIdRef = useRef("");
+  const rosterRequestSequenceRef = useRef(0);
+  const sessionsRequestSequenceRef = useRef(0);
+  const mountedRef = useRef(false);
 
   const selectedSession = useMemo(
     () => sessions.find((session) => String(session.classSessionId) === String(selectedSessionId)) || null,
@@ -79,17 +80,31 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
   const members = Array.isArray(roster?.members) ? roster.members : [];
   const sessionCancelled = String(roster?.sessionStatus || selectedSession?.sessionStatus || "").toUpperCase() === "CANCELLED";
 
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      rosterRequestSequenceRef.current += 1;
+      sessionsRequestSequenceRef.current += 1;
+    };
+  }, []);
+
   const loadSessions = useCallback(async () => {
+    const requestId = ++sessionsRequestSequenceRef.current;
     setSessionsLoading(true);
     setSessionsError("");
     try {
       const result = await getCoachAttendanceSessionsApi(token);
-      setSessions(Array.isArray(result) ? result : []);
+      if (mountedRef.current && requestId === sessionsRequestSequenceRef.current) {
+        setSessions(Array.isArray(result) ? result : []);
+      }
     } catch (error) {
-      setSessions([]);
-      setSessionsError(errorMessage(error, "Không tải được danh sách buổi học được phân công."));
+      if (mountedRef.current && requestId === sessionsRequestSequenceRef.current) setSessions([]);
+      if (mountedRef.current && requestId === sessionsRequestSequenceRef.current) {
+        setSessionsError(errorMessage(error, "Không tải được danh sách buổi học được phân công."));
+      }
     } finally {
-      setSessionsLoading(false);
+      if (mountedRef.current && requestId === sessionsRequestSequenceRef.current) setSessionsLoading(false);
     }
   }, [token]);
 
@@ -99,18 +114,28 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
   }, [loadSessions]);
 
   const loadRoster = useCallback(async (sessionId, active = () => true) => {
+    if (String(sessionId) !== String(selectedSessionIdRef.current)) return;
+    const requestId = ++rosterRequestSequenceRef.current;
+    const isCurrent = () => isCurrentAttendanceRosterRequest({
+      requestId,
+      latestRequestId: rosterRequestSequenceRef.current,
+      sessionId,
+      selectedSessionId: selectedSessionIdRef.current,
+      mounted: mountedRef.current,
+      effectActive: active(),
+    });
     setRosterLoading(true);
     setRosterError("");
     try {
       const result = await getAttendanceRosterApi(token, sessionId);
-      if (active()) setRoster(result && typeof result === "object" ? result : null);
+      if (isCurrent()) setRoster(result && typeof result === "object" ? result : null);
     } catch (error) {
-      if (active()) {
+      if (isCurrent()) {
         setRoster(null);
         setRosterError(errorMessage(error, "Không tải được danh sách điểm danh."));
       }
     } finally {
-      if (active()) setRosterLoading(false);
+      if (isCurrent()) setRosterLoading(false);
     }
   }, [token]);
 
@@ -131,8 +156,14 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
   }, [loadRoster, selectedSessionId]);
 
   function chooseSession(sessionId) {
-    setSelectedSessionId(String(sessionId));
+    const nextSessionId = String(sessionId);
+    if (nextSessionId !== String(selectedSessionIdRef.current)) {
+      selectedSessionIdRef.current = nextSessionId;
+      rosterRequestSequenceRef.current += 1;
+    }
+    setSelectedSessionId(nextSessionId);
     setRoster(null);
+    setRosterLoading(false);
     setRowErrors({});
     setNotice("");
     setHistoryForMemberId(null);
@@ -148,7 +179,7 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
     if (!roster || !selectedSessionId || savingMemberId !== null || sessionCancelled || roster.markingAllowed !== true) return;
     const memberId = member?.memberId;
     if (memberId == null) return;
-    const rowKey = attendanceKey(selectedSessionId, memberId);
+    const rowKey = attendanceRowKey(selectedSessionId, memberId);
     const currentStatus = member.attendanceStatus || "NOT_MARKED";
     const nextStatus = selectedStatuses[rowKey] ?? currentStatus;
     if (!["PRESENT", "ABSENT", "EXCUSED"].includes(nextStatus) || nextStatus === currentStatus) return;
@@ -173,14 +204,17 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
         note: String(notes[rowKey] ?? member.note ?? "").trim() || null,
         reason: correcting ? reason : null,
       });
+      if (!mountedRef.current) return;
       if (response?.id != null) setAttendanceIds((current) => ({ ...current, [rowKey]: response.id }));
       setSelectedStatuses((current) => ({ ...current, [rowKey]: nextStatus }));
-      setNotice("Đã lưu điểm danh cho " + (member.memberName || "Member #" + memberId) + ".");
-      await loadRoster(selectedSessionId);
+      if (String(selectedSessionIdRef.current) === String(selectedSessionId)) {
+        setNotice("Đã lưu điểm danh cho " + (member.memberName || "Member #" + memberId) + ".");
+        await loadRoster(selectedSessionId);
+      }
     } catch (error) {
-      setRowErrors((current) => ({ ...current, [rowKey]: errorMessage(error, "Không lưu được điểm danh.") }));
+      if (mountedRef.current) setRowErrors((current) => ({ ...current, [rowKey]: errorMessage(error, "Không lưu được điểm danh.") }));
     } finally {
-      setSavingMemberId(null);
+      if (mountedRef.current) setSavingMemberId(null);
     }
   }
 
@@ -193,11 +227,11 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
     setHistoryLoading(true);
     try {
       const result = await getAttendanceHistoryApi(token, attendanceId);
-      setHistory(Array.isArray(result) ? result : []);
+      if (mountedRef.current) setHistory(Array.isArray(result) ? result : []);
     } catch (error) {
-      setHistoryError(errorMessage(error, "Không tải được lịch sử điểm danh."));
+      if (mountedRef.current) setHistoryError(errorMessage(error, "Không tải được lịch sử điểm danh."));
     } finally {
-      setHistoryLoading(false);
+      if (mountedRef.current) setHistoryLoading(false);
     }
   }
 
@@ -296,7 +330,7 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
                             <thead><tr><th>Member</th><th>Trạng thái</th><th>Lần đánh dấu gần nhất</th><th>Ghi chú</th><th>Thao tác</th></tr></thead>
                             <tbody>{members.map((member) => {
                               const memberId = member?.memberId;
-                              const rowKey = attendanceKey(selectedSessionId, memberId);
+                              const rowKey = attendanceRowKey(selectedSessionId, memberId);
                               const currentStatus = member?.attendanceStatus || "NOT_MARKED";
                               const chosenStatus = selectedStatuses[rowKey] ?? currentStatus;
                               const correcting = currentStatus !== "NOT_MARKED";

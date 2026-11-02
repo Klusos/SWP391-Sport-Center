@@ -107,7 +107,7 @@ public class MembershipService {
                     "Membership assignment requires ADMIN; front-desk purchases must use /api/payments");
         }
 
-        User member = userRepository.findById(request.getMemberId())
+        User member = userRepository.findByIdForBookingUpdate(request.getMemberId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "User not found with id: " + request.getMemberId()));
         if (!"MEMBER".equalsIgnoreCase(member.getRole())) {
@@ -143,7 +143,7 @@ public class MembershipService {
      * bắt đầu đúng ngày gói hiện tại kết thúc (endDate là mốc loại trừ), không sửa gói cũ.
      */
     @Transactional
-    public Membership activateOrRenewFromPayment(Payment payment) {
+    public Optional<String> activateOrRenewFromPayment(Payment payment) {
         Integer memberId = payment.getMember().getId();
         Integer planId = payment.getReferenceId();
         boolean autoRenew = Boolean.TRUE.equals(payment.getAutoRenew());
@@ -154,6 +154,9 @@ public class MembershipService {
                 .orElseThrow(() -> new ResourceNotFoundException("Membership plan not found with id: " + planId));
 
         LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        if (membershipRepository.existsByMemberIdAndStatusAndStartDateGreaterThan(memberId, "ACTIVE", today)) {
+            return Optional.of("Member already has a future membership period");
+        }
         Optional<Membership> lastInChain = membershipRepository
                 .findByMemberIdAndStatusAndEndDateGreaterThan(memberId, "ACTIVE", today).stream()
                 .max(Comparator.comparing(Membership::getEndDate));
@@ -171,7 +174,44 @@ public class MembershipService {
         membership.setAutoRenew(autoRenew);
         membership.setStatus("ACTIVE");
         membership.setPurchasePayment(payment);
-        return membershipRepository.save(membership);
+        membershipRepository.save(membership);
+        return Optional.empty();
+    }
+
+    /** Activate a marked Auto-renew payment from its source period, not callback arrival date. */
+    @Transactional
+    public Optional<String> activateAutoRenewalFromPayment(Payment payment, Integer sourceMembershipId) {
+        Integer memberId = payment.getMember().getId();
+        User member = userRepository.findByIdForBookingUpdate(memberId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + memberId));
+        Membership source = membershipRepository.findById(sourceMembershipId).orElse(null);
+        if (source == null || !source.getMember().getId().equals(memberId)
+                || !source.getPlan().getId().equals(payment.getReferenceId())) {
+            return Optional.of("Auto-renew source membership does not match the payment");
+        }
+        if (!Boolean.TRUE.equals(source.getAutoRenew())
+                || (!"ACTIVE".equalsIgnoreCase(source.getStatus())
+                    && !"EXPIRED".equalsIgnoreCase(source.getStatus()))) {
+            return Optional.of("Auto-renew was disabled or the source membership is no longer eligible");
+        }
+        if (membershipRepository.existsByMemberIdAndStatusAndStartDateGreaterThanEqual(
+                memberId, "ACTIVE", source.getEndDate())) {
+            return Optional.of("A later membership period already exists");
+        }
+
+        MembershipPlan plan = membershipPlanRepository.findById(payment.getReferenceId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Membership plan not found with id: " + payment.getReferenceId()));
+        Membership renewal = new Membership();
+        renewal.setMember(member);
+        renewal.setPlan(plan);
+        renewal.setStartDate(source.getEndDate());
+        renewal.setEndDate(source.getEndDate().plusMonths(plan.getDurationMonths()));
+        renewal.setAutoRenew(true);
+        renewal.setStatus("ACTIVE");
+        renewal.setPurchasePayment(payment);
+        membershipRepository.save(renewal);
+        return Optional.empty();
     }
 
     /**
@@ -294,6 +334,9 @@ public class MembershipService {
                 .orElseThrow(() -> new ResourceNotFoundException("Membership not found with id: " + id));
         requireOwnMembershipOrStaff(actor, membership.getMember().getId());
         validateActiveMembership(membership);
+        Integer memberId = membership.getMember().getId();
+        userRepository.findByIdForBookingUpdate(memberId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + memberId));
         LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
         List<Membership> chain = membershipRepository.findByMemberIdAndStatusAndEndDateGreaterThan(
                 membership.getMember().getId(), "ACTIVE", today);
@@ -301,7 +344,9 @@ public class MembershipService {
             chain = List.of(membership);
         }
         chain.forEach(item -> item.setAutoRenew(enabled));
-        List<Membership> saved = membershipRepository.saveAll(chain);
+        // createIfDue refreshes the source row after taking the same member lock. Flush this
+        // transaction's intentional toggle first so that refresh cannot discard an enable.
+        List<Membership> saved = membershipRepository.saveAllAndFlush(chain);
         // Turning it on inside the notice window creates the renewal request now instead of at midnight.
         for (Membership item : saved) {
             if (enabled) {

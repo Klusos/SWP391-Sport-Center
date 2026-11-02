@@ -12,3 +12,32 @@ export function isMembershipEffective(membership, today = todayInVietnam()) {
   const endDate = dateOnly(membership?.endDate);
   return String(membership?.status || "").toUpperCase() === "ACTIVE" && Boolean(startDate && endDate) && startDate <= today && today < endDate;
 }
+
+// Every Membership is assigned to exactly one display group; queued Memberships are
+// persisted ACTIVE records whose start date is still in the future.
+export function membershipSections(memberships, today = todayInVietnam()) {
+  const current = [];
+  const upcoming = [];
+  const history = [];
+  for (const membership of memberships || []) {
+    const status = String(membership?.status || "").toUpperCase();
+    const startDate = dateOnly(membership?.startDate);
+    const endDate = dateOnly(membership?.endDate);
+    if (isMembershipEffective(membership, today)) {
+      current.push(membership);
+    } else if (status === "ACTIVE" && startDate && endDate && startDate > today && endDate > today) {
+      upcoming.push(membership);
+    } else {
+      history.push(membership);
+    }
+  }
+  const byStartAscending = (a, b) => String(a?.startDate || "").localeCompare(String(b?.startDate || ""));
+  current.sort(byStartAscending);
+  upcoming.sort(byStartAscending);
+  history.sort((a, b) => byStartAscending(b, a) || Number(b?.id || 0) - Number(a?.id || 0));
+  return { current, upcoming, history };
+}
+
+export function hasOverlappingEffectiveMemberships(sections) {
+  return (sections?.current?.length || 0) > 1;
+}

@@ -24,6 +24,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import group5.example.sportCenter.dto.CounterPaymentRequest;
 import group5.example.sportCenter.dto.CreatePaymentRequest;
 import group5.example.sportCenter.dto.DecisionNoteRequest;
+import group5.example.sportCenter.dto.ActionablePendingPaymentSummaryResponse;
 import group5.example.sportCenter.dto.PaymentResponse;
 import group5.example.sportCenter.dto.PendingCoursePaymentResponse;
 import group5.example.sportCenter.dto.PendingPtPaymentResponse;
@@ -170,6 +171,11 @@ public class PaymentController {
     @GetMapping("/me")
     public List<PaymentResponse> myHistory(@AuthenticationPrincipal Jwt jwt) {
         return paymentService.getMyHistory(jwt);
+    }
+
+    @GetMapping("/me/actionable-summary")
+    public ActionablePendingPaymentSummaryResponse myActionablePendingSummary(@AuthenticationPrincipal Jwt jwt) {
+        return paymentService.getMyActionablePendingSummary(jwt);
     }
 
     @GetMapping("/member/{memberId}")

@@ -410,8 +410,8 @@ export default function App() {
           </Route>
 
           <Route path="/receptionist/course-payments" element={<ReceptionistCoursePayments {...staff} userId={auth?.userId} />} />
+          <Route path="/receptionist/pt-payments" element={<ReceptionistPtPayments {...staff} userId={auth?.userId} />} />
           <Route path="/receptionist/course-registration" element={<ReceptionistCourseRegistration {...staff} />} />
-          <Route path="/receptionist/pt-payments" element={<ReceptionistPtPayments {...staff} />} />
 
           {/* Chỉ Admin */}
           <Route element={<AdminRoute auth={auth} />}>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
+import IndividualTrainingPlans from "../components/IndividualTrainingPlans";
 import { getMyTrainingApi } from "../api";
 import { Stars } from "./CoachTraining";
 import "./Training.css";
@@ -43,6 +44,7 @@ export default function MemberTraining({ token, role, onLogout, onNavigate }) {
       {!classes ? <p role="status">Đang tải…</p>
         : classes.length === 0 ? <p className="dash-empty">Bạn chưa có lớp đã xác nhận. Kết quả tập luyện sẽ xuất hiện sau khi đăng ký và thanh toán lớp học.</p>
           : classes.map((item) => <ClassCard key={item.courseClass.classId} item={item} />)}
+      {classes && <IndividualTrainingPlans mode="member" token={token} />}
     </main>
   </div>;
 }

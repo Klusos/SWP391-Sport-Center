@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
+import "./ConsultationQueue.css";
 import {
   completeConsultationRequestApi,
   createConsultationMemberApi,
@@ -370,7 +371,7 @@ export default function ConsultationQueue({ token, role, onLogout, onNavigate })
   return (
     <div className="layout">
       <Sidebar role={role} activePage="consultations" onNavigate={onNavigate} onLogout={onLogout} />
-      <main className="main">
+      <main className="main consultation-queue-page">
         <h1>{"Y\u00eau c\u1ea7u t\u01b0 v\u1ea5n"}</h1>
         <p className="subtitle">{"Ti\u1ebfp nh\u1eadn v\u00e0 theo d\u00f5i c\u00e1c y\u00eau c\u1ea7u t\u01b0 v\u1ea5n c\u1ee7a kh\u00e1ch h\u00e0ng."}</p>
         {!allowedRole && <div className="banner error" role="alert">Only Receptionist and Admin accounts can access this queue.</div>}

@@ -132,6 +132,17 @@ public class SecurityConfig {
                         "/api/training/sessions/*/complete", "/api/training/classes/*/members/*/evaluations")
                     .hasAnyRole("ADMIN", "COACH")
                 .requestMatchers(HttpMethod.DELETE, "/api/training/exercises/*").hasAnyRole("ADMIN", "COACH")
+                .requestMatchers(HttpMethod.GET, "/api/training/me/individual-plans")
+                    .hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/training/classes/*/individual-plans")
+                    .hasAnyRole("ADMIN", "COACH")
+                .requestMatchers(HttpMethod.GET, "/api/training/individual-plans/*",
+                        "/api/training/individual-plans/*/revisions")
+                    .hasAnyRole("ADMIN", "COACH", "MEMBER")
+                .requestMatchers(HttpMethod.POST, "/api/training/classes/*/members/*/individual-plan")
+                    .hasAnyRole("ADMIN", "COACH")
+                .requestMatchers(HttpMethod.PUT, "/api/training/individual-plans/*")
+                    .hasAnyRole("ADMIN", "COACH")
                 .requestMatchers("/api/training", "/api/training/**").denyAll()
 
                 .requestMatchers(HttpMethod.GET, "/api/pt-bookings/eligible-coaches", "/api/pt-bookings/me").hasRole("MEMBER")
@@ -149,6 +160,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/payments/pending-pt", "/api/payments/refund-required").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.PATCH, "/api/payments/*/refund").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.GET, "/api/payments/me").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/payments/me/actionable-summary").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/payments/member/*").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers("/api/payments", "/api/payments/**").denyAll()
 

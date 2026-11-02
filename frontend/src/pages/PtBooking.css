@@ -905,6 +905,35 @@
   color: var(--success);
 }
 
+.pt-main .pt-payment-actions { display:grid; gap:10px; margin-top:10px; }
+.pt-main .pt-payment-choice,.pt-main .pt-payment-state { display:grid; justify-items:start; gap:8px; padding:12px; border:1px solid var(--border); border-radius:10px; background:#f8fbff; }
+.pt-main .pt-payment-choice button,.pt-main .pt-secondary-button { padding:8px 12px; border:1px solid #1769a0; border-radius:8px; background:#1769a0; color:#fff; cursor:pointer; }
+.pt-main .pt-payment-choice button:disabled,.pt-main .pt-secondary-button:disabled { opacity:.55; cursor:default; }
+.pt-main .pt-payment-choice button:focus-visible,.pt-main .pt-secondary-button:focus-visible { outline:3px solid #dfaa23; outline-offset:3px; }
+
+.pt-actionable-card { border-color:#e7b94d; box-shadow:0 10px 28px rgba(126,88,15,.1); }
+.pt-actionable-list,.pt-compact-history { display:grid; gap:10px; }
+.pt-booking-summary { display:grid; grid-template-columns:minmax(0,1fr) minmax(220px,.75fr); gap:18px; padding:16px 18px; border:1px solid var(--border); border-radius:12px; background:#fff; }
+.pt-booking-summary.is-actionable { border-color:#e8c66f; background:linear-gradient(110deg,#fffdf7,#fff); }
+.pt-booking-summary-main,.pt-booking-summary-side { display:grid; align-content:start; justify-items:start; gap:8px; min-width:0; }
+.pt-booking-summary-main > strong { color:var(--navy); }
+.pt-booking-summary-main > span:not(.pt-status),.pt-booking-summary-main > small { color:var(--text-sub); }
+.pt-booking-summary-main > .pt-expired-hold { color:#986318; }
+.pt-booking-summary-side > strong { color:var(--navy); font-size:1.05rem; }
+.pt-history-controls { display:grid; grid-template-columns:minmax(200px,1fr) minmax(180px,.45fr); gap:12px; margin-bottom:14px; }
+.pt-history-controls label { display:grid; gap:6px; color:var(--text-sub); font-size:13px; font-weight:700; }
+.pt-history-controls input,.pt-history-controls select { min-height:40px; width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:#fff; color:var(--text); }
+.pt-history-controls input:focus-visible,.pt-history-controls select:focus-visible { outline:3px solid #dfaa23; outline-offset:2px; }
+.pt-history-payment-details { width:100%; margin-top:4px; }
+.pt-history-payment-details summary { color:#1769a0; cursor:pointer; font-size:13px; font-weight:700; }
+.pt-history-pagination { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:14px; color:var(--text-sub); font-size:13px; }
+.pt-history-pagination > div { display:flex; gap:8px; }
+@media(max-width:700px) {
+  .pt-booking-summary { grid-template-columns:1fr; gap:12px; padding:14px; }
+  .pt-history-controls { grid-template-columns:1fr; }
+  .pt-history-pagination { align-items:flex-start; flex-direction:column; }
+}
+
 @media (max-width: 1000px) {
   .pt-main .pt-form {
     grid-template-columns: 1fr 1fr;
@@ -1009,4 +1038,97 @@
 
 .pt-page .pt-table-wrap {
   overflow-x: auto;
+}
+
+/* Wave 2 refinements remain scoped to the Member PT booking page. */
+.pt-booking-layout .pt-page { max-width: 1240px; }
+.pt-booking-layout .pt-header {
+  align-items: center;
+  margin-bottom: 22px;
+  padding: clamp(20px, 3vw, 32px);
+  border: 1px solid #d8e7f6;
+  border-radius: 20px;
+  background: linear-gradient(120deg, #edf6ff 0%, #fff 76%);
+  box-shadow: 0 10px 28px rgba(17, 49, 87, .06);
+}
+.pt-booking-layout .pt-header h1 { font-size: clamp(1.7rem, 3vw, 2.35rem); font-weight: 820; }
+.pt-booking-layout .pt-page .pt-card {
+  border-color: #dce6f1;
+  border-radius: 18px;
+  box-shadow: 0 9px 27px rgba(21, 50, 82, .055);
+}
+.pt-booking-layout .pt-section-heading {
+  align-items: flex-start;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #edf2f7;
+}
+.pt-booking-layout .pt-section-icon {
+  border-color: #d6e8fa;
+  background: linear-gradient(145deg, #eef6ff, #e4f3ff);
+}
+.pt-booking-layout .pt-page .pt-form { gap: 18px; }
+.pt-booking-layout .pt-page .pt-field select:focus-visible,
+.pt-booking-layout .pt-page .pt-field input:focus-visible,
+.pt-booking-layout .pt-history-controls input:focus-visible,
+.pt-booking-layout .pt-history-controls select:focus-visible,
+.pt-booking-layout .pt-page button:focus-visible {
+  outline: 3px solid rgba(23, 105, 210, .25);
+  outline-offset: 2px;
+}
+.pt-booking-layout .pt-page .pt-coach {
+  padding: 17px 18px;
+  border-radius: 14px;
+  box-shadow: 0 4px 14px rgba(17, 49, 87, .035);
+}
+.pt-booking-layout .pt-page .pt-coach.selected {
+  box-shadow: 0 0 0 2px rgba(23, 105, 210, .12), 0 8px 18px rgba(17, 49, 87, .06);
+}
+.pt-booking-layout .pt-price > strong { font-size: 1.08rem; }
+.pt-booking-layout .pt-actionable-card {
+  border-color: #e7c66f;
+  background: linear-gradient(145deg, #fffefa, #fff 62%);
+}
+.pt-booking-layout .pt-booking-summary {
+  gap: 20px;
+  padding: 18px;
+  border-radius: 14px;
+  box-shadow: 0 4px 13px rgba(17, 49, 87, .035);
+}
+.pt-booking-layout .pt-booking-summary.is-actionable {
+  border-color: #ebd18c;
+  background: linear-gradient(115deg, #fffdf6, #fff 72%);
+}
+.pt-booking-layout .pt-booking-summary-main > strong { font-size: 15px; }
+.pt-booking-layout .pt-booking-summary-side > strong { font-size: 1.15rem; }
+.pt-booking-layout .pt-payment-state,
+.pt-booking-layout .pt-payment-choice {
+  padding: 14px;
+  border-color: #dce8f4;
+  border-radius: 12px;
+  background: #f5f9fe;
+}
+.pt-booking-layout .pt-history-payment-details {
+  padding: 10px 12px;
+  border: 1px solid #e0e9f3;
+  border-radius: 11px;
+  background: #fbfdff;
+}
+.pt-booking-layout .pt-history-payment-details[open] { background: #f7faff; }
+.pt-booking-layout .pt-history-payment-details summary { padding: 2px; }
+.pt-booking-layout .pt-history-controls { gap: 14px; }
+.pt-booking-layout .pt-history-controls label { color: #344b64; }
+.pt-booking-layout .pt-history-controls input,
+.pt-booking-layout .pt-history-controls select { min-height: 44px; border-radius: 10px; }
+.pt-booking-layout .pt-history-pagination {
+  padding-top: 13px;
+  border-top: 1px solid #edf2f7;
+}
+@media (max-width: 700px) {
+  .pt-booking-layout .pt-header { align-items: flex-start; }
+  .pt-booking-layout .pt-page .pt-card { padding: 18px; }
+  .pt-booking-layout .pt-section-heading { gap: 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pt-booking-layout * { scroll-behavior: auto !important; }
 }

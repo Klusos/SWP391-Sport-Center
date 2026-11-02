@@ -40,6 +40,7 @@ import group5.example.sportCenter.repository.CoachRepository;
 import group5.example.sportCenter.repository.CourseClassRepository;
 import group5.example.sportCenter.repository.CourseOfferingRepository;
 import group5.example.sportCenter.repository.FacilityRepository;
+import group5.example.sportCenter.repository.PersonalTrainingBookingRepository;
 
 @ExtendWith(MockitoExtension.class)
 class ClassSessionServiceTest {
@@ -57,6 +58,8 @@ class ClassSessionServiceTest {
     private FacilityRepository facilityRepository;
     @Mock
     private CoachRepository coachRepository;
+    @Mock
+    private PersonalTrainingBookingRepository ptBookingRepository;
     private ClassSessionService service;
 
     private CourseClass courseClass;
@@ -66,7 +69,8 @@ class ClassSessionServiceTest {
     @BeforeEach
     void setUp() {
         service = new ClassSessionService(classSessionRepository, courseClassRepository, courseOfferingRepository,
-                facilityRepository, coachRepository, FIXED_CLOCK);
+                facilityRepository, coachRepository, FIXED_CLOCK,
+                new CoachScheduleConflictService(classSessionRepository, ptBookingRepository, FIXED_CLOCK));
 
         Sport sport = new Sport();
         sport.setId(4);

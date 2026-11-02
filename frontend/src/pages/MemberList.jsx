@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Sidebar from "../components/Sidebar";
+import "./MemberList.css";
 import {
   createMemberProfileApi,
   deactivateMemberApi,
@@ -184,7 +185,7 @@ export default function MemberList({ token, role, onLogout, onNavigate }) {
   return (
     <div className="layout">
       <Sidebar role={role} activePage="members" onNavigate={onNavigate} onLogout={onLogout} />
-      <main className="main">
+      <main className="main member-list-main">
         <h1>Danh sách thành viên</h1>
         <p className="subtitle">Tra cứu tài khoản MEMBER và Member Profile.</p>
         {!allowed && <div className="banner error" role="alert">Chỉ ADMIN và RECEPTIONIST được truy cập trang này.</div>}

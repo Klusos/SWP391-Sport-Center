@@ -238,10 +238,6 @@ export function cancelPtBookingApi(token, bookingId) {
   });
 }
 
-export function getPendingPtPaymentsApi(token, page = 0, size = 20) {
-  return request(`/api/payments/pending-pt?page=${page}&size=${size}`, { headers: authenticatedHeaders(token) });
-}
-
 export function getMyAttendanceApi(token) {
   return request("/api/attendance/me", { headers: authenticatedHeaders(token) });
 }
@@ -458,8 +454,18 @@ export function getPendingMembershipPaymentsApi(token, page = 0, size = 20) {
   });
 }
 
+export function getPendingPtPaymentsApi(token, page = 0, size = 20) {
+  return request(`/api/payments/pending-pt?page=${page}&size=${size}`, {
+    headers: authenticatedHeaders(token),
+  });
+}
+
 export function getMyPaymentsApi(token) {
   return request("/api/payments/me", { headers: authenticatedHeaders(token) });
+}
+
+export function getMyActionablePendingPaymentSummaryApi(token) {
+  return request("/api/payments/me/actionable-summary", { headers: authenticatedHeaders(token) });
 }
 
 export function getMemberPaymentsApi(token, memberId) {
@@ -724,14 +730,6 @@ export function getMyRegistrationsApi(token) {
 export function getMyClassSessionsApi(token) {
   return request("/api/course-registrations/me/class-sessions", { headers: authenticatedHeaders(token) });
 }
-// ===== DÁN VÀO CUỐI FILE api.js (một lần duy nhất) =====
-// Nếu báo "has already been declared" ở hàm nào thì xóa bản trùng của hàm đó.
-
-// --- Thanh toán / hóa đơn ---
-export function getPaymentsByMemberApi(token, memberId) {
-  return request("/api/payments/member/" + encodeURIComponent(memberId), { headers: authenticatedHeaders(token) });
-}
-
 export function getNotificationsApi(token, page = 0, size = 20) {
   const query = new URLSearchParams({ page: String(page), size: String(size) });
   return request("/api/notifications?" + query.toString(), { headers: authenticatedHeaders(token) });
@@ -753,32 +751,6 @@ export function markAllNotificationsReadApi(token) {
     method: "PATCH",
     headers: authenticatedHeaders(token),
   });
-}
-
-// --- Báo cáo ---
-function reportQuery(from, to) {
-  return "?" + new URLSearchParams({ from, to }).toString();
-}
-
-export function getRevenueReportApi(token, from, to) {
-  return request("/api/reports/revenue" + reportQuery(from, to), { headers: authenticatedHeaders(token) });
-}
-
-export function getMemberReportApi(token, from, to) {
-  return request("/api/reports/members" + reportQuery(from, to), { headers: authenticatedHeaders(token) });
-}
-
-export function getClassRegReportApi(token, from, to) {
-  return request("/api/reports/class-registrations" + reportQuery(from, to), { headers: authenticatedHeaders(token) });
-}
-
-// --- Lớp học, gói thành viên ---
-export function getAllClassesApi(token) {
-  return request("/api/classes", { headers: authenticatedHeaders(token) });
-}
-
-export function getAllSessionsApi(token) {
-  return request("/api/class-sessions", { headers: authenticatedHeaders(token) });
 }
 
 export function setAutoRenewApi(token, membershipId, enable) {
@@ -923,4 +895,35 @@ export function evaluateProgressApi(token, classId, memberId, payload) {
 
 export function getMyTrainingApi(token) {
   return request("/api/training/me", { headers: authenticatedHeaders(token) });
+}
+
+export function createIndividualTrainingPlanApi(token, classId, memberId, payload) {
+  return request(`/api/training/classes/${encodeURIComponent(classId)}/members/${encodeURIComponent(memberId)}/individual-plan`,
+    trainingJson(token, "POST", payload));
+}
+
+export function getClassIndividualTrainingPlansApi(token, classId) {
+  return request(`/api/training/classes/${encodeURIComponent(classId)}/individual-plans`, {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function updateIndividualTrainingPlanApi(token, planId, payload) {
+  return request(`/api/training/individual-plans/${encodeURIComponent(planId)}`, trainingJson(token, "PUT", payload));
+}
+
+export function getMyIndividualTrainingPlansApi(token) {
+  return request("/api/training/me/individual-plans", { headers: authenticatedHeaders(token) });
+}
+
+export function getIndividualTrainingPlanApi(token, planId) {
+  return request(`/api/training/individual-plans/${encodeURIComponent(planId)}`, {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function getIndividualTrainingPlanRevisionsApi(token, planId) {
+  return request(`/api/training/individual-plans/${encodeURIComponent(planId)}/revisions`, {
+    headers: authenticatedHeaders(token),
+  });
 }

@@ -22,6 +22,7 @@ export default function NotificationBell({ token, role }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const countRequest = useRef(null);
+  const bellButtonRef = useRef(null);
 
   const refreshCount = useCallback(async (force = false) => {
     if (!token) return;
@@ -67,6 +68,17 @@ export default function NotificationBell({ token, role }) {
       window.clearInterval(timer);
     };
   }, [token, role, refreshCount]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      bellButtonRef.current?.focus();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [open]);
 
   const markOneRead = async (notification) => {
     if (notification.isRead || saving) return;
@@ -114,12 +126,12 @@ export default function NotificationBell({ token, role }) {
 
   return (
     <div className="notification-widget">
-      <button type="button" className="notification-bell" aria-label={`Thông báo, ${unreadCount} chưa đọc`} aria-expanded={open} onClick={togglePanel}>
+      <button ref={bellButtonRef} type="button" className="notification-bell" aria-label={`Thông báo, ${unreadCount} chưa đọc`} aria-expanded={open} aria-controls="notification-panel" onClick={togglePanel}>
         <i className="bi bi-bell" aria-hidden="true" />
-        {unreadCount > 0 && <span className="notification-count">{unreadCount > 99 ? "99+" : unreadCount}</span>}
+        {unreadCount > 0 && <span className="notification-count" aria-live="polite">{unreadCount > 99 ? "99+" : unreadCount}</span>}
       </button>
       {open && (
-        <section className="notification-panel" aria-label="Thông báo của bạn">
+        <section id="notification-panel" className="notification-panel" aria-label="Thông báo của bạn">
           <header className="notification-panel-header">
             <div><strong>Thông báo</strong><span>{unreadCount} chưa đọc</span></div>
             <button type="button" onClick={() => setOpen(false)} aria-label="Đóng thông báo">×</button>

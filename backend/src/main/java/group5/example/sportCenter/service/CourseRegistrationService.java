@@ -191,13 +191,13 @@ public class CourseRegistrationService {
         return response(registrations.saveAndFlush(registration));
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public List<CourseRegistrationResponse> mine(Jwt jwt) {
         User actor = access.actor(jwt);
         access.requireMember(actor);
-        expiration.expireForMember(actor.getId(), LocalDateTime.now(clock.withZone(BUSINESS_ZONE)));
+        LocalDateTime now = LocalDateTime.now(clock.withZone(BUSINESS_ZONE));
         return registrations.findByMemberIdOrderByRegisteredAtDescIdDesc(actor.getId()).stream()
-                .map(this::response).toList();
+                .map(registration -> memberHistoryResponse(registration, now)).toList();
     }
 
     public List<CourseRegistrationResponse> all(Jwt jwt) {
@@ -326,12 +326,26 @@ public class CourseRegistrationService {
     }
 
     private CourseRegistrationResponse response(CourseRegistration registration) {
+        return response(registration, registration.getStatus().name());
+    }
+
+    /** Member history exposes effective deadline status without persisting expiration during GET. */
+    private CourseRegistrationResponse memberHistoryResponse(CourseRegistration registration, LocalDateTime now) {
+        String effectiveStatus = registration.getStatus().name();
+        if (registration.getStatus() == PENDING && registration.getPaymentDeadline() != null
+                && !registration.getPaymentDeadline().isAfter(now)) {
+            effectiveStatus = CourseRegistrationStatus.EXPIRED.name();
+        }
+        return response(registration, effectiveStatus);
+    }
+
+    private CourseRegistrationResponse response(CourseRegistration registration, String status) {
         CourseClass courseClass = registration.getCourseClass();
         CourseOffering offering = courseClass.getCourseOffering();
         Course course = offering.getCourse();
         return new CourseRegistrationResponse(registration.getId(), registration.getMember().getId(), course.getId(),
                 course.getName(), offering.getId(), offering.getName(), courseClass.getId(), courseClass.getName(),
-                course.getSport().getId(), course.getLevel(), registration.getStatus().name(),
+                course.getSport().getId(), course.getLevel(), status,
                 registration.getRegisteredAt(), registration.getPaymentDeadline(), registration.getCancelledAt(), registration.getOriginalPrice(),
                 registration.getMembershipDiscount(), registration.getFinalPrice());
     }

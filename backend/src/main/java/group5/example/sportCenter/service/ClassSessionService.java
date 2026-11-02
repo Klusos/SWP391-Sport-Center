@@ -40,6 +40,7 @@ public class ClassSessionService {
     private final CourseOfferingRepository courseOfferingRepository;
     private final FacilityRepository facilityRepository;
     private final CoachRepository coachRepository;
+    private final CoachScheduleConflictService coachScheduleConflicts;
     private final Clock clock;
 
     @Autowired
@@ -48,9 +49,10 @@ public class ClassSessionService {
             CourseClassRepository courseClassRepository,
             CourseOfferingRepository courseOfferingRepository,
             FacilityRepository facilityRepository,
-            CoachRepository coachRepository) {
+            CoachRepository coachRepository,
+            CoachScheduleConflictService coachScheduleConflicts) {
         this(classSessionRepository, courseClassRepository, courseOfferingRepository, facilityRepository, coachRepository,
-                Clock.systemDefaultZone());
+                Clock.systemDefaultZone(), coachScheduleConflicts);
     }
 
     ClassSessionService(
@@ -59,13 +61,15 @@ public class ClassSessionService {
             CourseOfferingRepository courseOfferingRepository,
             FacilityRepository facilityRepository,
             CoachRepository coachRepository,
-            Clock clock) {
+            Clock clock,
+            CoachScheduleConflictService coachScheduleConflicts) {
         this.classSessionRepository = classSessionRepository;
         this.courseClassRepository = courseClassRepository;
         this.courseOfferingRepository = courseOfferingRepository;
         this.facilityRepository = facilityRepository;
         this.coachRepository = coachRepository;
         this.clock = clock;
+        this.coachScheduleConflicts = coachScheduleConflicts;
     }
 
     @Transactional(readOnly = true)
@@ -183,15 +187,8 @@ public class ClassSessionService {
             throw new IllegalArgumentException("Facility is already booked during this time range");
         }
 
-        Integer coachId = courseClass.getCoach().getId();
-        boolean coachConflict = excludedSessionId == null
-                ? classSessionRepository.existsByCourseClass_Coach_IdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThan(
-                        coachId, CANCELLED, endTime, startTime)
-                : classSessionRepository.existsByCourseClass_Coach_IdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThanAndIdNot(
-                        coachId, CANCELLED, endTime, startTime, excludedSessionId);
-        if (coachConflict) {
-            throw new IllegalArgumentException("Coach is already assigned to another ClassSession during this time range");
-        }
+        coachScheduleConflicts.requireNoConflict(courseClass.getCoach().getId(), startTime, endTime,
+                excludedSessionId);
     }
 
     private void validateRange(LocalDateTime startTime, LocalDateTime endTime) {
@@ -261,10 +258,8 @@ public class ClassSessionService {
                             facility.getId(), CANCELLED, endTime, startTime)) {
                 conflicts.add("Facility is already booked during this time range");
             }
-            if (classSessionRepository
-                    .existsByCourseClass_Coach_IdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThan(
-                            courseClass.getCoach().getId(), CANCELLED, endTime, startTime)) {
-                conflicts.add("Coach is already assigned to another ClassSession during this time range");
+            if (coachScheduleConflicts.hasConflict(courseClass.getCoach().getId(), startTime, endTime, null)) {
+                conflicts.add("Coach already has a ClassSession or active PT Booking during this time range");
             }
         }
         return conflicts;

@@ -26,6 +26,8 @@ public interface MembershipRepository extends JpaRepository<Membership, Integer>
     // Đã có gói nối tiếp bắt đầu từ ngày này trở đi chưa
     boolean existsByMemberIdAndStatusAndStartDateGreaterThanEqual(Integer memberId, String status, LocalDate date);
 
+    boolean existsByMemberIdAndStatusAndStartDateGreaterThan(Integer memberId, String status, LocalDate startDate);
+
     List<Membership> findByMemberIdAndStatusAndStartDateLessThanEqualAndEndDateGreaterThan(
             Integer memberId, String status, LocalDate registrationDate, LocalDate registrationDateExclusiveEnd);
 
@@ -33,6 +35,12 @@ public interface MembershipRepository extends JpaRepository<Membership, Integer>
             + "and m.status = 'ACTIVE' and m.startDate <= :sessionDate and m.endDate > :sessionDate")
     List<Membership> findActiveAndValidForPt(@Param("memberId") Integer memberId,
             @Param("sessionDate") LocalDate sessionDate);
+
+    @Query("select m from Membership m join fetch m.plan where m.member.id = :memberId "
+            + "and upper(m.status) = 'ACTIVE' and m.startDate <= :today and m.endDate > :today "
+            + "and m.plan.allowPersonalTrainingPlan = true")
+    List<Membership> findEffectivePersonalTrainingPlanMemberships(@Param("memberId") Integer memberId,
+            @Param("today") LocalDate today);
 
     // Các gói sắp hết hạn (phục vụ nhắc gia hạn / report)
     List<Membership> findByStatusAndEndDateBetween(String status, LocalDate from, LocalDate to);

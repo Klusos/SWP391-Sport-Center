@@ -81,6 +81,12 @@ test("staff reach the PT payment queue and VNPay results for PT go back to the P
   const checkout = await readFile(new URL("../src/pages/CourseCheckout.jsx", import.meta.url), "utf8");
   assert.ok(app.includes('path="/receptionist/pt-payments"'));
   assert.ok(app.indexOf('path="/receptionist/pt-payments"') > app.indexOf("<Route element={<StaffRoute auth={auth} />}>"));
-  assert.equal((sidebar.match(/\["pt-payments", "Thanh toán buổi PT"\]/g) || []).length, 2);
-  assert.ok(checkout.includes('targetPayment?.purpose === "PT_BOOKING"'));
+  const adminOversight = sidebar.match(/id: "oversight-exceptions",[\s\S]*?pages:\s*\[([\s\S]*?)\n    \],/)?.[1];
+  const receptionistNavigation = sidebar.match(/const receptionistLinks\s*=\s*\[([\s\S]*?)\n  \];/)?.[1];
+  assert.ok(adminOversight, "Admin oversight navigation group should exist");
+  assert.match(adminOversight, /\["pt-payments",\s*"[^"]+"\]/, "Admin oversight should include PT Payments");
+  assert.ok(receptionistNavigation, "Receptionist navigation should exist");
+  assert.match(receptionistNavigation, /\["pt-payments",\s*"[^"]+"\]/, "Receptionist navigation should include PT Payments");
+  assert.equal(app.match(/"pt-payments":\s*"([^"]+)"/)?.[1], "/receptionist/pt-payments");
+  assert.ok(checkout.includes('returnedPayment?.purpose === "PT_BOOKING"'));
 });

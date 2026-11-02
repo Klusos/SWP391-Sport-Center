@@ -71,13 +71,13 @@
 }
 .membership-main button:active:not(:disabled) { transform: translateY(1px); }
 .membership-main button:disabled { cursor: not-allowed; opacity: .6; }
-.membership-main .member-list-toolbar button:last-child {
+.membership-main .member-list-toolbar > button:last-child {
   border-color: #1767d2;
   background: #1767d2;
   color: #fff;
   box-shadow: 0 5px 12px rgba(23, 103, 210, .18);
 }
-.membership-main .member-list-toolbar button:last-child:hover:not(:disabled) { background: #1059bb; }
+.membership-main .member-list-toolbar > button:last-child:hover:not(:disabled) { background: #1059bb; }
 .membership-main .form-card {
   margin: 0 0 22px;
   padding: clamp(18px, 2.5vw, 28px);
@@ -194,6 +194,140 @@
   .membership-main .member-list-toolbar > span { flex-basis: 100%; margin-bottom: 3px; }
   .membership-main .member-list-toolbar button { flex: 1; }
   .membership-main .form-card { border-radius: 14px; }
+}
+
+/* Keep the existing plan table and editor while borrowing the source page's stronger hierarchy. */
+.membership-main > h1 {
+  position: relative;
+  padding-left: 15px;
+}
+.membership-main > h1::before {
+  position: absolute;
+  top: .12em;
+  bottom: .12em;
+  left: 0;
+  width: 4px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #20a7d8, #1767d2);
+  content: "";
+}
+.membership-main .member-list-toolbar {
+  padding: 12px;
+  border: 1px solid #e0e8f2;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .82);
+  box-shadow: 0 5px 18px rgba(24, 54, 91, .035);
+}
+.membership-main .member-list-toolbar > span {
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: #edf5ff;
+  color: #174f8f;
+  font-size: 13px;
+}
+.membership-main .queue-table-wrap {
+  border-color: #d8e4f1;
+  box-shadow: 0 14px 34px rgba(20, 48, 82, .075);
+}
+.membership-main .queue-table tbody tr:hover td {
+  background: #f5f9ff;
+}
+.membership-main button:focus-visible {
+  outline: 3px solid rgba(23, 103, 210, .25);
+  outline-offset: 2px;
+}
+
+.membership-main .membership-view-switcher {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid #d7e3f1;
+  border-radius: 11px;
+  background: #f2f6fb;
+}
+.membership-main .membership-view-switcher button {
+  min-height: 34px;
+  padding: 6px 12px;
+  border-color: transparent;
+  background: transparent;
+  color: #60738d;
+}
+.membership-main .membership-view-switcher button.is-selected {
+  border-color: #d7e4f5;
+  background: #fff;
+  color: #174f8f;
+  box-shadow: 0 2px 7px rgba(24, 54, 91, .08);
+}
+.membership-main .membership-plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr));
+  gap: 18px;
+}
+.membership-main .membership-plan-card {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid #dce6f1;
+  border-radius: 17px;
+  background: #fff;
+  box-shadow: 0 10px 26px rgba(20, 48, 82, .055);
+}
+.membership-main .membership-plan-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.membership-main .membership-plan-card-heading h2 {
+  margin: 0 0 10px;
+  color: #16365d;
+  font-size: 19px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+.membership-main .membership-plan-price {
+  color: #174f8f;
+  font-size: 17px;
+  white-space: nowrap;
+}
+.membership-main .membership-plan-description {
+  min-height: 42px;
+  margin: 15px 0 10px;
+  color: #718198;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.membership-main .membership-plan-duration {
+  margin: 0 0 15px;
+  color: #526781;
+  font-size: 13px;
+}
+.membership-main .membership-plan-details {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  border-top: 1px solid #e8eef5;
+}
+.membership-main .membership-plan-details > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid #e8eef5;
+  font-size: 12px;
+}
+.membership-main .membership-plan-details dt { color: #718198; font-weight: 600; }
+.membership-main .membership-plan-details dd { margin: 0; color: #263d5b; font-weight: 750; text-align: right; }
+.membership-main .membership-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 17px; }
+.membership-main .membership-plan-actions button:first-child { border-color: #1767d2; color: #1767d2; }
+.membership-main .membership-plan-actions button:last-child { background: #f7faff; }
+.membership-main .queue-table { min-width: 1080px; }
+.membership-main .membership-empty-state { margin: 0; }
+@media (max-width: 720px) {
+  .membership-main .member-list-toolbar { align-items: stretch; }
+  .membership-main .membership-view-switcher { flex: 1 1 100%; }
+  .membership-main .membership-view-switcher button { flex: 1; }
+  .membership-main .membership-plan-card { padding: 18px; }
+  .membership-main .membership-plan-card-heading { flex-direction: column; }
 }
 
 /* Form tạo / chỉnh sửa gói hội viên */

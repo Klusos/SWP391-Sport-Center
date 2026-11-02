@@ -31,7 +31,6 @@ import group5.example.sportCenter.entity.Sport;
 import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.exception.PtPricingConfigurationException;
-import group5.example.sportCenter.repository.ClassSessionRepository;
 import group5.example.sportCenter.repository.CoachRepository;
 import group5.example.sportCenter.repository.CoachSportRepository;
 import group5.example.sportCenter.repository.MembershipRepository;
@@ -55,7 +54,7 @@ public class PersonalTrainingBookingService {
     private final CoachSportRepository coachSports;
     private final SportRepository sports;
     private final MembershipRepository memberships;
-    private final ClassSessionRepository classSessions;
+    private final CoachScheduleConflictService coachScheduleConflicts;
     private final PaymentRepository payments;
     private final NotificationService notifications;
     private final Clock clock;
@@ -68,7 +67,7 @@ public class PersonalTrainingBookingService {
             CoachSportRepository coachSports,
             SportRepository sports,
             MembershipRepository memberships,
-            ClassSessionRepository classSessions,
+            CoachScheduleConflictService coachScheduleConflicts,
             PaymentRepository payments,
             NotificationService notifications,
             Clock clock,
@@ -79,7 +78,7 @@ public class PersonalTrainingBookingService {
         this.coachSports = coachSports;
         this.sports = sports;
         this.memberships = memberships;
-        this.classSessions = classSessions;
+        this.coachScheduleConflicts = coachScheduleConflicts;
         this.payments = payments;
         this.notifications = notifications;
         this.clock = clock;
@@ -294,9 +293,7 @@ public class PersonalTrainingBookingService {
 
     private boolean hasScheduleConflict(Integer coachId, Integer memberId, LocalDateTime start, LocalDateTime end) {
         LocalDateTime now = LocalDateTime.now(clock.withZone(BUSINESS_ZONE));
-        return classSessions.existsByCourseClass_Coach_IdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThan(
-                    coachId, "CANCELLED", end, start)
-                || bookings.existsCoachOverlap(coachId, start, end, now)
+        return coachScheduleConflicts.hasConflict(coachId, start, end, null)
                 || bookings.existsMemberOverlap(memberId, start, end, now);
     }
 

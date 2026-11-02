@@ -20,6 +20,14 @@
 .dash-card h2 small { color: var(--text-sub); font-size: 11px; font-weight: 500; }
 .dash-card h3 { margin: 22px 0 12px; font-size: 15px; }
 .dash-empty { margin: 0; padding: 14px; border-radius: var(--radius-sm); background: #f4f8fb; color: var(--text-sub); font-size: 13px; }
+.dash-error { margin: 0; padding: 14px; border-radius: var(--radius-sm); background: #fff0ec; color: #8f2e23; font-size: 13px; overflow-wrap: anywhere; }
+.coach-dashboard-link { display: inline-block; margin-top: 14px; color: var(--blue); font-size: 13px; font-weight: 650; }
+.dash-assessment-row { align-items: flex-start; }
+.dash-assessment-info { display: grid; min-width: 0; gap: 4px; }
+.dash-assessment-info b { color: var(--navy); }
+.dash-assessment-info small { color: var(--text-sub); line-height: 1.4; }
+.dash-rows .dash-assessment-status { flex: none; padding: 4px 9px; border: 1px solid #f5d69c; border-radius: 999px; background: #fff8e8; color: #875600; font-size: 11px; font-weight: 700; }
+.dash-assessment-note { margin: 10px 0 0; color: var(--text-sub); font-size: 12px; }
 
 .dash-bars { display: flex; align-items: flex-end; gap: 4%; height: 220px; padding: 0 4px; }
 .dash-bars span { flex: 1; border-radius: 6px 6px 3px 3px; background: #0a61f2; min-width: 0; }
@@ -57,4 +65,36 @@
   .dash-stats, .dash-actions { grid-template-columns: 1fr; }
   .dash-search { flex-direction: column; }
   .dash-sessions li { grid-template-columns: 1fr; }
+}
+
+/* Shared dashboard visual polish; role-specific data and actions stay in Dashboard.jsx. */
+.dash-main > h1 {
+  margin-bottom: 4px;
+  color: var(--navy);
+  font-size: clamp(1.65rem, 2.2vw, 2rem);
+  font-weight: 800;
+  letter-spacing: -.035em;
+}
+.dash-main .dash-stat {
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 5px 18px rgba(20, 48, 82, .045);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.dash-main .dash-stat:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(20, 48, 82, .09);
+}
+.dash-main .dash-card {
+  box-shadow: 0 6px 22px rgba(20, 48, 82, .045);
+}
+.dash-main .dash-card > h2 {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #edf2f7;
+  color: var(--navy);
+  font-weight: 750;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dash-main .dash-stat { transition: none; }
+  .dash-main .dash-stat:hover { transform: none; }
 }

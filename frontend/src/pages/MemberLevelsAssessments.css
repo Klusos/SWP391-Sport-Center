@@ -1,0 +1,67 @@
+.member-levels-page .field select:focus-visible,
+.member-levels-page button:focus-visible {
+  outline: 3px solid rgb(23 103 210 / 24%);
+  outline-offset: 2px;
+}
+
+.member-levels-page .field {
+  max-width: 520px !important;
+  margin-bottom: 14px;
+}
+
+.member-levels-page .field label {
+  display: block;
+  margin-bottom: 7px;
+  color: #344e6d;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.member-levels-page .field select {
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid #cbd8e6;
+  border-radius: 10px;
+  background: #fff;
+  color: #203c5c;
+  font: inherit;
+}
+
+.member-levels-page .member-level-card {
+  max-width: none !important;
+  min-height: 142px;
+  border-color: #d7e6f5;
+  background: linear-gradient(120deg, #fff, #f3f8ff);
+}
+
+.member-levels-page .member-level-card .eyebrow {
+  color: #1767b2;
+  letter-spacing: .1em;
+}
+
+.member-levels-page .member-level-value {
+  width: fit-content;
+  border: 1px solid #cfe2f7;
+  background: #e9f3ff;
+}
+
+.member-levels-page .member-history-card {
+  border-color: #dce7f3;
+  border-radius: 14px;
+  box-shadow: 0 6px 18px rgb(27 65 105 / 4%);
+}
+
+.member-levels-page .member-history-card:focus-within {
+  border-color: #9abfe3;
+}
+
+@media (max-width: 760px) {
+  .main.member-levels-page {
+    padding: 24px 18px;
+  }
+
+  .member-levels-page .member-level-card {
+    min-height: 0;
+  }
+}

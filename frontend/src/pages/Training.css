@@ -46,7 +46,35 @@
 .training-stats small { font-size: 11px; color: var(--text-sub, #637083); }
 .training-evaluations { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .training-member-class h3 { font-size: 15px; margin: 14px 0 8px; }
+.individual-plans { margin-top: 22px; padding: 18px; border: 1px solid var(--border, #dfe6ee); border-radius: 12px; background: #fff; }
+.individual-plans-heading, .individual-plan-weeks-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.individual-plans-heading h2, .individual-plans-heading h3, .individual-plan-weeks-heading h4 { margin: 0; }
+.individual-plan-list { display: grid; gap: 8px; }
+.individual-plan-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--border, #e8eef6); border-radius: 9px; }
+.individual-plan-row > div:first-child { display: flex; flex-direction: column; gap: 3px; }
+.individual-plan-row small { color: var(--text-sub, #637083); }
+.individual-plan-detail { margin-top: 16px; padding: 16px; border-radius: 10px; background: #f8faff; }
+.individual-plan-editor { display: grid; gap: 12px; margin: 14px 0; }
+.individual-plan-editor > label, .individual-plan-editor-grid > label, .individual-plan-exercise > label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.individual-plan-editor textarea { resize: vertical; font: inherit; }
+.individual-plan-editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.individual-plan-editor-grid .wide, .individual-plan-exercise .wide { grid-column: 1 / -1; }
+.individual-plan-week { min-width: 0; padding: 12px; border: 1px solid var(--border, #dfe6ee); border-radius: 9px; }
+.individual-plan-week legend { padding: 0 6px; font-weight: 600; }
+.individual-plan-exercise { display: grid; grid-template-columns: minmax(150px, 2fr) repeat(3, minmax(70px, 1fr)); gap: 8px; align-items: end; margin: 12px 0; padding-top: 10px; border-top: 1px dashed var(--border, #dfe6ee); }
+.individual-plan-exercise button { justify-self: start; }
+.individual-plan-revision { margin: 14px 0; }
+.individual-plan-revision > h4 { margin: 0 0 6px; }
+.individual-plan-week-view { margin: 12px 0; padding: 12px; border: 1px solid var(--border, #e8eef6); border-radius: 8px; background: #fff; }
+.individual-plan-week-view h5 { margin: 0 0 6px; }
+.individual-plan-history { margin-top: 14px; }
+.individual-plan-history details { margin: 8px 0; padding: 10px; border: 1px solid var(--border, #e8eef6); border-radius: 8px; background: #fff; }
+.individual-plan-history summary { cursor: pointer; font-weight: 600; }
 @media (max-width: 640px) {
   .training-class-picker { min-width: 0; width: 100%; }
   .training-table { display: block; overflow-x: auto; }
+  .individual-plans { padding: 13px; }
+  .individual-plan-row { align-items: flex-start; flex-direction: column; }
+  .individual-plan-editor-grid, .individual-plan-exercise { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .individual-plan-exercise > label:first-child, .individual-plan-exercise .wide { grid-column: 1 / -1; }
 }

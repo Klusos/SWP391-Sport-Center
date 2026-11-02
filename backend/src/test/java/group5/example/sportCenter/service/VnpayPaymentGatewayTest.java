@@ -66,6 +66,7 @@ class VnpayPaymentGatewayTest {
         assertEquals("TXN-ABC123", callback.transactionCode());
         assertTrue(callback.success());
         assertEquals(0, new BigDecimal("500000").compareTo(callback.amount()));
+        assertEquals("20261019120500", callback.verifiedPaymentTime());
     }
 
     @Test
@@ -86,6 +87,21 @@ class VnpayPaymentGatewayTest {
         Map<String, String> unsigned = signedReturn("00", "00", "50000000");
         unsigned.remove("vnp_SecureHash");
         assertTrue(gateway.verifyCallback(unsigned).isEmpty());
+    }
+
+    @Test
+    void signedReturnMayOmitOptionalPaymentDateButTimestampTamperingInvalidatesSignature() {
+        Map<String, String> missingDate = signedReturn("00", "00", "50000000");
+        missingDate.remove("vnp_PayDate");
+        missingDate.remove("vnp_SecureHashType");
+        missingDate.remove("vnp_SecureHash");
+        missingDate.put("vnp_SecureHash", sign(missingDate));
+        missingDate.put("vnp_SecureHashType", "HmacSHA512");
+        assertEquals(null, gateway.verifyCallback(missingDate).orElseThrow().verifiedPaymentTime());
+
+        Map<String, String> tamperedDate = signedReturn("00", "00", "50000000");
+        tamperedDate.put("vnp_PayDate", "20261031000000");
+        assertTrue(gateway.verifyCallback(tamperedDate).isEmpty());
     }
 
     @Test

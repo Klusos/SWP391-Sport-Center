@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Sidebar from "../components/Sidebar";
+import IndividualTrainingPlans from "../components/IndividualTrainingPlans";
 import { acquireAction } from "../courseCheckout";
 import {
   addTrainingExerciseApi,
@@ -88,12 +89,13 @@ export default function CoachTraining({ token, role, onLogout, onNavigate }) {
           <span>{selected.hasPlan ? `Mục tiêu: ${selected.planGoal}` : "Chưa có giáo án"}</span>
         </section>
         <nav className="training-tabs" role="tablist">
-          {[["plan", "1. Giáo án & bài tập"], ["sessions", "2. Buổi học & kết quả"], ["progress", "3. Đánh giá tiến độ"]].map(([key, label]) =>
+          {[["plan", "1. Giáo án & bài tập"], ["sessions", "2. Buổi học & kết quả"], ["progress", "3. Đánh giá tiến độ"], ["individual", "4. Giáo án cá nhân"]].map(([key, label]) =>
             <button key={key} type="button" role="tab" aria-selected={tab === key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>{label}</button>)}
         </nav>
         {tab === "plan" && <PlanTab key={classId} token={token} classId={classId} onSaved={loadClasses} flash={flash} fail={fail} />}
         {tab === "sessions" && <SessionsTab key={classId} token={token} classId={classId} onChanged={loadClasses} flash={flash} fail={fail} />}
         {tab === "progress" && <ProgressTab key={classId} token={token} classId={classId} flash={flash} fail={fail} />}
+        {tab === "individual" && <IndividualTrainingPlans key={classId} mode="coach" token={token} classId={classId} />}
       </>}
     </main>
   </div>;

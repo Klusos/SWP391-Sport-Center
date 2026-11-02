@@ -1,13 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { setAutoRenewApi } from "../src/api.js";
-import { activeMembershipChain, isAutoRenewalPayment } from "../src/membershipRenewal.js";
+import { activeMembershipChain, autoRenewalOnlineReplacementPayload, isAutoRenewalPayment } from "../src/membershipRenewal.js";
 
 test("only backend-created membership renewals are labelled as automatic", () => {
   assert.equal(isAutoRenewalPayment({ purpose: "MEMBERSHIP", note: "AUTO_RENEWAL membership #7" }), true);
   assert.equal(isAutoRenewalPayment({ purpose: "MEMBERSHIP", note: "Cancelled by MEMBER" }), false);
   assert.equal(isAutoRenewalPayment({ purpose: "MEMBERSHIP", note: null }), false);
   assert.equal(isAutoRenewalPayment({ purpose: "UPGRADE", note: "AUTO_RENEWAL membership #7" }), false);
+});
+
+test("online conversion carries the specific auto-renew source payment, while manual payments stay ordinary", () => {
+  assert.deepEqual(autoRenewalOnlineReplacementPayload({
+    id: 41, purpose: "MEMBERSHIP", referenceId: 7, note: "AUTO_RENEWAL membership #12",
+  }), {
+    method: "ONLINE", purpose: "MEMBERSHIP", referenceId: 7, autoRenew: true, renewalSourcePaymentId: 41,
+  });
+  assert.deepEqual(autoRenewalOnlineReplacementPayload({
+    id: 42, purpose: "MEMBERSHIP", referenceId: 7, note: null,
+  }), { method: "ONLINE", purpose: "MEMBERSHIP", referenceId: 7, autoRenew: false });
 });
 
 test("the membership chain keeps current and upcoming ACTIVE plans in start order", () => {

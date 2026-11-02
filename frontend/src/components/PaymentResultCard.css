@@ -1,0 +1,93 @@
+.payment-result-page {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: clamp(16px, 4vw, 44px);
+  display: grid;
+  place-items: center;
+  background: #f3f7fa;
+}
+
+.payment-result-card {
+  width: min(100%, 720px);
+  margin: 0 auto;
+  padding: clamp(22px, 4vw, 40px);
+  border: 1px solid #d9e3ec;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 18px 48px rgb(21 51 77 / 10%);
+  color: #183247;
+}
+
+.payment-result-icon {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border-radius: 50%;
+  background: #eef2f6;
+  color: #526777;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.payment-result-icon.tone-success { background: #e4f5ec; color: #137a45; }
+.payment-result-icon.tone-pending { background: #eef3f8; color: #315a78; }
+.payment-result-icon.tone-cancelled { background: #fff0ec; color: #a33b2e; }
+.payment-result-icon.tone-warning { background: #fff3d5; color: #865b00; }
+
+.payment-result-eyebrow {
+  margin: 22px 0 6px;
+  color: #547084;
+  font-size: .9rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.payment-result-card h1 { margin: 0; color: #123047; font-size: clamp(1.65rem, 4vw, 2.25rem); }
+.payment-result-explanation { max-width: 60ch; margin: 12px 0 24px; color: #526777; line-height: 1.65; }
+
+.payment-result-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 0;
+  border-top: 1px solid #e4ebf0;
+  border-bottom: 1px solid #e4ebf0;
+}
+
+.payment-result-status-label { color: #526777; font-weight: 600; }
+.payment-result-badge, .payment-result-resource-status { display: inline-flex; width: fit-content; padding: 5px 11px; border-radius: 999px; background: #eef2f6; color: #40596b; font-size: .9rem; font-weight: 700; }
+.payment-result-badge.tone-success, .status-confirmed, .status-active { background: #e4f5ec; color: #137a45; }
+.payment-result-badge.tone-pending, .status-pending_payment { background: #eef3f8; color: #315a78; }
+.payment-result-badge.tone-cancelled, .status-cancelled, .status-expired { background: #fff0ec; color: #a33b2e; }
+.payment-result-badge.tone-warning, .status-refund_required { background: #fff3d5; color: #865b00; }
+
+.payment-result-details { display: grid; gap: 0; margin: 0; }
+.payment-result-detail { display: grid; grid-template-columns: minmax(130px, .7fr) minmax(0, 1.3fr); gap: 14px; padding: 12px 0; border-bottom: 1px solid #edf1f4; }
+.payment-result-detail dt { color: #647b8b; font-weight: 600; }
+.payment-result-detail dd { margin: 0; overflow-wrap: anywhere; font-weight: 600; }
+.payment-result-service { margin-top: 24px; }
+.payment-result-service h2 { margin: 0 0 8px; font-size: 1.15rem; }
+.payment-result-membership + .payment-result-membership { margin-top: 14px; padding-top: 4px; }
+.payment-result-caution, .payment-result-error { margin: 18px 0 0; padding: 13px 15px; border-radius: 10px; background: #fff3d5; color: #704e00; line-height: 1.5; }
+.payment-result-error { background: #fff0ec; color: #8f2e23; }
+.payment-result-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 26px; }
+.payment-result-primary, .payment-result-actions button { display: inline-flex; min-height: 46px; align-items: center; justify-content: center; padding: 11px 18px; border: 1px solid #136784; border-radius: 10px; background: #136784; color: #fff; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
+.payment-result-actions button { background: #fff; color: #136784; }
+.payment-result-primary:hover { background: #0e536b; color: #fff; }
+.payment-result-actions button:hover { background: #eff7fa; }
+.payment-result-primary:focus-visible, .payment-result-actions button:focus-visible { outline: 3px solid #72bdd2; outline-offset: 3px; }
+.payment-result-actions button:disabled { opacity: .6; cursor: wait; }
+.payment-result-footnote { margin: 14px 0 0; color: #647b8b; font-size: .9rem; }
+
+@media (max-width: 600px) {
+  .payment-result-card { margin: 12px auto; border-radius: 16px; }
+  .payment-result-status-row { align-items: flex-start; flex-direction: column; }
+  .payment-result-detail { grid-template-columns: 1fr; gap: 4px; }
+  .payment-result-actions { align-items: stretch; flex-direction: column; }
+  .payment-result-primary, .payment-result-actions button { width: 100%; }
+}
