@@ -1,7 +1,11 @@
-.coach-pt-main .pt-page { max-width:1120px; }
-.coach-pt-main .pt-header { margin-bottom:24px; padding:clamp(20px,3vw,30px); border:1px solid #dce6f0; border-radius:16px; background:linear-gradient(135deg,#fff 0%,#f4f8fd 100%); box-shadow:0 10px 28px rgb(22 53 81 / 5%); }
-.coach-pt-main .pt-header h1 { margin:8px 0 10px; color:#153451; letter-spacing:-.025em; }
-.coach-pt-main .pt-header .pt-description { max-width:760px; color:#60758b; line-height:1.65; }
+.coach-pt-main .pt-page { display:grid; gap:18px; max-width:1180px; }
+.coach-pt-main .pt-header { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin:0; padding:0; border:0; border-radius:0; background:transparent; box-shadow:none; }
+.coach-pt-main .pt-header h1 { margin:4px 0 6px; color:#153451; font-size:clamp(27px,2.6vw,34px); font-weight:800; letter-spacing:-.025em; }
+.coach-pt-main .pt-header .pt-description { max-width:760px; color:#60758b; line-height:1.55; }
+.coach-pt-main .coach-pt-status-filter { display:inline-flex; flex-wrap:wrap; gap:2px; max-width:100%; padding:4px; border:1px solid #e3ebf5; border-radius:12px; background:#fff; }
+.coach-pt-main .coach-pt-status-filter button { min-height:36px; padding:0 13px; border:0; border-radius:9px; background:transparent; color:#5b6e82; font:inherit; font-size:12px; font-weight:650; white-space:nowrap; cursor:pointer; }
+.coach-pt-main .coach-pt-status-filter button:hover:not(.is-active) { background:#eff4ff; color:#1769d2; }
+.coach-pt-main .coach-pt-status-filter button.is-active { background:#1769d2; color:#fff; box-shadow:0 4px 10px rgb(23 105 210 / 24%); }
 .coach-pt-main .pt-card { padding:clamp(18px,2.5vw,28px); border-color:#dce6f0; border-radius:15px; box-shadow:0 10px 28px rgb(22 53 81 / 5%); }
 .coach-pt-main .pt-card > h2 { margin-bottom:18px; color:#153451; font-size:21px; }
 .coach-pt-main .pt-history { gap:11px; }
@@ -15,8 +19,22 @@
 .coach-pt-main .pt-status { min-width:112px; padding:6px 11px; font-size:11px; letter-spacing:.01em; }
 .coach-pt-main .pt-empty { min-height:170px; border-color:#cbd9e7; background:#f7faff; color:#60758b; font-size:14px; }
 .coach-pt-main .pt-alert { border-radius:10px; }
+.coach-pt-main .coach-pt-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; }
+.coach-pt-main .coach-pt-summary article { display:grid; gap:11px; min-width:0; padding:19px 21px; border:1px solid #e3ebf5; border-radius:18px; background:#fff; box-shadow:0 6px 20px rgb(21 50 82 / 6%); }
+.coach-pt-main .coach-pt-summary article > header { display:flex; align-items:center; justify-content:space-between; gap:12px; color:#5b6e82; font-size:13px; font-weight:650; }
+.coach-pt-main .coach-pt-summary article > header i { display:grid; width:48px; height:48px; place-items:center; border-radius:14px; background:#e8f1ff; color:#1769d2; font-style:normal; }
+.coach-pt-main .coach-pt-summary article.is-green > header i { background:#e1f5ec; color:#16a870; }
+.coach-pt-main .coach-pt-summary article.is-orange > header i { background:#fff3dc; color:#c97800; }
+.coach-pt-main .coach-pt-summary article > div { display:flex; align-items:center; flex-wrap:wrap; gap:12px; }
+.coach-pt-main .coach-pt-summary strong { color:#0f2742; font-size:36px; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+.coach-pt-main .coach-pt-summary em { padding:4px 9px; border-radius:999px; background:#e8f1ff; color:#1769d2; font-size:10px; font-style:normal; font-weight:700; }
+.coach-pt-main .coach-pt-summary .is-green em { background:#e1f5ec; color:#00613e; }
+.coach-pt-main .coach-pt-summary .is-orange em { background:#fff3dc; color:#a56500; }
 @media (max-width:700px) {
-  .coach-pt-main .pt-header { padding:20px; }
+  .coach-pt-main .coach-pt-status-filter { display:grid; width:100%; grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .coach-pt-main .coach-pt-status-filter button { white-space:normal; }
+  .coach-pt-main .coach-pt-summary { grid-template-columns:minmax(0,1fr); }
+  .coach-pt-main .pt-header { padding:0; }
   .coach-pt-main .pt-header h1 { font-size:27px; }
   .coach-pt-main .pt-card { padding:17px; }
   .coach-pt-main .pt-history-row { align-items:flex-start; flex-direction:column; gap:13px; padding:16px; }
@@ -32,15 +50,12 @@
 .coach-pt-week-navigation,
 .coach-pt-week-title,
 .coach-pt-week-actions,
-.coach-pt-calendar-controls,
 .coach-pt-selected-day { display: flex; align-items: center; }
 .coach-pt-calendar-heading,
 .coach-pt-week-navigation { justify-content: space-between; gap: 16px; }
 .coach-pt-calendar-heading { margin-bottom: 22px; }
 .coach-pt-calendar-heading h2 { margin: 0 0 5px; }
 .coach-pt-calendar-heading p { margin: 0; color: #60758b; font-size: 13px; }
-.coach-pt-calendar-controls { gap: 9px; color: #435b72; font-size: 12px; font-weight: 700; }
-.coach-pt-calendar-controls select { min-height: 40px; padding: 7px 10px; border: 1px solid #cbd8e6; border-radius: 9px; background: #fff; color: #203c5c; font: inherit; }
 .coach-pt-week-navigation { margin-bottom: 14px; }
 .coach-pt-week-title { flex-wrap: wrap; gap: 10px; }
 .coach-pt-week-title h3 { margin: 0; color: #183d61; font-size: 16px; }
@@ -83,10 +98,8 @@
 .coach-pt-detail-dialog > button { min-height: 39px; padding: 8px 14px; border: 1px solid #1767d2; border-radius: 9px; background: #1767d2; color: #fff; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
 @media (max-width: 760px) {
   .coach-pt-calendar-heading,.coach-pt-week-navigation { align-items: flex-start; flex-direction: column; }
-  .coach-pt-calendar-controls { width: 100%; align-items: flex-start; flex-direction: column; }
-  .coach-pt-calendar-controls select { width: 100%; }
   .coach-pt-week-actions { width: 100%; justify-content: space-between; }
-  .coach-pt-week-grid { grid-template-columns: repeat(7, minmax(74px, 1fr)); }
+  .coach-pt-week-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: visible; }
   .coach-pt-session-day .pt-history-row { align-items: flex-start; grid-template-columns: minmax(0, 1fr) auto; }
   .coach-pt-session-day .pt-history-meta { grid-column: 1; justify-items: start; }
   .coach-pt-detail-button { grid-column: 2; grid-row: 1 / span 2; align-self: center; }

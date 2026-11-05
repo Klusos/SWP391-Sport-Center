@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import PaymentMethodModal from "../components/PaymentMethodModal";
 import {
@@ -44,6 +44,10 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
   const [paymentModalPlan, setPaymentModalPlan] = useState(null);
   const [paymentReconciliationRequired, setPaymentReconciliationRequired] = useState(false);
   const [togglingId, setTogglingId] = useState(null);
+  const [upgradeModal, setUpgradeModal] = useState(null);
+  const upgradeDialogRef = useRef(null);
+  const upgradeSubmitLock = useRef(false);
+  const upgradeBusyRef = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,16 +93,51 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
     return () => { active = false; };
   }, [load]);
 
+  useEffect(() => {
+    if (!upgradeModal) return undefined;
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    (upgradeDialogRef.current?.querySelector('input[name="upgrade-payment-method"]:checked')
+      || upgradeDialogRef.current?.querySelector('input[name="upgrade-payment-method"]'))?.focus();
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape" && !upgradeBusyRef.current) {
+        event.preventDefault();
+        setUpgradeModal(null);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = [...(upgradeDialogRef.current?.querySelectorAll("button:not(:disabled), input:not(:disabled)") || [])];
+      if (!focusable.length) {
+        event.preventDefault();
+        upgradeDialogRef.current?.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [upgradeModal]);
   const pendingMembershipPayments = useMemo(() => (payments || []).filter(
     (payment) => isMembershipPayment(payment?.purpose) && payment?.status === "PENDING",
   ), [payments]);
 
   async function startUpgrade(option, method) {
-    if (busyPlanId !== null || pendingMembershipPayments.length > 0) return;
-    const where = method === "ONLINE" ? "qua VNPay Sandbox" : "tại quầy";
-    if (!window.confirm(`Nâng cấp lên “${option.planName}” ${where} với ${money(option.amount)} cho ${upgrade.remainingDays} ngày còn lại? `
-      + `Gói mới có hiệu lực ngay sau khi thanh toán thành công và vẫn hết hạn ngày ${upgrade.currentEndDate}. `
-      + (method === "ONLINE" ? "Báo giá có hiệu lực 15 phút." : "Báo giá có hiệu lực đến hết hôm nay."))) return;
+    if (busyPlanId !== null || pendingMembershipPayments.length > 0) return false;
     setBusyPlanId(option.planId);
     setError("");
     setNotice("");
@@ -109,21 +148,44 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
         if (!validVnpayUrl(payment.paymentUrl)) {
           await load();
           setError(`Đã tạo thanh toán nâng cấp #${payment.id}, nhưng máy chủ không trả về liên kết VNPay Sandbox hợp lệ. Hãy làm mới trạng thái hoặc hủy yêu cầu rồi thử lại.`);
-          return;
+          return false;
         }
+        setUpgradeModal(null);
         window.location.assign(payment.paymentUrl);
-      } else {
-        setNotice(`Đã tạo yêu cầu nâng cấp #${payment.id}. Vui lòng thanh toán tại quầy trong hôm nay; gói hiện tại chưa thay đổi.`);
+        return true;
       }
+      setNotice(`Đã tạo yêu cầu nâng cấp #${payment.id}. Vui lòng thanh toán tại quầy trong hôm nay; gói hiện tại chưa thay đổi.`);
+      setUpgradeModal(null);
+      return true;
     } catch (requestError) {
       const message = upgradeErrorMessage(requestError);
       await load();
       setError(message);
+      return false;
     } finally {
       setBusyPlanId(null);
+      upgradeSubmitLock.current = false;
+      upgradeBusyRef.current = false;
     }
   }
 
+  function openUpgradeModal(option) {
+    if (busyPlanId !== null || pendingMembershipPayments.length > 0) return;
+    setError("");
+    setNotice("");
+    setUpgradeModal({
+      option,
+      method: "",
+      currentPlanName: upgrade.currentPlanName,
+      remainingDays: upgrade.remainingDays,
+      currentEndDate: upgrade.currentEndDate,
+    });
+  }
+
+  function closeUpgradeModal() {
+    if (busyPlanId !== null || upgradeBusyRef.current) return;
+    setUpgradeModal(null);
+  }
   async function startPurchase(plan, method) {
     if (busyPlanId !== null || pendingMembershipPayments.length > 0 || paymentReconciliationRequired) return false;
     setBusyPlanId(plan.id);
@@ -377,12 +439,8 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
               <small>Giá gói {money(option.planPrice)} / {option.durationMonths} tháng · Giảm khóa học {option.courseDiscountPercent}% · Giảm PT {option.personalTrainingDiscountPercent}%</small>
               <div className="member-membership-payment-actions">
                 <button type="button" disabled={busyPlanId !== null || pendingMembershipPayments.length > 0}
-                  onClick={() => void startUpgrade(option, "COUNTER")}>
-                  {busyPlanId === option.planId ? "Đang tạo yêu cầu…" : "Nâng cấp · tại quầy"}
-                </button>
-                <button type="button" disabled={busyPlanId !== null || pendingMembershipPayments.length > 0}
-                  onClick={() => void startUpgrade(option, "ONLINE")}>
-                  {busyPlanId === option.planId ? "Đang tạo yêu cầu…" : "Nâng cấp · VNPay Sandbox"}
+                  onClick={() => openUpgradeModal(option)}>
+                  {busyPlanId === option.planId ? "Đang tạo yêu cầu…" : "Nâng cấp"}
                 </button>
               </div>
             </article>)}</div>}
@@ -454,6 +512,55 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
           </article>)}</div>}
       <p className="banner info" role="note">VNPay Sandbox là môi trường thử nghiệm. Trạng thái Membership chỉ thay đổi theo xác nhận thanh toán từ máy chủ.</p>
     </main>
+    {upgradeModal && <div className="mm-upgrade-backdrop" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget && busyPlanId === null) closeUpgradeModal();
+    }}>
+      <section ref={upgradeDialogRef} className="mm-upgrade-dialog" role="dialog" aria-modal="true"
+        aria-labelledby="mm-upgrade-title" aria-describedby="mm-upgrade-description" aria-busy={busyPlanId !== null} tabIndex={-1}>
+        <header className="mm-upgrade-dialog-header">
+          <div><p className="mm-upgrade-eyebrow">SPORTCENTER / MEMBERSHIP</p><h2 id="mm-upgrade-title">Xác nhận nâng cấp</h2></div>
+          <button type="button" className="mm-upgrade-close" aria-label="Đóng hộp thoại" onClick={closeUpgradeModal} disabled={busyPlanId !== null}>×</button>
+        </header>
+        <div className="mm-upgrade-summary" id="mm-upgrade-description">
+          <p><span>Gói hiện tại</span><strong>{upgradeModal.currentPlanName}</strong></p>
+          <p><span>Gói nâng cấp</span><strong>{upgradeModal.option.planName}</strong></p>
+          <p><span>Số ngày còn lại</span><strong>{upgradeModal.remainingDays}</strong></p>
+          <p><span>Ngày hết hạn hiện tại</span><strong>{formatDate(upgradeModal.currentEndDate)}</strong></p>
+          <div className="mm-upgrade-amount"><span>Số tiền nâng cấp</span><strong>{money(upgradeModal.option.amount)}</strong></div>
+        </div>
+        <p className="mm-upgrade-explanation">Gói mới có hiệu lực ngay sau khi thanh toán thành công và giữ nguyên ngày hết hạn Membership hiện tại. Báo giá và số tiền được lấy từ hệ thống.</p>
+        {error && <p className="mm-upgrade-error" role="alert">{error}</p>}
+        <form onSubmit={(event) => {
+          event.preventDefault();
+          if (upgradeSubmitLock.current || busyPlanId !== null || pendingMembershipPayments.length > 0 || !upgradeModal.method) return;
+          upgradeSubmitLock.current = true;
+          upgradeBusyRef.current = true;
+          void startUpgrade(upgradeModal.option, upgradeModal.method).then((submitted) => {
+            if (!submitted) {
+              upgradeSubmitLock.current = false;
+              upgradeBusyRef.current = false;
+            }
+          });
+        }}>
+          <fieldset className="mm-upgrade-methods" disabled={busyPlanId !== null}>
+            <legend>Chọn phương thức thanh toán</legend>
+            {[{ value: "COUNTER", label: "Thanh toán tại quầy (COUNTER)" }, { value: "ONLINE", label: "VNPay Sandbox (ONLINE)" }].map((method) => (
+              <label className={"mm-upgrade-method" + (upgradeModal.method === method.value ? " selected" : "")} key={method.value}>
+                <input type="radio" name="upgrade-payment-method" value={method.value} checked={upgradeModal.method === method.value}
+                  onChange={() => setUpgradeModal((current) => ({ ...current, method: method.value }))} />
+                <span>{method.label}</span>
+              </label>
+            ))}
+          </fieldset>
+          <footer className="mm-upgrade-actions">
+            <button type="button" className="mm-upgrade-cancel" onClick={closeUpgradeModal} disabled={busyPlanId !== null}>Hủy</button>
+            <button type="submit" className="mm-upgrade-confirm" disabled={busyPlanId !== null || pendingMembershipPayments.length > 0}>
+              {busyPlanId === upgradeModal.option.planId ? "Đang tạo yêu cầu…" : "Xác nhận nâng cấp"}
+            </button>
+          </footer>
+        </form>
+      </section>
+    </div>}
     {paymentModalPlan && <PaymentMethodModal
       amount={money(paymentModalPlan.price)}
       context={`Gói ${paymentModalPlan.name} · ${paymentModalPlan.durationMonths} tháng · ${currentMemberships.length ? "mua hoặc gia hạn" : "mua mới"}`}

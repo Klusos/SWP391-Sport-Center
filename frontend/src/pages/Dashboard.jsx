@@ -16,6 +16,8 @@ import {
   getTrainingClassesApi, getCoachAttendanceSessionsApi,
 } from "../api";
 import { coachAssessmentSummary, confirmedEnrollmentCount, pendingCoachAssessments, upcomingTeachingSessions } from "../coachDashboard.js";
+import { activeMembershipPlanRows, pendingConsultationRows, receptionistDashboardMetrics, searchReceptionistMembers } from "../receptionistDashboard.js";
+import "./ReceptionistDashboard.css";
 
 /* ---------- helpers ---------- */
 const list = (d) => (Array.isArray(d) ? d : d?.content ?? []);
@@ -34,8 +36,8 @@ const LOADERS = {
     requests: (t) => getConsultationRequestsApi(t, { size: 100 }),
   },
   RECEPTIONIST: {
-    members: memberUsers, sports: getSportsApi, plans: getPublicMembershipPlansApi,
-    requests: (t) => getConsultationRequestsApi(t, { size: 100 }),
+    me: getCurrentUserApi, members: memberUsers, sports: getSportsApi, plans: getPublicMembershipPlansApi,
+    pendingRequests: (t) => getConsultationRequestsApi(t, { status: "PENDING", page: 0, size: 5 }),
   },
   COACH: {
     bookings: getAssignedPtBookingsApi,
@@ -132,7 +134,7 @@ function Admin({ d, token }) {
   const by = (s) => reqs.filter((r) => r.status === s).length;
   const rows = [["Chờ xử lý", by("PENDING"), "orange"], ["Đang xử lý", by("IN_PROGRESS"), "blue"], ["Hoàn thành", by("COMPLETED"), "green"]];
   const sum = rows.reduce((a, r) => a + r[1], 0) || 1;
-  return (<>
+  return <div className="admin-dashboard">
     <Stats items={[
       { label: "Tổng thành viên", value: total(d.members), color: "blue" },
       { label: "Bộ môn", value: total(d.sports), color: "green" },
@@ -156,35 +158,108 @@ function Admin({ d, token }) {
         </ul>
       )}
     </Card>
-  </>);
+  </div>;
 }
 
-function Receptionist({ d, onNavigate }) {
-  const actions = [
-    ["Yêu cầu tư vấn", "Tiếp nhận / tạo thành viên", "consultations"],
-    ["Bán gói hội viên", "Thanh toán tại quầy", "membership-sales"],
-    ["Danh sách thành viên", "Tra cứu", "members"],
+const RECEPTIONIST_ICON = {
+  members: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75",
+  plans: "M3 7h18 M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M7 12h4 M7 16h7",
+  sports: "M12 2 4 6v6c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V6l-8-4z M8 12l2.5 2.5L16 9",
+  pending: "M12 8v4l3 2 M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20",
+  search: "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16 M21 21l-4.35-4.35",
+  consult: "M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z",
+  sales: "M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8 M12 17.5v-11",
+  arrow: "M5 12h14 M13 6l6 6-6 6",
+};
+
+function ReceptionistIcon({ name, size = 18 }) {
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {RECEPTIONIST_ICON[name].split(" M").map((path, index) => <path key={index} d={(index ? "M" : "") + path} />)}
+  </svg>;
+}
+
+function Receptionist({ d, errors = {}, onNavigate, loading }) {
+  const [query, setQuery] = useState("");
+  const [searchSubmitted, setSearchSubmitted] = useState(false);
+  const memberResults = searchReceptionistMembers(d.members, query);
+  const metrics = receptionistDashboardMetrics(d);
+  const requests = pendingConsultationRows(d.pendingRequests);
+  const plans = activeMembershipPlanRows(d.plans);
+  const dateLabel = new Date().toLocaleDateString("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Asia/Ho_Chi_Minh" });
+  const kpis = [
+    ["Tổng thành viên", metrics.members, errors.members ? "Không tải được dữ liệu" : "Tài khoản hội viên", "members", "blue"],
+    ["Gói hội viên", metrics.activePlans, errors.plans ? "Không tải được dữ liệu" : "Đang áp dụng", "plans", "green"],
+    ["Bộ môn", metrics.sports, errors.sports ? "Không tải được dữ liệu" : "Danh mục hiện có", "sports", "blue"],
+    ["Yêu cầu chờ xử lý", metrics.pendingConsultations, errors.pendingRequests ? "Không tải được dữ liệu" : "Đang chờ tiếp nhận", "pending", metrics.pendingConsultations > 0 ? "amber" : "green"],
   ];
-  return (<>
-    <Stats items={[
-      { label: "Tổng thành viên", value: total(d.members), color: "blue" },
-      { label: "Gói hội viên", value: total(d.plans), color: "green" },
-      { label: "Bộ môn", value: total(d.sports), color: "orange" },
-      { label: "Yêu cầu chờ xử lý", value: count(d.requests, (r) => r.status === "PENDING"), color: "red" },
-    ]} />
-    <Card title="Tìm kiếm thành viên" className="narrow">
-      <div className="dash-search">
-        <input placeholder="Nhập tên, SĐT, mã thành viên..." aria-label="Tìm thành viên" />
-        <button className="dash-primary" type="button" onClick={() => onNavigate("members")}>Tìm kiếm</button>
-      </div>
-      <h3>Thao tác nhanh</h3>
-      <div className="dash-actions">
-        {actions.map(([t, s, p]) => (
-          <button key={p} type="button" onClick={() => onNavigate(p)}><b>{t}</b><span>{s}</span></button>
-        ))}
-      </div>
-    </Card>
-  </>);
+  const actions = [
+    ["Yêu cầu tư vấn", "Xem và tiếp nhận yêu cầu", "consultations", "consult"],
+    ["Bán gói hội viên", "Tạo thanh toán tại quầy", "membership-sales", "sales"],
+    ["Danh sách thành viên", "Tra cứu hồ sơ hội viên", "members", "members"],
+  ];
+
+  return <div className="rc-content">
+    <header className="rc-head">
+      <div><p className="rc-eyebrow">SPORTCENTER / TIẾP NHẬN</p><h1>Tổng quan lễ tân</h1><p>Quản lý thành viên, tư vấn và gói hội viên.</p></div>
+      <span className="rc-date"><ReceptionistIcon name="pending" /><b>{dateLabel}</b><i aria-hidden="true" /><small>Hôm nay</small></span>
+    </header>
+
+    <section className="rc-kpis" aria-label="Chỉ số nhanh" aria-busy={loading}>
+      {kpis.map(([label, value, note, icon, tone]) => <article key={label} className="rc-kpi">
+        <header><span>{label}</span><i className={`rc-tile ${tone}`}><ReceptionistIcon name={icon} size={21} /></i></header>
+        <strong>{loading ? "—" : value ?? "—"}</strong><p className={errors[icon === "pending" ? "pendingRequests" : icon] ? "error" : tone}><span aria-hidden="true" />{note}</p>
+      </article>)}
+    </section>
+
+    <section className="rc-actions" aria-label="Thao tác nhanh">
+      {actions.map(([title, note, page, icon]) => <button key={page} type="button" className="rc-action" onClick={() => onNavigate(page)}>
+        <i className="rc-tile blue"><ReceptionistIcon name={icon} /></i><div><b>{title}</b><small>{note}</small></div><ReceptionistIcon name="arrow" />
+      </button>)}
+    </section>
+
+    <div className="rc-grid">
+      <section className="rc-card">
+        <div className="rc-card-head"><div><h2>Tìm kiếm thành viên</h2><p>Tìm trong danh sách thành viên hiện có.</p></div>
+          <button type="button" className="rc-link" onClick={() => onNavigate("members")}>Mở danh sách <ReceptionistIcon name="arrow" size={14} /></button></div>
+        <form className="rc-search" onSubmit={(event) => { event.preventDefault(); setSearchSubmitted(true); }}>
+          <label className="rc-input-wrap"><ReceptionistIcon name="search" /><input value={query} onChange={(event) => { setQuery(event.target.value); setSearchSubmitted(false); }} placeholder="Tên, số điện thoại, email hoặc mã hội viên" aria-label="Tìm thành viên" /></label>
+          <button type="submit" className="rc-btn-primary">Tìm kiếm</button>
+        </form>
+        {searchSubmitted && <div className="rc-search-results" aria-live="polite">
+          {errors.members ? <p className="rc-empty">Không thể tìm kiếm khi danh sách thành viên chưa tải được.</p>
+            : memberResults.length === 0 ? <p className="rc-empty">Không tìm thấy thành viên phù hợp.</p>
+              : <><p className="rc-search-count">Tìm thấy {memberResults.length} thành viên</p><ul className="rc-quick-list">
+                {memberResults.slice(0, 5).map((member) => <li key={member.id}><b>{member.name || `Thành viên #${member.id}`}</b><span>#{member.id}{member.phone ? ` · ${member.phone}` : ""}</span></li>)}
+              </ul></>}
+        </div>}
+      </section>
+
+      <section className="rc-card">
+        <div className="rc-card-head"><h2>Yêu cầu tư vấn đang chờ <span className="rc-count amber">{loading ? "—" : metrics.pendingConsultations ?? "—"}</span></h2>
+          <button type="button" className="rc-link" onClick={() => onNavigate("consultations")}>Xem tất cả <ReceptionistIcon name="arrow" size={14} /></button></div>
+        {errors.pendingRequests ? <p className="rc-empty" role="alert">Không tải được danh sách yêu cầu tư vấn.</p>
+          : loading ? <p className="rc-empty" role="status">Đang tải yêu cầu tư vấn…</p>
+            : requests.length === 0 ? <p className="rc-empty">Không có yêu cầu nào đang chờ.</p>
+              : <ul className="rc-requests">{requests.map((request, index) => <li key={request.id}>
+                <span className={`rc-avatar${index % 2 ? " alt" : ""}`}>{String(request.name || "?").trim().split(/\s+/).slice(-2).map((word) => word[0]).join("").toUpperCase() || "?"}</span>
+                <div className="rc-req-main"><div><b>{request.name || `Yêu cầu #${request.id}`}</b>{request.sportName && <em>{request.sportName}</em>}</div>
+                  <p>{request.phone && <span><ReceptionistIcon name="members" size={14} />{request.phone}</span>}<i aria-hidden="true" /><span>{request.createdAt ? fmt(request.createdAt) : "Chưa có ngày gửi"}</span></p></div>
+              </li>)}</ul>}
+      </section>
+    </div>
+
+    <section className="rc-card">
+      <div className="rc-card-head"><div><h2>Gói hội viên đang áp dụng</h2><p>Giá và quyền lợi lấy từ danh mục hiện tại.</p></div>
+        <button type="button" className="rc-link" onClick={() => onNavigate("membership-sales")}>Mở bán gói <ReceptionistIcon name="arrow" size={14} /></button></div>
+      {errors.plans ? <p className="rc-empty" role="alert">Không tải được danh sách gói hội viên.</p>
+        : loading ? <p className="rc-empty" role="status">Đang tải gói hội viên…</p>
+          : plans.length === 0 ? <p className="rc-empty">Chưa có gói hội viên đang áp dụng.</p>
+            : <ul className="rc-plans">{plans.slice(0, 3).map((plan) => <li key={plan.id}>
+              <div><b>{plan.name}</b><p>{plan.description || "Chưa có mô tả."}</p></div>
+              <span>{formatVnd(plan.price)} <small>{Number(plan.durationMonths) === 12 ? "/ năm" : `/ ${plan.durationMonths} tháng`}</small></span>
+            </li>)}</ul>}
+    </section>
+  </div>;
 }
 
 function BookingList({ items, who }) {
@@ -447,6 +522,20 @@ export default function Dashboard({ token, role, onLogout, onNavigate }) {
   const { data, errors, loading } = useLoad(token, role);
   const [title, sub] = TITLES[role] || TITLES.MEMBER;
   const View = { ADMIN: Admin, RECEPTIONIST: Receptionist, COACH: Coach, MEMBER: Member }[role] || Member;
+
+  if (role === "RECEPTIONIST") {
+    return <div className="layout">
+      <Sidebar role={role} activePage="dashboard" onLogout={onLogout} onNavigate={onNavigate} />
+      <main className="main rc-main">
+        <header className="rc-topbar">
+          <nav className="rc-crumb" aria-label="Điều hướng"><span>SPORTCENTER</span><i>›</i><span>LỄ TÂN</span><i>›</i><b>TỔNG QUAN</b></nav>
+          <div className="rc-user"><span className="rc-avatar">{String(data.me?.name || "").trim().split(/\s+/).slice(-2).map((word) => word[0]).join("").toUpperCase() || "—"}</span>
+            <div><b>{data.me?.name || (errors.me ? "Không tải được tài khoản" : "Quầy tiếp nhận")}</b><small>Nhân viên lễ tân</small></div></div>
+        </header>
+        <Receptionist d={data} errors={errors} onNavigate={onNavigate} loading={loading} />
+      </main>
+    </div>;
+  }
 
   return (
     <div className="layout">

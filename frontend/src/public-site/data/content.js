@@ -74,17 +74,20 @@ export const facilities = [
   },
   {
     title: 'Phòng Gym',
-    img: '/images/facility-2.png',
+    homeKey: 'gym',
+    img: '/images/gym.jpg',
     text: 'Thiết bị sức mạnh và cardio hiện đại, không gian thoáng sạch, có huấn luyện viên hướng dẫn kỹ thuật cho mọi cấp độ.',
   },
   {
     title: 'Hồ bơi',
-    img: '/images/facility-3.png',
+    homeKey: 'pool',
+    img: '/images/facility-2.png',
     text: 'Hồ bơi tiêu chuẩn, nước được xử lý sạch sẽ mỗi ngày, có khu vực riêng cho lớp học kỹ thuật bơi.',
   },
   {
     title: 'Studio',
-    img: '/images/facility-4.png',
+    homeKey: 'studio',
+    img: '/images/facility-3.png',
     text: 'Phòng tập Yoga, dance và group class với sàn gỗ, gương lớn và hệ thống âm thanh chuyên dụng.',
   },
 ]

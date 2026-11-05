@@ -2,36 +2,94 @@
   min-width: 0;
 }
 
-.coach-skill-assessments-page > .page-header {
-  margin-bottom: 22px;
-  padding: clamp(20px, 3vw, 30px);
-  border: 1px solid #d8e7f5;
-  border-radius: 18px;
-  background: linear-gradient(120deg, #eff7ff, #fff 78%);
-  box-shadow: 0 9px 26px rgb(17 49 87 / 5%);
+.coach-skill-assessments-page > .coach-assessment-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
-.coach-skill-assessments-page > .page-header h1 {
-  color: #123b63;
-  font-size: clamp(1.55rem, 2.5vw, 2rem);
+.coach-skill-assessments-page > .coach-assessment-header h1 {
+  margin: 0 0 var(--space-1);
+  color: var(--navy);
+  font-size: clamp(24px, 2.1vw, 30px);
   font-weight: 800;
-  letter-spacing: -.03em;
+  letter-spacing: -.025em;
 }
 
-.coach-skill-assessments-page > .page-header .subtitle {
+.coach-skill-assessments-page > .coach-assessment-header .subtitle {
   max-width: 720px;
-  line-height: 1.65;
+  color: var(--text-sub);
+  line-height: 1.55;
+}
+
+.coach-skill-assessments-page .coach-assessment-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  align-items: start;
+  gap: var(--space-4);
+}
+
+.coach-skill-assessments-page .coach-assessment-browser,
+.coach-skill-assessments-page .coach-assessment-selection-empty {
+  min-width: 0;
+}
+
+.coach-skill-assessments-page .coach-assessment-browser {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.coach-skill-assessments-page .coach-assessment-selection-empty {
+  display: grid;
+  min-height: 270px;
+  align-content: center;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: clamp(20px, 2.5vw, 28px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text-sub);
+  box-shadow: var(--shadow-card);
+  text-align: center;
+}
+
+.coach-skill-assessments-page .coach-assessment-selection-empty h2 {
+  margin: 0 0 var(--space-2);
+  color: var(--navy);
+  font-size: 18px;
+}
+
+.coach-skill-assessments-page .coach-assessment-selection-empty p {
+  line-height: 1.6;
 }
 
 .coach-skill-assessments-page .coach-assessment-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
   margin: 0 0 20px;
-  padding: 12px 14px;
-  border: 1px solid #dce7f2;
-  border-radius: 12px;
-  background: #fff;
-  color: #536a85;
-  box-shadow: 0 4px 14px rgb(20 48 82 / 3%);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-sub);
+  box-shadow: none;
 }
+
+.coach-skill-assessments-page .coach-assessment-counts { display: flex; flex-wrap: wrap; gap: 8px; margin-right: auto; }
+.coach-skill-assessments-page .coach-assessment-counts span { display: inline-flex; align-items: center; gap: 7px; padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text-sub); font-size: 12px; font-weight: 650; }
+.coach-skill-assessments-page .coach-assessment-counts i { width: 7px; height: 7px; border-radius: 50%; background: var(--warning); }
+.coach-skill-assessments-page .coach-assessment-counts i.is-processed { background: var(--success); }
 
 .coach-skill-assessments-page .coach-assessment-toolbar button,
 .coach-skill-assessments-page .coach-assessment-open,
@@ -131,18 +189,18 @@
 }
 
 .coach-skill-assessments-page .coach-assessment-group {
-  margin: 0 0 22px;
-  padding: clamp(16px, 2vw, 22px);
-  border: 1px solid #dce6f1;
-  border-radius: 16px;
-  background: #f8fbff;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .coach-skill-assessments-page .coach-assessment-group h2 {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 0 0 15px;
+  margin: 0 0 13px;
   color: #173e65;
   font-size: 17px;
   font-weight: 800;
@@ -153,7 +211,7 @@
   height: 21px;
   border-radius: 4px;
   background: #176ed9;
-  content: "";
+  content: none;
 }
 
 .coach-skill-assessments-page .coach-assessment-list {
@@ -194,10 +252,12 @@
 }
 
 .coach-skill-assessments-page .coach-assessment-detail {
-  margin-top: 8px;
+  min-width: 0;
+  margin-top: 0;
+  padding: 22px;
   border-color: #d6e5f4;
-  border-radius: 17px;
-  box-shadow: 0 10px 28px rgb(20 48 82 / 5%);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
 }
 
 .coach-skill-assessments-page .coach-assessment-detail > header h2 {
@@ -223,8 +283,14 @@
 }
 
 @media (max-width: 760px) {
-  .coach-skill-assessments-page > .page-header {
-    padding: 20px;
+  .coach-skill-assessments-page .coach-assessment-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .coach-skill-assessments-page .coach-assessment-detail,
+  .coach-skill-assessments-page .coach-assessment-selection-empty {
+    position: static;
+    max-height: none;
   }
 
   .coach-skill-assessments-page .coach-assessment-row {
@@ -235,6 +301,10 @@
     grid-column: 1 / -1;
     width: 100%;
   }
+}
+
+@media (max-width: 1000px) {
+  .coach-skill-assessments-page .coach-assessment-workspace { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (prefers-reduced-motion: reduce) {

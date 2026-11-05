@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Img from '../components/Img.jsx'
 import { getPublicCoachesApi, getPublicSportsApi } from '../../api.js'
+import { facilities } from '../data/content.js'
 
 export default function Home() {
   const [coaches, setCoaches] = useState([])
@@ -22,13 +23,14 @@ export default function Home() {
     })
     return () => { active = false }
   }, [])
+  const homeFacilityImages = ['gym', 'pool', 'studio'].map((key) => facilities.find((facility) => facility.homeKey === key)?.img)
   return (
     <>
       {/* HERO */}
       <section className="home-hero">
         <div className="container-xl">
           <div className="row align-items-center g-5">
-            <div className="col-lg-7">
+            <div className="col-12 col-lg-8">
               <p className="eyebrow">TRUNG TÂM THỂ THAO HIỆN ĐẠI</p>
               <h1>KHỎE MỖI NGÀY.<br />MẠNH MỖI BƯỚC.</h1>
               <p className="lead-text">
@@ -39,20 +41,7 @@ export default function Home() {
                 <Link to="/bo-mon" className="btn btn-ghost">XEM CÁC BỘ MÔN</Link>
               </div>
             </div>
-            <div className="col-lg-5 d-none d-lg-block">
-              <div className="hero-art" aria-hidden="true">
-                <div className="blob blob-1" />
-                <div className="blob blob-2" />
-                <div className="hero-card">
-                  <div className="fig-head" />
-                  <div className="fig-body" />
-                  <div className="fig-arm fig-arm-l" />
-                  <div className="fig-arm fig-arm-r" />
-                  <div className="fig-leg fig-leg-l" />
-                  <div className="fig-leg fig-leg-r" />
-                </div>
-              </div>
-            </div>
+
           </div>
         </div>
       </section>
@@ -120,10 +109,10 @@ export default function Home() {
               ["G", "PHÒNG GYM", "Thiết bị sức mạnh & cardio", false],
               ["S", "HỒ BƠI", "Khu bơi tiêu chuẩn, sạch sẽ", true],
               ["Y", "STUDIO", "Yoga, dance & group class", false],
-            ].map(([letter, title, description, featured]) => (
+            ].map(([, title, description, featured], index) => (
               <div className="col-md-4" key={title}>
                 <Link to="/co-so-vat-chat" className={`space-card ${featured ? 'is-dark' : ''}`}>
-                  <div className="space-top"><span className="space-letter">{letter}</span></div>
+                  <div className="space-top"><Img src={homeFacilityImages[index]} alt={title} label={title} className="space-image" /></div>
                   <div className="space-body">
                     <h6>{title}</h6>
                     <p>{description}</p>

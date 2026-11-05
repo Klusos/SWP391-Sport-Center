@@ -6,6 +6,7 @@ import {
   getMySkillAssessmentAssignmentsApi,
   getSportsApi,
 } from "../api";
+import { coachAssessmentStatusSummary } from "../coachAssessmentView.js";
 import "./CoachSkillAssessments.css";
 
 const LEVELS = ["BEGINNER", "INTERMEDIATE", "ADVANCED"];
@@ -44,6 +45,7 @@ export default function CoachSkillAssessments({ token, role, onLogout, onNavigat
   const isDowngrade = Boolean(assessedLevel && LEVEL_RANK[assessedLevel] < LEVEL_RANK[currentLevel]);
   const pending = useMemo(() => assignments.filter((item) => item.status === "PENDING"), [assignments]);
   const history = useMemo(() => assignments.filter((item) => item.status === "COMPLETED" || item.status === "CANCELLED"), [assignments]);
+  const summary = useMemo(() => coachAssessmentStatusSummary(assignments), [assignments]);
   const sportOptions = useMemo(() => [...new Set(assignments.map((item) => Number(item.sportId)))].sort((a, b) => a - b), [assignments]);
   const visiblePending = useMemo(() => pending.filter((item) => sportFilter === "all" || Number(item.sportId) === Number(sportFilter)), [pending, sportFilter]);
   const visibleHistory = useMemo(() => history.filter((item) => sportFilter === "all" || Number(item.sportId) === Number(sportFilter)), [history, sportFilter]);
@@ -184,14 +186,19 @@ export default function CoachSkillAssessments({ token, role, onLogout, onNavigat
   return <div className="layout">
     <Sidebar role={role} activePage="coach-assessments" onNavigate={onNavigate} onLogout={onLogout} />
     <main className="main coach-skill-assessments-page">
-      <header className="page-header"><p className="eyebrow">SPORTCENTER / COACH</p><h1>Quản lý đánh giá kỹ năng</h1>
-        <p className="subtitle">Xem các assessment được phân công và cập nhật trình độ sau khi đánh giá Member.</p></header>
+      <header className="coach-assessment-header"><div><p className="eyebrow">SPORTCENTER / COACH</p><h1>Đánh giá kỹ năng</h1>
+        <p className="subtitle">Theo dõi các đánh giá được phân công và cập nhật trình độ Member.</p></div></header>
       {notice && <p className="banner success" role="status">{notice}</p>}
       {error && <p className="banner error" role="alert">{error}</p>}
       {sportsError && <p className="banner" role="status">{sportsError}</p>}
-      <div className="coach-assessment-toolbar"><span>{pending.length} assessment đang chờ · {history.length} trong lịch sử</span>
+      <div className="coach-assessment-toolbar"><div className="coach-assessment-counts" aria-label="Số lượng assessment" aria-busy={loading}>
+          <span><i className="is-pending" aria-hidden="true" />{loading ? "—" : summary.pending} đang chờ</span>
+          <span><i className="is-processed" aria-hidden="true" />{loading ? "—" : summary.processed} đã xử lý</span>
+        </div>
         <button type="button" onClick={() => void loadAssignments()} disabled={loading}>{loading ? "Đang tải…" : "Làm mới"}</button></div>
 
+      <div className="coach-assessment-workspace">
+      <section className="coach-assessment-browser" aria-label="Danh sách đánh giá được phân công">
       {loading ? <div className="queue-state" role="status">Đang tải assignment…</div> : !error && <>
         <div className="coach-assessment-tabs" role="group" aria-label="Lọc danh sách đánh giá">
           <button type="button" aria-pressed={activeTab === "pending"} className={activeTab === "pending" ? "is-active" : ""} onClick={() => setActiveTab("pending")}>
@@ -215,6 +222,7 @@ export default function CoachSkillAssessments({ token, role, onLogout, onNavigat
           {visibleHistory.length === 0 ? <p className="queue-state">Chưa có assessment lịch sử phù hợp với bộ lọc.</p> : <div className="coach-assessment-list">{visibleHistory.map(renderAssessment)}</div>}
         </section>}
       </>}
+      </section>
 
       {selected && <section className="coach-assessment-detail" aria-labelledby="coach-assessment-detail-title">
         <header><div><p className="subtitle">Assessment #{selected.id}</p><h2 id="coach-assessment-detail-title">{sportNames.get(Number(selected.sportId)) || `Sport #${selected.sportId}`}</h2></div>
@@ -265,6 +273,11 @@ export default function CoachSkillAssessments({ token, role, onLogout, onNavigat
           <p>Kết quả đã hoàn tất chỉ đọc; lịch sử assessment được giữ nguyên.</p>
         </div>}
       </section>}
+      {!selected && <aside className="coach-assessment-selection-empty" aria-live="polite">
+        <h2>Chi tiết đánh giá</h2>
+        <p>Chọn một đánh giá trong danh sách để xem trình độ hiện tại và thông tin liên quan.</p>
+      </aside>}
+      </div>
     </main>
   </div>;
 }

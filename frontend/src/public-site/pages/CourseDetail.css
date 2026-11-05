@@ -231,6 +231,21 @@
 .member-course-detail .member-class-schedule-details p { margin: 0; color: #718198; font-size: 11px; }
 .member-course-detail .member-registration-confirm { border-color: #c8dcef; border-radius: 13px; background: #f5f9ff; }
 .member-course-detail .course-registration-success { border-radius: 13px; }
+.member-course-detail .member-course-registration-card { display: grid; gap: 15px; margin: 0 0 18px; padding: clamp(16px, 2.5vw, 22px); border: 1px solid #c8ddf1; border-radius: 14px; background: linear-gradient(135deg, #f3f9ff, #fff); box-shadow: 0 6px 18px rgb(20 48 82 / 5%); }
+.member-course-detail .member-course-registration-card.is-pending { border-color: #eed58f; background: linear-gradient(135deg, #fff9e8, #fff); }
+.member-course-detail .member-course-registration-card-heading { display: grid; justify-items: start; gap: 8px; }
+.member-course-detail .member-course-registration-status { display: inline-flex; min-height: 27px; align-items: center; padding: 4px 10px; border: 1px solid #c9e5d0; border-radius: 999px; background: #eff9f1; color: #286c3c; font-size: 11px; font-weight: 800; }
+.member-course-detail .member-course-registration-status.is-pending { border-color: #ecd38c; background: #fff4d3; color: #795600; }
+.member-course-detail .member-course-registration-card-heading h3 { margin: 0; color: #16365d; font-size: 17px; line-height: 1.35; }
+.member-course-detail .member-course-registration-facts { display: flex; flex-wrap: wrap; gap: 10px 22px; margin: 0; }
+.member-course-detail .member-course-registration-facts > div { display: grid; min-width: min(100%, 150px); gap: 3px; }
+.member-course-detail .member-course-registration-facts dt { color: #718198; font-size: 10px; font-weight: 750; }
+.member-course-detail .member-course-registration-facts dd { margin: 0; color: #294b6c; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
+.member-course-detail .member-course-registration-actions { display: flex; flex-wrap: wrap; gap: 9px; }
+.member-course-detail .member-course-registration-actions a { display: inline-flex; min-height: 40px; align-items: center; justify-content: center; padding: 8px 14px; border: 1px solid #176ed9; border-radius: 9px; background: #176ed9; color: #fff; font-size: 12px; font-weight: 800; text-decoration: none; }
+.member-course-detail .member-course-registration-actions a:hover { background: #0e5dbb; }
+.member-course-detail .member-course-registration-actions a.member-course-registration-secondary { border-color: #d2e1ef; background: #fff; color: #245b89; }
+.member-course-detail .member-course-registration-actions a.member-course-registration-secondary:hover { background: #f3f8fd; }
 .member-course-detail :focus-visible { outline: 3px solid rgb(36 120 210 / 28%); outline-offset: 2px; }
 @media (max-width: 680px) {
   .member-course-detail .member-course-page-header { margin-bottom: 15px; padding: 22px 18px; border-radius: 15px; }
@@ -242,4 +257,6 @@
   .member-course-detail .member-class-schedule-details { padding-left: 38px; }
   .member-course-detail .member-course-consultation-card { grid-template-columns: minmax(0, 1fr); }
   .member-course-detail .member-course-consultation-button { grid-column: 1; grid-row: auto; justify-self: start; }
+  .member-course-detail .member-course-registration-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .member-course-detail .member-course-registration-actions a { width: 100%; box-sizing: border-box; }
 }

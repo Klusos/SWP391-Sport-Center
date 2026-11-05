@@ -199,3 +199,47 @@
   .consultation-queue-page .consultation-detail-heading { align-items: flex-start; }
   .consultation-queue-page .assessment-assignment-actions > button { flex: 1 1 100%; }
 }
+.consultation-queue-page { max-width:1600px; margin-inline:auto; padding:clamp(18px,2.5vw,34px) clamp(16px,2.7vw,40px) 48px; }
+.consultation-queue-page .consultation-page-header { display:flex; align-items:center; justify-content:space-between; gap:18px; padding:clamp(20px,2.5vw,30px); border:1px solid #d7e7f7; border-radius:18px; background:linear-gradient(120deg,#edf6ff,#fff 78%); box-shadow:0 10px 28px rgba(18,59,99,.06); }
+.consultation-queue-page .consultation-eyebrow { margin:0 0 7px; color:#1767d2; font-size:10px; font-weight:800; letter-spacing:.12em; }
+.consultation-queue-page .consultation-page-header h1 { margin:0; color:#102a4c; font-size:clamp(24px,2.4vw,32px); font-weight:820; letter-spacing:-.035em; }
+.consultation-queue-page .consultation-page-header .subtitle { max-width:680px; margin:7px 0 0; color:#60758c; line-height:1.6; }
+.consultation-queue-page .consultation-summary { display:grid; min-width:136px; gap:3px; padding:13px 16px; border:1px solid #d8e8f8; border-radius:12px; background:#fff; text-align:center; }
+.consultation-queue-page .consultation-summary strong { color:#1767d2; font-size:24px; line-height:1.1; }
+.consultation-queue-page .consultation-summary span { color:#64748b; font-size:11px; font-weight:650; }
+.consultation-queue-page .queue-toolbar { align-items:center; justify-content:space-between; margin:0; padding:12px; border-color:#dce6f1; border-radius:13px; background:#fff; box-shadow:0 6px 18px rgba(20,48,82,.035); }
+.consultation-queue-page .consultation-filter-segments { display:flex; max-width:100%; gap:4px; padding:4px; overflow-x:auto; border-radius:10px; background:#eff4ff; }
+.consultation-queue-page .consultation-filter-segments button { min-height:34px; padding:7px 12px; border:0; border-radius:7px; background:transparent; color:#526a85; font:inherit; font-size:12px; font-weight:650; white-space:nowrap; cursor:pointer; }
+.consultation-queue-page .consultation-filter-segments button.active { background:#fff; color:#1458b5; box-shadow:0 1px 4px rgba(11,25,44,.1); }
+.consultation-queue-page .consultation-filter-segments button:focus-visible { outline:3px solid rgba(23,103,210,.24); outline-offset:1px; }
+.consultation-queue-page .consultation-workspace { display:grid; min-width:0; grid-template-columns:minmax(0,1fr); gap:16px; }
+.consultation-queue-page .consultation-workspace.has-detail { grid-template-columns:minmax(0,1fr) minmax(360px,520px); align-items:start; }
+.consultation-queue-page .consultation-list-panel,.consultation-queue-page .consultation-detail-panel { min-width:0; }
+.consultation-queue-page .consultation-list-panel > .queue-state { padding:34px 20px; border:1px dashed #cbd9e8; border-radius:14px; background:#f8fbff; }
+.consultation-queue-page .queue-table-wrap { border-color:#dce6f1; border-radius:14px; }
+.consultation-queue-page .queue-table { min-width:920px; }
+.consultation-queue-page .queue-table thead th { padding:11px 12px; background:#f1f6fc; color:#536a85; font-size:10px; }
+.consultation-queue-page .queue-table tbody td { padding:10px 12px; color:#29445e; }
+.consultation-queue-page .queue-table tbody tr { transition:background .14s ease; }
+.consultation-queue-page .queue-table tbody tr:hover td { background:#f6faff; }
+.consultation-queue-page .queue-actions button { min-height:32px; padding:6px 10px; }
+.consultation-queue-page .consultation-detail-panel > .queue-state { padding:24px; border:1px dashed #cbd9e8; border-radius:14px; background:#fff; }
+.consultation-queue-page .consultation-detail-empty { display:grid; min-height:170px; place-items:center; padding:24px; border:1px dashed #cbd9e8; border-radius:15px; background:#f8fbff; color:#647b94; font-size:13px; text-align:center; line-height:1.6; }
+.consultation-queue-page .consultation-workspace:not(.has-detail) .consultation-detail-panel { display:none; }
+.consultation-queue-page .consultation-detail { gap:13px; padding:18px; border-color:#d6e5f4; border-radius:15px; box-shadow:0 10px 26px rgba(20,48,82,.06); }
+.consultation-queue-page .consultation-detail-heading { align-items:flex-start; }
+.consultation-queue-page .consultation-detail-heading h2 { font-size:19px; overflow-wrap:anywhere; }
+.consultation-queue-page .consultation-detail-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.consultation-queue-page .consultation-detail-grid > div { padding:10px; border-radius:9px; }
+@media (max-width:1150px) {
+  .consultation-queue-page .consultation-workspace.has-detail { grid-template-columns:minmax(0,1fr); }
+}
+@media (max-width:700px) {
+  .consultation-queue-page .consultation-page-header { align-items:flex-start; flex-direction:column; }
+  .consultation-queue-page .consultation-summary { grid-template-columns:auto 1fr; align-items:center; min-width:0; width:100%; text-align:left; }
+  .consultation-queue-page .consultation-summary strong { grid-row:span 1; }
+  .consultation-queue-page .queue-toolbar { align-items:stretch; flex-direction:column; }
+  .consultation-queue-page .consultation-filter-segments { width:100%; }
+  .consultation-queue-page .consultation-filter-segments button { flex:1 0 auto; }
+  .consultation-queue-page .consultation-detail-grid { grid-template-columns:minmax(0,1fr); }
+}

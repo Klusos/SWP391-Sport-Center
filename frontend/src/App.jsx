@@ -46,7 +46,6 @@ import Schedule from "./pages/Schedule";
 import Layout from "./components/Layout";
 
 // Các trang bổ sung
-import CrudPage from "./pages/CrudPage";
 import ReportPage from "./pages/ReportPage";
 import MemberPage from "./pages/MemberPage";
 
@@ -474,13 +473,7 @@ export default function App() {
 
               <Route
                 path="/admin/classes"
-                element={
-                  <CrudPage
-                    kind="classes"
-                    title="Demo — Quản lý lớp học"
-                    subtitle="Giao diện mẫu với dữ liệu minh họa; không sửa dữ liệu SportCenter."
-                  />
-                }
+                element={<Navigate to="/staff/courses" replace />}
               />
 
               <Route

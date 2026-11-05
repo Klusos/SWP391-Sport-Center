@@ -5,6 +5,7 @@ import {
   markAllNotificationsReadApi,
   markNotificationReadApi,
 } from "../api";
+import { shouldShowNotificationPagination } from "../notificationPagination.js";
 import "./NotificationBell.css";
 
 const formatDate = (value) => {
@@ -151,11 +152,11 @@ export default function NotificationBell({ token, role }) {
               ))}
             </div>
           )}
-          <footer className="notification-pagination">
+          {shouldShowNotificationPagination(page) && <footer className="notification-pagination">
             <button type="button" disabled={loading || pageNumber <= 0} onClick={() => loadPage(pageNumber - 1)}>Trước</button>
             <span>{page ? `Trang ${(page.number ?? pageNumber) + 1}${page.totalPages ? ` / ${page.totalPages}` : ""}` : ""}</span>
             <button type="button" disabled={loading || !page?.hasNext} onClick={() => loadPage(pageNumber + 1)}>Sau</button>
-          </footer>
+          </footer>}
         </section>
       )}
     </div>

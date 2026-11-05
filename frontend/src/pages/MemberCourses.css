@@ -42,7 +42,10 @@
 .member-course-badge { padding: 5px 9px; border-radius: 999px; background: #eff6fd; color: var(--mc-blue); font-size: 10px; font-weight: 750; }
 .member-course-number { color: #a6b5c4; font-size: 12px; font-weight: 800; }
 .member-course-card-body { flex: 1; padding: 12px 17px; }
-.member-course-card-body h3 { margin: 0 0 7px; color: var(--mc-ink); font-size: 17px; font-weight: 800; line-height: 1.35; }
+.member-course-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 9px; margin-bottom: 9px; }
+.member-course-card-body h3 { flex: 1 1 180px; min-width: 0; margin: 0; color: var(--mc-ink); font-size: 17px; font-weight: 800; line-height: 1.35; overflow-wrap: anywhere; }
+.member-course-registration-badge { display: inline-flex; flex: 0 0 auto; min-height: 24px; align-items: center; margin: 0; padding: 4px 9px; border: 1px solid #cce8d5; border-radius: 999px; background: #eff9f1; color: #286c3c; font-size: 10px; font-weight: 800; }
+.member-course-registration-badge.pending { border-color: #f0d997; background: #fff7df; color: #795600; }
 .member-course-card-meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 9px; }
 .member-course-card-meta-badge { display: inline-flex; min-height: 23px; align-items: center; padding: 3px 8px; border: 1px solid #d9e5f1; border-radius: 999px; background: #f2f0ff; color: #56489d; font-size: 10px; font-weight: 750; line-height: 1.3; }
 .member-course-card-meta-badge.age { border-color: #d7e9dc; background: #eef8f0; color: #347147; }
