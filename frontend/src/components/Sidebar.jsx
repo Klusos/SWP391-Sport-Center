@@ -31,7 +31,6 @@ const adminGroups = [
     pages: [
       ["sports", "Quản lý bộ môn"],
       ["courses", "Quản lý khóa học"],
-      ["classes", "Quản lý lớp học"],
       ["facilities", "Quản lý cơ sở vật chất"],
       ["membership-plans", "Gói hội viên"],
     ],

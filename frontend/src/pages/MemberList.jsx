@@ -215,7 +215,7 @@ export default function MemberList({ token, role, onLogout, onNavigate }) {
           <section className="member-list-table-column">
           <div className="member-list-toolbar">
             <label className="member-search-label" htmlFor="memberSearch">Tìm tên, email, số điện thoại, ID hoặc trạng thái</label>
-            <input id="memberSearch" type="search" placeholder="T\u00ecm t\u00ean, email, S\u0110T ho\u1eb7c ID" value={query}
+            <input id="memberSearch" type="search" placeholder="Tìm tên, email, SĐT hoặc ID" value={query}
               onChange={(event) => { setQuery(event.target.value); setPage(0); setSelected(null); }} />
             <button type="button" onClick={loadMembers} disabled={loading}>{loading ? "Đang tải…" : "Làm mới"}</button>
           </div>
