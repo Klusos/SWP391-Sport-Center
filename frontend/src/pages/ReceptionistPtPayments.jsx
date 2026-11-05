@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import { getMemberPaymentsApi, getPendingPtPaymentsApi, processCounterPaymentApi } from "../api";
 import { canViewPtPayments, createPtCounterQueue, ptPaymentExpired, ptPaymentMoney } from "../ptPaymentFlow";
 import { vietnamDate } from "../courseCheckout";
+import "./ReceptionistCoursePayments.css";
 import "./ReceptionistPtPayments.css";
 
 function readUncertain(key) {
@@ -15,14 +16,30 @@ function readUncertain(key) {
 
 function formatTime(value) {
   const date = vietnamDate(value);
-  return date ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh" }).format(date) : "Time unavailable";
+  return date ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh" }).format(date) : "Chưa có thời gian";
 }
+
+function getInitials(name) {
+  return String(name || "HV")
+    .trim()
+    .split(/\s+/)
+    .slice(-2)
+    .map((part) => part[0] || "")
+    .join("")
+    .toUpperCase() || "HV";
+}
+
+const AVATAR_TONES = ["tone-indigo", "tone-blue", "tone-emerald", "tone-orange"];
 
 export default function ReceptionistPtPayments({ token, role, userId, onNavigate, onLogout }) {
   const [queue, setQueue] = useState({ loading: true, data: null, page: 0, error: "" });
-  const [busy, setBusy] = useState(false), [outcome, setOutcome] = useState(null), [uncertain, setUncertain] = useState([]), [now, setNow] = useState(0);
+  const [busy, setBusy] = useState(false), [outcome, setOutcome] = useState(null), [uncertain, setUncertain] = useState([]), [now, setNow] = useState(Date.now);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSportFilter, setSelectedSportFilter] = useState("ALL");
+  const [urgentOnly, setUrgentOnly] = useState(false);
   const controller = useRef(null);
   const storageKey = `sportcenter.pt-counter.${userId}.${role}`;
+
   useEffect(() => {
     if (!token || !canViewPtPayments(role)) return undefined;
     const initial = readUncertain(storageKey);
@@ -43,39 +60,407 @@ export default function ReceptionistPtPayments({ token, role, userId, onNavigate
     return () => { active = false; workflow.dispose(); controller.current = null; window.clearTimeout(immediate); window.clearInterval(poll); window.clearInterval(clock); window.removeEventListener("focus", refresh); };
   }, [token, role, storageKey]);
 
+  const rows = queue.data?.content || [];
+
+  const metrics = useMemo(() => {
+    let totalAmount = 0;
+    let urgentCount = 0;
+    const sportCounts = new Map();
+
+    rows.forEach((row) => {
+      totalAmount += Number(row.amount || 0);
+      const expired = ptPaymentExpired({ paymentExpiresAt: row.paymentDeadline }, now);
+      const remaining = Math.max(0, Math.ceil(((vietnamDate(row.paymentDeadline)?.getTime() || 0) - now) / 60000));
+      if (!expired && remaining <= 15) {
+        urgentCount += 1;
+      }
+      const sportLabel = row.sportName || "PT 1:1";
+      sportCounts.set(sportLabel, (sportCounts.get(sportLabel) || 0) + 1);
+    });
+
+    return {
+      totalCount: queue.data?.totalElements ?? rows.length,
+      totalAmount,
+      urgentCount,
+      sportChips: Array.from(sportCounts.entries()).slice(0, 4),
+    };
+  }, [rows, queue.data?.totalElements, now]);
+
+  const filteredRows = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return rows.filter((row) => {
+      const sportLabel = row.sportName || "PT 1:1";
+      if (selectedSportFilter !== "ALL" && sportLabel !== selectedSportFilter) return false;
+      const expired = ptPaymentExpired({ paymentExpiresAt: row.paymentDeadline }, now);
+      const remaining = Math.max(0, Math.ceil(((vietnamDate(row.paymentDeadline)?.getTime() || 0) - now) / 60000));
+      if (urgentOnly && (expired || remaining > 30)) return false;
+      if (!q) return true;
+      const haystack = `${row.memberName || ""} #${row.memberId} #${row.paymentId} #${row.bookingId} ${row.sportName || ""} ${row.coachName || ""}`.toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [rows, searchQuery, selectedSportFilter, urgentOnly, now]);
+
+  const liveClockLabel = useMemo(() => {
+    return new Intl.DateTimeFormat("vi-VN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+      timeZone: "Asia/Ho_Chi_Minh",
+    }).format(new Date(now || Date.now())) + " (GMT+7)";
+  }, [now]);
+
   if (!token) return <Navigate to="/login" replace />;
   if (!canViewPtPayments(role)) return <Navigate to="/" replace />;
-  return <div className="layout"><Sidebar role={role} activePage="pt-payments" onNavigate={onNavigate} onLogout={onLogout} />
-    <main className="main pt-payment-queue">
-      <header><div><p>SPORTCENTER / COUNTER</p><h1>PT Booking counter payments</h1><p>Only confirm after receiving the full cash amount. The server rechecks the booking hold.</p></div>
-        <button type="button" disabled={busy || queue.loading} onClick={() => void controller.current?.refresh()}>Refresh</button></header>
-      <p>Queue refreshes every 30 seconds. The displayed deadline is advisory; the server remains authoritative.</p>
-      {outcome && <p className={`pt-queue-outcome ${outcome.kind}`} role={outcome.kind === "warning" ? "alert" : "status"}>{outcome.text}</p>}
-      {uncertain.length > 0 && <section className="pt-queue-review"><h2>Settlement needs reconciliation</h2><p>Do not submit confirmation again for these payments until the status is checked.</p>
-        {uncertain.map((row) => <div key={row.paymentId}><span>Payment #{row.paymentId} · Booking #{row.bookingId} · Member #{row.memberId}</span>
-          <button type="button" disabled={busy} onClick={() => void controller.current?.check(row)}>Check payment history</button></div>)}</section>}
-      {queue.loading ? <p role="status">Loading PT counter queue…</p> : queue.error ? <div role="alert"><p>{queue.error}</p><button type="button" disabled={busy} onClick={() => void controller.current?.refresh()}>Try again</button></div>
-        : queue.data && <>
-          {queue.data.content.length === 0 ? <p role="status">No pending PT counter payments.</p> : <div className="pt-queue-table"><table><caption>PT Booking cash payments awaiting confirmation</caption>
-            <thead><tr><th>Member</th><th>Sport / Coach</th><th>Appointment</th><th>Amount</th><th>Deadline</th><th>Status</th><th>Action</th></tr></thead>
-            <tbody>{queue.data.content.map((row) => {
-              const expired = ptPaymentExpired({ paymentExpiresAt: row.paymentDeadline }, now), blocked = uncertain.some((item) => item.paymentId === row.paymentId);
-              return <tr key={row.paymentId}>
-                <td>{row.memberName}<small>Member #{row.memberId}</small></td>
-                <td>{row.sportName}<small>Coach: {row.coachName}</small></td>
-                <td>{formatTime(row.startTime)}<small>Ends: {formatTime(row.endTime)}</small></td>
-                <td>{ptPaymentMoney(row.amount)}</td>
-                <td>{formatTime(row.paymentDeadline)}<small>{expired ? "Deadline passed; reconcile" : `${Math.max(0, Math.ceil(((vietnamDate(row.paymentDeadline)?.getTime() || 0) - now) / 60000))} min remaining (approx.)`}</small></td>
-                <td>{row.paymentStatus}<small>Booking: {row.bookingStatus}</small></td>
-                <td><button type="button" disabled={busy || expired || blocked || row.paymentStatus !== "PENDING" || row.bookingStatus !== "PENDING_PAYMENT"}
-                  onClick={() => void controller.current?.receive(row)}>Confirm cash received · #{row.paymentId}</button></td>
-              </tr>;
-            })}</tbody>
-          </table></div>}
-          <nav className="pt-queue-pagination" aria-label="PT payment pages"><button type="button" disabled={busy || queue.page === 0} onClick={() => void controller.current?.load(queue.page - 1)}>Previous</button>
-            <span>Page {queue.page + 1} / {Math.max(1, queue.data.totalPages)} · {queue.data.totalElements} payments</span>
-            <button type="button" disabled={busy || queue.data.last} onClick={() => void controller.current?.load(queue.page + 1)}>Next</button></nav>
-        </>}
-    </main>
-  </div>;
+
+  return (
+    <div className="layout">
+      <Sidebar role={role} activePage="pt-payments" onNavigate={onNavigate} onLogout={onLogout} />
+      <main className="main pt-payment-queue">
+        {/* Top Utility Bar */}
+        <div className="cp-topbar">
+          <div className="cp-breadcrumb">
+            <span>SPORTCENTER</span>
+            <span className="cp-sep">/</span>
+            <span>QUẦY LỄ TÂN</span>
+            <span className="cp-sep">/</span>
+            <span className="cp-active-crumb">THU TIỀN PT TẠI QUẦY</span>
+          </div>
+          <div className="cp-topbar-right">
+            <div className="cp-clock-pill">
+              <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+              </svg>
+              <span>{liveClockLabel}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="cp-body">
+          {/* Header Section */}
+          <header className="cp-hero-header">
+            <div className="cp-hero-titles">
+              <div className="cp-title-row">
+                <h1>Thu tiền mặt tại quầy · PT 1:1</h1>
+                <span className="cp-counter-badge">HÀNG CHỜ COUNTER</span>
+              </div>
+              <p className="cp-subtitle">
+                Chỉ xác nhận sau khi đã nhận đủ tiền mặt hoặc quẹt POS tại quầy cho buổi tập PT.
+              </p>
+            </div>
+            <div className="cp-header-actions">
+              <button
+                type="button"
+                className="cp-btn-refresh"
+                disabled={busy || queue.loading}
+                onClick={() => void controller.current?.refresh()}
+              >
+                <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                </svg>
+                <span>Làm mới</span>
+              </button>
+            </div>
+          </header>
+
+          {/* Category Mode Toggle Tabs */}
+          <section className="cp-mode-tabs" aria-label="Chuyển danh mục thu tiền">
+            <button
+              type="button"
+              className="cp-mode-tab"
+              onClick={() => onNavigate?.("course-payments")}
+            >
+              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+              </svg>
+              <span>Khóa học &amp; Lớp thể thao</span>
+            </button>
+            <button type="button" className="cp-mode-tab active" aria-current="page">
+              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+              </svg>
+              <span>Huấn luyện viên cá nhân PT</span>
+              <span className="cp-tab-count">{metrics.totalCount}</span>
+            </button>
+          </section>
+
+          {/* Metrics Row */}
+          <section className="cp-metrics-grid" aria-label="Thống kê nhanh">
+            <div className="cp-metric-card">
+              <div className="cp-metric-info">
+                <span className="cp-metric-label">CHỜ THU TIỀN MẶT</span>
+                <div className="cp-metric-value">
+                  {String(metrics.totalCount).padStart(2, "0")} <small>giao dịch</small>
+                </div>
+              </div>
+              <div className="cp-metric-icon blue">
+                <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                </svg>
+              </div>
+            </div>
+
+            <div className="cp-metric-card">
+              <div className="cp-metric-info">
+                <span className="cp-metric-label">TỔNG TIỀN CẦN THU</span>
+                <div className="cp-metric-value emerald">{ptPaymentMoney(metrics.totalAmount)}</div>
+              </div>
+              <div className="cp-metric-icon emerald">
+                <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                </svg>
+              </div>
+            </div>
+
+            <div className="cp-metric-card">
+              <div className="cp-metric-info">
+                <span className="cp-metric-label">SẮP HẾT HẠN (&lt;15P)</span>
+                <div className="cp-metric-value rose">
+                  {String(metrics.urgentCount).padStart(2, "0")} <small>giao dịch</small>
+                </div>
+              </div>
+              <div className="cp-metric-icon rose">
+                <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                </svg>
+              </div>
+            </div>
+
+            <div className="cp-metric-card">
+              <div className="cp-metric-info">
+                <span className="cp-metric-label">CẦN ĐỐI SOÁT</span>
+                <div className="cp-metric-value amber">
+                  {String(uncertain.length).padStart(2, "0")} <small>cảnh báo</small>
+                </div>
+              </div>
+              <div className="cp-metric-icon amber">
+                <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                </svg>
+              </div>
+            </div>
+          </section>
+
+          {/* Outcome Alert */}
+          {outcome && (
+            <p className={`pt-queue-outcome ${outcome.kind}`} role={outcome.kind === "warning" ? "alert" : "status"}>
+              {outcome.text}
+            </p>
+          )}
+
+          {/* Special Reconciliation Banner */}
+          {uncertain.length > 0 && (
+            <section className="pt-queue-review cp-reconcile-banner" aria-label="Yêu cầu cần đối soát PT">
+              <div className="cp-reconcile-head">
+                <div className="cp-reconcile-icon">
+                  <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                  </svg>
+                </div>
+                <div>
+                  <h2>Yêu cầu chưa có kết quả chắc chắn</h2>
+                  <p>Không gửi lại xác nhận cho đến khi đã kiểm tra lịch sử giao dịch.</p>
+                </div>
+              </div>
+              <div className="cp-reconcile-list">
+                {uncertain.map((row) => (
+                  <div key={row.paymentId} className="cp-reconcile-item">
+                    <span>Thanh toán <strong>#{row.paymentId}</strong> · Booking #{row.bookingId} · Thành viên #{row.memberId}</span>
+                    <button type="button" className="cp-btn-amber" disabled={busy} onClick={() => void controller.current?.check(row)}>
+                      <span>Kiểm tra lịch sử #{row.paymentId}</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Search & Filter Bar */}
+          <section className="cp-filter-bar" aria-label="Bộ lọc tìm kiếm">
+            <div className="cp-search-box">
+              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Tìm theo Tên hội viên, Mã TV, Mã thanh toán (#10003), hoặc Môn / Coach..."
+              />
+            </div>
+            <div className="cp-filter-chips">
+              <div className="cp-chip-group">
+                <button
+                  type="button"
+                  className={`cp-chip ${selectedSportFilter === "ALL" ? "active" : ""}`}
+                  onClick={() => setSelectedSportFilter("ALL")}
+                >
+                  Tất cả ({rows.length})
+                </button>
+                {metrics.sportChips.map(([sportLabel, count]) => (
+                  <button
+                    key={sportLabel}
+                    type="button"
+                    className={`cp-chip ${selectedSportFilter === sportLabel ? "active" : ""}`}
+                    onClick={() => setSelectedSportFilter(sportLabel)}
+                  >
+                    {sportLabel} ({count})
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                className={`cp-urgent-toggle ${urgentOnly ? "active" : ""}`}
+                onClick={() => setUrgentOnly((prev) => !prev)}
+              >
+                <span>Hạn &lt; 30 phút</span>
+              </button>
+            </div>
+          </section>
+
+          {/* Queue Content */}
+          {queue.loading ? (
+            <div className="cp-state-card" role="status">Đang tải hàng chờ thanh toán PT…</div>
+          ) : queue.error ? (
+            <div className="cp-state-card error" role="alert">
+              <p>{queue.error}</p>
+              <button type="button" className="cp-btn-refresh" disabled={busy} onClick={() => void controller.current?.refresh()}>Thử tải lại</button>
+            </div>
+          ) : queue.data && (
+            <section className="cp-table-card">
+              <div className="cp-table-header">
+                <h2>Hàng chờ thanh toán PT tại quầy</h2>
+                <div className="cp-total-badge">
+                  Tổng: <strong>{queue.data.totalElements} giao dịch</strong>
+                </div>
+              </div>
+
+              {filteredRows.length === 0 ? (
+                <p className="cp-empty-msg" role="status">
+                  {rows.length === 0
+                    ? "Không có thanh toán PT tại quầy nào đang chờ xác nhận."
+                    : "Không tìm thấy giao dịch PT khớp với bộ lọc hiện tại."}
+                </p>
+              ) : (
+                <div className="pt-queue-table">
+                  <table>
+                    <caption className="sr-only">Thanh toán PT tại quầy chờ xác nhận</caption>
+                    <thead>
+                      <tr>
+                        <th>Hội viên</th>
+                        <th>Bộ môn / Huấn luyện viên</th>
+                        <th>Mã hệ thống</th>
+                        <th className="text-right">Số tiền cần thu</th>
+                        <th>Hạn giữ chỗ</th>
+                        <th className="text-center">Trạng thái</th>
+                        <th className="text-center">Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredRows.map((row, index) => {
+                        const expired = ptPaymentExpired({ paymentExpiresAt: row.paymentDeadline }, now);
+                        const blocked = uncertain.some((item) => item.paymentId === row.paymentId);
+                        const remaining = Math.max(0, Math.ceil(((vietnamDate(row.paymentDeadline)?.getTime() || 0) - now) / 60000));
+                        const isUrgent = !expired && remaining <= 15;
+                        const tone = AVATAR_TONES[index % AVATAR_TONES.length];
+
+                        return (
+                          <tr key={row.paymentId} className={isUrgent ? "cp-row-urgent" : ""}>
+                            <td>
+                              <div className="cp-member-cell">
+                                <div className={`cp-avatar ${tone}`}>{getInitials(row.memberName)}</div>
+                                <div>
+                                  <div className="cp-member-name">{row.memberName}</div>
+                                  <div className="cp-member-sub">#{row.memberId}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td>
+                              <div className="cp-course-title">
+                                {row.sportName} <span className="cp-course-tag pt">PT 1:1</span>
+                              </div>
+                              <div className="cp-course-sub">
+                                HLV: <span>{row.coachName}</span> · {formatTime(row.startTime)}
+                              </div>
+                            </td>
+                            <td>
+                              <span className="cp-id-pill">#{row.paymentId}</span>
+                              <div className="cp-id-sub">BK: <span>#{row.bookingId}</span></div>
+                            </td>
+                            <td className="text-right">
+                              <div className="cp-amount">{ptPaymentMoney(row.amount)}</div>
+                            </td>
+                            <td>
+                              <div className={`cp-time-line ${isUrgent ? "urgent-text" : ""}`}>
+                                <span>{formatTime(row.paymentDeadline)}</span>
+                              </div>
+                              <div className="cp-countdown-wrap">
+                                <span className={`cp-countdown-pill ${expired ? "expired" : isUrgent ? "urgent" : "safe"}`}>
+                                  <span>
+                                    {expired
+                                      ? "Đã quá hạn"
+                                      : isUrgent
+                                        ? `⚠️ Còn ${remaining} phút`
+                                        : `Còn ~${remaining} phút`}
+                                  </span>
+                                </span>
+                              </div>
+                            </td>
+                            <td className="text-center">
+                              <span className="cp-status-badge">{row.paymentStatus}</span>
+                            </td>
+                            <td className="text-center">
+                              <button
+                                type="button"
+                                className={`cp-action-btn ${isUrgent ? "urgent" : ""}`}
+                                disabled={busy || expired || blocked || row.paymentStatus !== "PENDING" || row.bookingStatus !== "PENDING_PAYMENT"}
+                                onClick={() => void controller.current?.receive(row)}
+                              >
+                                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
+                                </svg>
+                                <span>Xác nhận #{row.paymentId}</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              <nav className="pt-queue-pagination cp-table-footer" aria-label="PT payment pages">
+                <div className="cp-footer-summary">
+                  Hiển thị <strong>{filteredRows.length}</strong> / <strong>{queue.data.totalElements}</strong> giao dịch
+                </div>
+                <div className="cp-pagination-controls">
+                  <button
+                    type="button"
+                    disabled={busy || queue.page === 0}
+                    onClick={() => void controller.current?.load(queue.page - 1)}
+                  >
+                    Trang trước
+                  </button>
+                  <span className="cp-page-indicator">
+                    Trang {queue.page + 1} / {Math.max(1, queue.data.totalPages)}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={busy || queue.data.last}
+                    onClick={() => void controller.current?.load(queue.page + 1)}
+                  >
+                    Trang sau
+                  </button>
+                </div>
+              </nav>
+            </section>
+          )}
+        </div>
+      </main>
+    </div>
+  );
 }
