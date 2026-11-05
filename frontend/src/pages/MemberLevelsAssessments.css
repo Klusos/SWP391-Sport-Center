@@ -1,67 +1,2016 @@
-.member-levels-page .field select:focus-visible,
-.member-levels-page button:focus-visible {
-  outline: 3px solid rgb(23 103 210 / 24%);
-  outline-offset: 2px;
+/* ==========================================================================
+   MEMBER LEVELS & ASSESSMENTS (2-STEP FLOW: DIRECTORY -> SPORT DETAIL)
+   ========================================================================== */
+
+.layout:has(nav[aria-label="Member navigation"]) .main.member-levels-page.mla-workspace,
+.main.member-levels-page.mla-workspace {
+  padding: 0 !important;
+  background: #f6f9fe !important;
+  color: #0f172a;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
-.member-levels-page .field {
-  max-width: 520px !important;
+.mla-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- TOP UTILITY BAR ---------- */
+.mla-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  min-height: 64px;
+  padding: 12px clamp(20px, 3vw, 36px);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid #e3ebf5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.mla-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.mla-eyebrow-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #dce9ff;
+  color: #16407a;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.mla-crumb-sep {
+  color: #cbd5e1;
+  font-weight: 500;
+}
+
+.main .mla-crumb-link {
+  border: 0;
+  background: transparent;
+  padding: 2px 4px;
+  min-height: 0;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.main .mla-crumb-link:hover {
+  color: #1769d2;
+  background: transparent;
+}
+
+.main .mla-crumb-link.is-current {
+  color: #475569;
+  cursor: default;
+}
+
+.mla-crumb-active {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: #153e67;
+}
+
+.mla-crumb-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #1769d2;
+}
+
+.mla-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-right: 56px; /* Chừa khoảng trống để không bị nút chuông thông báo (fixed góc trên bên phải) che khuất */
+}
+
+.mla-search-box {
+  position: relative;
+  width: min(280px, 60vw);
+  display: flex;
+  align-items: center;
+}
+
+.mla-search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: #94a3b8;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.main input.mla-search-input,
+.main .mla-search-box input {
+  width: 100% !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 16px 0 40px !important; /* Đủ padding-left để chữ không đè lên icon kính lúp */
+  border-radius: 999px !important;
+  border: 1px solid #dce7f4 !important;
+  background: #ffffff !important;
+  color: #1e293b !important;
+  font-size: 13px !important;
+  font-family: inherit !important;
+  line-height: normal !important;
+  outline: none !important;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04) !important;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease !important;
+}
+
+.main input.mla-search-input::-webkit-search-decoration,
+.main input.mla-search-input::-webkit-search-cancel-button,
+.main input.mla-search-input::-webkit-search-results-button,
+.main input.mla-search-input::-webkit-search-results-decoration {
+  display: none;
+}
+
+.main input.mla-search-input::placeholder,
+.main .mla-search-box input::placeholder {
+  color: #94a3b8 !important;
+  opacity: 1 !important;
+  font-size: 13px !important;
+}
+
+.main input.mla-search-input:focus,
+.main .mla-search-box input:focus {
+  background: #ffffff !important;
+  border-color: #1769d2 !important;
+  box-shadow: 0 0 0 3px rgba(23, 105, 210, 0.16) !important;
+}
+
+.main .mla-primary-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px !important;
+  background: #1769d2;
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(23, 105, 210, 0.24);
+  transition: background-color 0.18s ease, transform 0.15s ease;
+}
+
+.main .mla-primary-pill-btn:hover:not(:disabled) {
+  background: #0f4fa8;
+  color: #ffffff;
+}
+
+.main .mla-primary-pill-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* ---------- MAIN CONTAINER ---------- */
+.mla-container {
+  width: 100%;
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 28px clamp(20px, 3vw, 36px) 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.mla-banner-success {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: #e2f7ec;
+  border: 1px solid #b5e6cd;
+  color: #167447;
+  font-weight: 600;
+}
+
+.main .mla-banner-dismiss {
+  border: 0;
+  background: transparent;
+  color: #167447;
+  font-size: 18px;
+  font-weight: 700;
+  padding: 0 6px;
+  min-height: 0;
+  cursor: pointer;
+}
+
+.mla-loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 140px;
+}
+
+.mla-spinner {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2.5px solid #cfe2f7;
+  border-top-color: #1769d2;
+  animation: mlaSpin 0.75s linear infinite;
+}
+
+@keyframes mlaSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ==========================================================================
+   STEP 1: SPORTS OVERVIEW DIRECTORY
+   ========================================================================== */
+.mla-step1-view {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.member-levels-page .page-header.mla-step1-header {
+  margin-bottom: 0;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(227, 235, 245, 0.85);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.mla-step-tag-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.member-levels-page .page-header .eyebrow.mla-step-badge {
+  margin: 0;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #dce9ff;
+  color: #16407a;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.mla-step-sublabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.member-levels-page .page-header.mla-step1-header h1 {
+  margin: 0;
+  color: #153e67;
+  font-size: clamp(26px, 2.5vw, 32px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.member-levels-page .page-header.mla-step1-header .subtitle {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.6;
+  max-width: 680px;
+}
+
+.mla-stepper-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 15px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid #e3ebf5;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+}
+
+.mla-stepper-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #153e67;
+}
+
+.mla-stepper-item.is-muted {
+  opacity: 0.45;
+  font-weight: 600;
+  color: #475569;
+}
+
+.mla-stepper-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.mla-stepper-item.is-active .mla-stepper-num {
+  background: #1769d2;
+  color: #ffffff;
+}
+
+.mla-stepper-arrow {
+  width: 15px;
+  height: 15px;
+  color: #cbd5e1;
+}
+
+/* ---------- 3 KPI SUMMARY CARDS ---------- */
+.mla-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.mla-kpi-card {
+  background: #ffffff;
+  border: 1px solid #e3ebf5;
+  border-radius: 16px;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: 0 4px 14px rgba(21, 50, 82, 0.04);
+}
+
+.mla-kpi-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.mla-kpi-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mla-kpi-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.mla-kpi-icon.blue {
+  background: #eff6ff;
+  color: #1769d2;
+}
+
+.mla-kpi-icon.green {
+  background: #e2f7ec;
+  color: #167447;
+}
+
+.mla-kpi-icon.amber {
+  background: #fef3d6;
+  color: #996000;
+}
+
+.mla-kpi-label {
+  margin: 0 0 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.mla-kpi-value {
+  display: block;
+  font-size: 16px;
+  font-weight: 800;
+  color: #153e67;
+}
+
+.mla-kpi-value.green {
+  color: #167447;
+}
+
+.mla-kpi-value.amber {
+  color: #996000;
+}
+
+.mla-kpi-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.mla-kpi-tag.neutral {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.mla-kpi-tag.green {
+  background: #e2f7ec;
+  color: #167447;
+}
+
+.mla-kpi-tag.amber {
+  background: #fef3d6;
+  color: #996000;
+}
+
+.mla-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* ---------- CATALOG BAR & FILTER TABS ---------- */
+.member-levels-page .member-levels-section.mla-catalog-section {
+  margin: 0;
+}
+
+.mla-catalog-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.mla-catalog-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.mla-catalog-title h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #153e67;
+}
+
+.mla-catalog-title h2::before {
+  display: none !important;
+}
+
+.mla-count-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mla-filter-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: #eef2f7;
+  border: 1px solid #e2e8f0;
+}
+
+.main .mla-filter-tab {
+  border: 0;
+  background: transparent;
+  padding: 6px 12px;
+  min-height: 0;
+  border-radius: 8px !important;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.main .mla-filter-tab:hover {
+  color: #0f172a;
+}
+
+.main .mla-filter-tab.is-active {
+  background: #ffffff;
+  color: #153e67;
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+}
+
+/* ---------- 3-COLUMN SPORTS GRID ---------- */
+.mla-sports-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.mla-sport-card {
+  background: #ffffff;
+  border: 1px solid #e3ebf5;
+  border-radius: 18px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(21, 50, 82, 0.04);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.22s ease;
+}
+
+.mla-sport-card:hover {
+  transform: translateY(-4px);
+  border-color: #1769d2;
+  box-shadow: 0 16px 32px -8px rgba(11, 39, 69, 0.09),
+    0 4px 12px rgba(23, 105, 210, 0.08);
+}
+
+.mla-sport-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 14px;
 }
 
-.member-levels-page .field label {
-  display: block;
-  margin-bottom: 7px;
-  color: #344e6d;
-  font-size: 13px;
-  font-weight: 750;
+.mla-sport-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid transparent;
 }
 
-.member-levels-page .field select {
+.mla-sport-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.mla-sport-icon.blue {
+  background: linear-gradient(135deg, rgba(23, 105, 210, 0.12), #eff6ff);
+  border-color: #dbeafe;
+  color: #1769d2;
+}
+
+.mla-sport-icon.cyan {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.12), #ecfeff);
+  border-color: #cffafe;
+  color: #0891b2;
+}
+
+.mla-sport-icon.lime {
+  background: linear-gradient(135deg, rgba(101, 163, 13, 0.12), #f7fee7);
+  border-color: #ecfccb;
+  color: #65a30d;
+}
+
+.mla-sport-icon.amber {
+  background: linear-gradient(135deg, rgba(217, 119, 6, 0.12), #fffbeb);
+  border-color: #fef3c7;
+  color: #d97706;
+}
+
+.mla-sport-icon.rose {
+  background: linear-gradient(135deg, rgba(244, 63, 94, 0.12), #fff1f2);
+  border-color: #ffe4e6;
+  color: #f43f5e;
+}
+
+.mla-sport-icon.orange {
+  background: linear-gradient(135deg, rgba(234, 88, 12, 0.12), #fff7ed);
+  border-color: #ffedd5;
+  color: #ea580c;
+}
+
+.mla-verify-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.mla-verify-chip svg {
+  width: 13px;
+  height: 13px;
+}
+
+.mla-verify-chip.verified {
+  background: #e2f7ec;
+  color: #167447;
+}
+
+.mla-verify-chip.unverified {
+  background: #eef2f7;
+  color: #5b6e82;
+  font-weight: 600;
+}
+
+.mla-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #5b6e82;
+}
+
+.mla-sport-title-group {
+  margin-bottom: 14px;
+}
+
+.mla-sport-title-group h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #153e67;
+  transition: color 0.16s ease;
+}
+
+.mla-sport-card:hover .mla-sport-title-group h3 {
+  color: #1769d2;
+}
+
+.mla-sport-title-group p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: #64748b;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Level Box inside Sport Card */
+.mla-sport-level-box {
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 13px;
+  padding: 12px;
+  margin-bottom: 14px;
+}
+
+.mla-sport-level-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.mla-sport-level-head span {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.mla-level-pill {
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.mla-level-pill.beginner {
+  background: #dbeafe;
+  color: #1769d2;
+}
+
+.mla-level-pill.intermediate {
+  background: #d1fae5;
+  color: #167447;
+}
+
+.mla-level-pill.advanced {
+  background: #f3e8ff;
+  color: #7e22ce;
+}
+
+.mla-seg-bar {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.mla-seg-bar span {
+  height: 7px;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.mla-sport-level-box.beginner .mla-seg-bar span.is-filled {
+  background: #1769d2;
+}
+
+.mla-sport-level-box.intermediate .mla-seg-bar span.is-filled {
+  background: #167447;
+}
+
+.mla-sport-level-box.advanced .mla-seg-bar span.is-filled {
+  background: #9333ea;
+}
+
+.mla-seg-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.mla-sport-level-box.beginner .mla-seg-labels span.is-current {
+  color: #1769d2;
+  font-weight: 800;
+}
+
+.mla-sport-level-box.intermediate .mla-seg-labels span.is-current {
+  color: #167447;
+  font-weight: 800;
+}
+
+.mla-sport-level-box.advanced .mla-seg-labels span.is-current {
+  color: #7e22ce;
+  font-weight: 800;
+}
+
+/* Quick facts in sport card */
+.mla-sport-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.mla-sport-fact-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mla-sport-fact-line svg {
+  width: 15px;
+  height: 15px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.mla-sport-fact-line svg.icon-green {
+  color: #10b981;
+}
+
+.mla-sport-fact-line svg.icon-amber {
+  color: #f59e0b;
+}
+
+.mla-sport-fact-line .strong {
+  font-weight: 600;
+  color: #334155;
+}
+
+.mla-sport-fact-line .amber-text {
+  font-weight: 600;
+  color: #996000;
+}
+
+.main .mla-sport-card-cta {
   width: 100%;
-  min-height: 44px;
-  padding: 9px 12px;
-  border: 1px solid #cbd8e6;
-  border-radius: 10px;
-  background: #fff;
-  color: #203c5c;
-  font: inherit;
+  height: 40px;
+  border: 0;
+  border-radius: 12px !important;
+  background: #eff4ff;
+  color: #1769d2;
+  font-size: 12.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background-color 0.18s ease, color 0.18s ease;
 }
 
-.member-levels-page .member-level-card {
+.main .mla-sport-card-cta svg {
+  width: 14px;
+  height: 14px;
+}
+
+.mla-sport-card:hover .mla-sport-card-cta,
+.main .mla-sport-card-cta:hover {
+  background: #1769d2;
+  color: #ffffff;
+}
+
+/* Info Banner at bottom of Step 1 */
+.mla-info-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 20px;
+  border-radius: 16px;
+  background: rgba(239, 246, 255, 0.8);
+  border: 1px solid #bfdbfe;
+  color: #16407a;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.mla-info-banner-icon {
+  width: 20px;
+  height: 20px;
+  color: #1769d2;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.mla-info-banner p {
+  margin: 0;
+}
+
+.mla-info-banner .green-highlight {
+  color: #167447;
+}
+
+/* ==========================================================================
+   STEP 2: SPORT DETAIL VIEW
+   ========================================================================== */
+.mla-step2-view {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.mla-step2-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.mla-step2-nav-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.main .mla-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 999px !important;
+  border: 1px solid #dce7f4;
+  background: #ffffff;
+  color: #153e67;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
+  transition: all 0.16s ease;
+}
+
+.main .mla-back-btn svg {
+  width: 15px;
+  height: 15px;
+  color: #1769d2;
+  transition: transform 0.16s ease;
+}
+
+.main .mla-back-btn:hover {
+  border-color: #1769d2;
+  color: #1769d2;
+  background: #ffffff;
+}
+
+.main .mla-back-btn:hover svg {
+  transform: translateX(-3px);
+}
+
+.mla-step2-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #64748b;
+}
+
+.mla-step2-badge {
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #eef2f7;
+  color: #475569;
+  font-weight: 700;
+}
+
+.mla-step2-breadcrumb strong {
+  color: #153e67;
+  font-weight: 800;
+}
+
+.mla-quick-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid #dce7f4;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
+  font-size: 12.5px;
+}
+
+.mla-switcher-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #1769d2;
+}
+
+.mla-quick-switcher label {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.mla-quick-switcher select {
+  border: 0;
+  background: transparent;
+  color: #153e67;
+  font-size: 12.5px;
+  font-weight: 800;
+  font-family: inherit;
+  padding-right: 6px;
+  cursor: pointer;
+  outline: none;
+}
+
+/* ---------- HERO CARD (STEP 2) ---------- */
+.member-levels-page .member-level-card.mla-hero-card {
+  position: relative;
+  overflow: hidden;
+  display: block !important;
   max-width: none !important;
-  min-height: 142px;
-  border-color: #d7e6f5;
-  background: linear-gradient(120deg, #fff, #f3f8ff);
+  padding: clamp(24px, 3vw, 34px) !important;
+  border-radius: 22px !important;
+  border: 1px solid rgba(96, 165, 250, 0.28) !important;
+  background: linear-gradient(112deg, #1769d2 0%, #0f4fa8 52%, #0b2745 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 18px 38px rgba(11, 39, 69, 0.2) !important;
 }
 
-.member-levels-page .member-level-card .eyebrow {
-  color: #1767b2;
-  letter-spacing: .1em;
+.member-levels-page .member-level-card.mla-hero-card:hover {
+  transform: none;
 }
 
-.member-levels-page .member-level-value {
-  width: fit-content;
-  border: 1px solid #cfe2f7;
-  background: #e9f3ff;
+.mla-hero-watermark {
+  position: absolute;
+  right: -24px;
+  bottom: -36px;
+  width: 280px;
+  height: 280px;
+  opacity: 0.08;
+  pointer-events: none;
+  color: #ffffff;
 }
 
-.member-levels-page .member-history-card {
-  border-color: #dce7f3;
+.mla-hero-watermark svg {
+  width: 100%;
+  height: 100%;
+}
+
+.mla-hero-grid {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.95fr);
+  gap: 28px;
+  align-items: center;
+}
+
+.mla-hero-main {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.mla-hero-badges {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.member-levels-page .member-level-card.mla-hero-card .eyebrow.mla-hero-eyebrow {
+  margin: 0 !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px !important;
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.16) !important;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #ffffff !important;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.mla-hero-eyebrow svg {
+  width: 14px;
+  height: 14px;
+  color: #bfdbfe;
+}
+
+.mla-hero-verify-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.mla-hero-verify-pill svg {
+  width: 14px;
+  height: 14px;
+}
+
+.mla-hero-verify-pill.verified {
+  background: rgba(16, 185, 129, 0.22);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  color: #6ee7b7 !important;
+}
+
+.mla-hero-verify-pill.unverified {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #e2e8f0 !important;
+}
+
+.mla-hero-level-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.member-levels-page .member-level-card.mla-hero-card .member-level-value.mla-hero-level-text {
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+  color: #ffffff !important;
+  font-size: clamp(28px, 3vw, 38px) !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+.mla-hero-tier-badge {
+  padding: 3px 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #bfdbfe !important;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.member-levels-page .member-level-card.mla-hero-card .mla-hero-desc {
+  margin: 8px 0 0 !important;
+  color: rgba(219, 234, 254, 0.92) !important;
+  font-size: 13.5px;
+  line-height: 1.65;
+  max-width: 620px;
+}
+
+.mla-hero-roadmap {
+  padding-top: 4px;
+}
+
+.mla-roadmap-steps {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.mla-roadmap-step {
+  color: rgba(191, 219, 254, 0.72) !important;
+}
+
+.mla-roadmap-step.is-done {
+  color: #6ee7b7 !important;
+}
+
+.mla-roadmap-step.is-current {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #ffffff !important;
+}
+
+.mla-roadmap-bar {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.mla-roadmap-bar span {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.mla-roadmap-bar span.seg-done {
+  background: #34d399;
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.45);
+}
+
+.mla-roadmap-bar span.seg-active {
+  background: #ffffff;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.55);
+}
+
+.mla-roadmap-captions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: rgba(191, 219, 254, 0.78) !important;
+}
+
+.mla-roadmap-captions .is-bright {
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+/* Right Glass Card inside Hero */
+.mla-glass-card {
+  background: rgba(255, 255, 255, 0.11);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 18px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mla-glass-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.mla-glass-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mla-glass-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mla-glass-icon svg {
+  width: 18px;
+  height: 18px;
+  color: #ffffff;
+}
+
+.mla-glass-header h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: #ffffff !important;
+}
+
+.mla-glass-header p {
+  margin: 2px 0 0 !important;
+  font-size: 11px !important;
+  color: #bfdbfe !important;
+}
+
+.mla-glass-status {
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.mla-glass-status.verified {
+  background: rgba(16, 185, 129, 0.22);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  color: #6ee7b7 !important;
+}
+
+.mla-glass-status.default {
+  background: rgba(255, 255, 255, 0.16);
+  color: #e2e8f0 !important;
+}
+
+.mla-glass-meta {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  font-size: 12px;
+}
+
+.mla-glass-meta > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.mla-glass-meta > div:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.mla-glass-meta dt {
+  color: #bfdbfe !important;
+  font-weight: 500;
+}
+
+.mla-glass-meta dd {
+  margin: 0;
+  color: #ffffff !important;
+  font-weight: 700;
+  text-align: right;
+}
+
+.mla-glass-meta dd.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11.5px;
+}
+
+.mla-glass-meta dd.amber {
+  color: #fde68a !important;
+}
+
+.mla-coach-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mla-coach-pill > span {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(147, 197, 253, 0.28);
+  font-size: 10.5px;
+}
+
+.main .mla-glass-cta,
+.member-level-card .mla-glass-cta,
+.mla-glass-card button.mla-glass-cta {
+  width: 100%;
+  height: 42px;
+  min-height: 42px !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+  color: #153e67 !important;
+  font-size: 13px !important;
+  font-weight: 800 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  cursor: pointer !important;
+  box-shadow: 0 6px 16px rgba(7, 27, 50, 0.18) !important;
+  transition: all 0.18s ease !important;
+}
+
+.main .mla-glass-cta *,
+.member-level-card .mla-glass-cta *,
+.mla-glass-card button.mla-glass-cta * {
+  color: #153e67 !important;
+}
+
+.main .mla-glass-cta svg,
+.member-level-card .mla-glass-cta svg,
+.mla-glass-card button.mla-glass-cta svg {
+  width: 16px !important;
+  height: 16px !important;
+  color: #1769d2 !important;
+  transition: transform 0.18s ease !important;
+}
+
+.main .mla-glass-cta:hover,
+.member-level-card .mla-glass-cta:hover,
+.mla-glass-card button.mla-glass-cta:hover {
+  background: #eff6ff !important;
+  color: #1769d2 !important;
+  transform: translateY(-1px) !important;
+}
+
+.main .mla-glass-cta:hover *,
+.member-level-card .mla-glass-cta:hover *,
+.mla-glass-card button.mla-glass-cta:hover * {
+  color: #1769d2 !important;
+}
+
+.main .mla-glass-cta:hover svg,
+.member-level-card .mla-glass-cta:hover svg,
+.mla-glass-card button.mla-glass-cta:hover svg {
+  transform: translateX(3px) !important;
+}
+
+/* ---------- 2-COLUMN HISTORY SECTION (STEP 2) ---------- */
+.mla-history-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.95fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.member-levels-page .member-levels-section.mla-history-panel {
+  margin: 0;
+  background: #ffffff;
+  border: 1px solid #e3ebf5;
+  border-radius: 18px;
+  padding: 24px;
+  box-shadow: 0 4px 16px rgba(21, 50, 82, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.mla-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e3ebf5;
+}
+
+.mla-panel-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mla-panel-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mla-panel-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.mla-panel-icon.blue {
+  background: #eff4ff;
+  color: #1769d2;
+}
+
+.mla-panel-icon.amber {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.mla-panel-title-wrap h2 {
+  margin: 0;
+  font-size: 16.5px;
+  font-weight: 800;
+  color: #153e67;
+}
+
+.mla-panel-title-wrap h2::before {
+  display: none !important;
+}
+
+.mla-panel-title-wrap p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.mla-badge-count {
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.mla-badge-count.blue {
+  background: #eff4ff;
+  color: #1769d2;
+}
+
+.mla-badge-count.amber {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.mla-consult-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mla-mini-toggle {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 9px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+}
+
+.main .mla-mini-toggle button {
+  border: 0;
+  background: transparent;
+  padding: 4px 9px;
+  min-height: 0;
+  border-radius: 6px !important;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.main .mla-mini-toggle button.is-active {
+  background: #ffffff;
+  color: #153e67;
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+/* History Record Cards */
+.member-levels-page .member-history-list.mla-card-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.member-levels-page .member-history-card.mla-record-card {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 14px !important;
+  padding: 18px 20px !important;
+  border-radius: 16px !important;
+  border: 1px solid #e3ebf5 !important;
+  background: #fcfdff !important;
+  color: #1e293b !important;
+  box-shadow: none !important;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.member-levels-page .member-history-card.mla-record-card:hover {
+  border-color: #93c5fd !important;
+  box-shadow: 0 6px 18px rgba(23, 105, 210, 0.06) !important;
+}
+
+.member-levels-page .member-history-heading.mla-record-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 0;
+  border-bottom: 0;
+  margin-bottom: 0;
+}
+
+.mla-record-title-group {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 10px !important;
+}
+
+.mla-record-id-box {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11.5px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.mla-record-id-box.blue {
+  background: #dbeafe;
+  color: #1769d2;
+}
+
+.mla-record-id-box.amber {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.mla-record-title-group strong {
+  display: block;
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  color: #153e67 !important;
+}
+
+.mla-record-title-group span {
+  display: block;
+  font-size: 11.5px !important;
+  color: #64748b !important;
+}
+
+.member-levels-page .member-history-facts.mla-record-facts {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 14px !important;
+  margin: 0 !important;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+}
+
+.member-levels-page .member-history-facts.mla-record-facts.cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.member-levels-page .member-history-facts.mla-record-facts .span-2 {
+  grid-column: span 2;
+}
+
+.member-levels-page .member-history-facts.mla-record-facts dt {
+  margin: 0 0 3px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  color: #94a3b8 !important;
+}
+
+.member-levels-page .member-history-facts.mla-record-facts dd {
+  margin: 0 !important;
+  font-size: 12.5px !important;
+  font-weight: 700 !important;
+  color: #1e293b !important;
+}
+
+.member-levels-page .member-history-facts.mla-record-facts dd.highlight-blue {
+  color: #1769d2 !important;
+  font-weight: 800 !important;
+}
+
+.member-levels-page .member-history-facts.mla-record-facts dd.highlight-green {
+  color: #167447 !important;
+}
+
+.mla-pending-hint {
+  margin: 0 !important;
+  font-size: 12.5px !important;
+  color: #996000 !important;
+  font-weight: 600;
+}
+
+.member-levels-page .member-history-notes.mla-note-callout {
+  margin: 0 !important;
+  padding: 12px 14px !important;
+  border-radius: 10px !important;
+  font-size: 12.5px !important;
+  line-height: 1.6 !important;
+}
+
+.member-levels-page .member-history-notes.mla-note-callout.blue {
+  background: #eff4ff !important;
+  border-left: 4px solid #1769d2 !important;
+  color: #334155 !important;
+}
+
+.member-levels-page .member-history-notes.mla-note-callout.amber {
+  background: rgba(254, 243, 199, 0.55) !important;
+  border-left: 4px solid #f59e0b !important;
+  color: #334155 !important;
+}
+
+.mla-note-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.mla-note-header strong {
+  font-size: 12px;
+  font-weight: 800;
+  color: #153e67 !important;
+}
+
+.mla-note-header span {
+  font-size: 11px;
+  color: #64748b !important;
+}
+
+.mla-note-callout p {
+  margin: 0 !important;
+  color: #475569 !important;
+}
+
+.mla-panel-helper {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px dashed #dce7f4;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.main .mla-inline-link {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  min-height: 0;
+  color: #1769d2;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.main .mla-inline-link:hover {
+  text-decoration: underline;
+  background: transparent;
+  color: #0f4fa8;
+}
+
+.mla-empty-box {
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Dashed CTA Box in Consultation Column */
+.mla-consult-cta-box {
+  padding: 20px;
+  border-radius: 16px;
+  border: 2px dashed #dce7f4;
+  background: #f8fafc;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.mla-consult-cta-box:hover {
+  background: #ffffff;
+  border-color: #1769d2;
+}
+
+.mla-consult-cta-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #eff6ff;
+  color: #1769d2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.mla-consult-cta-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.mla-consult-cta-box h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  color: #153e67;
+}
+
+.mla-consult-cta-box p {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  color: #64748b;
+  max-width: 300px;
+  line-height: 1.55;
+}
+
+.main .mla-consult-cta-btn {
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 999px !important;
+  border: 1px solid #dce7f4;
+  background: #ffffff;
+  color: #1769d2;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.main .mla-consult-cta-btn:hover {
+  background: #1769d2;
+  border-color: #1769d2;
+  color: #ffffff;
+}
+
+/* Step 2 Footer */
+.mla-step2-footer {
+  padding: 14px 20px;
   border-radius: 14px;
-  box-shadow: 0 6px 18px rgb(27 65 105 / 4%);
+  background: #ffffff;
+  border: 1px solid #e3ebf5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #64748b;
 }
 
-.member-levels-page .member-history-card:focus-within {
-  border-color: #9abfe3;
+.mla-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-@media (max-width: 760px) {
-  .main.member-levels-page {
-    padding: 24px 18px;
+.mla-footer-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.mla-footer-links {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.main .mla-footer-links button {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  min-height: 0;
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.main .mla-footer-links button:hover {
+  color: #1769d2;
+  background: transparent;
+}
+
+/* ---------- CONSULTATION / ASSESSMENT REQUEST MODAL ---------- */
+.mla-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(11, 39, 69, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.mla-modal {
+  width: min(540px, 100%);
+  max-height: 92vh;
+  overflow-y: auto;
+  background: #ffffff;
+  border-radius: 20px;
+  border: 1px solid #e3ebf5;
+  padding: 24px 26px;
+  box-shadow: 0 24px 60px rgba(7, 27, 50, 0.32);
+}
+
+.mla-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e3ebf5;
+  margin-bottom: 18px;
+}
+
+.mla-modal-header h2 {
+  margin: 8px 0 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #153e67;
+}
+
+.main .mla-modal-close {
+  border: 0;
+  background: #f1f5f9;
+  color: #475569;
+  width: 32px;
+  height: 32px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50% !important;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mla-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.mla-modal-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.mla-modal-grid label.wide {
+  grid-column: span 2;
+}
+
+.mla-modal-grid input,
+.mla-modal-grid select,
+.mla-modal-grid textarea {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  color: #0f172a;
+  background: #ffffff;
+  outline: none;
+}
+
+.mla-modal-grid input:focus,
+.mla-modal-grid select:focus,
+.mla-modal-grid textarea:focus {
+  border-color: #1769d2;
+  box-shadow: 0 0 0 3px rgba(23, 105, 210, 0.15);
+}
+
+.mla-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e3ebf5;
+}
+
+.main .mla-btn-secondary {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 999px !important;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* ---------- RESPONSIVE ---------- */
+@media (max-width: 1120px) {
+  .mla-kpi-grid {
+    grid-template-columns: 1fr;
   }
 
-  .member-levels-page .member-level-card {
-    min-height: 0;
+  .mla-sports-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mla-hero-grid,
+  .mla-history-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .mla-sports-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .member-levels-page .member-history-facts.mla-record-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mla-modal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mla-modal-grid label.wide {
+    grid-column: span 1;
   }
 }
