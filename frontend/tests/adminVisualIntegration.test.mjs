@@ -5,7 +5,7 @@ import test from "node:test";
 test("Admin dashboard keeps real revenue data and uses scoped presentation", async () => {
   const source = await readFile(new URL("../src/pages/Dashboard.jsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../src/pages/Dashboard.css", import.meta.url), "utf8");
-  assert.match(source, /function Admin\(\{ d, token \}\)/);
+  assert.match(source, /function Admin\(\{ d, token, errors = \{\} \}\)/);
   assert.match(source, /className="admin-dashboard"/);
   assert.match(source, /getAdminRevenueReportApi\(token/);
   assert.match(source, /AdminRevenueCard token=\{token\}/);

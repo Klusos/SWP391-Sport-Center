@@ -17,6 +17,7 @@ import {
 } from "../api";
 import { coachAssessmentSummary, confirmedEnrollmentCount, pendingCoachAssessments, upcomingTeachingSessions } from "../coachDashboard.js";
 import { activeMembershipPlanRows, pendingConsultationRows, receptionistDashboardMetrics, searchReceptionistMembers } from "../receptionistDashboard.js";
+import { visibleAdminDashboardSports } from "../adminDashboard.js";
 import "./ReceptionistDashboard.css";
 
 /* ---------- helpers ---------- */
@@ -129,7 +130,10 @@ function AdminRevenueCard({ token }) {
   );
 }
 
-function Admin({ d, token }) {
+function Admin({ d, token, errors = {} }) {
+  const [showAllSports, setShowAllSports] = useState(false);
+  const sports = list(d.sports);
+  const visibleSports = visibleAdminDashboardSports(sports, showAllSports);
   const reqs = list(d.requests);
   const by = (s) => reqs.filter((r) => r.status === s).length;
   const rows = [["Chờ xử lý", by("PENDING"), "orange"], ["Đang xử lý", by("IN_PROGRESS"), "blue"], ["Hoàn thành", by("COMPLETED"), "green"]];
@@ -152,11 +156,17 @@ function Admin({ d, token }) {
       </Card>
     </div>
     <Card title="Bộ môn">
-      {list(d.sports).length === 0 ? <Empty>Chưa có bộ môn nào.</Empty> : (
+      {errors.sports ? <p className="dash-error" role="alert">Không tải được danh sách bộ môn: {errors.sports}</p> : sports.length === 0 ? <Empty>Chưa có bộ môn nào.</Empty> : (
         <ul className="dash-rows">
-          {list(d.sports).slice(0, 6).map((s) => <li key={s.id}><span>{s.name}</span><em>{s.status}</em></li>)}
+          {visibleSports.map((s) => <li key={s.id}><span>{s.name}</span><em>{s.status}</em></li>)}
         </ul>
       )}
+      {!errors.sports && sports.length > 6 && <button
+        className="admin-sports-toggle"
+        type="button"
+        aria-expanded={showAllSports}
+        onClick={() => setShowAllSports((expanded) => !expanded)}
+      >{showAllSports ? "Thu gọn" : `Xem tất cả (${sports.length})`}</button>}
     </Card>
   </div>;
 }

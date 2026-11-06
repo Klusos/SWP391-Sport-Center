@@ -111,6 +111,20 @@
 }
 .admin-dashboard .dash-grid.wide { align-items: stretch; }
 .admin-dashboard .dash-card { box-shadow: 0 8px 24px rgba(20, 48, 82, .055); }
+.admin-dashboard .admin-sports-toggle {
+  margin-top: 10px;
+  padding: 7px 11px;
+  border: 1px solid #d5e3f1;
+  border-radius: 8px;
+  background: #f7faff;
+  color: var(--blue);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.admin-dashboard .admin-sports-toggle:hover { border-color: var(--blue); background: #eef5ff; }
+.admin-dashboard .admin-sports-toggle:focus-visible { outline: 3px solid rgba(104, 177, 255, .9); outline-offset: 2px; }
 @media (max-width: 560px) {
   .admin-dashboard .dash-stat { min-height: 92px; }
 }
