@@ -1,3 +1,5 @@
+import { evaluateCourseAgeEligibility } from "./courseAgeEligibility.js";
+
 export function counterCoursePaymentPayload(memberId, registrationId) {
   const member = Number(memberId), registration = Number(registrationId);
   if (![member, registration].every((id) => Number.isSafeInteger(id) && id > 0)) {
@@ -5,7 +7,6 @@ export function counterCoursePaymentPayload(memberId, registrationId) {
   }
   return { memberId: member, method: "COUNTER", purpose: "COURSE_REGISTRATION", referenceId: registration };
 }
-
 export function activeSeatCount(registrations, classId, now = Date.now()) {
   return (registrations || []).filter((item) => Number(item.classId) === Number(classId)
     && (item.status === "CONFIRMED" || (item.status === "PENDING_PAYMENT" && vietnamTime(item.paymentDeadline) > now))).length;
@@ -36,23 +37,14 @@ export function membershipDiscount(memberMemberships, plans, sportDate = new Dat
     .map((membership) => planDiscounts.get(Number(membership.planId)) || 0));
 }
 
-export function eligibilityIssues(member, course, level, offering, registrations = []) {
+export function eligibilityIssues(member, course, level, offering, registrations = [], businessDate) {
   const issues = [];
   if (member?.status !== "ACTIVE" || member?.role !== "MEMBER") issues.push("Tài khoản không phải MEMBER đang hoạt động.");
   const required = String(course?.level || "BEGINNER").toUpperCase();
   const ranks = { BEGINNER: 0, INTERMEDIATE: 1, ADVANCED: 2 };
   if (!(required in ranks)) issues.push("Khóa học có cấp độ không được hỗ trợ.");
-  const dob = member?.dateOfBirth;
-  if (dob && (course?.targetAgeMin != null || course?.targetAgeMax != null)) {
-    const birth = new Date(`${dob}T00:00:00`), today = new Date();
-    let age = today.getFullYear() - birth.getFullYear();
-    if (today.getMonth() < birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) age--;
-    if ((course.targetAgeMin != null && age < course.targetAgeMin) || (course.targetAgeMax != null && age > course.targetAgeMax)) {
-      issues.push("Thành viên không nằm trong độ tuổi mục tiêu của khóa.");
-    }
-  } else if (course?.targetAgeMin != null || course?.targetAgeMax != null) {
-    issues.push("Cần ngày sinh để kiểm tra độ tuổi.");
-  }
+  const ageEligibility = evaluateCourseAgeEligibility(course, member?.dateOfBirth, businessDate);
+  if (ageEligibility.decision === "BLOCKED") issues.push(ageEligibility.message);
   if (required in ranks && required !== "BEGINNER") {
     if (!level?.verifiedAt || !level?.verifiedByCoachId || !(String(level.level).toUpperCase() in ranks)) {
       issues.push("Cần HLV xác minh trình độ trước khi đăng ký khóa này.");
@@ -76,6 +68,11 @@ export function eligibilityIssues(member, course, level, offering, registrations
     issues.push("Thành viên đã có đăng ký đang giữ chỗ hoặc đã xác nhận trong đợt này.");
   }
   return issues;
+}
+
+export function courseAgeWarning(member, course, businessDate) {
+  const result = evaluateCourseAgeEligibility(course, member?.dateOfBirth, businessDate);
+  return result.decision === "ALLOWED_WITH_WARNING" ? result.message : "";
 }
 
 export function estimateCoursePrice(price, discountPercent) {

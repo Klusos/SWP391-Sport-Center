@@ -7,7 +7,7 @@ import {
   getMemberPaymentsApi, getMembershipsByMemberApi, getMemberSportLevelsApi,
   getPublicMembershipPlansApi, getSportsApi, getUsersApi, processCounterPaymentApi,
 } from "../api";
-import { activeSeatCount, counterCoursePaymentPayload, eligibilityIssues, estimateCoursePrice, formatVietnamTime, membershipDiscount, vietnamTime } from "../receptionistRegistration";
+import { activeSeatCount, counterCoursePaymentPayload, courseAgeWarning, eligibilityIssues, estimateCoursePrice, formatVietnamTime, membershipDiscount, vietnamTime } from "../receptionistRegistration";
 import "./Portal.css";
 import "./ReceptionistCourseRegistration.css";
 
@@ -83,6 +83,7 @@ export default function ReceptionistCourseRegistration({ token, role, onLogout, 
   const discountPercent = membershipDiscount(memberships, plans);
   const estimate = selectedOffering ? estimateCoursePrice(selectedOffering.price, discountPercent) : null;
   const issues = selectedMember && selectedCourse ? eligibilityIssues(selectedMember, selectedCourse, activeLevel, selectedOffering, memberRegistrations) : [];
+  const ageWarning = selectedMember && selectedCourse ? courseAgeWarning(selectedMember, selectedCourse) : "";
   const occupied = selectedClass ? activeSeatCount(allRegistrations, selectedClass.id, now) : 0;
   const matchingPending = useMemo(() => memberRegistrations.filter((registration) => registration.status === "PENDING_PAYMENT"), [memberRegistrations]);
   const visibleMembers = members.filter((member) => `${member.name} ${member.email} ${member.id}`.toLowerCase().includes(search.trim().toLowerCase())).slice(0, 30);
@@ -200,6 +201,7 @@ export default function ReceptionistCourseRegistration({ token, role, onLogout, 
             <p>{selectedClass.coachName || "Chưa phân HLV"} · Sức chứa {occupied}/{selectedClass.capacity} · {selectedClass.status}</p>
             {selectedOffering && <p>Đăng ký đến: {formatVietnamTime(selectedOffering.registrationDeadline)} · Thời gian khóa: {selectedOffering.startDate} – {selectedOffering.endDate}</p>}
             {selectedMember && <><p>Ưu đãi hội viên hiện tại: {discountPercent}% · Giá dự kiến: {estimate ? money(estimate.finalPrice) : "—"}</p><small>Giá và điều kiện cuối cùng do máy chủ tính khi tạo đăng ký.</small></>}
+            {ageWarning && <p className="receptionist-eligibility-warning" role="status">{ageWarning}</p>}
             {issues.length > 0 ? <ul className="receptionist-eligibility-error" role="alert">{issues.map((issue) => <li key={issue}>{issue}</li>)}</ul>
               : selectedMember && <p className="receptionist-eligibility-ok">Điều kiện hồ sơ sơ bộ đạt. Máy chủ sẽ kiểm tra lại lịch đăng ký, trình độ, chỗ trống và lịch học.</p>}
             <button type="button" disabled={!selectedMember || !selectedClass || issues.length > 0 || busy || memberLoading || occupied >= selectedClass.capacity} onClick={() => void createRegistration()}>{busy ? "Đang xử lý…" : "Tạo giữ chỗ PENDING_PAYMENT"}</button>

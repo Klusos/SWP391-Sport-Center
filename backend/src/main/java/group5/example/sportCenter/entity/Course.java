@@ -33,6 +33,10 @@ public class Course {
 
     private Integer targetAgeMax;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "age_policy", nullable = false, length = 20, columnDefinition = "varchar(20)")
+    private CourseAgePolicy agePolicy = CourseAgePolicy.RECOMMENDED;
+
     @Column(length = 50)
     private String level;
 

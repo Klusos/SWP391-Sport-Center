@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  activeSeatCount, counterCoursePaymentPayload, eligibilityIssues, estimateCoursePrice,
+  activeSeatCount, counterCoursePaymentPayload, courseAgeWarning, eligibilityIssues, estimateCoursePrice,
   formatVietnamTime, membershipDiscount,
 } from "../src/receptionistRegistration.js";
 
@@ -24,13 +24,23 @@ test("seat estimate counts confirmed and unexpired holds only", () => {
 
 test("eligibility preview identifies age, verified level and duplicate offering issues", () => {
   const member = { id: 8, role: "MEMBER", status: "ACTIVE", dateOfBirth: "2015-01-01" };
-  const course = { level: "INTERMEDIATE", targetAgeMin: 18 };
+  const course = { level: "INTERMEDIATE", agePolicy: "REQUIRED", targetAgeMin: 18, targetAgeMax: 35 };
   const offering = { id: 14, startDate: "2026-12-20", registrationDeadline: "2099-01-01T00:00:00" };
   const registrations = [{ memberId: 8, courseOfferingId: 14, status: "PENDING_PAYMENT", paymentDeadline: "2099-01-01T00:00:00" }];
-  const issues = eligibilityIssues(member, course, null, offering, registrations);
-  assert.ok(issues.some((issue) => issue.includes("độ tuổi")));
+  const issues = eligibilityIssues(member, course, null, offering, registrations, "2026-11-05");
+  assert.ok(issues.some((issue) => /độ tuổi/i.test(issue)));
   assert.ok(issues.some((issue) => issue.includes("HLV xác minh")));
   assert.ok(issues.some((issue) => issue.includes("đăng ký đang giữ chỗ")));
+});
+
+test("recommended age warning is informational while required age mismatch blocks", () => {
+  const member = { id: 8, role: "MEMBER", status: "ACTIVE", dateOfBirth: "2012-01-01" };
+  const recommended = { level: "BEGINNER", agePolicy: "RECOMMENDED", targetAgeMin: 18, targetAgeMax: 35 };
+  assert.match(courseAgeWarning(member, recommended, "2026-11-05"), /khuyến nghị/i);
+  assert.equal(eligibilityIssues(member, recommended, null, null, [], "2026-11-05").some((issue) => /độ tuổi/i.test(issue)), false);
+  assert.equal(courseAgeWarning(member, { ...recommended, targetAgeMin: 5, targetAgeMax: 9 }, "2026-11-05"), "");
+  const required = { ...recommended, agePolicy: "REQUIRED" };
+  assert.ok(eligibilityIssues(member, required, null, null, [], "2026-11-05").some((issue) => /bắt buộc/i.test(issue)));
 });
 
 test("membership quote is a display estimate and preserves cents", () => {

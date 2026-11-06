@@ -28,4 +28,8 @@ public class PaymentResponse {
     /** Chỉ có khi status = REFUNDED. */
     private LocalDateTime refundedAt;
     private String refundedByName;
+    private Integer registrationId;
+    private String courseName;
+    private String courseOfferingName;
+    private String className;
 }

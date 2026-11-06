@@ -8,6 +8,7 @@ import group5.example.sportCenter.dto.CourseResponse;
 import group5.example.sportCenter.dto.CreateCourseRequest;
 import group5.example.sportCenter.dto.UpdateCourseRequest;
 import group5.example.sportCenter.entity.Course;
+import group5.example.sportCenter.entity.CourseAgePolicy;
 import group5.example.sportCenter.entity.Sport;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.CourseRepository;
@@ -43,9 +44,9 @@ public class CourseService {
                     "Cannot create course for an inactive sport");
         }
 
-        validateAgeRange(
-                request.getTargetAgeMin(),
-                request.getTargetAgeMax());
+        CourseAgePolicy agePolicy = request.getAgePolicy() == null
+                ? CourseAgePolicy.RECOMMENDED : request.getAgePolicy();
+        validateAgeRange(request.getTargetAgeMin(), request.getTargetAgeMax(), agePolicy);
 
         Course course = new Course();
 
@@ -54,6 +55,7 @@ public class CourseService {
         course.setDescription(request.getDescription());
         course.setTargetAgeMin(request.getTargetAgeMin());
         course.setTargetAgeMax(request.getTargetAgeMax());
+        course.setAgePolicy(agePolicy);
         course.setLevel(CatalogValues.courseLevel(request.getLevel()));
         course.setLearningOutcome(request.getLearningOutcome());
         course.setStatus("ACTIVE");
@@ -123,14 +125,15 @@ public class CourseService {
                         new ResourceNotFoundException(
                                 "Course not found with id: " + id));
 
-        validateAgeRange(
-                request.getTargetAgeMin(),
-                request.getTargetAgeMax());
+        CourseAgePolicy agePolicy = request.getAgePolicy() == null
+                ? course.getAgePolicy() : request.getAgePolicy();
+        validateAgeRange(request.getTargetAgeMin(), request.getTargetAgeMax(), agePolicy);
 
         course.setName(request.getName());
         course.setDescription(request.getDescription());
         course.setTargetAgeMin(request.getTargetAgeMin());
         course.setTargetAgeMax(request.getTargetAgeMax());
+        course.setAgePolicy(agePolicy);
         course.setLevel(CatalogValues.courseLevel(request.getLevel()));
         course.setLearningOutcome(request.getLearningOutcome());
         course.setStatus(CatalogValues.status(request.getStatus(), "Course", List.of("ACTIVE", "INACTIVE")));
@@ -140,7 +143,16 @@ public class CourseService {
 
     private void validateAgeRange(
             Integer minAge,
-            Integer maxAge) {
+            Integer maxAge,
+            CourseAgePolicy agePolicy) {
+
+        if (minAge != null && minAge < 0 || maxAge != null && maxAge < 0) {
+            throw new IllegalArgumentException("Course ages cannot be negative");
+        }
+
+        if (agePolicy == CourseAgePolicy.REQUIRED && (minAge == null || maxAge == null)) {
+            throw new IllegalArgumentException("Required age policy needs both minimum and maximum ages");
+        }
 
         if (minAge != null
                 && maxAge != null
@@ -164,6 +176,8 @@ public class CourseService {
 
                 course.getTargetAgeMin(),
                 course.getTargetAgeMax(),
+
+                course.getAgePolicy(),
 
                 course.getLevel(),
                 course.getLearningOutcome(),

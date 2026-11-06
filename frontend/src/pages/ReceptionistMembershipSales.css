@@ -179,3 +179,8 @@
 .membership-sales-page .membership-sales-selected-member small { color:#647b94; font-size:11px; overflow-wrap:anywhere; }
 .membership-sales-page .membership-sales-selected-tag { flex:none; padding:4px 8px; border-radius:999px; background:#e7f8ef; color:#12804b; font-size:10px; font-weight:750; }
 @media (max-width:480px) { .membership-sales-page .membership-sales-selected-tag { display:none; } }
+
+.membership-sales-page .membership-sales-refund-context { display:grid; min-width:0; gap:4px; overflow-wrap:anywhere; }
+.membership-sales-page .membership-sales-refund-context > strong { color:#183957; }
+.membership-sales-page .membership-sales-refund-context > span { color:#526a86; line-height:1.45; }
+.membership-sales-page .membership-sales-refund-context > small { color:#71859b; overflow-wrap:anywhere; }

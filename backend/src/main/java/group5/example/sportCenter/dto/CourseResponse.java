@@ -3,6 +3,7 @@ package group5.example.sportCenter.dto;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
+import group5.example.sportCenter.entity.CourseAgePolicy;
 
 @Getter
 @Setter
@@ -19,6 +20,8 @@ public class CourseResponse {
 
     private Integer targetAgeMin;
     private Integer targetAgeMax;
+
+    private CourseAgePolicy agePolicy;
 
     private String level;
     private String learningOutcome;

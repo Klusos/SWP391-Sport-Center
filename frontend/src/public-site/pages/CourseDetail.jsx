@@ -5,6 +5,7 @@ import Sidebar from "../../components/Sidebar.jsx";
 import CourseConsultationModal from "../../components/CourseConsultationModal.jsx";
 import { formatClassScheduleSummary, toggleExpandedClass } from "../../memberCoursePresentation.js";
 import { activeOfferingRegistration, courseRegistrationStatusLabel } from "../../memberCourseRegistration.js";
+import { ageOnVietnamBusinessDate, courseAgePolicyLabel, evaluateCourseAgeEligibility } from "../../courseAgeEligibility.js";
 import "../../pages/MemberCourseDetail.css";
 import "./CourseDetail.css";
 import {
@@ -60,13 +61,8 @@ function formatPrice(value) {
 }
 
 function currentAge(dateOfBirth) {
-  if (!dateOfBirth) return "";
-  const date = new Date(`${dateOfBirth}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return "";
-  const today = new Date();
-  let age = today.getFullYear() - date.getFullYear();
-  if (today.getMonth() < date.getMonth() || (today.getMonth() === date.getMonth() && today.getDate() < date.getDate())) age -= 1;
-  return age > 0 && age <= 120 ? String(age) : "";
+  const age = ageOnVietnamBusinessDate(dateOfBirth);
+  return age != null && age > 0 && age <= 120 ? String(age) : "";
 }
 
 function isInsufficientLevel(error) {
@@ -92,6 +88,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
   const [levels, setLevels] = useState(null);
   const [levelsError, setLevelsError] = useState("");
   const [profile, setProfile] = useState(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const [profileError, setProfileError] = useState("");
   const [selectedClassId, setSelectedClassId] = useState("");
   const [expandedScheduleClassId, setExpandedScheduleClassId] = useState(null);
@@ -118,8 +115,12 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
   const existingOfferingRegistration = memberRoute
     ? activeOfferingRegistration(registrations, selectedOfferingId)
     : null;
+  const ageEligibility = memberRoute && isMember && course
+    ? evaluateCourseAgeEligibility(course, profile?.dateOfBirth)
+    : null;
   const canRegister = Boolean(selectedClass && selectedOffering && isOfferingOpenNow(selectedOffering)
-    && String(selectedClass.status).toUpperCase() === "ACTIVE" && !existingOfferingRegistration && !classesError);
+    && String(selectedClass.status).toUpperCase() === "ACTIVE" && !existingOfferingRegistration && !classesError
+    && ageEligibility?.decision !== "BLOCKED");
 
   useEffect(() => {
     let active = true;
@@ -142,7 +143,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
     Promise.resolve().then(() => {
       if (!active) return null;
       setOfferingsLoading(true);
-      setLevelsError(""); setProfileError(""); setSessionExpired(false);
+      setLevelsError(""); setProfileError(""); setProfile(null); setProfileLoaded(false); setSessionExpired(false);
       return Promise.allSettled([
         getCourseOfferingsByCourseApi(auth.accessToken, course.id),
         getMyMemberSportLevelsApi(auth.accessToken),
@@ -167,6 +168,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
       else { setLevels(null); setLevelsError(levelsResult.reason?.message || "Không tải được trình độ hiện tại."); if (levelsResult.reason?.status === 401) setSessionExpired(true); }
       if (profileResult.status === "fulfilled") setProfile(profileResult.value);
       else { setProfile(null); setProfileError(profileResult.reason?.message || "Không tải được thông tin hồ sơ."); if (profileResult.reason?.status === 401) setSessionExpired(true); }
+      setProfileLoaded(true);
       if (registrationsResult.status === "fulfilled" && Array.isArray(registrationsResult.value)) setRegistrations(registrationsResult.value);
       else { setRegistrations([]); if (registrationsResult.reason?.status === 401) setSessionExpired(true); }
     }).finally(() => { if (active) setOfferingsLoading(false); });
@@ -295,7 +297,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
             {memberRoute && <h2 className="member-course-overview-title">Thông tin khóa học</h2>}
             {memberRoute && course.description && <p>{course.description}</p>}
             {course.learningOutcome && <div><h2>Kết quả mong đợi</h2><p>{course.learningOutcome}</p></div>}
-            {!memberRoute && (course.targetAgeMin != null || course.targetAgeMax != null) && <p><strong>Độ tuổi:</strong> {course.targetAgeMin ?? "Không giới hạn"} – {course.targetAgeMax ?? "Không giới hạn"}</p>}
+            {!memberRoute && <p><strong>{courseAgePolicyLabel(course)}:</strong> {course.targetAgeMin ?? "Không giới hạn"} – {course.targetAgeMax ?? "Không giới hạn"}</p>}
             {!memberRoute && (isMember ? <button type="button" className="btn btn-cyan" onClick={openConsultation}>Yêu cầu tư vấn</button>
               : <Link to="/tuyen-sinh" className="btn btn-cyan">Đăng ký tư vấn</Link>)}
           </article>
@@ -405,6 +407,12 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
                   </div>}
               {scheduleError && <p className="member-muted" role="status">{scheduleError} Thông tin lịch có thể chưa được công bố.</p>}
               <p className="member-muted">Sức chứa là sức chứa tối đa do hệ thống cung cấp; số chỗ còn lại không được API hiện tại cung cấp. Học phí hiển thị chỉ để tham khảo; máy chủ tính giá và ưu đãi khi đăng ký.</p>
+              <p className="member-course-age-policy"><strong>{courseAgePolicyLabel(course)}:</strong> {course.targetAgeMin ?? "Không giới hạn"} – {course.targetAgeMax ?? "Không giới hạn"} tuổi.</p>
+              {profileError && <p className="member-course-age-blocked" role="alert">Không xác minh được ngày sinh nên chưa thể đăng ký. Hãy kiểm tra hồ sơ hoặc thử tải lại.</p>}
+              {!profileError && !profileLoaded && <p className="member-course-age-blocked" role="status">Đang xác minh ngày sinh để kiểm tra điều kiện độ tuổi…</p>}
+              {profile?.dateOfBirth && ageEligibility?.decision === "BLOCKED" && <p className="member-course-age-blocked" role="alert">{ageEligibility.message}</p>}
+              {profileLoaded && !profile?.dateOfBirth && !profileError && <p className="member-course-age-blocked" role="alert">Hồ sơ chưa có ngày sinh hợp lệ; vui lòng cập nhật ngày sinh trước khi đăng ký.</p>}
+              {profile?.dateOfBirth && ageEligibility?.decision === "ALLOWED_WITH_WARNING" && <p className="member-course-age-warning" role="status">{ageEligibility.message}</p>}
               {registrationError && <p className="banner error" role="alert">{registrationError}</p>}
               {selectedClass && !existingOfferingRegistration && <button type="button" className="btn btn-cyan" disabled={!canRegister || registering}
                 onClick={() => setConfirmingRegistration(true)}>Tiếp tục đăng ký lớp đã chọn</button>}
@@ -487,9 +495,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
         {course && <div className="member-course-detail-badges">
           <span className="member-course-detail-badge sport">{course.sportName || (course.sportId != null ? `Bộ môn #${course.sportId}` : "Bộ môn")}</span>
           {course.level && <span className="member-course-detail-badge level">Trình độ: {course.level}</span>}
-          {(course.targetAgeMin != null || course.targetAgeMax != null) && <span className="member-course-detail-badge age">
-            Độ tuổi: {course.targetAgeMin ?? "—"}–{course.targetAgeMax ?? "—"}
-          </span>}
+          <span className="member-course-detail-badge age">{courseAgePolicyLabel(course)}: {course.targetAgeMin ?? "—"}–{course.targetAgeMax ?? "—"}</span>
         </div>}
         <h1>{course?.name || "Chi tiết khóa học"}</h1>
       </header>

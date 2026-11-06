@@ -110,3 +110,12 @@
   .member-course-spinner { animation-duration: 1.6s; }
   .member-course-card,.member-sport-tab { transition: none; }
 }
+
+.member-registration-cancellation { display:grid; grid-column:1 / -1; gap:6px; min-width:0; padding:10px 12px; border:1px solid #dce8f5; border-radius:10px; background:#f8fbff; color:var(--mc-muted); font-size:11px; line-height:1.5; }
+.member-registration-cancellation > button { justify-self:start; min-height:34px; padding:6px 12px; border:1px solid #176ed9; border-radius:8px; background:#176ed9; color:#fff; font:inherit; font-weight:750; cursor:pointer; }
+.member-registration-cancellation > button:disabled { border-color:#d2dce7; background:#eef2f6; color:#75869a; cursor:not-allowed; }
+.member-registration-status.cancelled { background:#f2f4f7; color:#596779; }
+.member-refund-status { justify-self:start; padding:5px 8px; border-radius:999px; font-size:10px; }
+.member-refund-status.pending { background:#fff5dc; color:#805b00; }
+.member-refund-status.complete { background:#e9f8ef; color:#176b3b; }
+.member-registration-cancellation button:focus-visible { outline:3px solid rgb(23 110 217 / 25%); outline-offset:2px; }

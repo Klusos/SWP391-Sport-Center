@@ -26,6 +26,10 @@ const money = (value) => value == null ? "Chưa có giá" : Number(value).toLoca
 const purposeLabel = (payment) => payment?.purpose === "UPGRADE" ? "Nâng cấp lên "
   : isAutoRenewalPayment(payment) ? "Gia hạn tự động · " : "";
 
+const refundDescription = (payment) => payment?.purpose === "COURSE_REGISTRATION"
+  ? "\u0110\u0103ng k\u00fd #" + (payment.registrationId ?? payment.referenceId) + " \u00b7 " + (payment.courseName || "Kh\u00f3a h\u1ecdc #" + payment.referenceId) + " \u00b7 " + (payment.courseOfferingName || "\u0110\u1ee3t ch\u01b0a c\u00f3 t\u00ean") + " \u00b7 " + (payment.className || "L\u1edbp ch\u01b0a c\u00f3 t\u00ean")
+  : (paymentPurposeLabel[payment?.purpose] || payment?.purpose || "Kho\u1ea3n thanh to\u00e1n");
+
 export default function ReceptionistMembershipSales({ token, role, onLogout, onNavigate }) {
   const [members, setMembers] = useState([]);
   const [plans, setPlans] = useState([]);
@@ -260,8 +264,12 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
 
   async function confirmRefund(payment) {
     if (saving) return;
-    const note = window.prompt(`Xác nhận đã trả ${money(payment.amount)} cho ${payment.memberName} (thanh toán #${payment.id})? `
-      + "Chỉ xác nhận khi tiền đã thực sự được hoàn. Ghi chú (không bắt buộc, ví dụ: tiền mặt, chuyển khoản):", "");
+    const context = refundDescription(payment);
+    const confirmed = window.confirm("Hoàn " + money(payment.amount) + " cho " + payment.memberName
+      + " (thanh toán #" + payment.id + ")?\n" + context
+      + "\n\nChỉ xác nhận sau khi đã hoàn tiền trực tiếp cho khách hàng.");
+    if (!confirmed) return;
+    const note = window.prompt("Ghi chú kiểm toán (không bắt buộc):", "");
     if (note === null) return;
     setSaving(true); setError(""); setNotice("");
     try {
@@ -324,8 +332,10 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
         {refunds === null ? <p role="status">Đang tải…</p> : refunds.content.length === 0
           ? <p>Không có khoản nào cần hoàn tiền.</p>
           : <>{refunds.content.map((payment) => <div key={payment.id} className="membership-sales-history-row">
-            <span>#{payment.id} · {payment.memberName} (#{payment.memberId}) · {paymentPurposeLabel[payment.purpose] || payment.purpose} · {money(payment.amount)}
-              {payment.note ? ` · ${payment.note}` : ""}</span>
+            <span className="membership-sales-refund-context"><strong>#{payment.id} · {payment.memberName} (#{payment.memberId})</strong>
+              <span>{refundDescription(payment)}</span>
+              <span>{payment.purpose === "COURSE_REGISTRATION" ? "Tham chiếu đăng ký #" + (payment.registrationId ?? payment.referenceId) + " · " : ""}{money(payment.amount)} · {paymentStatusLabel[payment.status] || payment.status}</span>
+              {payment.note && <small>{payment.note}</small>}</span>
             <button type="button" disabled={saving} onClick={() => void confirmRefund(payment)}>Xác nhận đã hoàn tiền</button>
           </div>)}
           {refunds.totalElements > refunds.content.length && <p>Đang hiển thị {refunds.content.length} / {refunds.totalElements} khoản cũ nhất.</p>}</>}

@@ -25,6 +25,7 @@ import group5.example.sportCenter.dto.CreateSportRequest;
 import group5.example.sportCenter.dto.UpdateCourseRequest;
 import group5.example.sportCenter.dto.UpdateSportRequest;
 import group5.example.sportCenter.entity.Course;
+import group5.example.sportCenter.entity.CourseAgePolicy;
 import group5.example.sportCenter.entity.Sport;
 import group5.example.sportCenter.repository.CourseRepository;
 import group5.example.sportCenter.repository.SportRepository;
@@ -54,10 +55,39 @@ class CourseCatalogAndPublicSportIntegrationTest {
         for (String level : new String[] {"beginner", "INTERMEDIATE", " Advanced "}) {
             var created = coursesService.createCourse(courseRequest(level));
             assertEquals(level.trim().toUpperCase(), created.getLevel());
+            assertEquals(CourseAgePolicy.RECOMMENDED, created.getAgePolicy());
         }
         for (String invalid : new String[] {null, "", "   ", "NOVICE", "EXPERT"}) {
             assertBadRequest(() -> coursesService.createCourse(courseRequest(invalid)), invalid);
         }
+    }
+
+    @Test
+    void courseAgePolicyDefaultsToRecommendedAndRequiredNeedsAValidCompleteRange() {
+        CreateCourseRequest recommended = courseRequest("BEGINNER");
+        var created = coursesService.createCourse(recommended);
+        assertEquals(CourseAgePolicy.RECOMMENDED, created.getAgePolicy());
+
+        CreateCourseRequest missingBounds = courseRequest("BEGINNER");
+        missingBounds.setAgePolicy(CourseAgePolicy.REQUIRED);
+        assertThrows(IllegalArgumentException.class, () -> coursesService.createCourse(missingBounds));
+
+        CreateCourseRequest oneBound = courseRequest("BEGINNER");
+        oneBound.setAgePolicy(CourseAgePolicy.REQUIRED);
+        oneBound.setTargetAgeMin(10);
+        assertThrows(IllegalArgumentException.class, () -> coursesService.createCourse(oneBound));
+
+        CreateCourseRequest inverted = courseRequest("BEGINNER");
+        inverted.setAgePolicy(CourseAgePolicy.REQUIRED);
+        inverted.setTargetAgeMin(16);
+        inverted.setTargetAgeMax(12);
+        assertThrows(IllegalArgumentException.class, () -> coursesService.createCourse(inverted));
+
+        CreateCourseRequest valid = courseRequest("BEGINNER");
+        valid.setAgePolicy(CourseAgePolicy.REQUIRED);
+        valid.setTargetAgeMin(5);
+        valid.setTargetAgeMax(9);
+        assertEquals(CourseAgePolicy.REQUIRED, coursesService.createCourse(valid).getAgePolicy());
     }
 
     @Test
