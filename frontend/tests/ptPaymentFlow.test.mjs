@@ -75,7 +75,7 @@ test("only Admin and Receptionist may use PT counter queue", () => {
   for (const role of ["MEMBER", "COACH", undefined]) assert.equal(canViewPtPayments(role), false);
 });
 
-test("App and Sidebar expose the queue only through the staff area and add both staff navigation entries", async () => {
+test("App and Sidebar preserve staff queue routes with one combined Receptionist payment entry", async () => {
   const root = new URL("../src/", import.meta.url);
   const app = await readFile(new URL("App.jsx", root), "utf8");
   const sidebar = await readFile(new URL("components/Sidebar.jsx", root), "utf8");
@@ -86,7 +86,10 @@ test("App and Sidebar expose the queue only through the staff area and add both 
   assert.ok(adminOversight, "Admin oversight navigation group should exist");
   assert.match(adminOversight, /\["pt-payments",\s*"[^"]+"\]/, "Admin oversight should include PT Payments");
   assert.ok(receptionistNavigation, "Receptionist navigation should exist");
-  assert.match(receptionistNavigation, /\["pt-payments",\s*"[^"]+"\]/, "Receptionist navigation should include PT Payments");
+  assert.equal((receptionistNavigation.match(/\["course-payments"/g) || []).length, 1, "Receptionist has one combined payment entry");
+  assert.match(receptionistNavigation, /\["course-payments",\s*"[^"]*PT[^"]*"\]/, "Combined entry names both payment queues");
+  assert.doesNotMatch(receptionistNavigation, /\["pt-payments",/, "PT queue remains reachable in-page, not as a second sidebar item");
+  assert.match(page, /activePage=\{role === "RECEPTIONIST" \? "course-payments" : "pt-payments"\}/);
   assert.equal(app.match(/"pt-payments":\s*"([^"]+)"/)?.[1], "/receptionist/pt-payments");
   assert.match(page, /canViewPtPayments\(role\)/);
   assert.match(page, /<Navigate to="\/" replace \/>/);

@@ -461,6 +461,7 @@ onLogout={onLogout}
             <h2 id="pt-actionable-title">Cần xử lý</h2>
             <p>Booking đang giữ chỗ được sắp theo hạn thanh toán gần nhất.</p>
           </div>
+          <button type="button" className="pt-secondary-button pt-actionable-refresh" aria-label={"L\u00e0m m\u1edbi tr\u1ea1ng th\u00e1i booking v\u00e0 thanh to\u00e1n"} title={"L\u00e0m m\u1edbi tr\u1ea1ng th\u00e1i booking v\u00e0 thanh to\u00e1n"} disabled={paymentBusyId !== null} onClick={() => void refreshAuthoritative().catch((requestError) => setPaymentError("Could not refresh booking and payment history: " + requestError.message))}>{"L\u00e0m m\u1edbi"}</button>
         </div>
         {loading ? <div className="pt-loading" role="status">Đang tải booking cần xử lý…</div>
           : actionableBookings.length === 0 ? <div className="pt-empty"><strong>Không có booking cần xử lý.</strong><p>Booking mới sẽ xuất hiện ở đây sau khi được tạo.</p></div>
@@ -476,7 +477,6 @@ onLogout={onLogout}
           <div>
             <h2 id="pt-history-title">Lịch sử Booking</h2>
             <p>Booking đã xác nhận, đã hủy hoặc hết hạn được lưu tại đây.</p>
-            <button type="button" className="pt-secondary-button" disabled={paymentBusyId !== null} onClick={() => void refreshAuthoritative().catch((requestError) => setPaymentError("Could not refresh booking and payment history: " + requestError.message))}>Làm mới trạng thái booking và thanh toán</button>
           </div>
         </div>
 

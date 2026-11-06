@@ -24,6 +24,7 @@ function getInitials(name) {
 }
 
 const AVATAR_TONES = ["tone-blue", "tone-orange", "tone-emerald", "tone-indigo"];
+const EMPTY_ROWS = [];
 
 export default function ReceptionistCoursePayments({ token, role, userId, onNavigate, onLogout }) {
   const [queue, setQueue] = useState({ loading: true, data: null, page: 0, error: "" });
@@ -62,7 +63,7 @@ export default function ReceptionistCoursePayments({ token, role, userId, onNavi
     };
   }, [token, role, storageKey]);
 
-  const rows = queue.data?.content || [];
+  const rows = queue.data?.content ?? EMPTY_ROWS;
 
   const metrics = useMemo(() => {
     let totalAmount = 0;

@@ -86,7 +86,26 @@ test("staff reach the PT payment queue and VNPay results for PT go back to the P
   assert.ok(adminOversight, "Admin oversight navigation group should exist");
   assert.match(adminOversight, /\["pt-payments",\s*"[^"]+"\]/, "Admin oversight should include PT Payments");
   assert.ok(receptionistNavigation, "Receptionist navigation should exist");
-  assert.match(receptionistNavigation, /\["pt-payments",\s*"[^"]+"\]/, "Receptionist navigation should include PT Payments");
+  assert.equal((receptionistNavigation.match(/\["course-payments"/g) || []).length, 1, "Receptionist has one combined payment entry");
+  assert.match(receptionistNavigation, /\["course-payments",\s*"[^"]*PT[^"]*"\]/);
+  assert.doesNotMatch(receptionistNavigation, /\["pt-payments",/);
+  assert.match(await readFile(new URL("../src/pages/ReceptionistPtPayments.jsx", import.meta.url), "utf8"), /activePage=\{role === "RECEPTIONIST" \? "course-payments" : "pt-payments"\}/);
   assert.equal(app.match(/"pt-payments":\s*"([^"]+)"/)?.[1], "/receptionist/pt-payments");
   assert.ok(checkout.includes('returnedPayment?.purpose === "PT_BOOKING"'));
+});
+
+
+test("booking and payment refresh is placed under Pending Actions and keeps its existing handler", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const page = await readFile(new URL("../src/pages/PtBooking.jsx", import.meta.url), "utf8");
+  const pending = page.match(/<section className="pt-card pt-actionable-card"[\s\S]*?<\/section>/)?.[0];
+  const history = page.match(/<section className="pt-card pt-history-card"[\s\S]*?<\/section>/)?.[0];
+  assert.ok(pending);
+  assert.ok(history);
+  assert.match(history, /Booking đã xác nhận, đã hủy hoặc hết hạn được lưu tại đây\./);
+  assert.match(pending, /pt-actionable-refresh[\s\S]*?refreshAuthoritative\(\)/);
+  assert.match(pending, /disabled=\{paymentBusyId !== null\}/);
+  assert.match(pending, /aria-label=/);
+  assert.doesNotMatch(history, /pt-actionable-refresh|refreshAuthoritative/);
+  assert.equal((page.match(/pt-actionable-refresh/g) || []).length, 1);
 });
