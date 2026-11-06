@@ -108,16 +108,16 @@ The image URL migration is manual and has not been run automatically by the appl
 
 After the core schema and migrations are applied, `demo-seed.sql` can add fictional Flow 1 data to a dedicated local `SportCenterDB`. It is additive and transactional: it does not update/delete rows or reset passwords, and it rolls back if a deterministic account or relationship conflicts. Connect to the intended local SQL Server instance, select `SportCenterDB`, inspect the script, then change its `@ConfirmLocalDemoDatabase` variable from `0` to `1` to enable execution. The database-name guard cannot identify whether a server is local, so verify the connected server before enabling it. Do not run the script in shared or production environments.
 
-Seeded login accounts all share this demo-only password and use the existing `POST /api/auth/login` endpoint:
+Demo accounts are available for local development. Use the existing `POST /api/auth/login` workflow and obtain an account identifier and password for the required role through the authorized private project channel. Do not store passwords or access tokens in tracked documentation.
 
-| Role | Email |
+Security note: Credentials previously committed to this repository may remain accessible through Git history to people with repository-history access. If any such credentials are still active, an authorized administrator should assess the exposure and rotate them as appropriate. Do not commit plaintext passwords, tokens, or other secrets.
+
+| Role | Account access |
 | --- | --- |
-| ADMIN | `demo.admin@sportcenter.example.test` |
-| RECEPTIONIST | `demo.reception1@sportcenter.example.test`, `demo.reception2@sportcenter.example.test` |
-| COACH | `demo.coach1@sportcenter.example.test`, `demo.coach2@sportcenter.example.test`, `demo.coach3@sportcenter.example.test` |
-| MEMBER | `demo.member01@sportcenter.example.test` through `demo.member10@sportcenter.example.test` |
-
-Password for local demonstration only: `SportCenterDemo!2026`. The database stores only a BCrypt hash. The seed creates 5 demo sports, 7 coach specializations, 10 member profiles, 3 membership plans, and 8 memberships. It does not seed payment, bill, enrollment, assessment, or consultation records.
+| ADMIN | Obtain through authorized private channel |
+| RECEPTIONIST | Obtain through authorized private channel |
+| COACH | Obtain through authorized private channel |
+| MEMBER | Obtain through authorized private channel |
 
 ## Phase 3A Coach biography migration
 
@@ -134,3 +134,11 @@ After manual execution, verify every Facility has at least one join row and that
 ## Phase 9.1 Support Tickets
 
 `phase9-1-support-tickets.sql` is an additive SQL Server migration for `dbo.support_ticket` and `dbo.support_ticket_message`. It requires the existing `dbo.users` table, creates no Membership or Payment dependencies, and must be applied manually before starting this feature with `spring.jpa.hibernate.ddl-auto=validate`. The script is transactional, validates both tables and their constraints/indexes on rerun, and stops on partial or incompatible schema. It has not been executed as part of recovery work.
+
+## Phase 10 Course age policy
+
+`phase10-course-age-policy-preflight.sql` is a read-only metadata and aggregate-data check. The dated results below are a historical pre-migration snapshot, not a statement of the current database schema. `phase10-course-age-policy.sql` is a manual, transactional SQL Server migration guarded for the intended `SportCenterDemo` server/database. It adds `dbo.course.age_policy VARCHAR(20) NOT NULL`, defaults existing and new unqualified courses to `RECOMMENDED`, preserves existing age bounds, and validates policy and range constraints.
+
+Phase 10D deployment was previously reported successful. This documentation update does not independently revalidate the live database schema. Review and execute the migration manually only after separate approval, a verified backup, and a rehearsal against a restored copy. The migration must not run automatically at Spring Boot startup. Backend code using the age-policy column requires the matching schema; keep Hibernate configured with `spring.jpa.hibernate.ddl-auto=validate`. Once application code stores `REQUIRED` values, dropping the column is not a safe rollback.
+
+Historical pre-migration preflight (2026-11-05): the report recorded server `sportcenter-release-sqlserver`, database `SportCenterDemo` (`ONLINE`), eight Course rows, nullable `INT` age-bound columns, and no `age_policy` column or Course age constraints at that time. It reported zero negative or inverted age ranges. These results describe the pre-migration snapshot only; they do not independently establish the current live state.
