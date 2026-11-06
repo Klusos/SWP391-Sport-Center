@@ -1,6 +1,19 @@
 const blankWeek = (weekNumber = 1) => ({ weekNumber, title: "", description: "", exercises: [] });
 const asOptionalNumber = (value) => value === "" || value == null ? null : Number(value);
 
+export function canCreateIndividualPlan(member, eligibilityLoaded) {
+  return eligibilityLoaded === true && member?.hasQualifyingCompletedAttendance === true;
+}
+
+export function individualPlanEligibilityMessage(member, eligibilityLoaded, eligibilityError = false) {
+  if (eligibilityError || eligibilityLoaded !== true) {
+    return "Không thể xác minh điều kiện điểm danh. Hãy tải lại danh sách trước khi tạo giáo án.";
+  }
+  return member?.hasQualifyingCompletedAttendance === true
+    ? ""
+    : "Chỉ có thể tạo giáo án cá nhân sau khi học viên tham gia ít nhất một buổi học đã hoàn thành.";
+}
+
 export function addWeekWithUnusedNumber(weeks) {
   const used = new Set(weeks.map((week) => Number(week.weekNumber)));
   let weekNumber = 1;

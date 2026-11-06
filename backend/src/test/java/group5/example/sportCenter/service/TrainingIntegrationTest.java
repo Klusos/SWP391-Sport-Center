@@ -287,6 +287,80 @@ class TrainingIntegrationTest {
     }
 
     @Test
+    void classProgressEligibilityRequiresCurrentPresentAttendanceInCompletedSession() throws Exception {
+        markAttendance(futureSession, member, AttendanceStatus.PRESENT);
+        markAttendance(endedSession, member, AttendanceStatus.PRESENT);
+        String progressUrl = "/api/training/classes/" + coachClass.getId() + "/progress";
+        mvc.perform(get(progressUrl).header("Authorization", bearer(coachUser)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].hasQualifyingCompletedAttendance").value(false))
+                .andExpect(jsonPath("$[0].sessionsMarked").value(2))
+                .andExpect(jsonPath("$[0].sessionsPresent").value(2));
+
+        mvc.perform(post("/api/training/sessions/" + endedSession.getId() + "/complete")
+                        .header("Authorization", bearer(coachUser)))
+                .andExpect(status().isOk());
+        mvc.perform(get(progressUrl).header("Authorization", bearer(coachUser)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].hasQualifyingCompletedAttendance").value(true));
+
+        ClassSession secondCompletedSession = session(coachClass, now.minusDays(2), now.minusDays(2).plusHours(1));
+        markAttendance(secondCompletedSession, member, AttendanceStatus.PRESENT);
+        mvc.perform(post("/api/training/sessions/" + secondCompletedSession.getId() + "/complete")
+                        .header("Authorization", bearer(coachUser)))
+                .andExpect(status().isOk());
+        mvc.perform(get(progressUrl).header("Authorization", bearer(coachUser)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].hasQualifyingCompletedAttendance").value(true))
+                .andExpect(jsonPath("$[0].sessionsMarked").value(3))
+                .andExpect(jsonPath("$[0].sessionsPresent").value(3));
+
+        String attendanceUrl = "/api/attendance/sessions/" + endedSession.getId() + "/members/" + member.getId();
+        mvc.perform(put(attendanceUrl).header("Authorization", bearer(coachUser)).contentType("application/json")
+                        .content("{\"status\":\"ABSENT\",\"reason\":\"Correction\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(get(progressUrl).header("Authorization", bearer(coachUser)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].hasQualifyingCompletedAttendance").value(true))
+                .andExpect(jsonPath("$[0].sessionsPresent").value(2));
+
+        String secondAttendanceUrl = "/api/attendance/sessions/" + secondCompletedSession.getId()
+                + "/members/" + member.getId();
+        mvc.perform(put(secondAttendanceUrl).header("Authorization", bearer(coachUser)).contentType("application/json")
+                        .content("{\"status\":\"EXCUSED\",\"reason\":\"Correction\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(get(progressUrl).header("Authorization", bearer(coachUser)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].hasQualifyingCompletedAttendance").value(false))
+                .andExpect(jsonPath("$[0].sessionsMarked").value(3))
+                .andExpect(jsonPath("$[0].sessionsPresent").value(1));
+    }
+
+    @Test
+    void classProgressDoesNotUseAttendanceFromAnotherClassOrCancelledSessions() throws Exception {
+        register(outsider, coachClass);
+        CourseClass unrelatedClass = courseClass(coaches.findByUserId(otherCoachUser.getId()).orElseThrow());
+        register(member, unrelatedClass);
+        ClassSession completedElsewhere = session(unrelatedClass, now.minusDays(2), now.minusDays(2).plusHours(1));
+        completedElsewhere.setStatus("COMPLETED");
+        sessions.saveAndFlush(completedElsewhere);
+        markAttendance(completedElsewhere, member, AttendanceStatus.PRESENT);
+
+        ClassSession cancelledHere = session(coachClass, now.minusDays(2), now.minusDays(2).plusHours(1));
+        cancelledHere.setStatus("CANCELLED");
+        sessions.saveAndFlush(cancelledHere);
+        markAttendance(cancelledHere, member, AttendanceStatus.PRESENT);
+
+        mvc.perform(get("/api/training/classes/" + coachClass.getId() + "/progress")
+                        .header("Authorization", bearer(coachUser)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].hasQualifyingCompletedAttendance").value(false))
+                .andExpect(jsonPath("$[1].hasQualifyingCompletedAttendance").value(false));
+    }
+
+    @Test
     void adminManagesAnyClassAndPlanUpdatesKeepTheSamePlan() throws Exception {
         String planUrl = "/api/training/classes/" + coachClass.getId() + "/plan";
         mvc.perform(get("/api/training/classes").header("Authorization", bearer(admin)))

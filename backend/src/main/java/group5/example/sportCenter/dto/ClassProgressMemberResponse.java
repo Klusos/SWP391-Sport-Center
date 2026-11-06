@@ -11,5 +11,6 @@ public record ClassProgressMemberResponse(
         long resultsRecorded,
         Double averageScore,
         ProgressEvaluationResponse latestEvaluation,
-        List<ProgressEvaluationResponse> evaluationHistory) {
+        List<ProgressEvaluationResponse> evaluationHistory,
+        boolean hasQualifyingCompletedAttendance) {
 }

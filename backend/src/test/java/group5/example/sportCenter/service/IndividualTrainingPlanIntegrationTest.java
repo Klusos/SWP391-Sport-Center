@@ -39,6 +39,9 @@ import group5.example.sportCenter.dto.IndividualTrainingPlanRequest;
 import group5.example.sportCenter.dto.IndividualTrainingWeekRequest;
 import group5.example.sportCenter.dto.TrainingExerciseRequest;
 import group5.example.sportCenter.entity.Coach;
+import group5.example.sportCenter.entity.Attendance;
+import group5.example.sportCenter.entity.AttendanceStatus;
+import group5.example.sportCenter.entity.ClassSession;
 import group5.example.sportCenter.entity.Course;
 import group5.example.sportCenter.entity.CourseClass;
 import group5.example.sportCenter.entity.CourseOffering;
@@ -50,6 +53,8 @@ import group5.example.sportCenter.entity.Sport;
 import group5.example.sportCenter.entity.TrainingPlan;
 import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.repository.CoachRepository;
+import group5.example.sportCenter.repository.AttendanceRepository;
+import group5.example.sportCenter.repository.ClassSessionRepository;
 import group5.example.sportCenter.repository.CourseClassRepository;
 import group5.example.sportCenter.repository.CourseOfferingRepository;
 import group5.example.sportCenter.repository.CourseRegistrationRepository;
@@ -78,6 +83,8 @@ class IndividualTrainingPlanIntegrationTest {
     @Autowired CourseRepository courses;
     @Autowired CourseOfferingRepository offerings;
     @Autowired CourseClassRepository classes;
+    @Autowired AttendanceRepository attendance;
+    @Autowired ClassSessionRepository sessions;
     @Autowired CourseRegistrationRepository registrations;
     @Autowired MembershipRepository memberships;
     @Autowired MembershipPlanRepository membershipPlans;
@@ -99,6 +106,7 @@ class IndividualTrainingPlanIntegrationTest {
     private User member;
     private User otherMember;
     private CourseClass courseClass;
+    private Coach assignedCoach;
 
     @BeforeEach
     void setUp() {
@@ -109,15 +117,124 @@ class IndividualTrainingPlanIntegrationTest {
         mvc = MockMvcBuilders.webAppContextSetup(context).addFilters(security).build();
         today = LocalDate.now(clock.withZone(ZONE));
         coachUser = user("COACH");
-        Coach coach = coach(coachUser);
+        assignedCoach = coach(coachUser);
         otherCoachUser = user("COACH");
         coach(otherCoachUser);
         admin = user("ADMIN");
         member = user("MEMBER");
         otherMember = user("MEMBER");
-        courseClass = courseClass(coach);
+        courseClass = courseClass(assignedCoach);
         register(member, courseClass, CourseRegistrationStatus.CONFIRMED);
         qualifyingMembership(member, true, true, today, today.plusMonths(1));
+        addSessionAttendance(courseClass, member, "SCHEDULED", AttendanceStatus.ABSENT);
+        addSessionAttendance(courseClass, member, "COMPLETED", AttendanceStatus.PRESENT);
+    }
+
+    @Test
+    void attendanceEligibilityQueryRequiresSameMemberClassPresentAndCompletedSession() {
+        Attendance baseline = attendance.findByMemberIdOrderByMarkedAtDescIdDesc(member.getId()).stream()
+                .filter(record -> record.getClassSession().getCourseClass().getId().equals(courseClass.getId()))
+                .findFirst().orElseThrow();
+        baseline.setStatus(AttendanceStatus.ABSENT);
+        attendance.saveAndFlush(baseline);
+        assertTrue(!attendance.existsQualifyingCompletedSessionAttendance(
+                member.getId(), courseClass.getId(), AttendanceStatus.PRESENT, "COMPLETED"));
+        ClassSession scheduled = addSessionAttendance(courseClass, member, "SCHEDULED", AttendanceStatus.PRESENT);
+        assertTrue(!attendance.existsQualifyingCompletedSessionAttendance(
+                member.getId(), courseClass.getId(), AttendanceStatus.PRESENT, "COMPLETED"));
+        scheduled.setStatus("CANCELLED");
+        sessions.saveAndFlush(scheduled);
+        assertTrue(!attendance.existsQualifyingCompletedSessionAttendance(
+                member.getId(), courseClass.getId(), AttendanceStatus.PRESENT, "COMPLETED"));
+
+        CourseClass unrelatedClass = courseClass(assignedCoach);
+        addSessionAttendance(unrelatedClass, member, "COMPLETED", AttendanceStatus.PRESENT);
+        assertTrue(!attendance.existsQualifyingCompletedSessionAttendance(
+                member.getId(), courseClass.getId(), AttendanceStatus.PRESENT, "COMPLETED"));
+        assertTrue(attendance.existsQualifyingCompletedSessionAttendance(
+                member.getId(), unrelatedClass.getId(), AttendanceStatus.PRESENT, "COMPLETED"));
+
+        ClassSession otherMemberSession = addSessionAttendance(courseClass, otherMember, "COMPLETED", AttendanceStatus.PRESENT);
+        assertTrue(!attendance.existsQualifyingCompletedSessionAttendance(
+                otherMember.getId(), unrelatedClass.getId(), AttendanceStatus.PRESENT, "COMPLETED"));
+        assertTrue(attendance.existsQualifyingCompletedSessionAttendance(
+                otherMember.getId(), courseClass.getId(), AttendanceStatus.PRESENT, "COMPLETED"));
+        Attendance otherMemberAttendance = attendance.findByClassSessionIdAndMemberId(
+                otherMemberSession.getId(), otherMember.getId()).orElseThrow();
+        otherMemberAttendance.setStatus(AttendanceStatus.EXCUSED);
+        attendance.saveAndFlush(otherMemberAttendance);
+        assertTrue(!attendance.existsQualifyingCompletedSessionAttendance(
+                otherMember.getId(), courseClass.getId(), AttendanceStatus.PRESENT, "COMPLETED"));
+    }
+
+    @Test
+    void creationWithoutQualifyingAttendanceIsRejectedWithoutPersistingPlanOrRevision() throws Exception {
+        Attendance present = attendance.findByMemberIdOrderByMarkedAtDescIdDesc(member.getId()).stream()
+                .filter(record -> record.getClassSession().getCourseClass().getId().equals(courseClass.getId()))
+                .findFirst().orElseThrow();
+        attendance.delete(present);
+        attendance.flush();
+
+        mvc.perform(post(createUrl(member)).header("Authorization", bearer(coachUser))
+                        .contentType("application/json").content(body("No attendance", "Week", "Exercise")))
+                .andExpect(status().isConflict());
+        assertEquals(0, plans.count());
+        assertEquals(0, revisions.count());
+    }
+
+    @Test
+    void attendanceMustBePresentAndSessionMustBeCompletedAtCreationTime() {
+        ClassSession completed = sessions.findByCourseClassId(courseClass.getId()).stream()
+                .filter(session -> "COMPLETED".equals(session.getStatus())).findFirst().orElseThrow();
+        Attendance attendanceRecord = attendance.findByClassSessionIdAndMemberId(completed.getId(), member.getId()).orElseThrow();
+
+        completed.setStatus("SCHEDULED");
+        sessions.saveAndFlush(completed);
+        assertCreateRejected();
+        completed.setStatus("CANCELLED");
+        sessions.saveAndFlush(completed);
+        assertCreateRejected();
+
+        completed.setStatus("COMPLETED");
+        sessions.saveAndFlush(completed);
+        attendanceRecord.setStatus(AttendanceStatus.ABSENT);
+        attendance.saveAndFlush(attendanceRecord);
+        assertCreateRejected();
+        attendanceRecord.setStatus(AttendanceStatus.EXCUSED);
+        attendance.saveAndFlush(attendanceRecord);
+        assertCreateRejected();
+
+        attendanceRecord.setStatus(AttendanceStatus.PRESENT);
+        attendance.saveAndFlush(attendanceRecord);
+        assertTrue(attendance.existsQualifyingCompletedSessionAttendance(
+                member.getId(), courseClass.getId(), AttendanceStatus.PRESENT, "COMPLETED"));
+    }
+
+    @Test
+    void pendingRegistrationAndUnassignedCoachCannotCreateEvenWithQualifyingAttendance() throws Exception {
+        User unauthorizedCoach = user("COACH");
+        coach(unauthorizedCoach);
+        mvc.perform(post(createUrl(member)).header("Authorization", bearer(unauthorizedCoach))
+                        .contentType("application/json").content(body("Unauthorized", "Week", "Exercise")))
+                .andExpect(status().isForbidden());
+
+        CourseRegistration registration = registrations.findByMemberIdAndCourseClassIdAndStatus(
+                member.getId(), courseClass.getId(), CourseRegistrationStatus.CONFIRMED).orElseThrow();
+        registration.setStatus(CourseRegistrationStatus.PENDING_PAYMENT);
+        registrations.saveAndFlush(registration);
+        mvc.perform(post(createUrl(member)).header("Authorization", bearer(coachUser))
+                        .contentType("application/json").content(body("Pending", "Week", "Exercise")))
+                .andExpect(status().isConflict());
+        assertEquals(0, plans.count());
+        assertEquals(0, revisions.count());
+    }
+
+    private void assertCreateRejected() {
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> service.create(courseClass.getId(), member.getId(), request("Rejected", "Week", "Exercise"), jwt(coachUser)));
+        assertEquals(409, exception.getStatusCode().value());
+        assertEquals(0, plans.count());
+        assertEquals(0, revisions.count());
     }
 
     @Test
@@ -147,6 +264,8 @@ class IndividualTrainingPlanIntegrationTest {
         mvc.perform(get("/api/training/classes/" + courseClass.getId() + "/individual-plans")
                         .header("Authorization", bearer(coachUser)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(planId));
+        mvc.perform(get("/api/training/individual-plans/" + planId).header("Authorization", bearer(admin)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(planId));
         mvc.perform(get("/api/training/classes/" + courseClass.getId() + "/individual-plans")
                         .header("Authorization", bearer(otherCoachUser)))
                 .andExpect(status().isForbidden());
@@ -159,6 +278,65 @@ class IndividualTrainingPlanIntegrationTest {
                         .contentType("application/json").content(body("Member edit", "Week", "Exercise")))
                 .andExpect(status().isForbidden());
         assertEquals(2, revisions.count());
+    }
+
+    @Test
+    void cancelledMemberCannotReadPlanButPlanAndRevisionRemainStored() throws Exception {
+        String created = mvc.perform(post(createUrl(member)).header("Authorization", bearer(coachUser))
+                        .contentType("application/json").content(body("Original", "Week", "Exercise")))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        Integer planId = integerField(created, "id");
+        CourseRegistration registration = registrations.findByMemberIdAndCourseClassIdAndStatus(
+                member.getId(), courseClass.getId(), CourseRegistrationStatus.CONFIRMED).orElseThrow();
+        registration.setStatus(CourseRegistrationStatus.CANCELLED);
+        registrations.saveAndFlush(registration);
+
+        mvc.perform(get("/api/training/me/individual-plans").header("Authorization", bearer(member)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
+        mvc.perform(get("/api/training/individual-plans/" + planId).header("Authorization", bearer(member)))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/training/individual-plans/" + planId + "/revisions")
+                        .header("Authorization", bearer(member)))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/training/me").header("Authorization", bearer(member)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
+        mvc.perform(get("/api/training/classes/" + courseClass.getId() + "/plan")
+                        .header("Authorization", bearer(member)))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/training/classes/" + courseClass.getId() + "/individual-plans")
+                        .header("Authorization", bearer(member)))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/training/classes/" + courseClass.getId() + "/individual-plans")
+                        .header("Authorization", bearer(coachUser)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(planId));
+        mvc.perform(post(createUrl(member)).header("Authorization", bearer(coachUser))
+                        .contentType("application/json").content(body("New", "Week", "Exercise")))
+                .andExpect(status().isConflict());
+
+        assertEquals(1, plans.count());
+        assertEquals(1, revisions.count());
+    }
+
+    @Test
+    void pendingPaymentMemberCannotListOrReadExistingPlan() throws Exception {
+        String created = mvc.perform(post(createUrl(member)).header("Authorization", bearer(coachUser))
+                        .contentType("application/json").content(body("Original", "Week", "Exercise")))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        Integer planId = integerField(created, "id");
+        CourseRegistration registration = registrations.findByMemberIdAndCourseClassIdAndStatus(
+                member.getId(), courseClass.getId(), CourseRegistrationStatus.CONFIRMED).orElseThrow();
+        registration.setStatus(CourseRegistrationStatus.PENDING_PAYMENT);
+        registrations.saveAndFlush(registration);
+
+        mvc.perform(get("/api/training/me/individual-plans").header("Authorization", bearer(member)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
+        mvc.perform(get("/api/training/individual-plans/" + planId).header("Authorization", bearer(member)))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/training/individual-plans/" + planId + "/revisions")
+                        .header("Authorization", bearer(member)))
+                .andExpect(status().isForbidden());
+        assertEquals(1, plans.count());
+        assertEquals(1, revisions.count());
     }
 
     @Test
@@ -293,6 +471,24 @@ class IndividualTrainingPlanIntegrationTest {
         result.setCapacity(20);
         result.setStatus("ACTIVE");
         return classes.saveAndFlush(result);
+    }
+
+    private ClassSession addSessionAttendance(CourseClass targetClass, User who, String sessionStatus,
+            AttendanceStatus attendanceStatus) {
+        ClassSession session = new ClassSession();
+        session.setCourseClass(targetClass);
+        session.setStartTime(LocalDateTime.now(clock).minusDays(2));
+        session.setEndTime(LocalDateTime.now(clock).minusDays(2).plusHours(1));
+        session.setStatus(sessionStatus);
+        session = sessions.saveAndFlush(session);
+        Attendance record = new Attendance();
+        record.setClassSession(session);
+        record.setMember(who);
+        record.setStatus(attendanceStatus);
+        record.setMarkedBy(coachUser);
+        record.setMarkedAt(LocalDateTime.now(clock));
+        attendance.saveAndFlush(record);
+        return session;
     }
 
     private void register(User who, CourseClass target, CourseRegistrationStatus statusValue) {

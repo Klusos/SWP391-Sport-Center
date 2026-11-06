@@ -2,10 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   addWeekWithUnusedNumber,
+  canCreateIndividualPlan,
   createLatestRequestGuard,
+  individualPlanEligibilityMessage,
   savePlanAndRefreshOpenHistory,
   toIndividualTrainingPlanPayload,
 } from "../src/components/individualTrainingPlanHelpers.js";
+import { readFile } from "node:fs/promises";
 
 const week = (weekNumber, exercise = `Week ${weekNumber}`) => ({
   weekNumber, title: `Week ${weekNumber}`, description: "", exercises: [{
@@ -83,4 +86,28 @@ test("only the latest revision-history request may update the view", () => {
   assert.equal(requests.isCurrent(currentRequest), true);
   requests.invalidate();
   assert.equal(requests.isCurrent(currentRequest), false);
+});
+
+test("individual plan creation stays disabled until the backend attendance eligibility is loaded", () => {
+  const eligible = { memberId: 12, hasQualifyingCompletedAttendance: true };
+  const ineligible = { memberId: 13, hasQualifyingCompletedAttendance: false };
+  assert.equal(canCreateIndividualPlan(eligible, false), false);
+  assert.equal(canCreateIndividualPlan(eligible, true), true);
+  assert.equal(canCreateIndividualPlan(ineligible, true), false);
+  assert.equal(canCreateIndividualPlan({ memberId: 14 }, true), false);
+});
+
+test("eligibility states explain missing attendance and failed progress requests", () => {
+  assert.match(individualPlanEligibilityMessage({ hasQualifyingCompletedAttendance: false }, true), /sau khi học viên tham gia ít nhất một buổi học đã hoàn thành/);
+  assert.match(individualPlanEligibilityMessage({ hasQualifyingCompletedAttendance: true }, true), /^$/);
+  assert.match(individualPlanEligibilityMessage({ hasQualifyingCompletedAttendance: true }, false), /Không thể xác minh điều kiện điểm danh/);
+  assert.match(individualPlanEligibilityMessage(null, true), /sau khi học viên tham gia/);
+});
+
+test("Coach/Admin UI keeps existing plans available and refreshes eligibility after a 409", async () => {
+  const component = await readFile(new URL("../src/components/IndividualTrainingPlans.jsx", import.meta.url), "utf8");
+  assert.match(component, /plan \? <button type="button" className="secondary" onClick=\{\(\) => void openPlan\(plan\)\}>/);
+  assert.match(component, /disabled=\{!canCreate\}/);
+  assert.match(component, /requestError\?\.status === 409\) await load\(\)/);
+  assert.match(component, /Promise\.allSettled/);
 });

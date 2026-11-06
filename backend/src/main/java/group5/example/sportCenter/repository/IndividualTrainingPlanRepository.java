@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import group5.example.sportCenter.entity.CourseRegistrationStatus;
 import group5.example.sportCenter.entity.IndividualTrainingPlan;
 
 public interface IndividualTrainingPlanRepository extends JpaRepository<IndividualTrainingPlan, Integer> {
@@ -23,6 +24,17 @@ public interface IndividualTrainingPlanRepository extends JpaRepository<Individu
 
     @EntityGraph(attributePaths = { "courseClass", "courseClass.coach", "member", "createdBy" })
     List<IndividualTrainingPlan> findByMemberIdOrderByUpdatedAtDescIdDesc(Integer memberId);
+
+    @EntityGraph(attributePaths = { "courseClass", "courseClass.coach", "member", "createdBy" })
+    @Query("select plan from IndividualTrainingPlan plan "
+            + "where plan.member.id = :memberId and exists ("
+            + "select registration.id from CourseRegistration registration "
+            + "where registration.member.id = :memberId "
+            + "and registration.courseClass.id = plan.courseClass.id "
+            + "and registration.status = :status) "
+            + "order by plan.updatedAt desc, plan.id desc")
+    List<IndividualTrainingPlan> findByMemberIdAndRegistrationStatus(
+            @Param("memberId") Integer memberId, @Param("status") CourseRegistrationStatus status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select plan from IndividualTrainingPlan plan where plan.id = :id")

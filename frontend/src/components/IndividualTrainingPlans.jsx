@@ -10,7 +10,9 @@ import {
 } from "../api";
 import {
   addWeekWithUnusedNumber,
+  canCreateIndividualPlan,
   createLatestRequestGuard,
+  individualPlanEligibilityMessage,
   savePlanAndRefreshOpenHistory,
   toIndividualTrainingPlanPayload,
 } from "./individualTrainingPlanHelpers";
@@ -44,6 +46,8 @@ export default function IndividualTrainingPlans({ token, mode, classId }) {
   const isCoach = mode === "coach";
   const [plans, setPlans] = useState([]);
   const [members, setMembers] = useState([]);
+  const [eligibilityLoaded, setEligibilityLoaded] = useState(false);
+  const [eligibilityError, setEligibilityError] = useState(false);
   const [selected, setSelected] = useState(null);
   const [history, setHistory] = useState(null);
   const [historyPlanId, setHistoryPlanId] = useState(null);
@@ -60,19 +64,34 @@ export default function IndividualTrainingPlans({ token, mode, classId }) {
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
+    setEligibilityLoaded(false);
+    setEligibilityError(false);
     try {
       if (isCoach) {
-        const [classPlans, progress] = await Promise.all([
+        const [plansResult, progressResult] = await Promise.allSettled([
           getClassIndividualTrainingPlansApi(token, classId),
           getTrainingProgressApi(token, classId),
         ]);
-        setPlans(Array.isArray(classPlans) ? classPlans : []);
-        setMembers(Array.isArray(progress) ? progress : []);
+        if (plansResult.status === "rejected") throw plansResult.reason;
+        setPlans(Array.isArray(plansResult.value) ? plansResult.value : []);
+        if (progressResult.status === "rejected") {
+          setMembers([]);
+          setEligibilityError(true);
+          setError(messageFor(progressResult.reason, "Could not verify attendance eligibility. Retry loading the class."));
+        } else {
+          setMembers(Array.isArray(progressResult.value) ? progressResult.value : []);
+          setEligibilityLoaded(Array.isArray(progressResult.value));
+        }
       } else {
         const ownPlans = await getMyIndividualTrainingPlansApi(token);
         setPlans(Array.isArray(ownPlans) ? ownPlans : []);
+        setMembers([]);
       }
     } catch (requestError) {
+      if (isCoach) {
+        setMembers([]);
+        setEligibilityError(true);
+      }
       setError(messageFor(requestError, "Không tải được danh sách giáo án cá nhân."));
     } finally {
       setLoading(false);
@@ -151,7 +170,9 @@ export default function IndividualTrainingPlans({ token, mode, classId }) {
       setSelected(saved);
       await load();
     } catch (requestError) {
-      setError(messageFor(requestError, "Không lưu được giáo án cá nhân."));
+      const failureMessage = messageFor(requestError, "Không lưu được giáo án cá nhân.");
+      if (planId == null && requestError?.status === 409) await load();
+      setError(failureMessage);
     } finally {
       setBusy(false);
     }
@@ -166,17 +187,29 @@ export default function IndividualTrainingPlans({ token, mode, classId }) {
       <button type="button" className="secondary" onClick={() => void load()} disabled={loading}>Làm mới</button>
     </div>
     {error && <div className="banner error" role="alert">{error}</div>}
+    {isCoach && eligibilityError && <div className="banner error" role="alert">
+      Không thể xác minh điều kiện điểm danh. <button type="button" className="secondary" onClick={() => void load()} disabled={loading}>Thử tải lại</button>
+    </div>}
     {notice && <div className="banner success" role="status">{notice}</div>}
     {loading ? <p role="status">Đang tải giáo án cá nhân…</p>
       : isCoach ? <>
-        {members.length === 0 ? <p className="dash-empty">Lớp hiện chưa có học viên đăng ký đã xác nhận.</p> : <div className="individual-plan-list">
+        {members.length === 0 ? plans.length > 0 ? <div className="individual-plan-list">{plans.map((plan) => <article className="individual-plan-row" key={plan.id}>
+          <div><strong>{plan.memberName}</strong><small>{plan.className} · Phiên bản {plan.currentRevision?.revisionNumber ?? "—"}</small></div>
+          <button type="button" className="secondary" onClick={() => void openPlan(plan)}>Mở giáo án</button>
+        </article>)}</div> : <p className="dash-empty">Lớp hiện chưa có học viên đăng ký đã xác nhận.</p> : <div className="individual-plan-list">
           {members.map((member) => {
             const plan = planByMember.get(member.memberId);
+            const canCreate = canCreateIndividualPlan(member, eligibilityLoaded);
+            const eligibilityHint = individualPlanEligibilityMessage(member, eligibilityLoaded, eligibilityError);
             return <article className="individual-plan-row" key={member.memberId}>
               <div><strong>{member.memberName}</strong><small>{plan ? `Phiên bản ${plan.currentRevision?.revisionNumber ?? "—"}` : "Chưa có giáo án cá nhân"}</small></div>
               <div className="training-actions">
                 {plan ? <button type="button" className="secondary" onClick={() => void openPlan(plan)}>Mở giáo án</button>
-                  : <button type="button" onClick={() => { clearHistory(); setCreatingFor(member.memberId); setSelected(null); }}>Tạo giáo án</button>}
+                  : <>
+                    <button type="button" disabled={!canCreate} title={eligibilityHint || undefined}
+                      onClick={() => { clearHistory(); setCreatingFor(member.memberId); setSelected(null); }}>Tạo giáo án</button>
+                    {!canCreate && <small className="training-muted">{eligibilityHint}</small>}
+                  </>}
               </div>
             </article>;
           })}
