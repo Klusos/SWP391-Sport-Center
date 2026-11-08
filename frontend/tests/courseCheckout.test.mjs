@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { acquireAction, canCheckout, checkoutAccess, checkoutPayload, paymentMessage, positiveId, prepareCheckout, registrationMessage, registrationPayments, shouldPoll, startStatusPolling, validVnpayUrl } from "../src/courseCheckout.js";
 
 const registration = { id: 123, classId: 8, status: "PENDING_PAYMENT", paymentDeadline: "2099-01-01T10:00:00", finalPrice: 500000 };
@@ -18,6 +19,11 @@ test("ONLINE uses registration identity and excludes client price/member fields"
 });
 test("COUNTER uses the same registration without creating another hold", () => {
   assert.deepEqual(checkoutPayload(123, "COUNTER"), { method: "COUNTER", purpose: "COURSE_REGISTRATION", referenceId: 123 });
+});
+test("CourseCheckout preserves VNPay and counter methods", async () => {
+  const source = await readFile(new URL("../src/pages/CourseCheckout.jsx", import.meta.url), "utf8");
+  assert.match(source, /pay\("ONLINE"\).*Thanh toán VNPay Sandbox/);
+  assert.match(source, /pay\("COUNTER"\).*Thanh toán tại lễ tân/);
 });
 test("synchronous action lock rejects double clicks before any await", () => {
   const lock = { current: false };

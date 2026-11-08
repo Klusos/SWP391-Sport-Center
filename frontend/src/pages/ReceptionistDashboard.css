@@ -58,6 +58,8 @@
 
 .rc-main .rc-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
 .rc-main .rc-kpi { display: grid; min-width: 0; gap: 12px; padding: 19px 21px; border: 1px solid var(--rc-line); border-radius: 14px; background: #fff; box-shadow: 0 2px 8px rgb(11 25 44 / 4%); transition: transform .15s ease, box-shadow .15s ease; }
+.rc-main a.rc-kpi { width: 100%; color: inherit; text-align: left; text-decoration: none; }
+.rc-main a.rc-kpi:focus-visible { outline: 3px solid var(--rc-primary); outline-offset: 3px; }
 .rc-main .rc-kpi:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgb(30 96 213 / 8%); }
 .rc-main .rc-kpi header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .rc-main .rc-kpi header > span { color: var(--rc-sub); font-size: 13px; font-weight: 600; }

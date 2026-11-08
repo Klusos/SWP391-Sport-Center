@@ -141,6 +141,10 @@ class MembershipAutoRenewalIntegrationTest {
         assertEquals(true, request.getAutoRenew());
         assertEquals(current.getId(), MembershipAutoRenewalService.sourceMembershipId(request));
         assertEquals(1, notificationsFor(member));
+        assertEquals(1, memberships.findByMemberId(member.getId()).size(),
+                "Auto-renew creates a pending payment request, not a new Membership");
+        assertEquals(today.plusDays(2), memberships.findById(current.getId()).orElseThrow().getEndDate(),
+                "Auto-renew does not extend dates before payment settlement");
 
         // Turning it off again cancels the unpaid request.
         mvc.perform(patch("/api/memberships/" + current.getId() + "/cancel-renewal").header("Authorization", bearer(member)))
@@ -361,6 +365,25 @@ class MembershipAutoRenewalIntegrationTest {
         assertTrue(autoRenewal.createIfDue(current).isEmpty());
         assertTrue(pendingRenewals().isEmpty());
         assertEquals(1, notificationsFor(member));
+    }
+
+    @Test
+    void validRenewalPaymentCreatedBeforeDeactivationCanSettleAndQueueInOrder() {
+        Membership current = membership(member, plan, today.minusDays(28), today.plusDays(2), true);
+        Payment pending = autoRenewal.createIfDue(current).orElseThrow();
+        plan.setStatus("INACTIVE");
+        plans.saveAndFlush(plan);
+
+        assertEquals(PaymentStatus.PENDING, paymentRows.findById(pending.getId()).orElseThrow().getStatus());
+        assertEquals("SUCCESS", payments.processAtCounter(pending.getId(), counter(), jwt(receptionist)).getStatus());
+
+        List<Membership> chain = memberships.findByMemberId(member.getId()).stream()
+                .sorted(Comparator.comparing(Membership::getStartDate)).toList();
+        assertEquals(2, chain.size());
+        assertEquals(current.getEndDate(), chain.get(1).getStartDate());
+        assertEquals(current.getEndDate().plusMonths(plan.getDurationMonths()), chain.get(1).getEndDate());
+        assertEquals("ACTIVE", chain.get(0).getStatus());
+        assertEquals("INACTIVE", plans.findById(plan.getId()).orElseThrow().getStatus());
     }
 
     @Test

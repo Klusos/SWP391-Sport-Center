@@ -33,13 +33,32 @@ test("cancellation errors are converted to safe user-facing text", () => {
  assert.notEqual(cancellationErrorMessage({ message: deadline }), deadline);
  assert.notEqual(cancellationErrorMessage({ message: internal }), internal);
 });
-test("Receptionist refund UI displays course context and confirms before existing API", async () => {
- const source = await read("../src/pages/ReceptionistMembershipSales.jsx");
- assert.match(source, /payment\.courseName/);
- assert.match(source, /payment\.courseOfferingName/);
- assert.match(source, /payment\.className/);
- assert.match(source, /payment\.registrationId/);
- assert.match(source, /window\.confirm/);
- assert.match(source, /confirmRefundApi\(token, payment.id/);
- assert.match(source, /getRefundRequiredPaymentsApi\(token, 0, 50\)/);
+test("course refund queue and confirmation are on Course & PT Payments only", async () => {
+ const sales = await read("../src/pages/ReceptionistMembershipSales.jsx");
+ const payments = await read("../src/pages/ReceptionistCoursePayments.jsx");
+ assert.doesNotMatch(sales, /getRefundRequiredPaymentsApi|confirmRefundApi|refunds\.content/);
+ assert.match(payments, /getRefundRequiredPaymentsApi\(token, activePage, 50\)/);
+ assert.match(payments, /refundPurposeLabel\(payment\)/);
+ assert.match(payments, /refundReferenceLabel\(payment\)/);
+ assert.match(payments, /payment\.courseName/);
+ assert.match(payments, /payment\.courseOfferingName/);
+ assert.match(payments, /payment\.className/);
+ assert.match(payments, /window\.confirm/);
+ assert.match(payments, /window\.prompt/);
+ assert.match(payments, /confirmRefundApi\(token, payment\.id, note\.trim\(\) \|\| null\)/);
+ assert.match(payments, /refundBusy\.current \|\| payment\?\.status !== "REFUND_REQUIRED"/);
+ assert.match(payments, /refundQueue\.loading/);
+ assert.match(payments, /refundQueue\.error/);
+ assert.match(payments, /refundQueue\.notice/);
+ assert.match(payments, /refundQueueRows\(refundQueue\.data\)\.length === 0/);
+});
+
+test("Member course detail keeps its upper checkout card and separate schedule action", async () => {
+ const source = await read("../src/public-site/pages/CourseDetail.jsx");
+ assert.match(source, /member-course-registration-primary/);
+ assert.match(source, /Tiếp tục thanh toán/);
+ assert.match(source, /Xem chi tiết đăng ký/);
+ assert.doesNotMatch(source, /Thanh toán VNPay Sandbox \/ tại lễ tân/);
+ assert.match(source, /registration\.status === "PENDING_PAYMENT" && <p role="status">/);
+ assert.match(source, /<Link to="\/member\/schedule">Đi đến lịch học<\/Link>/);
 });

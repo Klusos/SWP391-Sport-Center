@@ -206,6 +206,48 @@ class MembershipPlanIntegrationTest {
         assertFalse(memberships.findByPlanId(planId).isEmpty());
     }
 
+    @Test
+    void deactivationAndReactivationDoNotRewriteActiveExpiredOrCancelledMemberships() throws Exception {
+        User member = user("MEMBER");
+        MembershipPlan plan = plan("ACTIVE");
+        java.time.LocalDate today = java.time.LocalDate.now();
+        Membership active = membership(member, plan, today.minusDays(1), today.plusDays(10), "ACTIVE");
+        Membership expired = membership(member, plan, today.minusMonths(2), today.minusMonths(1), "EXPIRED");
+        Membership cancelled = membership(member, plan, today.minusMonths(3), today.minusMonths(2), "CANCELLED");
+        String adminToken = bearer(user("ADMIN"));
+
+        mvc.perform(patch("/api/membership-plans/{id}/status", plan.getId()).header("Authorization", adminToken)
+                        .contentType("application/json").content("{\"status\":\"INACTIVE\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(patch("/api/membership-plans/{id}/status", plan.getId()).header("Authorization", adminToken)
+                        .contentType("application/json").content("{\"status\":\"ACTIVE\"}"))
+                .andExpect(status().isOk());
+
+        assertMembershipUnchanged(active, "ACTIVE");
+        assertMembershipUnchanged(expired, "EXPIRED");
+        assertMembershipUnchanged(cancelled, "CANCELLED");
+    }
+
+    private Membership membership(User member, MembershipPlan plan, java.time.LocalDate start,
+            java.time.LocalDate end, String status) {
+        Membership membership = new Membership();
+        membership.setMember(member);
+        membership.setPlan(plan);
+        membership.setAutoRenew(false);
+        membership.setStartDate(start);
+        membership.setEndDate(end);
+        membership.setStatus(status);
+        return memberships.saveAndFlush(membership);
+    }
+
+    private void assertMembershipUnchanged(Membership expected, String status) {
+        Membership actual = memberships.findById(expected.getId()).orElseThrow();
+        assertEquals(status, actual.getStatus());
+        assertEquals(expected.getStartDate(), actual.getStartDate());
+        assertEquals(expected.getEndDate(), actual.getEndDate());
+        assertEquals(expected.getPlan().getId(), actual.getPlan().getId());
+    }
+
     private MembershipPlan plan(String status) {
         MembershipPlan plan = new MembershipPlan();
         plan.setName("Test plan " + UUID.randomUUID());

@@ -61,7 +61,7 @@ export default function CourseList({ token, role, onLogout, onNavigate }) {
                 <tbody>{filtered.map((course) => <tr key={course.id}>
                   <td><strong>{course.name}</strong></td><td>{course.sportName || "—"}</td><td>{course.level || "—"}</td>
                   <td>{course.targetAgeMin ?? "—"} – {course.targetAgeMax ?? "—"}</td><td><span className={"status-pill status-" + String(course.status || "").toLowerCase()}>{course.status || "—"}</span></td>
-                  <td><div className="adm-actions"><button type="button" onClick={() => navigate("/staff/courses/" + course.id)}>Quản lý</button><button type="button" onClick={() => navigate("/staff/courses/" + course.id + "/edit")}>Sửa</button></div></td>
+                  <td><div className="adm-actions"><button type="button" onClick={() => navigate("/staff/courses/" + course.id)}>Quản lý</button></div></td>
                 </tr>)}</tbody>
               </table>
             </div>

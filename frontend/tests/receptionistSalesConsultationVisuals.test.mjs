@@ -32,7 +32,7 @@ test("consultation segmented filters preserve backend status paging and role res
   assert.match(queue, /const STATUSES = \["", "PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"\]/);
   assert.match(queue, /getConsultationRequestsApi\(token, \{ status, page, size: PAGE_SIZE \}\)/);
   assert.match(queue, /aria-pressed=\{status === value\}/);
-  assert.match(queue, /setStatus\(value\); setPage\(0\); setNotice\(""\)/);
+  assert.match(queue, /setSearchParams\(value \? \{ status: value \} : \{\}\); setPage\(0\); setNotice\(""\)/);
   assert.match(queue, /disabled=\{!allowedRole\}/);
   assert.match(queue, /request\.status === "PENDING" && allowedRole/);
   assert.match(queue, /actorId != null && request\.handledBy === actorId/);

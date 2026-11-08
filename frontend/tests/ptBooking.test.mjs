@@ -23,7 +23,9 @@ test("members cancel pending bookings any time and confirmed ones until 24 hours
   const confirmed = { status: "CONFIRMED", startTime: "2026-11-20T09:00:00" };
   assert.equal(canMemberCancel({ status: "PENDING_PAYMENT" }), true);
   assert.equal(canMemberCancel(confirmed, at("2026-11-19T08:59:00+07:00")), true);
+  assert.equal(canMemberCancel(confirmed, at("2026-11-19T09:00:00+07:00")), true);
   assert.equal(canMemberCancel(confirmed, at("2026-11-19T09:01:00+07:00")), false);
+  assert.equal(canMemberCancel(confirmed, at("2026-11-20T09:00:00+07:00")), false);
   assert.equal(canMemberCancel({ status: "EXPIRED", startTime: "2026-11-20T09:00:00" }, 0), false);
 });
 
@@ -108,4 +110,15 @@ test("booking and payment refresh is placed under Pending Actions and keeps its 
   assert.match(pending, /aria-label=/);
   assert.doesNotMatch(history, /pt-actionable-refresh|refreshAuthoritative/);
   assert.equal((page.match(/pt-actionable-refresh/g) || []).length, 1);
+});
+
+test("member booking history exposes eligible cancellation with confirmation, refresh, and explicit refund-pending messaging", async () => {
+  const page = await (await import("node:fs/promises")).readFile(new URL("../src/pages/PtBooking.jsx", import.meta.url), "utf8");
+  assert.match(page, /cancelPtBookingApi\(token, booking\.id\)/);
+  assert.match(page, /!actionable && canMemberCancel\(booking, now\).*?Cancel booking/s);
+  assert.match(page, /window\.confirm\(prompt\)/);
+  assert.match(page, /await refreshAuthoritative\(\)/);
+  assert.match(page, /awaiting staff refund confirmation/);
+  assert.match(page, /ptErrorMessage\(requestError/);
+  assert.match(page, /paymentBusyId !== null \|\| !canMemberCancel\(booking/);
 });

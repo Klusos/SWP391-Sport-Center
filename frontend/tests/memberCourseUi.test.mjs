@@ -97,7 +97,7 @@ test("registration remains PENDING_PAYMENT and keeps checkout, deadline, cancell
     read("../src/public-site/pages/CourseDetail.jsx"),
     read("../src/pages/MemberCourses.jsx"),
   ]);
-  assert.match(detail, /registration\.status === "PENDING_PAYMENT"[\s\S]*?\/member\/course-checkout/);
+  assert.match(detail, /member-course-registration-primary.*member\/course-checkout/);
   assert.match(detail, /registration\.status === "CONFIRMED"/);
   assert.match(detail, /registration\.status === "EXPIRED"/);
   assert.match(detail, /formatPrice\(registration\.originalPrice\)/);

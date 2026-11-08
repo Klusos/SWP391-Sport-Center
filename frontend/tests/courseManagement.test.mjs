@@ -49,3 +49,12 @@ test("Admin Course Form exposes policy, age safety guidance, and disables invali
   assert.match(form, /trẻ dưới 10 tuổi/);
   assert.match(form, /disabled=\{busy \|\| ageRangeInvalid\}/);
 });
+
+test("Course list has only the management action while Course Management keeps editing", async () => {
+  const list = await readFile(new URL("../src/pages/CourseList.jsx", import.meta.url), "utf8");
+  const management = await readFile(new URL("../src/pages/CourseManagement.jsx", import.meta.url), "utf8");
+  assert.match(list, /onClick=\{\(\) => navigate\("\/staff\/courses\/" \+ course\.id\)\}>Quản lý/);
+  assert.doesNotMatch(list, /\/edit.*>Sửa|>Sửa<\/button>/);
+  assert.match(management, /onClick=\{\(\) => open\(it\)\}>Sửa/);
+  assert.match(management, /navigate\("\/staff\/courses\/" \+ course\.id \+ "\/edit"\)/);
+});

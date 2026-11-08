@@ -39,6 +39,7 @@ const LOADERS = {
   RECEPTIONIST: {
     me: getCurrentUserApi, members: memberUsers, sports: getSportsApi, plans: getPublicMembershipPlansApi,
     pendingRequests: (t) => getConsultationRequestsApi(t, { status: "PENDING", page: 0, size: 5 }),
+    inProgressRequests: (t) => getConsultationRequestsApi(t, { status: "IN_PROGRESS", page: 0, size: 5 }),
   },
   COACH: {
     bookings: getAssignedPtBookingsApi,
@@ -200,7 +201,7 @@ function Receptionist({ d, errors = {}, onNavigate, loading }) {
     ["Tổng thành viên", metrics.members, errors.members ? "Không tải được dữ liệu" : "Tài khoản hội viên", "members", "blue"],
     ["Gói hội viên", metrics.activePlans, errors.plans ? "Không tải được dữ liệu" : "Đang áp dụng", "plans", "green"],
     ["Bộ môn", metrics.sports, errors.sports ? "Không tải được dữ liệu" : "Danh mục hiện có", "sports", "blue"],
-    ["Yêu cầu chờ xử lý", metrics.pendingConsultations, errors.pendingRequests ? "Không tải được dữ liệu" : "Đang chờ tiếp nhận", "pending", metrics.pendingConsultations > 0 ? "amber" : "green"],
+    ["Yêu cầu đang xử lý", metrics.inProgressConsultations, errors.inProgressRequests ? "Không tải được dữ liệu" : "Đang được tiếp nhận", "pending", metrics.inProgressConsultations > 0 ? "amber" : "green"],
   ];
   const actions = [
     ["Yêu cầu tư vấn", "Xem và tiếp nhận yêu cầu", "consultations", "consult"],
@@ -215,10 +216,13 @@ function Receptionist({ d, errors = {}, onNavigate, loading }) {
     </header>
 
     <section className="rc-kpis" aria-label="Chỉ số nhanh" aria-busy={loading}>
-      {kpis.map(([label, value, note, icon, tone]) => <article key={label} className="rc-kpi">
-        <header><span>{label}</span><i className={`rc-tile ${tone}`}><ReceptionistIcon name={icon} size={21} /></i></header>
-        <strong>{loading ? "—" : value ?? "—"}</strong><p className={errors[icon === "pending" ? "pendingRequests" : icon] ? "error" : tone}><span aria-hidden="true" />{note}</p>
-      </article>)}
+      {kpis.map(([label, value, note, icon, tone]) => {
+        const content = <><header><span>{label}</span><i className={`rc-tile ${tone}`}><ReceptionistIcon name={icon} size={21} /></i></header>
+          <strong>{loading ? "—" : value ?? "—"}</strong><p className={errors[icon === "pending" ? "inProgressRequests" : icon] ? "error" : tone}><span aria-hidden="true" />{note}</p></>;
+        return label === "Yêu cầu đang xử lý"
+          ? <Link key={label} className="rc-kpi rc-kpi-link" to="/staff/consultations?status=IN_PROGRESS">{content}</Link>
+          : <article key={label} className="rc-kpi">{content}</article>;
+      })}
     </section>
 
     <section className="rc-actions" aria-label="Thao tác nhanh">
@@ -245,8 +249,8 @@ function Receptionist({ d, errors = {}, onNavigate, loading }) {
       </section>
 
       <section className="rc-card">
-        <div className="rc-card-head"><h2>Yêu cầu tư vấn đang chờ <span className="rc-count amber">{loading ? "—" : metrics.pendingConsultations ?? "—"}</span></h2>
-          <button type="button" className="rc-link" onClick={() => onNavigate("consultations")}>Xem tất cả <ReceptionistIcon name="arrow" size={14} /></button></div>
+        <div className="rc-card-head"><h2>Yêu cầu chưa tiếp nhận <span className="rc-count amber">{loading ? "—" : metrics.pendingConsultations ?? "—"}</span></h2>
+          <Link className="rc-link" to="/staff/consultations?status=PENDING">Xem tất cả <ReceptionistIcon name="arrow" size={14} /></Link></div>
         {errors.pendingRequests ? <p className="rc-empty" role="alert">Không tải được danh sách yêu cầu tư vấn.</p>
           : loading ? <p className="rc-empty" role="status">Đang tải yêu cầu tư vấn…</p>
             : requests.length === 0 ? <p className="rc-empty">Không có yêu cầu nào đang chờ.</p>

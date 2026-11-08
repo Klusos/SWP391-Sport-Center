@@ -427,6 +427,8 @@ class CourseRegistrationIntegrationTest {
         CourseClass selected = pricedClass("100.00");
         membership(pricedMember, tenPercent, today, today.plusDays(1), "ACTIVE", false);
         membership(pricedMember, twentyPercent, today.minusDays(3), today.plusDays(1), "ACTIVE", false);
+        twentyPercent.setStatus("INACTIVE");
+        plans.saveAndFlush(twentyPercent);
 
         var response = service.register(request(selected), jwt(pricedMember));
         assertEquals(new BigDecimal("100.00"), response.originalPrice());

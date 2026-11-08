@@ -2,16 +2,19 @@ const rows = (value) => Array.isArray(value) ? value : value?.content ?? [];
 
 function countValue(value) {
   if (value == null) return null;
-  return value?.totalElements ?? rows(value).length;
+  if (Array.isArray(value)) return value.length;
+  if (Array.isArray(value?.content)) return Number.isFinite(value.totalElements) ? value.totalElements : null;
+  return null;
 }
 
-export function receptionistDashboardMetrics({ members, sports, plans, pendingRequests }) {
+export function receptionistDashboardMetrics({ members, sports, plans, pendingRequests, inProgressRequests }) {
   const activePlans = plans == null ? null : rows(plans).filter((plan) => plan?.status === "ACTIVE").length;
   return {
     members: countValue(members),
     sports: countValue(sports),
     activePlans,
     pendingConsultations: countValue(pendingRequests),
+    inProgressConsultations: countValue(inProgressRequests),
   };
 }
 

@@ -491,6 +491,56 @@ class PaymentIntegrationTest {
     }
 
     @Test
+    void inactivePlanRejectsRenewalButReactivationAllowsANewRequest() {
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        Membership current = membership(member, plan, today.minusDays(10), today.plusDays(20));
+        plan.setStatus("INACTIVE");
+        plans.saveAndFlush(plan);
+
+        IllegalArgumentException rejected = assertThrows(IllegalArgumentException.class,
+                () -> service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                        PaymentMethod.COUNTER), jwt(member)));
+        assertEquals("Membership plan is not active", rejected.getMessage());
+        assertTrue(payments.findByMemberIdOrderByCreatedAtDesc(member.getId()).isEmpty());
+
+        plan.setStatus("ACTIVE");
+        plans.saveAndFlush(plan);
+        PaymentResponse renewed = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        assertEquals("PENDING", renewed.getStatus());
+        assertEquals(1, memberships.findByMemberId(member.getId()).size());
+        assertEquals(current.getStartDate(), memberships.findById(current.getId()).orElseThrow().getStartDate());
+        assertEquals(current.getEndDate(), memberships.findById(current.getId()).orElseThrow().getEndDate());
+    }
+
+    @Test
+    void preDeactivationMembershipPaymentMaySettleAndQueueWithoutChangingCurrentEntitlement() {
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        Membership current = membership(member, plan, today.minusDays(10), today.plusDays(20));
+        LocalDate originalStart = current.getStartDate();
+        LocalDate originalEnd = current.getEndDate();
+        PaymentResponse pending = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+
+        plan.setStatus("INACTIVE");
+        plans.saveAndFlush(plan);
+        assertEquals(PaymentStatus.PENDING, payments.findById(pending.getId()).orElseThrow().getStatus());
+        assertEquals("ACTIVE", memberships.findById(current.getId()).orElseThrow().getStatus());
+        assertEquals(originalStart, memberships.findById(current.getId()).orElseThrow().getStartDate());
+        assertEquals(originalEnd, memberships.findById(current.getId()).orElseThrow().getEndDate());
+
+        assertEquals("SUCCESS", service.processAtCounter(pending.getId(), counter(true), jwt(receptionist)).getStatus());
+        List<Membership> chain = memberships.findByMemberId(member.getId()).stream()
+                .sorted(Comparator.comparing(Membership::getStartDate)).toList();
+        assertEquals(2, chain.size());
+        assertEquals(originalEnd, chain.get(1).getStartDate());
+        assertEquals(originalEnd.plusMonths(plan.getDurationMonths()), chain.get(1).getEndDate());
+        assertEquals(originalStart, chain.get(0).getStartDate());
+        assertEquals(originalEnd, chain.get(0).getEndDate());
+        assertEquals("INACTIVE", plans.findById(plan.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
     void receptionistCannotUseLegacyMembershipCreationToBypassPayment() throws Exception {
         String body = "{\"memberId\":" + member.getId() + ",\"planId\":" + plan.getId()
                 + ",\"startDate\":\"" + LocalDate.now() + "\",\"autoRenew\":false}";

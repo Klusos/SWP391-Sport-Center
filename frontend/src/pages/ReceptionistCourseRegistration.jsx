@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import {
   createPaymentApi, createStaffCourseRegistrationApi, getAllCourseRegistrationsApi,
   getClassesByOfferingApi, getCourseOfferingsByCourseApi, getCoursesBySportApi,
   getMemberPaymentsApi, getMembershipsByMemberApi, getMemberSportLevelsApi,
-  getPublicMembershipPlansApi, getSportsApi, getUsersApi, processCounterPaymentApi,
+  getPublicMembershipPlansApi, getSportsApi, getUsersApi,
 } from "../api";
 import { activeSeatCount, counterCoursePaymentPayload, courseAgeWarning, eligibilityIssues, estimateCoursePrice, formatVietnamTime, membershipDiscount, vietnamTime } from "../receptionistRegistration";
 import "./Portal.css";
@@ -16,6 +16,7 @@ const money = (value) => value == null ? "—" : `${Number(value).toLocaleString
 const isStaff = (role) => ["ADMIN", "RECEPTIONIST"].includes(String(role || "").toUpperCase());
 
 export default function ReceptionistCourseRegistration({ token, role, onLogout, onNavigate }) {
+  const navigate = useNavigate();
   const [members, setMembers] = useState([]), [sports, setSports] = useState([]);
   const [courses, setCourses] = useState([]), [offerings, setOfferings] = useState([]), [classes, setClasses] = useState([]);
   const [allRegistrations, setAllRegistrations] = useState([]), [memberRegistrations, setMemberRegistrations] = useState([]);
@@ -158,26 +159,6 @@ export default function ReceptionistCourseRegistration({ token, role, onLogout, 
     finally { lock.current = false; setBusy(false); }
   }
 
-  async function confirmReceipt(registration, payment) {
-    if (payment.method !== "COUNTER" || payment.status !== "PENDING" || lock.current) return;
-    const late = Number.isFinite(vietnamTime(registration.paymentDeadline)) && vietnamTime(registration.paymentDeadline) <= now;
-    const text = `Chỉ xác nhận nếu đã thực sự nhận đủ ${money(payment.amount)} từ ${selectedMember?.name} cho khóa ${registration.courseName || "này"}, lớp ${registration.className || "này"} (thanh toán #${payment.id}).${late ? " Hạn giữ chỗ có thể đã qua; máy chủ có thể chuyển khoản thu muộn sang REFUND_REQUIRED mà không khôi phục chỗ." : ""}`;
-    if (!window.confirm(text)) return;
-    lock.current = true; setBusy(true); setError(""); setNotice("");
-    try {
-      const result = await processCounterPaymentApi(token, payment.id, true, "Course payment received at reception");
-      setNotice(result.status === "REFUND_REQUIRED"
-        ? `Ngoại lệ: thanh toán #${payment.id} ở trạng thái REFUND_REQUIRED. Cần nhân viên đối soát/hoàn tiền; đăng ký không được xác nhận.`
-        : result.status === "SUCCESS"
-          ? `Máy chủ xác nhận thanh toán #${payment.id} thành công. Đang làm mới trạng thái đăng ký.`
-          : `Máy chủ trả về trạng thái ${result.status} cho thanh toán #${payment.id}.`);
-      await refreshMember(selectedMember.id);
-    } catch (requestError) {
-      setError(`${requestError.message || "Không nhận được kết quả settlement."} Đang làm mới lịch sử; nếu kết quả chưa rõ, không gửi lại trước khi đối chiếu.`);
-      await refreshMember(selectedMember.id);
-    } finally { lock.current = false; setBusy(false); }
-  }
-
   if (!token) return <Navigate to="/login" replace />;
   if (!isStaff(role)) return <Navigate to="/" replace />;
 
@@ -221,7 +202,7 @@ export default function ReceptionistCourseRegistration({ token, role, onLogout, 
                     {payment && <span>Thanh toán #{payment.id} · {payment.method} · {payment.status}</span>}
                   </div>
                   {payment?.status === "PENDING" && payment.method === "COUNTER"
-                    ? <button type="button" disabled={busy} onClick={() => void confirmReceipt(registration, payment)}>Xác nhận đã nhận tiền #{payment.id}</button>
+                    ? <button type="button" disabled={busy} onClick={() => navigate(`/receptionist/course-payments?paymentId=${encodeURIComponent(payment.id)}&registrationId=${encodeURIComponent(registration.id)}`)}>Đến trang thanh toán #{payment.id}</button>
                     : payment?.status === "PENDING" ? <p role="status">Đang có giao dịch ONLINE #{payment.id}; không tạo thanh toán trùng.</p>
                       : <button type="button" disabled={busy || expired} onClick={() => uncertainRegistrationId === registration.id ? void refreshMember(selectedMember.id) : void createOrReusePayment(registration)}>{expired ? "Giữ chỗ có thể đã hết hạn" : uncertainRegistrationId === registration.id ? "Làm mới để kiểm tra thanh toán" : "Tạo / tiếp tục yêu cầu COUNTER"}</button>}
                 </article>;

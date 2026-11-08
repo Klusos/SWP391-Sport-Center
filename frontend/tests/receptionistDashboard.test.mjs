@@ -9,10 +9,12 @@ test("Receptionist dashboard metrics count only supplied real data and report un
     sports: { content: [{ id: 1 }], totalElements: 7 },
     plans: [{ status: "ACTIVE" }, { status: "INACTIVE" }, {}],
     pendingRequests: { content: [{ id: 1 }], totalElements: 6 },
-  }), { members: 2, sports: 7, activePlans: 1, pendingConsultations: 6 });
+    inProgressRequests: { content: [{ id: 2 }], totalElements: 9 },
+  }), { members: 2, sports: 7, activePlans: 1, pendingConsultations: 6, inProgressConsultations: 9 });
   assert.deepEqual(receptionistDashboardMetrics({ members: null, sports: null, plans: null, pendingRequests: null }), {
-    members: null, sports: null, activePlans: null, pendingConsultations: null,
+    members: null, sports: null, activePlans: null, pendingConsultations: null, inProgressConsultations: null,
   });
+  assert.equal(receptionistDashboardMetrics({ pendingRequests: { content: [{ id: 1 }] } }).pendingConsultations, null);
 });
 
 test("member quick search and dashboard lists use supplied active and pending records", () => {
@@ -28,11 +30,21 @@ test("member quick search and dashboard lists use supplied active and pending re
   ] }).map((row) => row.id), [1, 2]);
 });
 
-test("dashboard uses staff destinations and displays source/API error states", async () => {
+test("dashboard requests separate paginated status totals and links each panel to its actual filter", async () => {
   const source = await readFile(new URL("../src/pages/Dashboard.jsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../src/pages/ReceptionistDashboard.css", import.meta.url), "utf8");
   assert.match(source, /getConsultationRequestsApi\(t, \{ status: "PENDING", page: 0, size: 5 \}\)/);
-  assert.match(source, /onNavigate\("consultations"\)/);
+  assert.match(source, /getConsultationRequestsApi\(t, \{ status: "IN_PROGRESS", page: 0, size: 5 \}\)/);
+  assert.match(source, /metrics\.inProgressConsultations/);
+  assert.match(source, /metrics\.pendingConsultations/);
+  assert.match(source, /to="\/staff\/consultations\?status=IN_PROGRESS"/);
+  assert.match(source, /to="\/staff\/consultations\?status=PENDING"/);
+  assert.match(source, /errors\.inProgressRequests/);
+  assert.match(source, /errors\.pendingRequests/);
+  const queue = await readFile(new URL("../src/pages/ConsultationQueue.jsx", import.meta.url), "utf8");
+  assert.match(queue, /useSearchParams/);
+  assert.match(queue, /STATUSES\.includes\(searchParams\.get\("status"\)\)/);
+  assert.match(queue, /setSearchParams\(value \? \{ status: value \} : \{\}\)/);
   assert.match(source, /onNavigate\("membership-sales"\)/);
   assert.match(source, /onNavigate\("members"\)/);
   assert.match(source, /role="status"/);

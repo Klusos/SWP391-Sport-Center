@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import {
   cancelMembershipApi,
-  confirmRefundApi,
   createPaymentApi,
   decideCancellationRequestApi,
   getCancellationRequestsApi,
@@ -10,11 +9,10 @@ import {
   getMemberPaymentsApi,
   getPendingMembershipPaymentsApi,
   getPublicMembershipPlansApi,
-  getRefundRequiredPaymentsApi,
   getUsersApi,
   processCounterPaymentApi,
 } from "../api";
-import { cancellationRequestErrorMessage, formatDate, formatDateTime, paymentPurposeLabel, paymentStatusLabel } from "../membershipCancellation";
+import { cancellationRequestErrorMessage, formatDate, formatDateTime, paymentStatusLabel } from "../membershipCancellation";
 import { todayInVietnam } from "../membershipDates";
 import { activeMembershipChain, cancellableMembershipId, cancelMembershipErrorMessage, isAutoRenewalPayment } from "../membershipRenewal";
 import { isMembershipPayment, upgradeErrorMessage } from "../membershipUpgrade";
@@ -25,10 +23,6 @@ const rows = (value) => Array.isArray(value) ? value : value?.content ?? [];
 const money = (value) => value == null ? "Chưa có giá" : Number(value).toLocaleString("vi-VN") + " ₫";
 const purposeLabel = (payment) => payment?.purpose === "UPGRADE" ? "Nâng cấp lên "
   : isAutoRenewalPayment(payment) ? "Gia hạn tự động · " : "";
-
-const refundDescription = (payment) => payment?.purpose === "COURSE_REGISTRATION"
-  ? "\u0110\u0103ng k\u00fd #" + (payment.registrationId ?? payment.referenceId) + " \u00b7 " + (payment.courseName || "Kh\u00f3a h\u1ecdc #" + payment.referenceId) + " \u00b7 " + (payment.courseOfferingName || "\u0110\u1ee3t ch\u01b0a c\u00f3 t\u00ean") + " \u00b7 " + (payment.className || "L\u1edbp ch\u01b0a c\u00f3 t\u00ean")
-  : (paymentPurposeLabel[payment?.purpose] || payment?.purpose || "Kho\u1ea3n thanh to\u00e1n");
 
 export default function ReceptionistMembershipSales({ token, role, onLogout, onNavigate }) {
   const [members, setMembers] = useState([]);
@@ -49,17 +43,15 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [cancelRequests, setCancelRequests] = useState(null);
-  const [refunds, setRefunds] = useState(null);
 
-  // Cancellation requests awaiting review and payments awaiting a refund (all purposes).
+  // Membership cancellation requests remain managed on the membership page.
   const loadReviewQueues = useCallback(async () => {
     try {
-      const [requests, refundPage] = await Promise.all([getCancellationRequestsApi(token), getRefundRequiredPaymentsApi(token, 0, 50)]);
+      const requests = await getCancellationRequestsApi(token);
       setCancelRequests(rows(requests));
-      setRefunds(refundPage);
     } catch (requestError) {
       setError(requestError.status === 401 ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
-        : requestError.message || "Không tải được yêu cầu hủy gói hoặc khoản cần hoàn tiền.");
+        : requestError.message || "Không tải được yêu cầu hủy gói.");
     }
   }, [token]);
   useEffect(() => {
@@ -262,30 +254,6 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
     }
   }
 
-  async function confirmRefund(payment) {
-    if (saving) return;
-    const context = refundDescription(payment);
-    const confirmed = window.confirm("Hoàn " + money(payment.amount) + " cho " + payment.memberName
-      + " (thanh toán #" + payment.id + ")?\n" + context
-      + "\n\nChỉ xác nhận sau khi đã hoàn tiền trực tiếp cho khách hàng.");
-    if (!confirmed) return;
-    const note = window.prompt("Ghi chú kiểm toán (không bắt buộc):", "");
-    if (note === null) return;
-    setSaving(true); setError(""); setNotice("");
-    try {
-      await confirmRefundApi(token, payment.id, note.trim() || null);
-      setNotice(`Đã ghi nhận hoàn tiền thanh toán #${payment.id}; hội viên đã được thông báo.`);
-      setHistoryVersion((value) => value + 1);
-    } catch (requestError) {
-      setError(requestError.status === 401 ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
-        : /Only a REFUND_REQUIRED/.test(requestError.message || "") ? "Khoản này đã được xử lý trước đó. Hãy làm mới danh sách."
-          : requestError.message || "Không thể xác nhận hoàn tiền.");
-    } finally {
-      await loadReviewQueues();
-      setSaving(false);
-    }
-  }
-
   function startAnother() { setPendingPayment(null); setNotice(""); setError(""); setPlanId(""); }
 
   return <div className="layout">
@@ -327,19 +295,7 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
           </div>)}
         <p className="membership-sales-note">Chỉ duyệt được khi gói chưa bắt đầu và là gói sau cùng. Yêu cầu chưa xử lý sẽ tự hết hiệu lực khi gói bắt đầu.</p>
       </section>
-      <section className="membership-sales-card">
-        <h2>Cần hoàn tiền</h2>
-        {refunds === null ? <p role="status">Đang tải…</p> : refunds.content.length === 0
-          ? <p>Không có khoản nào cần hoàn tiền.</p>
-          : <>{refunds.content.map((payment) => <div key={payment.id} className="membership-sales-history-row">
-            <span className="membership-sales-refund-context"><strong>#{payment.id} · {payment.memberName} (#{payment.memberId})</strong>
-              <span>{refundDescription(payment)}</span>
-              <span>{payment.purpose === "COURSE_REGISTRATION" ? "Tham chiếu đăng ký #" + (payment.registrationId ?? payment.referenceId) + " · " : ""}{money(payment.amount)} · {paymentStatusLabel[payment.status] || payment.status}</span>
-              {payment.note && <small>{payment.note}</small>}</span>
-            <button type="button" disabled={saving} onClick={() => void confirmRefund(payment)}>Xác nhận đã hoàn tiền</button>
-          </div>)}
-          {refunds.totalElements > refunds.content.length && <p>Đang hiển thị {refunds.content.length} / {refunds.totalElements} khoản cũ nhất.</p>}</>}
-      </section>
+
       {loading ? <p role="status">Đang tải thành viên và gói hội viên…</p> : <div className="membership-sales-checkout-layout">
         <div className="membership-sales-steps">
         <section className="membership-sales-card">
