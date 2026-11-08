@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import "./ConsultationQueue.css";
 import {
@@ -30,7 +31,9 @@ function formatDate(value) {
 }
 
 export default function ConsultationQueue({ token, role, onLogout, onNavigate }) {
-  const [status, setStatus] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedStatus = STATUSES.includes(searchParams.get("status")) ? searchParams.get("status") : "";
+  const status = requestedStatus;
   const [page, setPage] = useState(0);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -383,7 +386,7 @@ export default function ConsultationQueue({ token, role, onLogout, onNavigate })
           <div className="consultation-filter-segments" role="group" aria-label={"L\u1ecdc theo tr\u1ea1ng th\u00e1i"}>
             {STATUSES.map((value) => <button key={value || "ALL"} type="button"
               className={status === value ? "active" : ""} aria-pressed={status === value}
-              onClick={() => { setStatus(value); setPage(0); setNotice(""); }} disabled={!allowedRole}>
+              onClick={() => { setSearchParams(value ? { status: value } : {}); setPage(0); setNotice(""); }} disabled={!allowedRole}>
               {value ? STATUS_LABELS[value] : "T\u1ea5t c\u1ea3"}
             </button>)}
           </div>

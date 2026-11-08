@@ -1132,3 +1132,7 @@
 @media (prefers-reduced-motion: reduce) {
   .pt-booking-layout * { scroll-behavior: auto !important; }
 }
+
+.pt-booking-layout .pt-actionable-card .pt-section-heading > div { flex: 1 1 auto; }
+.pt-booking-layout .pt-actionable-refresh { margin-left: auto; flex: 0 0 auto; white-space: nowrap; }
+@media (max-width: 540px) { .pt-booking-layout .pt-actionable-refresh { min-height: 42px; } }

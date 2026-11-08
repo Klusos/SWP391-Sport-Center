@@ -120,8 +120,7 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
     ["members", "Thành viên"],
     ["membership-sales", "Bán gói hội viên"],
     ["course-registration", "Đăng ký khóa học tại quầy"],
-    ["course-payments", "Thanh toán khóa học"],
-    ["pt-payments", "Thanh toán PT"],
+    ["course-payments", "Thanh to\u00e1n kh\u00f3a h\u1ecdc & PT"],
     ["support-tickets", "Yêu cầu hỗ trợ"],
     ["consultations", "Yêu cầu tư vấn"],
   ];

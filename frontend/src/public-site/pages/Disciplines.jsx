@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import PageHero from '../components/PageHero.jsx'
 import Img from '../components/Img.jsx'
 import { getPublicCoursesBySportApi, getPublicSportsApi } from '../../api.js'
+import { formatSportIndex } from './disciplinePresentation.js'
 import './Disciplines.css'
 export default function Disciplines() {
   const { sportId } = useParams()
@@ -36,7 +37,7 @@ export default function Disciplines() {
       <div className="disciplines-heading"><div><span className="disciplines-eyebrow">SPORTS CENTER</span>
         <h2>{sportId ? `Khám phá khóa học${selectedSport?.name ? ` · ${selectedSport.name}` : ''}` : 'Khám phá các bộ môn'}</h2>
         <p>{sportId ? 'Chọn chương trình phù hợp với trình độ và mục tiêu luyện tập của bạn.' : 'Chọn một bộ môn để xem các chương trình và khóa học hiện có.'}</p></div>
-        {!sportId && !sportLoading && sports.length > 0 && <span className="disciplines-count">{sports.length}<small>bộ môn</small></span>}
+        {!sportId && !sportLoading && !error && <span className="disciplines-count">{sports.length}<small>bộ môn</small></span>}
         {sportId && !courseLoading && courses.length > 0 && <span className="disciplines-count">{courses.length}<small>khóa học</small></span>}
       </div>
       {error && <p className="banner error disciplines-error" role="alert">{error}</p>}
@@ -49,13 +50,24 @@ export default function Disciplines() {
           </div></article></div>)}</div>)
         : sportLoading ? <p className="disciplines-state" role="status">Đang tải bộ môn…</p> : sports.length === 0
           ? <p className="disciplines-state disciplines-empty">Hiện chưa có bộ môn nào đang hoạt động.</p>
-          : <div className="row g-4 disciplines-grid">{sports.map((sport) => <div className="col-md-6 col-lg-4 disciplines-grid-item" key={sport.id}>
-            <Link to={'/bo-mon/' + sport.id} className="sport-card sport-catalog-card d-block h-100 text-decoration-none disciplines-sport-card">
-              <Img src={sport.imageUrl} alt={sport.name} label={sport.name} className="catalog-image" />
-              <div className="sport-catalog-copy disciplines-sport-copy"><span className="sport-badge">{sport.name.slice(0, 3).toUpperCase()}</span>
-                <h3>{sport.name}</h3><span className="link-arrow">Xem khóa học <i className="bi bi-arrow-right" /></span>
+          : <div className="disciplines-grid">{sports.map((sport, index) => <Link
+            key={sport.id}
+            to={`/bo-mon/${sport.id}`}
+            className="disciplines-sport-card"
+          >
+            <div className="disciplines-sport-image-wrap">
+              <Img src={sport.imageUrl} alt={sport.name} label={sport.name} className="disciplines-sport-image" />
+              <span className="disciplines-sport-index" aria-hidden="true">{formatSportIndex(index)}</span>
+            </div>
+            <div className="disciplines-sport-card-body">
+              <span className="disciplines-sport-small-label">BỘ MÔN</span>
+              <h3>{sport.name}</h3>
+              <div className="disciplines-sport-card-action">
+                <span>Xem khóa học</span>
+                <span className="disciplines-sport-arrow" aria-hidden="true">→</span>
               </div>
-            </Link></div>)}</div>}
+            </div>
+          </Link>)}</div>}
     </div></section>
   </div>
 }

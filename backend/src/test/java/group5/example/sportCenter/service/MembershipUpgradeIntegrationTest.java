@@ -153,6 +153,23 @@ class MembershipUpgradeIntegrationTest {
     }
 
     @Test
+    void inactiveUpgradeTargetRejectsInitiationButDoesNotInvalidateAnAlreadyCreatedUpgrade() {
+        PaymentResponse pending = payments.createPayment(upgrade(premium, PaymentMethod.COUNTER), jwt(member));
+        premium.setStatus("INACTIVE");
+        plans.saveAndFlush(premium);
+
+        assertEquals("SUCCESS", payments.processAtCounter(pending.getId(), counter(true), jwt(receptionist)).getStatus());
+        assertEquals(premium.getId(), activePlanId(member));
+
+        User secondMember = user("MEMBER", "inactive-target-upgrade");
+        Membership secondCurrent = membership(secondMember, standard, today.minusDays(10), today.plusDays(20));
+        assertThrows(IllegalArgumentException.class,
+                () -> payments.createPayment(upgrade(premium, PaymentMethod.COUNTER), jwt(secondMember)));
+        assertEquals(1, memberships.findByMemberId(secondMember.getId()).size());
+        assertEquals("ACTIVE", memberships.findById(secondCurrent.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
     void upgradeSettlementRechecksAndReconcilesWhenAQueueAppearsAfterPaymentCreation() {
         PaymentResponse payment = payments.createPayment(upgrade(premium, PaymentMethod.COUNTER), jwt(member));
         Membership queued = membership(member, standard, current.getEndDate(), current.getEndDate().plusMonths(1));

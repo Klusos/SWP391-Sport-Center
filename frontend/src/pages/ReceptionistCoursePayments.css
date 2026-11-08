@@ -31,6 +31,23 @@
   flex-direction: column;
 }
 
+.cp-refund-queue { display: grid; gap: 14px; margin-top: 24px; padding: 22px; border: 1px solid #dbe5f0; border-radius: 16px; background: #fff; box-shadow: 0 8px 24px rgb(15 42 74 / 5%); }
+.cp-refund-heading, .cp-refund-item, .cp-refund-pagination, .cp-refund-pagination > div { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.cp-refund-heading h2 { margin: 0; color: #123b63; font-size: 20px; }
+.cp-refund-heading p { margin: 5px 0 0; color: #61758b; font-size: 13px; }
+.cp-refund-list { display: grid; gap: 9px; }
+.cp-refund-item { padding: 14px; border: 1px solid #e1e9f1; border-radius: 11px; }
+.cp-refund-item-main { display: grid; min-width: 0; gap: 5px; color: #334b64; font-size: 13px; }
+.cp-refund-item-main strong { color: #163a5b; }
+.cp-refund-item-main small { overflow-wrap: anywhere; color: #708198; }
+.cp-refund-item button, .cp-refund-heading button, .cp-refund-pagination button { flex: none; padding: 8px 12px; border: 1px solid #bfd0e1; border-radius: 8px; background: #fff; color: #1759a7; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.cp-refund-item button:disabled, .cp-refund-heading button:disabled, .cp-refund-pagination button:disabled { opacity: .55; cursor: not-allowed; }
+.cp-refund-notice, .cp-refund-error { margin: 0; padding: 10px 12px; border-radius: 8px; }
+.cp-refund-notice { background: #eaf7ef; color: #17663a; }
+.cp-refund-error { background: #fff0ef; color: #9b2c22; }
+.cp-refund-pagination { padding-top: 6px; color: #60748a; font-size: 12px; }
+@media (max-width: 640px) { .cp-refund-item, .cp-refund-heading { align-items: stretch; flex-direction: column; } .cp-refund-pagination { align-items: flex-start; flex-direction: column; } .cp-refund-pagination > div { width: 100%; flex-wrap: wrap; } }
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1050,3 +1067,5 @@
     align-items: flex-start;
   }
 }
+.cp-row-target { outline: 3px solid #2563eb; outline-offset: -3px; background: #eff6ff !important; }
+.cp-target-message { margin: 0 0 14px; padding: 12px 16px; border-radius: 10px; color: #1e3a8a; background: #eff6ff; }

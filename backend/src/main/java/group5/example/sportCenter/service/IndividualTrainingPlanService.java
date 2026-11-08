@@ -19,6 +19,7 @@ import group5.example.sportCenter.dto.IndividualTrainingPlanResponse;
 import group5.example.sportCenter.dto.IndividualTrainingPlanRevisionResponse;
 import group5.example.sportCenter.dto.IndividualTrainingWeekResponse;
 import group5.example.sportCenter.entity.CourseClass;
+import group5.example.sportCenter.entity.AttendanceStatus;
 import group5.example.sportCenter.entity.CourseRegistrationStatus;
 import group5.example.sportCenter.entity.IndividualTrainingPlan;
 import group5.example.sportCenter.entity.IndividualTrainingPlanExercise;
@@ -29,6 +30,7 @@ import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.CourseClassRepository;
 import group5.example.sportCenter.repository.CourseRegistrationRepository;
+import group5.example.sportCenter.repository.AttendanceRepository;
 import group5.example.sportCenter.repository.IndividualTrainingPlanExerciseRepository;
 import group5.example.sportCenter.repository.IndividualTrainingPlanRepository;
 import group5.example.sportCenter.repository.IndividualTrainingPlanRevisionRepository;
@@ -48,6 +50,7 @@ public class IndividualTrainingPlanService {
     private final IndividualTrainingPlanExerciseRepository exercises;
     private final CourseClassRepository classes;
     private final CourseRegistrationRepository registrations;
+    private final AttendanceRepository attendance;
     private final MembershipRepository memberships;
     private final UserRepository users;
     private final AssessmentAccess access;
@@ -57,7 +60,7 @@ public class IndividualTrainingPlanService {
     public IndividualTrainingPlanService(IndividualTrainingPlanRepository plans,
             IndividualTrainingPlanRevisionRepository revisions, IndividualTrainingPlanWeekRepository weeks,
             IndividualTrainingPlanExerciseRepository exercises, CourseClassRepository classes,
-            CourseRegistrationRepository registrations, MembershipRepository memberships,
+            CourseRegistrationRepository registrations, AttendanceRepository attendance, MembershipRepository memberships,
             UserRepository users, AssessmentAccess access, AuditLogService auditLogs, Clock clock) {
         this.plans = plans;
         this.revisions = revisions;
@@ -65,6 +68,7 @@ public class IndividualTrainingPlanService {
         this.exercises = exercises;
         this.classes = classes;
         this.registrations = registrations;
+        this.attendance = attendance;
         this.memberships = memberships;
         this.users = users;
         this.access = access;
@@ -84,6 +88,11 @@ public class IndividualTrainingPlanService {
                         memberId, classId, CourseRegistrationStatus.CONFIRMED)
                 .orElseThrow(() -> error(HttpStatus.CONFLICT,
                         "Member must have a CONFIRMED CourseRegistration for this CourseClass"));
+        if (!attendance.existsQualifyingCompletedSessionAttendance(
+                memberId, classId, AttendanceStatus.PRESENT, "COMPLETED")) {
+            throw error(HttpStatus.CONFLICT,
+                    "An individual training plan can only be created after the member has attended at least one completed class session.");
+        }
         User member = users.findByIdForBookingUpdate(memberId)
                 .orElseThrow(() -> new ResourceNotFoundException("Member not found with id: " + memberId));
         if (!"MEMBER".equalsIgnoreCase(member.getRole()) || !"ACTIVE".equalsIgnoreCase(member.getStatus())) {
@@ -119,7 +128,7 @@ public class IndividualTrainingPlanService {
     public List<IndividualTrainingPlanResponse> mine(Jwt jwt) {
         User actor = access.actor(jwt);
         access.requireMember(actor);
-        return plans.findByMemberIdOrderByUpdatedAtDescIdDesc(actor.getId()).stream()
+        return plans.findByMemberIdAndRegistrationStatus(actor.getId(), CourseRegistrationStatus.CONFIRMED).stream()
                 .map(this::response).toList();
     }
 
@@ -233,6 +242,11 @@ public class IndividualTrainingPlanService {
         if ("MEMBER".equalsIgnoreCase(actor.getRole())) {
             if (!plan.getMember().getId().equals(actor.getId())) {
                 throw error(HttpStatus.FORBIDDEN, "Members may read only their own individual training plans");
+            }
+            if (!registrations.existsByMemberIdAndCourseClassIdAndStatus(actor.getId(),
+                    plan.getCourseClass().getId(), CourseRegistrationStatus.CONFIRMED)) {
+                throw error(HttpStatus.FORBIDDEN,
+                        "Members may read individual training plans only for classes with a CONFIRMED registration");
             }
             return;
         }

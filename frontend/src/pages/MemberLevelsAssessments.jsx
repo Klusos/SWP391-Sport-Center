@@ -4,10 +4,13 @@ import {
   createMemberConsultationRequestApi,
   getCurrentUserApi,
   getMyConsultationRequestsApi,
+
   getMyMemberSportLevelsApi,
+  getMyRegistrationsApi,
   getMySkillAssessmentsApi,
   getPublicSportsApi,
 } from "../api";
+import { getMemberRelevantSports } from "../memberSportEligibility";
 import "./Membertheme.css";
 import "./MemberLevelsAssessments.css";
 
@@ -81,13 +84,6 @@ function getSportTheme(sportName = "", index = 0) {
       stage1: "Cơ bản: Phát cầu & Giao lưu",
       stage2: "Trung cấp: Đập cầu, Phông sâu, Di chuyển",
       stage3: "Nâng cao: Chiến thuật thi đấu",
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 2a4 4 0 0 0-4 4c0 1.5.8 2.8 2 3.5V14l-4 4 2 2 4-4h4.5c.7 1.2 2 2 3.5 2a4 4 0 0 0 4-4c0-1.5-.8-2.8-2-3.5V6a4 4 0 0 0-4-4h-4z" />
-          <circle cx="12" cy="18" r="2" />
-          <path d="M10 10l4 4" />
-        </svg>
-      ),
     };
   }
   if (lower.includes("bơi") || lower.includes("swim")) {
@@ -97,13 +93,6 @@ function getSportTheme(sportName = "", index = 0) {
       stage1: "Cơ bản: Làm quen nước & Bơi ếch",
       stage2: "Trung cấp: Bơi sải & Kỹ thuật thở",
       stage3: "Nâng cao: Bơi bướm & Sức bền",
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" />
-          <path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" />
-          <path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1" />
-        </svg>
-      ),
     };
   }
   if (lower.includes("tennis") || lower.includes("quần vợt") || lower.includes("pickleball")) {
@@ -113,13 +102,6 @@ function getSportTheme(sportName = "", index = 0) {
       stage1: "Cơ bản: Cầm vợt & Forehand",
       stage2: "Trung cấp: Giao bóng & Volley",
       stage3: "Nâng cao: Đối kháng & Chiến thuật",
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10" />
-          <path d="M17.5 4.5a10 10 0 0 0-11 15" />
-          <path d="M6.5 4.5a10 10 0 0 1 11 15" />
-        </svg>
-      ),
     };
   }
   if (lower.includes("gym") || lower.includes("fitness") || lower.includes("thể hình")) {
@@ -129,11 +111,6 @@ function getSportTheme(sportName = "", index = 0) {
       stage1: "Cơ bản: Kỹ thuật form & Cơ nền",
       stage2: "Trung cấp: Tăng cơ & Kiểm soát tạ",
       stage3: "Nâng cao: Sức mạnh & Conditioning",
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M6 5v14M18 5v14M2 9v6M22 9v6M6 12h12" />
-        </svg>
-      ),
     };
   }
   if (lower.includes("yoga") || lower.includes("pilates")) {
@@ -143,13 +120,6 @@ function getSportTheme(sportName = "", index = 0) {
       stage1: "Cơ bản: Hít thở & Thăng bằng",
       stage2: "Trung cấp: Chuỗi Asana linh hoạt",
       stage3: "Nâng cao: Kiểm soát cơ lõi chuyên sâu",
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 4v16" />
-          <path d="M4 14c2.5-4 5-6 8-6s5.5 2 8 6" />
-          <path d="M7 19c2-2 3.5-3 5-3s3 1 5 3" />
-        </svg>
-      ),
     };
   }
   if (lower.includes("bóng rổ") || lower.includes("basketball") || lower.includes("bóng")) {
@@ -159,14 +129,6 @@ function getSportTheme(sportName = "", index = 0) {
       stage1: "Cơ bản: Nhồi bóng & Lên rổ",
       stage2: "Trung cấp: Ném rổ & Phối hợp",
       stage3: "Nâng cao: Chiến thuật 5v5",
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10" />
-          <path d="M5.5 5.5l13 13" />
-          <path d="M18.5 5.5l-13 13" />
-          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-        </svg>
-      ),
     };
   }
   const themes = ["blue", "cyan", "lime", "amber", "rose", "orange"];
@@ -176,16 +138,6 @@ function getSportTheme(sportName = "", index = 0) {
     stage1: "Cơ bản: Nền tảng & Làm quen",
     stage2: "Trung cấp: Kỹ thuật & Phối hợp",
     stage3: "Nâng cao: Chiến thuật thi đấu",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
-        <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
-        <path d="M4 22h16" />
-        <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22" />
-        <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
-        <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
-      </svg>
-    ),
   };
 }
 
@@ -194,6 +146,9 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
   const [levels, setLevels] = useState([]);
   const [assessments, setAssessments] = useState([]);
   const [consultations, setConsultations] = useState([]);
+  const [registrations, setRegistrations] = useState([]);
+
+
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState({});
@@ -227,10 +182,12 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
       getMySkillAssessmentsApi(token),
       getMyConsultationRequestsApi(token),
       token ? getCurrentUserApi(token) : Promise.resolve(null),
+      getMyRegistrationsApi(token),
+
     ]).then((results) => {
       if (!active) return;
-      const setters = [setSports, setLevels, setAssessments, setConsultations];
-      const keys = ["sports", "levels", "assessments", "consultations"];
+      const setters = [setSports, setLevels, setAssessments, setConsultations, null, setRegistrations];
+      const keys = ["sports", "levels", "assessments", "consultations", null, "registrations"];
       const messages = [
         "Không tải được danh sách bộ môn đang hoạt động.",
         "Không tải được trình độ của bạn.",
@@ -238,12 +195,14 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
         "Không tải được lịch sử yêu cầu tư vấn.",
       ];
       const nextErrors = {};
-      for (let index = 0; index < 4; index += 1) {
+      messages.push(null, "Could not verify your confirmed course registrations.");
+      for (let index = 0; index < setters.length; index += 1) {
+        if (!setters[index]) continue;
         const result = results[index];
-        if (result.status === "fulfilled") {
-          setters[index](Array.isArray(result.value) ? result.value : []);
+        if (result.status === "fulfilled" && Array.isArray(result.value)) {
+          setters[index](result.value);
         } else {
-          nextErrors[keys[index]] = requestMessage(result.reason, messages[index]);
+          nextErrors[keys[index]] = requestMessage(result.status === "rejected" ? result.reason : null, messages[index]);
           setters[index]([]);
         }
       }
@@ -251,6 +210,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
         setProfile(results[4].value);
       }
       setErrors(nextErrors);
+
       setLoading(false);
     });
     return () => {
@@ -268,10 +228,17 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
   );
 
   const levelsAvailable = !errors.levels;
+  const eligibilityAvailable = !errors.sports && !errors.registrations && !errors.assessments;
+  const relevantSports = useMemo(
+    () => eligibilityAvailable
+      ? getMemberRelevantSports({ sports, registrations, assessments, memberId: profile?.id })
+      : [],
+    [eligibilityAvailable, sports, registrations, assessments, profile?.id]
+  );
 
   // Tổng hợp dữ liệu cho từng bộ môn ở Bước 1
   const enrichedSports = useMemo(() => {
-    return sports.map((sport, index) => {
+    return relevantSports.map((sport, index) => {
       const sportIdNum = Number(sport.id);
       const levelRecord = levelsBySport.get(sportIdNum);
       const isVerified = levelRecord?.verifiedByCoachId != null && Boolean(levelRecord?.verifiedAt);
@@ -316,7 +283,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
         meta: getSportTheme(sport.name, index),
       };
     });
-  }, [sports, levelsBySport, levelsAvailable, assessments, consultations]);
+  }, [relevantSports, levelsBySport, levelsAvailable, assessments, consultations]);
 
   const verifiedSportsCount = useMemo(
     () => enrichedSports.filter((s) => s.isVerified).length,
@@ -325,14 +292,8 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
   const unverifiedSportsCount = Math.max(0, enrichedSports.length - verifiedSportsCount);
 
   const pendingRequestsCount = useMemo(() => {
-    const pendingAssessments = assessments.filter(
-      (item) => String(item.status).toUpperCase() === "PENDING"
-    ).length;
-    const pendingConsults = consultations.filter((item) =>
-      ["PENDING", "IN_PROGRESS"].includes(String(item.status).toUpperCase())
-    ).length;
-    return pendingAssessments + pendingConsults;
-  }, [assessments, consultations]);
+    return enrichedSports.reduce((total, sport) => total + sport.pendingCount, 0);
+  }, [enrichedSports]);
 
   const filteredSports = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -370,10 +331,11 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
   }, [selectedSport, searchQuery]);
 
   const displayedConsultations = useMemo(() => {
+    const relevantIds = new Set(relevantSports.map((sport) => Number(sport.id)));
     const baseList =
       selectedSport && consultationScope === "SPORT"
         ? selectedSport.sportConsultations
-        : consultations;
+        : consultations.filter((item) => relevantIds.has(Number(item.sportId)));
     const q = searchQuery.trim().toLowerCase();
     if (!q) return baseList;
     return baseList.filter(
@@ -383,7 +345,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
         String(item.note || "").toLowerCase().includes(q) ||
         String(item.resolutionNote || "").toLowerCase().includes(q)
     );
-  }, [selectedSport, consultationScope, consultations, searchQuery]);
+  }, [selectedSport, consultationScope, consultations, relevantSports, searchQuery]);
 
   function handleSelectSport(sportId) {
     setPickedSportId(String(sportId));
@@ -554,9 +516,17 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
               {errors.sports}
             </p>
           )}
+          {(errors.registrations || errors.assessments) && (
+            <p className="banner error" role="alert">{"Kh\u00f4ng th\u1ec3 x\u00e1c minh \u0111\u1ea7y \u0111\u1ee7 c\u00e1c m\u00f4n \u0111ang h\u1ecdc ho\u1eb7c \u0111\u00e1nh gi\u00e1 c\u1ee7a Coach. H\u00e3y t\u1ea3i l\u1ea1i trang \u0111\u1ec3 th\u1eed l\u1ea1i."}</p>
+          )}
           {errors.levels && (
             <p className="banner error" role="alert">
               {errors.levels}
+            </p>
+          )}
+          {errors.consultations && (
+            <p className="banner error" role="alert">
+              {errors.consultations}
             </p>
           )}
 
@@ -567,14 +537,14 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
             </div>
           )}
 
-          {!loading && !errors.sports && sports.length === 0 && (
-            <p className="queue-state">Hiện chưa có bộ môn đang hoạt động.</p>
+          {!loading && eligibilityAvailable && relevantSports.length === 0 && (
+            <p className="queue-state">{"B\u1ed9 m\u00f4n s\u1ebd hi\u1ec3n sau khi b\u1ea1n tham gia m\u1ed9t l\u1edbp h\u1ecdc ho\u1eb7c \u0111\u01b0\u1ee3c Coach \u0111\u00e1nh gi\u00e1."}</p>
           )}
 
           {/* =====================================================================
               BƯỚC 1: DANH SÁCH CÁC BỘ MÔN (Khi chưa chọn bộ môn cụ thể)
               ===================================================================== */}
-          {!loading && sports.length > 0 && !selectedSport && (
+          {!loading && eligibilityAvailable && relevantSports.length > 0 && !selectedSport && (
             <div className="mla-step1-view">
               {/* 1. PAGE HEADER */}
               <header className="page-header mla-step1-header">
@@ -634,7 +604,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                     <div>
                       <p className="mla-kpi-label">Tổng số bộ môn</p>
                       <strong className="mla-kpi-value">
-                        {sports.length} bộ môn đang hoạt động
+                        {relevantSports.length} bộ môn đang hoạt động
                       </strong>
                     </div>
                   </div>
@@ -716,7 +686,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                       className={`mla-filter-tab ${statusFilter === "ALL" ? "is-active" : ""}`}
                       onClick={() => setStatusFilter("ALL")}
                     >
-                      Tất cả ({sports.length})
+                      Tất cả ({relevantSports.length})
                     </button>
                     <button
                       type="button"
@@ -761,9 +731,6 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                         >
                           <div className="mla-sport-card-body">
                             <div className="mla-sport-card-top">
-                              <div className={`mla-sport-icon ${sport.meta.theme}`}>
-                                {sport.meta.icon}
-                              </div>
 
                               {sport.isVerified ? (
                                 <span className="mla-verify-chip verified">
@@ -988,7 +955,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
           {/* =====================================================================
               BƯỚC 2: CHI TIẾT TRÌNH ĐỘ & LỊCH SỬ CỦA BỘ MÔN ĐÃ CHỌN
               ===================================================================== */}
-          {!loading && sports.length > 0 && selectedSport && (
+          {!loading && eligibilityAvailable && relevantSports.length > 0 && selectedSport && (
             <div className="mla-step2-view">
               {/* 1. STEP 2 NAVIGATION & QUICK SWITCHER */}
               <div className="mla-step2-nav">
@@ -1030,7 +997,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                     value={String(selectedSport.id)}
                     onChange={(event) => handleSelectSport(event.target.value)}
                   >
-                    {sports.map((sport) => (
+                    {relevantSports.map((sport) => (
                       <option key={sport.id} value={String(sport.id)}>
                         {sport.name} · Đổi bộ môn nhanh
                       </option>
@@ -1041,9 +1008,6 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
 
               {/* 2. HERO CARD: TRÌNH ĐỘ HIỆN TẠI */}
               <article className="member-level-card mla-hero-card">
-                <div className="mla-hero-watermark" aria-hidden="true">
-                  {selectedSport.meta.icon}
-                </div>
 
                 <div className="mla-hero-grid">
                   {/* Cột trái: Trình độ & Lộ trình 3 bước */}

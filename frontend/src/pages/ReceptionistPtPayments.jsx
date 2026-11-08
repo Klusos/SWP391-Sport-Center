@@ -30,6 +30,7 @@ function getInitials(name) {
 }
 
 const AVATAR_TONES = ["tone-indigo", "tone-blue", "tone-emerald", "tone-orange"];
+const EMPTY_ROWS = [];
 
 export default function ReceptionistPtPayments({ token, role, userId, onNavigate, onLogout }) {
   const [queue, setQueue] = useState({ loading: true, data: null, page: 0, error: "" });
@@ -60,7 +61,7 @@ export default function ReceptionistPtPayments({ token, role, userId, onNavigate
     return () => { active = false; workflow.dispose(); controller.current = null; window.clearTimeout(immediate); window.clearInterval(poll); window.clearInterval(clock); window.removeEventListener("focus", refresh); };
   }, [token, role, storageKey]);
 
-  const rows = queue.data?.content || [];
+  const rows = queue.data?.content ?? EMPTY_ROWS;
 
   const metrics = useMemo(() => {
     let totalAmount = 0;
@@ -110,7 +111,7 @@ export default function ReceptionistPtPayments({ token, role, userId, onNavigate
       second: "2-digit",
       hour12: false,
       timeZone: "Asia/Ho_Chi_Minh",
-    }).format(new Date(now || Date.now())) + " (GMT+7)";
+    }).format(new Date(now)) + " (GMT+7)";
   }, [now]);
 
   if (!token) return <Navigate to="/login" replace />;
@@ -118,7 +119,7 @@ export default function ReceptionistPtPayments({ token, role, userId, onNavigate
 
   return (
     <div className="layout">
-      <Sidebar role={role} activePage="pt-payments" onNavigate={onNavigate} onLogout={onLogout} />
+      <Sidebar role={role} activePage={role === "RECEPTIONIST" ? "course-payments" : "pt-payments"} onNavigate={onNavigate} onLogout={onLogout} />
       <main className="main pt-payment-queue">
         {/* Top Utility Bar */}
         <div className="cp-topbar">

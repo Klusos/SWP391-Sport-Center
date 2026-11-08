@@ -5,7 +5,8 @@ import { formatTargetAgeRange } from "../memberCoursePresentation.js";
 import { courseRegistrationStatus } from "../memberCourseRegistration.js";
 import "./Portal.css";
 import "./MemberCourses.css";
-import { cancelCourseRegistrationApi, getMyRegistrationsApi, getPublicSportsApi, getPublicCoursesBySportApi } from "../api";
+import { cancelCourseRegistrationApi, getMyPaymentsApi, getMyRegistrationsApi, getPublicSportsApi, getPublicCoursesBySportApi } from "../api";
+import { coursePaymentInfo, paidCancellationEligibility, cancellationErrorMessage } from "../courseCancellation.js";
 const list = (d) => Array.isArray(d) ? d : d?.content ?? [];
 function formatVietnamDateTime(value) {
   if (!value) return "deadline unavailable";
@@ -19,7 +20,8 @@ export default function MemberCourses({ token, role, onLogout, onNavigate }) {
   const [sports, setSports] = useState([]), [sportId, setSportId] = useState(null), [courses, setCourses] = useState([]);
   const [loadingSports, setLoadingSports] = useState(true), [loadingCourses, setLoadingCourses] = useState(false), [error, setError] = useState("");
   const [registrations, setRegistrations] = useState([]), [registrationsLoading, setRegistrationsLoading] = useState(true), [registrationsError, setRegistrationsError] = useState("");
-  const [cancellingId, setCancellingId] = useState(null), [cancelError, setCancelError] = useState("");
+  const [payments, setPayments] = useState([]), [paymentsLoading, setPaymentsLoading] = useState(true), [paymentsError, setPaymentsError] = useState("");
+  const [cancellingId, setCancellingId] = useState(null), [paidCancelId, setPaidCancelId] = useState(null), [paidCancelSuccessId, setPaidCancelSuccessId] = useState(null), [cancelError, setCancelError] = useState("");
   async function cancelHold(id) {
     setCancellingId(id); setCancelError("");
     try {
@@ -47,6 +49,36 @@ export default function MemberCourses({ token, role, onLogout, onNavigate }) {
     const interval = window.setInterval(refreshRegistrations, 60_000);
     window.addEventListener("focus", refreshRegistrations);
     return () => { active = false; window.clearInterval(interval); window.removeEventListener("focus", refreshRegistrations); };
+  }, [token]);
+  async function cancelConfirmedRegistration(item) {
+    if (paidCancelId !== null || cancellingId !== null) return;
+    const info = coursePaymentInfo(payments, item.id);
+    const amount = info.amount == null ? "" : " Số tiền thực tế đã thanh toán: " + Number(info.amount).toLocaleString("vi-VN") + " ₫.";
+    const accepted = window.confirm("Xác nhận hủy đăng ký khóa học\n\n" + (item.courseName || "Khóa học") + " · " + (item.courseOfferingName || item.className || "Lớp học") + "\n\nBạn có chắc muốn hủy đăng ký? Sau khi hủy thành công, bạn sẽ không còn quyền tham gia lớp học.\n\nBạn sẽ được hoàn 100% số tiền thực tế đã thanh toán. Vui lòng đến quầy lễ tân để nhận tiền hoàn." + amount);
+    if (!accepted) return;
+    setPaidCancelId(item.id); setCancelError(""); setPaidCancelSuccessId(null);
+    try {
+      const response = await cancelCourseRegistrationApi(token, item.id);
+      setRegistrations((current) => current.map((row) => row.id === item.id ? { ...row, ...response } : row));
+      setPaidCancelSuccessId(item.id);
+      const [registrationData, paymentData] = await Promise.all([getMyRegistrationsApi(token), getMyPaymentsApi(token)]);
+      setRegistrations(list(registrationData)); setPayments(list(paymentData)); setRegistrationsError(""); setPaymentsError("");
+    } catch (requestError) {
+      setCancelError(cancellationErrorMessage(requestError));
+      try {
+        const [registrationData, paymentData] = await Promise.all([getMyRegistrationsApi(token), getMyPaymentsApi(token)]);
+        const current = list(registrationData); setRegistrations(current); setPayments(list(paymentData));
+        if (current.some((row) => row.id === item.id && row.status === "CANCELLED")) { setPaidCancelSuccessId(item.id); setCancelError(""); }
+      } catch { /* Keep the registration visible until its status can be verified. */ }
+    } finally { setPaidCancelId(null); }
+  }
+  useEffect(() => {
+    let active = true;
+    const refreshPaymentStatus = () => getMyPaymentsApi(token).then((data) => { if (active) { setPayments(list(data)); setPaymentsError(""); } }).catch((e) => { if (active) setPaymentsError(e.message || "Could not load payment status."); });
+    refreshPaymentStatus().finally(() => { if (active) setPaymentsLoading(false); });
+    const interval = window.setInterval(refreshPaymentStatus, 60_000);
+    window.addEventListener("focus", refreshPaymentStatus);
+    return () => { active = false; window.clearInterval(interval); window.removeEventListener("focus", refreshPaymentStatus); };
   }, [token]);
   return <div className="layout"><Sidebar role={role} activePage="member-courses" onLogout={onLogout} onNavigate={onNavigate}/><main className="main member-courses-page">
     <div className="member-courses-shell">
@@ -104,8 +136,24 @@ export default function MemberCourses({ token, role, onLogout, onNavigate }) {
             : registrations.length === 0 ? <p className="member-course-history-state">Bạn chưa có đăng ký CONFIRMED nào.</p>
               : <div className="member-registration-list">{registrations.map((item) => <article className="member-registration-row" key={item.id}>
                 <div className="member-registration-details"><strong>{item.className || `Lớp #${item.classId}`}</strong><span>{[item.courseName, item.courseOfferingName].filter(Boolean).join(" · ") || "Thông tin khóa học không khả dụng"}</span></div>
-                <span className={`member-registration-status ${item.status === "PENDING_PAYMENT" ? "pending" : ""}`}>{item.status === "PENDING_PAYMENT" ? "Payment pending" : item.status === "CONFIRMED" ? "Confirmed" : item.status === "EXPIRED" ? "Expired" : item.status}</span>
+                <span className={"member-registration-status " + (item.status === "PENDING_PAYMENT" ? "pending" : item.status === "CANCELLED" ? "cancelled" : "")}>{item.status === "PENDING_PAYMENT" ? "Chờ thanh toán" : item.status === "CONFIRMED" ? "Đã xác nhận" : item.status === "CANCELLED" ? "Đã hủy" : item.status === "EXPIRED" ? "Đã hết hạn" : item.status}</span>
                 {item.status === "PENDING_PAYMENT" && <span className="member-registration-deadline">Thanh toán trước {formatVietnamDateTime(item.paymentDeadline)} (giờ Việt Nam).</span>}
+                {item.status === "CONFIRMED" && (() => {
+                  const info = coursePaymentInfo(payments, item.id);
+                  const eligibility = paidCancellationEligibility(item, payments, new Date());
+                  const reason = paymentsLoading ? "Đang xác minh thanh toán…" : paymentsError ? "Chưa thể xác minh khoản thanh toán." : eligibility.reason === "deadline-unavailable" ? "Chưa có hạn hủy đáng tin cậy từ máy chủ." : eligibility.reason === "deadline-passed" ? "Đã qua hạn hủy theo thời gian hiển thị; máy chủ xác nhận điều kiện cuối cùng." : eligibility.reason === "payment-unverified" ? "Chưa xác minh được duy nhất một khoản thanh toán thành công." : null;
+                  return <div className="member-registration-cancellation">
+                    <span>Hạn hủy: {formatVietnamDateTime(item.cancellationDeadline)} (giờ Việt Nam).</span>
+                    {eligibility.allowed ? <button type="button" disabled={paidCancelId !== null || cancellingId !== null} onClick={() => void cancelConfirmedRegistration(item)}>{paidCancelId === item.id ? "Đang hủy…" : "Hủy đăng ký"}</button> : <button type="button" disabled aria-describedby={"cancel-unavailable-" + item.id}>Hủy đăng ký</button>}
+                    {!eligibility.allowed && <small id={"cancel-unavailable-" + item.id}>{reason || "Không đủ thông tin để xác minh điều kiện hủy."}</small>}
+                    {info.status === "REFUND_REQUIRED" && <strong className="member-refund-status pending">Đang chờ hoàn tiền tại quầy</strong>}
+                    {info.status === "REFUNDED" && <strong className="member-refund-status complete">Đã hoàn tiền</strong>}
+                  </div>;
+                })()}
+                {item.status === "CANCELLED" && (() => {
+                  const info = coursePaymentInfo(payments, item.id);
+                  return info.status === "REFUNDED" ? <strong className="member-refund-status complete">Đã hoàn tiền</strong> : info.status === "REFUND_REQUIRED" ? <strong className="member-refund-status pending">Đang chờ hoàn tiền tại quầy. Vui lòng đến quầy lễ tân.</strong> : paidCancelSuccessId === item.id ? <span role="status">Đăng ký đã được hủy. Nếu bạn đã thanh toán, vui lòng đến quầy lễ tân để nhận lại 100% số tiền thực tế đã trả.</span> : null;
+                })()}
                 <div className="member-registration-actions"><Link to={`/member/course-checkout/${item.id}`}>{item.status === "PENDING_PAYMENT" ? "Thanh toán / theo dõi" : "Xem thanh toán"}</Link>
                   {item.status === "PENDING_PAYMENT" && <button type="button" disabled={cancellingId !== null} onClick={() => void cancelHold(item.id)}>{cancellingId === item.id ? "Đang hủy…" : "Hủy giữ chỗ"}</button>}
                   {item.courseId != null && <Link to={`/member/courses/${item.courseId}`}>Xem khóa học</Link>}</div>

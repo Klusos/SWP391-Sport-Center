@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -40,6 +42,7 @@ import org.springframework.security.web.FilterChainProxy;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.context.annotation.Import;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
@@ -48,9 +51,11 @@ import org.springframework.web.server.ResponseStatusException;
 import group5.example.sportCenter.dto.CounterPaymentRequest;
 import group5.example.sportCenter.dto.CreateMembershipRequest;
 import group5.example.sportCenter.dto.CreatePaymentRequest;
+import group5.example.sportCenter.dto.CourseRegistrationResponse;
 import group5.example.sportCenter.dto.PaymentResponse;
 import group5.example.sportCenter.dto.RevenueGrouping;
 import group5.example.sportCenter.entity.Coach;
+import group5.example.sportCenter.entity.ClassSession;
 import group5.example.sportCenter.entity.Course;
 import group5.example.sportCenter.entity.CourseClass;
 import group5.example.sportCenter.entity.CourseOffering;
@@ -93,10 +98,11 @@ class PaymentIntegrationTest {
     private static final String EMAIL_DOMAIN = "@payment.example.test";
 
     @Autowired PaymentService service;
+    @Autowired CourseRegistrationService courseRegistrationService;
     @Autowired PaymentGateway paymentGateway;
     @Autowired CourseRegistrationExpirationService registrationExpiration;
     @Autowired PaymentReportService reports;
-    @Autowired PaymentRepository payments;
+    @MockitoSpyBean PaymentRepository payments;
     @Autowired NotificationRepository notifications;
     @Autowired UserRepository users;
     @Autowired JdbcTemplate jdbc;
@@ -485,6 +491,56 @@ class PaymentIntegrationTest {
     }
 
     @Test
+    void inactivePlanRejectsRenewalButReactivationAllowsANewRequest() {
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        Membership current = membership(member, plan, today.minusDays(10), today.plusDays(20));
+        plan.setStatus("INACTIVE");
+        plans.saveAndFlush(plan);
+
+        IllegalArgumentException rejected = assertThrows(IllegalArgumentException.class,
+                () -> service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                        PaymentMethod.COUNTER), jwt(member)));
+        assertEquals("Membership plan is not active", rejected.getMessage());
+        assertTrue(payments.findByMemberIdOrderByCreatedAtDesc(member.getId()).isEmpty());
+
+        plan.setStatus("ACTIVE");
+        plans.saveAndFlush(plan);
+        PaymentResponse renewed = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        assertEquals("PENDING", renewed.getStatus());
+        assertEquals(1, memberships.findByMemberId(member.getId()).size());
+        assertEquals(current.getStartDate(), memberships.findById(current.getId()).orElseThrow().getStartDate());
+        assertEquals(current.getEndDate(), memberships.findById(current.getId()).orElseThrow().getEndDate());
+    }
+
+    @Test
+    void preDeactivationMembershipPaymentMaySettleAndQueueWithoutChangingCurrentEntitlement() {
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        Membership current = membership(member, plan, today.minusDays(10), today.plusDays(20));
+        LocalDate originalStart = current.getStartDate();
+        LocalDate originalEnd = current.getEndDate();
+        PaymentResponse pending = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+
+        plan.setStatus("INACTIVE");
+        plans.saveAndFlush(plan);
+        assertEquals(PaymentStatus.PENDING, payments.findById(pending.getId()).orElseThrow().getStatus());
+        assertEquals("ACTIVE", memberships.findById(current.getId()).orElseThrow().getStatus());
+        assertEquals(originalStart, memberships.findById(current.getId()).orElseThrow().getStartDate());
+        assertEquals(originalEnd, memberships.findById(current.getId()).orElseThrow().getEndDate());
+
+        assertEquals("SUCCESS", service.processAtCounter(pending.getId(), counter(true), jwt(receptionist)).getStatus());
+        List<Membership> chain = memberships.findByMemberId(member.getId()).stream()
+                .sorted(Comparator.comparing(Membership::getStartDate)).toList();
+        assertEquals(2, chain.size());
+        assertEquals(originalEnd, chain.get(1).getStartDate());
+        assertEquals(originalEnd.plusMonths(plan.getDurationMonths()), chain.get(1).getEndDate());
+        assertEquals(originalStart, chain.get(0).getStartDate());
+        assertEquals(originalEnd, chain.get(0).getEndDate());
+        assertEquals("INACTIVE", plans.findById(plan.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
     void receptionistCannotUseLegacyMembershipCreationToBypassPayment() throws Exception {
         String body = "{\"memberId\":" + member.getId() + ",\"planId\":" + plan.getId()
                 + ",\"startDate\":\"" + LocalDate.now() + "\",\"autoRenew\":false}";
@@ -545,6 +601,261 @@ class PaymentIntegrationTest {
         var rows = reports.classRegistrationReport(today, today, jwt(admin));
         assertEquals(1, rows.size());
         assertEquals(new BigDecimal("450000.00"), rows.get(0).getTotalAmount());
+    }
+
+    @Test
+    void confirmedCourseCancellationQueuesFullActualPaidAmountAndReleasesSeat() throws Exception {
+        CourseRegistration registration = registration(member, "1000000.00", "100000.00");
+        ClassSession session = new ClassSession();
+        session.setCourseClass(registration.getCourseClass());
+        session.setStartTime(now().plusDays(1));
+        session.setEndTime(now().plusDays(1).plusHours(1));
+        session.setStatus("SCHEDULED");
+        classSessions.saveAndFlush(session);
+        PaymentResponse created = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                registration.getId(), PaymentMethod.COUNTER), jwt(member));
+        assertEquals(new BigDecimal("900000.00"), created.getAmount());
+        service.processAtCounter(created.getId(), counter(true), jwt(receptionist));
+        assertEquals(1, courseRegistrationService.myCourseSessions(jwt(member)).size());
+
+        CourseRegistrationResponse cancelled = courseRegistrationService.cancel(registration.getId(), jwt(member));
+
+        assertEquals("CANCELLED", cancelled.status());
+        assertNotNull(cancelled.cancelledAt());
+        assertNotNull(cancelled.cancellationDeadline());
+        Payment refund = payments.findById(created.getId()).orElseThrow();
+        assertEquals(PaymentStatus.REFUND_REQUIRED, refund.getStatus());
+        assertEquals(new BigDecimal("900000.00"), refund.getAmount(), "refund uses actual amount paid, including discount snapshot");
+        assertTrue(refund.getNote().contains("100% counter refund required"));
+        mvc.perform(get("/api/payments/refund-required").header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].registrationId").value(registration.getId()))
+                .andExpect(jsonPath("$.content[0].courseName").value(registration.getCourseClass().getCourseOffering().getCourse().getName()))
+                .andExpect(jsonPath("$.content[0].courseOfferingName").value("Pay offering"))
+                .andExpect(jsonPath("$.content[0].className").value("Pay class"))
+                .andExpect(jsonPath("$.content[0].amount").value(900000.0));
+        assertEquals(0L, occupiedSeats(registration));
+        assertTrue(courseRegistrationService.myCourseSessions(jwt(member)).isEmpty());
+    }
+
+    @Test
+    void confirmedCourseCancellationRejectsAtAndAfterDeadline() {
+        for (LocalDateTime deadline : List.of(now(), now().minusNanos(1))) {
+            CourseRegistration registration = registration(member, "200000.00", "0.00");
+            PaymentResponse created = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                    registration.getId(), PaymentMethod.COUNTER), jwt(member));
+            service.processAtCounter(created.getId(), counter(true), jwt(receptionist));
+            setCancellationDeadline(registration, deadline);
+
+            ResponseStatusException rejected = assertThrows(ResponseStatusException.class,
+                    () -> courseRegistrationService.cancel(registration.getId(), jwt(member)));
+            assertEquals(409, rejected.getStatusCode().value());
+            assertEquals(CourseRegistrationStatus.CONFIRMED,
+                    registrations.findById(registration.getId()).orElseThrow().getStatus());
+            assertEquals(PaymentStatus.SUCCESS, payments.findById(created.getId()).orElseThrow().getStatus());
+        }
+    }
+
+    @Test
+    void confirmedCourseCancellationRejectsMissingAmbiguousOrAlreadyRefundedPayments() {
+        CourseRegistration missing = registration(member, "200000.00", "0.00");
+        missing.setStatus(CourseRegistrationStatus.CONFIRMED);
+        registrations.saveAndFlush(missing);
+        assertThrows(ResponseStatusException.class,
+                () -> courseRegistrationService.cancel(missing.getId(), jwt(member)));
+
+        CourseRegistration mismatched = registration(member, "200000.00", "0.00");
+        mismatched.setStatus(CourseRegistrationStatus.CONFIRMED);
+        registrations.saveAndFlush(mismatched);
+        Payment wrongOwner = courseQueueFixture(mismatched, PaymentMethod.COUNTER,
+                PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.SUCCESS);
+        wrongOwner.setMember(otherMember);
+        payments.saveAndFlush(wrongOwner);
+        assertThrows(ResponseStatusException.class,
+                () -> courseRegistrationService.cancel(mismatched.getId(), jwt(member)));
+        assertEquals(CourseRegistrationStatus.CONFIRMED,
+                registrations.findById(mismatched.getId()).orElseThrow().getStatus());
+
+        CourseRegistration ambiguous = registration(member, "200000.00", "0.00");
+        PaymentResponse paid = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                ambiguous.getId(), PaymentMethod.COUNTER), jwt(member));
+        service.processAtCounter(paid.getId(), counter(true), jwt(receptionist));
+        courseQueueFixture(ambiguous, PaymentMethod.COUNTER, PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.SUCCESS);
+        assertThrows(ResponseStatusException.class,
+                () -> courseRegistrationService.cancel(ambiguous.getId(), jwt(member)));
+        assertEquals(CourseRegistrationStatus.CONFIRMED, registrations.findById(ambiguous.getId()).orElseThrow().getStatus());
+
+        for (PaymentStatus state : List.of(PaymentStatus.REFUND_REQUIRED, PaymentStatus.REFUNDED)) {
+            CourseRegistration alreadyRefunding = registration(member, "200000.00", "0.00");
+            alreadyRefunding.setStatus(CourseRegistrationStatus.CONFIRMED);
+            registrations.saveAndFlush(alreadyRefunding);
+            courseQueueFixture(alreadyRefunding, PaymentMethod.COUNTER, PaymentPurpose.COURSE_REGISTRATION, state);
+            assertThrows(ResponseStatusException.class,
+                    () -> courseRegistrationService.cancel(alreadyRefunding.getId(), jwt(member)));
+            assertEquals(CourseRegistrationStatus.CONFIRMED,
+                    registrations.findById(alreadyRefunding.getId()).orElseThrow().getStatus());
+        }
+
+    }
+
+    @Test
+    void confirmedCourseCancellationChecksOwnershipAndCannotBeRepeated() {
+        CourseRegistration registration = registration(member, "200000.00", "0.00");
+        PaymentResponse created = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                registration.getId(), PaymentMethod.COUNTER), jwt(member));
+        service.processAtCounter(created.getId(), counter(true), jwt(receptionist));
+
+        ResponseStatusException forbidden = assertThrows(ResponseStatusException.class,
+                () -> courseRegistrationService.cancel(registration.getId(), jwt(otherMember)));
+        assertEquals(403, forbidden.getStatusCode().value());
+        assertEquals(403, assertThrows(ResponseStatusException.class,
+                () -> courseRegistrationService.cancel(registration.getId(), jwt(admin))).getStatusCode().value());
+        assertEquals("CANCELLED", courseRegistrationService.cancel(registration.getId(), jwt(member)).status());
+        assertThrows(ResponseStatusException.class,
+                () -> courseRegistrationService.cancel(registration.getId(), jwt(member)));
+        assertEquals(1, payments.findIdsByPurposeAndReferenceIdAndStatusIn(PaymentPurpose.COURSE_REGISTRATION,
+                registration.getId(), List.of(PaymentStatus.REFUND_REQUIRED)).size());
+    }
+
+    @Test
+    void cancellationRollsBackIfRefundRequiredPaymentWriteFails() {
+        CourseRegistration registration = registration(member, "200000.00", "0.00");
+        PaymentResponse created = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                registration.getId(), PaymentMethod.COUNTER), jwt(member));
+        service.processAtCounter(created.getId(), counter(true), jwt(receptionist));
+        doThrow(new IllegalStateException("simulated payment persistence failure"))
+                .when(payments).save(any(Payment.class));
+
+        assertThrows(IllegalStateException.class,
+                () -> courseRegistrationService.cancel(registration.getId(), jwt(member)));
+
+        assertEquals(CourseRegistrationStatus.CONFIRMED, registrations.findById(registration.getId()).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.SUCCESS, payments.findById(created.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void duplicateRefundConfirmationAndDelayedCallbacksDoNotReviveCancelledRegistration() throws Exception {
+        CourseRegistration registration = registration(member, "200000.00", "0.00");
+        PaymentResponse online = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                registration.getId(), PaymentMethod.ONLINE), jwt(member));
+        String callbackUrl = paymentGateway.createPaymentUrl(online.getTransactionCode(), online.getAmount(), "127.0.0.1");
+        mvc.perform(get(callbackPath(callbackUrl))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUCCESS"));
+
+        courseRegistrationService.cancel(registration.getId(), jwt(member));
+        mvc.perform(get(callbackPath(callbackUrl))).andExpect(status().isOk());
+        assertEquals(CourseRegistrationStatus.CANCELLED, registrations.findById(registration.getId()).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.REFUND_REQUIRED, payments.findById(online.getId()).orElseThrow().getStatus());
+
+        mvc.perform(patch("/api/payments/" + online.getId() + "/refund")
+                        .header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("REFUNDED"));
+        mvc.perform(patch("/api/payments/" + online.getId() + "/refund")
+                        .header("Authorization", bearer(receptionist)))
+                .andExpect(status().isConflict());
+        assertEquals(CourseRegistrationStatus.CANCELLED, registrations.findById(registration.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void delayedOnlineSettlementAfterExistingPendingCancellationRequiresCounterRefund() throws Exception {
+        CourseRegistration registration = registration(member, "200000.00", "0.00");
+        PaymentResponse payment = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                registration.getId(), PaymentMethod.ONLINE), jwt(member));
+        String callbackUrl = paymentGateway.createPaymentUrl(payment.getTransactionCode(), payment.getAmount(), "127.0.0.1");
+
+        assertEquals("CANCELLED", courseRegistrationService.cancel(registration.getId(), jwt(member)).status());
+        mvc.perform(get(callbackPath(callbackUrl))).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REFUND_REQUIRED"));
+
+        assertEquals(CourseRegistrationStatus.CANCELLED, registrations.findById(registration.getId()).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.REFUND_REQUIRED, payments.findById(payment.getId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void concurrentCourseCancellationRequestsCreateOnlyOneRefundObligation() throws Exception {
+        CourseRegistration registration = registration(member, "200000.00", "0.00");
+        PaymentResponse created = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                registration.getId(), PaymentMethod.COUNTER), jwt(member));
+        service.processAtCounter(created.getId(), counter(true), jwt(receptionist));
+
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<Boolean> first = pool.submit(() -> cancelAfterBarrier(registration.getId(), ready, start));
+            Future<Boolean> second = pool.submit(() -> cancelAfterBarrier(registration.getId(), ready, start));
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            List<Boolean> outcomes = List.of(first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS));
+            assertEquals(1, outcomes.stream().filter(Boolean::booleanValue).count());
+        } finally {
+            pool.shutdownNow();
+        }
+        assertEquals(CourseRegistrationStatus.CANCELLED, registrations.findById(registration.getId()).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.REFUND_REQUIRED, payments.findById(created.getId()).orElseThrow().getStatus());
+        assertEquals(1, payments.findIdsByPurposeAndReferenceIdAndStatusIn(PaymentPurpose.COURSE_REGISTRATION,
+                registration.getId(), List.of(PaymentStatus.REFUND_REQUIRED)).size());
+    }
+
+    @Test
+    void concurrentCourseCancellationAndPaymentSettlementDoNotReconfirmCancelledRegistration() throws Exception {
+        CourseRegistration registration = registration(member, "200000.00", "0.00");
+        PaymentResponse first = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                registration.getId(), PaymentMethod.COUNTER), jwt(member));
+        PaymentResponse second = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                registration.getId(), PaymentMethod.COUNTER), jwt(member));
+        service.processAtCounter(first.getId(), counter(true), jwt(receptionist));
+
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        String cancellation;
+        try {
+            Future<String> cancel = pool.submit(() -> {
+                ready.countDown();
+                await(start);
+                try {
+                    courseRegistrationService.cancel(registration.getId(), jwt(member));
+                    return "CANCELLED";
+                } catch (ResponseStatusException rejected) {
+                    return "REJECTED";
+                }
+            });
+            Future<PaymentResponse> settlement = pool.submit(() -> {
+                ready.countDown();
+                await(start);
+                return service.processAtCounter(second.getId(), counter(true), jwt(receptionist));
+            });
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            PaymentResponse settledSecond = settlement.get(10, TimeUnit.SECONDS);
+            cancellation = cancel.get(10, TimeUnit.SECONDS);
+            assertEquals(PaymentStatus.REFUND_REQUIRED, PaymentStatus.valueOf(settledSecond.getStatus()));
+        } finally {
+            pool.shutdownNow();
+        }
+
+        CourseRegistration persisted = registrations.findById(registration.getId()).orElseThrow();
+        Payment persistedFirst = payments.findById(first.getId()).orElseThrow();
+        assertEquals(PaymentStatus.REFUND_REQUIRED, payments.findById(second.getId()).orElseThrow().getStatus());
+        if ("CANCELLED".equals(cancellation)) {
+            assertEquals(CourseRegistrationStatus.CANCELLED, persisted.getStatus());
+            assertEquals(PaymentStatus.REFUND_REQUIRED, persistedFirst.getStatus());
+        } else {
+            assertEquals(CourseRegistrationStatus.CONFIRMED, persisted.getStatus());
+            assertEquals(PaymentStatus.SUCCESS, persistedFirst.getStatus());
+        }
+    }
+
+    private boolean cancelAfterBarrier(Integer registrationId, CountDownLatch ready, CountDownLatch start) {
+        ready.countDown();
+        await(start);
+        try {
+            courseRegistrationService.cancel(registrationId, jwt(member));
+            return true;
+        } catch (ResponseStatusException rejected) {
+            return false;
+        }
     }
 
     @Test
@@ -642,6 +953,12 @@ class PaymentIntegrationTest {
         CourseRegistration persisted = registrations.findById(registration.getId()).orElseThrow();
         persisted.setPaymentDeadline(deadline);
         registrations.saveAndFlush(persisted);
+    }
+
+    private void setCancellationDeadline(CourseRegistration registration, LocalDateTime deadline) {
+        CourseOffering offering = offerings.findById(registration.getCourseClass().getCourseOffering().getId()).orElseThrow();
+        offering.setCancellationDeadline(deadline);
+        offerings.saveAndFlush(offering);
     }
 
     private long occupiedSeats(CourseRegistration registration) {

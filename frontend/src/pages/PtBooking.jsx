@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import PaymentMethodModal from "../components/PaymentMethodModal";
-import { cancelPaymentApi, createPaymentApi, createPtBookingApi, getMyPaymentsApi, getMyPtBookingsApi, getPublicSportsApi, getPtEligibleCoachesApi } from "../api";
+import { cancelPaymentApi, cancelPtBookingApi, createPaymentApi, createPtBookingApi, getMyPaymentsApi, getMyPtBookingsApi, getPublicSportsApi, getPtEligibleCoachesApi } from "../api";
 import { acquirePtPaymentAction, bookingPayments, filterPtBookingHistory, focusPtPaymentPanel, paginatePtBookingHistory, partitionPtBookings, pendingPtPayment, ptPaymentExpired, ptPaymentMoney, ptOnlineUrlIsTrusted, ptPaymentPayload, ptCancellationWarning } from "../ptPaymentFlow";
+import { canMemberCancel, ptErrorMessage } from "../ptBooking.js";
 import "./PtBooking.css";
 
 const rows = (value) => Array.isArray(value) ? value : value?.content ?? [];
@@ -117,6 +118,27 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
     } finally { paymentAction.current = false; setPaymentBusyId(null); }
   }
 
+  async function cancelBooking(booking) {
+    if (paymentBusyId !== null || !canMemberCancel(booking, currentTimestamp()) || !acquirePtPaymentAction(paymentAction)) return;
+    const paid = bookingPayments(payments, booking.id).some((payment) => payment.status === "SUCCESS");
+    const prompt = paid
+      ? `Cancel confirmed PT booking #${booking.id}? The backend will create a refund-required record for the amount paid. A staff member must process and confirm the actual refund; this does not mean the refund is complete.`
+      : booking.status === "PENDING_PAYMENT"
+        ? `Cancel pending PT booking #${booking.id}? The booking and any pending payment will be cancelled. No refund is due for an unpaid payment.`
+        : `Cancel PT booking #${booking.id}?`;
+    if (!window.confirm(prompt)) { paymentAction.current = false; return; }
+    setPaymentBusyId(booking.id); setPaymentError(""); setNotice("");
+    try {
+      await cancelPtBookingApi(token, booking.id);
+      await refreshAuthoritative();
+      setNotice(paid
+        ? `Booking #${booking.id} was cancelled. Its paid amount is awaiting staff refund confirmation.`
+        : `Booking #${booking.id} was cancelled.`);
+    } catch (requestError) {
+      setPaymentError(ptErrorMessage(requestError, "Could not cancel this PT booking."));
+      try { await refreshAuthoritative(); } catch { /* Keep the server cancellation error visible. */ }
+    } finally { paymentAction.current = false; setPaymentBusyId(null); }
+  }
   async function cancelPendingPayment(payment) {
     if (paymentBusyId !== null || payment.status !== "PENDING" || !acquirePtPaymentAction(paymentAction)) return;
     if (!window.confirm(ptCancellationWarning(payment))) { paymentAction.current = false; return; }
@@ -199,6 +221,7 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
         <span>{vietnamTime(booking.startTime, true)} – {vietnamTime(booking.endTime)}</span>
         {actionable && <small>Giữ chỗ đến {vietnamTime(booking.paymentExpiresAt, true)} (giờ Việt Nam)</small>}
         <span className="pt-status">{bookingStatus(booking)}</span>
+        {!actionable && canMemberCancel(booking, now) && <button type="button" className="pt-secondary-button" disabled={paymentBusyId !== null} onClick={() => void cancelBooking(booking)}>{paymentBusyId === booking.id ? "Cancelling…" : "Cancel booking"}</button>}
         {booking.status === "PENDING_PAYMENT" && ptPaymentExpired(booking, now) && <small className="pt-expired-hold">Đã hết hạn theo thời gian giữ chỗ (trạng thái máy chủ: PENDING_PAYMENT).</small>}
       </div>
       <div className="pt-booking-summary-side">
@@ -461,6 +484,7 @@ onLogout={onLogout}
             <h2 id="pt-actionable-title">Cần xử lý</h2>
             <p>Booking đang giữ chỗ được sắp theo hạn thanh toán gần nhất.</p>
           </div>
+          <button type="button" className="pt-secondary-button pt-actionable-refresh" aria-label={"L\u00e0m m\u1edbi tr\u1ea1ng th\u00e1i booking v\u00e0 thanh to\u00e1n"} title={"L\u00e0m m\u1edbi tr\u1ea1ng th\u00e1i booking v\u00e0 thanh to\u00e1n"} disabled={paymentBusyId !== null} onClick={() => void refreshAuthoritative().catch((requestError) => setPaymentError("Could not refresh booking and payment history: " + requestError.message))}>{"L\u00e0m m\u1edbi"}</button>
         </div>
         {loading ? <div className="pt-loading" role="status">Đang tải booking cần xử lý…</div>
           : actionableBookings.length === 0 ? <div className="pt-empty"><strong>Không có booking cần xử lý.</strong><p>Booking mới sẽ xuất hiện ở đây sau khi được tạo.</p></div>
@@ -476,7 +500,6 @@ onLogout={onLogout}
           <div>
             <h2 id="pt-history-title">Lịch sử Booking</h2>
             <p>Booking đã xác nhận, đã hủy hoặc hết hạn được lưu tại đây.</p>
-            <button type="button" className="pt-secondary-button" disabled={paymentBusyId !== null} onClick={() => void refreshAuthoritative().catch((requestError) => setPaymentError("Could not refresh booking and payment history: " + requestError.message))}>Làm mới trạng thái booking và thanh toán</button>
           </div>
         </div>
 

@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalDouble;
@@ -301,6 +302,12 @@ public class TrainingService {
         CourseClass courseClass = findClass(classId);
         authorizeStaffOrCoachRead(actor, courseClass);
 
+        List<CourseRegistration> roster = confirmedRegistrations(classId);
+        List<Integer> memberIds = roster.stream().map(registration -> registration.getMember().getId()).toList();
+        Set<Integer> membersWithQualifyingAttendance = memberIds.isEmpty() ? Set.of()
+                : new HashSet<>(attendance.findMemberIdsWithQualifyingCompletedSessionAttendance(
+                        classId, memberIds, AttendanceStatus.PRESENT, COMPLETED));
+
         List<ClassSession> classSessions = sessions.findByCourseClassId(classId);
         Map<Integer, List<Attendance>> attendanceByMember = new HashMap<>();
         Map<Integer, List<TrainingResult>> resultsByMember = new HashMap<>();
@@ -315,7 +322,7 @@ public class TrainingService {
                 .map(this::evaluationResponse)
                 .collect(Collectors.groupingBy(ProgressEvaluationResponse::memberId));
 
-        return confirmedRegistrations(classId).stream()
+        return roster.stream()
                 .map(CourseRegistration::getMember)
                 .map(member -> {
                     List<Attendance> marked = attendanceByMember.getOrDefault(member.getId(), List.of());
@@ -323,7 +330,8 @@ public class TrainingService {
                     List<ProgressEvaluationResponse> history = evaluationsByMember.getOrDefault(member.getId(), List.of());
                     return new ClassProgressMemberResponse(member.getId(), member.getName(), marked.size(),
                             marked.stream().filter(record -> record.getStatus() == AttendanceStatus.PRESENT).count(),
-                            memberResults.size(), average(memberResults), history.isEmpty() ? null : history.get(0), history);
+                            memberResults.size(), average(memberResults), history.isEmpty() ? null : history.get(0), history,
+                            membersWithQualifyingAttendance.contains(member.getId()));
                 }).toList();
     }
 

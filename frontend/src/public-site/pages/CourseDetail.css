@@ -260,3 +260,6 @@
   .member-course-detail .member-course-registration-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
   .member-course-detail .member-course-registration-actions a { width: 100%; box-sizing: border-box; }
 }
+.member-course-age-policy { margin: 0.5rem 0; color: #34445b; }
+.member-course-age-warning { padding: 0.75rem 1rem; border-radius: 0.75rem; color: #704f00; background: #fff5d8; border: 1px solid #f0d68c; }
+.member-course-age-blocked { padding: 0.75rem 1rem; border-radius: 0.75rem; color: #8b2635; background: #fff0f1; border: 1px solid #efc3c8; }

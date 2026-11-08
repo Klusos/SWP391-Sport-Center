@@ -59,7 +59,7 @@ export function canMemberCancel(booking, now = Date.now()) {
   if (booking?.status === "PENDING_PAYMENT") return true;
   if (booking?.status !== "CONFIRMED") return false;
   const start = vietnamInstant(booking.startTime);
-  return Boolean(start) && start.getTime() - PT_CANCEL_NOTICE_HOURS * 3600000 > now;
+  return Boolean(start) && start.getTime() > now && start.getTime() - PT_CANCEL_NOTICE_HOURS * 3600000 >= now;
 }
 
 // The single PENDING payment attempt for a booking, if any (the backend allows only one at a time).

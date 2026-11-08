@@ -8,7 +8,7 @@ import "./Admin.css";
 import "./CourseManagement.css";
 
 const rows = (data) => Array.isArray(data) ? data : data?.content || [];
-const empty = { sportId: "", name: "", level: "", targetAgeMin: "", targetAgeMax: "", description: "", learningOutcome: "", status: "ACTIVE" };
+const empty = { sportId: "", name: "", level: "", targetAgeMin: "", targetAgeMax: "", agePolicy: "RECOMMENDED", description: "", learningOutcome: "", status: "ACTIVE" };
 
 export default function CourseForm({ token, role, onLogout, onNavigate }) {
   const { courseId } = useParams();
@@ -26,7 +26,7 @@ export default function CourseForm({ token, role, onLogout, onNavigate }) {
       .then(([sportData, course]) => {
         if (!active) return;
         setSports(rows(sportData));
-        if (course) setForm({ ...empty, ...course, sportId: String(course.sportId), targetAgeMin: course.targetAgeMin ?? "", targetAgeMax: course.targetAgeMax ?? "" });
+        if (course) setForm({ ...empty, ...course, sportId: String(course.sportId), agePolicy: course.agePolicy || "RECOMMENDED", targetAgeMin: course.targetAgeMin ?? "", targetAgeMax: course.targetAgeMax ?? "" });
         setError("");
       })
       .catch((e) => active && setError(e.message || "Không thể tải dữ liệu khóa học."))
@@ -35,6 +35,12 @@ export default function CourseForm({ token, role, onLogout, onNavigate }) {
   }, [courseId, editing, token]);
 
   const change = (event) => setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
+  const ageMin = form.targetAgeMin === "" ? null : Number(form.targetAgeMin);
+  const ageMax = form.targetAgeMax === "" ? null : Number(form.targetAgeMax);
+  const ageRangeInvalid = (ageMin != null && (!Number.isInteger(ageMin) || ageMin < 0))
+    || (ageMax != null && (!Number.isInteger(ageMax) || ageMax < 0))
+    || (ageMin != null && ageMax != null && ageMin > ageMax)
+    || (form.agePolicy === "REQUIRED" && (ageMin == null || ageMax == null));
   const submit = async (event) => {
     event.preventDefault();
     if (busy) return;
@@ -72,14 +78,18 @@ export default function CourseForm({ token, role, onLogout, onNavigate }) {
               <div className="field"><label htmlFor="course-name">Tên khóa học *</label><input id="course-name" name="name" value={form.name} onChange={change} required maxLength={255} /></div>
               <div className="field"><label htmlFor="course-level">Trình độ *</label><select id="course-level" name="level" value={form.level} onChange={change} required><option value="" disabled>Chọn trình độ</option>{["BEGINNER", "INTERMEDIATE", "ADVANCED"].map((level) => <option key={level}>{level}</option>)}</select></div>
               <div className="field"><label htmlFor="course-status">Trạng thái</label><select id="course-status" name="status" value={form.status} onChange={change} disabled={!editing}><option value="ACTIVE">ACTIVE</option><option value="INACTIVE">INACTIVE</option></select></div>
-              <div className="field"><label htmlFor="course-age-min">Tuổi tối thiểu</label><input id="course-age-min" name="targetAgeMin" type="number" min="0" value={form.targetAgeMin} onChange={change} /></div>
-              <div className="field"><label htmlFor="course-age-max">Tuổi tối đa</label><input id="course-age-max" name="targetAgeMax" type="number" min="0" value={form.targetAgeMax} onChange={change} /></div>
+              <div className="field"><label htmlFor="course-age-policy">Chính sách độ tuổi</label><select id="course-age-policy" name="agePolicy" value={form.agePolicy} onChange={change}><option value="RECOMMENDED">Độ tuổi khuyến nghị</option><option value="REQUIRED">Độ tuổi bắt buộc</option></select></div>
+              <div className="field"><label htmlFor="course-age-min">Tuổi tối thiểu{form.agePolicy === "REQUIRED" && " *"}</label><input id="course-age-min" name="targetAgeMin" type="number" min="0" step="1" value={form.targetAgeMin} onChange={change} required={form.agePolicy === "REQUIRED"} aria-invalid={ageRangeInvalid} /></div>
+              <div className="field"><label htmlFor="course-age-max">Tuổi tối đa{form.agePolicy === "REQUIRED" && " *"}</label><input id="course-age-max" name="targetAgeMax" type="number" min="0" step="1" value={form.targetAgeMax} onChange={change} required={form.agePolicy === "REQUIRED"} aria-invalid={ageRangeInvalid} /></div>
+              <p className="subtitle" role={ageRangeInvalid ? "alert" : undefined}>{ageRangeInvalid
+                ? form.agePolicy === "REQUIRED" && (ageMin == null || ageMax == null) ? "Độ tuổi bắt buộc cần có cả tuổi tối thiểu và tối đa." : "Khoảng tuổi phải là số nguyên không âm và tuổi tối thiểu không lớn hơn tuổi tối đa."
+                : form.agePolicy === "RECOMMENDED" ? "Độ tuổi này chỉ mang tính khuyến nghị; thành viên từ 10 tuổi trở lên vẫn có thể đăng ký ngoài khoảng. Quy tắc an toàn bắt buộc áp dụng cho trẻ dưới 10 tuổi với mọi chính sách." : "Thành viên phải nằm trong khoảng tuổi này. Quy tắc an toàn riêng áp dụng cho trẻ dưới 10 tuổi."}</p>
               <div className="field"><label htmlFor="course-description">Mô tả</label><textarea id="course-description" name="description" value={form.description || ""} onChange={change} /></div>
               <div className="field"><label htmlFor="course-outcome">Kết quả đạt được</label><textarea id="course-outcome" name="learningOutcome" value={form.learningOutcome || ""} onChange={change} /></div>
             </div>
             <div className="form-actions">
               <button type="button" onClick={() => navigate(editing ? "/staff/courses/" + courseId : "/staff/courses")}>Hủy</button>
-              <button className="adm-primary" type="submit" disabled={busy}>{busy ? "Đang lưu…" : "Lưu khóa học"}</button>
+              <button className="adm-primary" type="submit" disabled={busy || ageRangeInvalid}>{busy ? "Đang lưu…" : "Lưu khóa học"}</button>
             </div>
           </form>
         )}

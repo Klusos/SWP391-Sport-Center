@@ -50,6 +50,7 @@ import group5.example.sportCenter.entity.ClassSession;
 import group5.example.sportCenter.entity.Coach;
 import group5.example.sportCenter.entity.CoachSport;
 import group5.example.sportCenter.entity.Course;
+import group5.example.sportCenter.entity.CourseAgePolicy;
 import group5.example.sportCenter.entity.CourseClass;
 import group5.example.sportCenter.entity.CourseOffering;
 import group5.example.sportCenter.entity.CourseRegistration;
@@ -282,6 +283,7 @@ class CourseRegistrationIntegrationTest {
 
         Course ageIneligible = course(sport, "BEGINNER", "ACTIVE");
         ageIneligible.setTargetAgeMin(30);
+        ageIneligible.setAgePolicy(CourseAgePolicy.REQUIRED);
         courses.saveAndFlush(ageIneligible);
         assertEquals(409, assertThrows(ResponseStatusException.class,
                 () -> service.register(request(classFor(ageIneligible, 5)), jwt(member))).getStatusCode().value());
@@ -290,13 +292,86 @@ class CourseRegistrationIntegrationTest {
         ageRequiresDob.setTargetAgeMax(40);
         courses.saveAndFlush(ageRequiresDob);
         User missingDob = user("MEMBER", "ACTIVE");
+        missingDob.setDateOfBirth(null);
+        users.saveAndFlush(missingDob);
         assertEquals(409, assertThrows(ResponseStatusException.class,
                 () -> service.register(request(classFor(ageRequiresDob, 5)), jwt(missingDob))).getStatusCode().value());
 
         Course unverifiedRequirement = course(sport, "INTERMEDIATE", "ACTIVE");
         User noDob = user("MEMBER", "ACTIVE");
+        noDob.setDateOfBirth(null);
+        users.saveAndFlush(noDob);
         assertEquals(409, assertThrows(ResponseStatusException.class,
                 () -> service.register(request(classFor(unverifiedRequirement, 5)), jwt(noDob))).getStatusCode().value());
+    }
+
+    @Test
+    void registrationEnforcesAgePolicyAndUnderTenSafetyOnTheServer() {
+        LocalDate today = LocalDate.now(clock.withZone(ZoneId.of("Asia/Ho_Chi_Minh")));
+
+        Course recommendedTeenCourse = course(sport, "BEGINNER", "ACTIVE");
+        recommendedTeenCourse.setTargetAgeMin(12);
+        recommendedTeenCourse.setTargetAgeMax(16);
+        courses.saveAndFlush(recommendedTeenCourse);
+        User adult = userAtAge(25, today);
+        assertEquals("PENDING_PAYMENT", service.register(request(classFor(recommendedTeenCourse, 5)), jwt(adult)).status());
+
+        Course recommendedChildCourse = course(sport, "BEGINNER", "ACTIVE");
+        recommendedChildCourse.setTargetAgeMin(5);
+        recommendedChildCourse.setTargetAgeMax(9);
+        courses.saveAndFlush(recommendedChildCourse);
+        User child = userAtAge(8, today);
+        assertEquals("PENDING_PAYMENT", service.register(request(classFor(recommendedChildCourse, 5)), jwt(child)).status());
+
+        Course requiredChildCourse = course(sport, "BEGINNER", "ACTIVE");
+        requiredChildCourse.setTargetAgeMin(5);
+        requiredChildCourse.setTargetAgeMax(9);
+        requiredChildCourse.setAgePolicy(CourseAgePolicy.REQUIRED);
+        courses.saveAndFlush(requiredChildCourse);
+        User requiredChild = userAtAge(8, today);
+        assertEquals("PENDING_PAYMENT", service.register(request(classFor(requiredChildCourse, 5)), jwt(requiredChild)).status());
+
+        Course outOfRangeRecommended = course(sport, "BEGINNER", "ACTIVE");
+        outOfRangeRecommended.setTargetAgeMin(12);
+        outOfRangeRecommended.setTargetAgeMax(16);
+        courses.saveAndFlush(outOfRangeRecommended);
+        User tooYoungChild = userAtAge(8, today);
+        assertEquals(409, assertThrows(ResponseStatusException.class,
+                () -> service.register(request(classFor(outOfRangeRecommended, 5)), jwt(tooYoungChild)))
+                .getStatusCode().value());
+
+        Course outOfRangeRequired = course(sport, "BEGINNER", "ACTIVE");
+        outOfRangeRequired.setTargetAgeMin(5);
+        outOfRangeRequired.setTargetAgeMax(9);
+        outOfRangeRequired.setAgePolicy(CourseAgePolicy.REQUIRED);
+        courses.saveAndFlush(outOfRangeRequired);
+        User adultOutsideRequiredRange = userAtAge(25, today);
+        assertEquals(409, assertThrows(ResponseStatusException.class,
+                () -> service.register(request(classFor(outOfRangeRequired, 5)), jwt(adultOutsideRequiredRange)))
+                .getStatusCode().value());
+
+        Course adultRecommended = course(sport, "BEGINNER", "ACTIVE");
+        adultRecommended.setTargetAgeMin(18);
+        adultRecommended.setTargetAgeMax(35);
+        courses.saveAndFlush(adultRecommended);
+        User underRecommendedMinimum = userAtAge(14, today);
+        assertEquals("PENDING_PAYMENT", service.register(request(classFor(adultRecommended, 5)), jwt(underRecommendedMinimum)).status());
+
+        Course missingBounds = course(sport, "BEGINNER", "ACTIVE");
+        User unknownAge = user("MEMBER", "ACTIVE");
+        unknownAge.setDateOfBirth(null);
+        users.saveAndFlush(unknownAge);
+        assertEquals(409, assertThrows(ResponseStatusException.class,
+                () -> service.register(request(classFor(missingBounds, 5)), jwt(unknownAge)))
+                .getStatusCode().value());
+
+        User invalidFutureDob = userAtAge(20, today);
+        invalidFutureDob.setDateOfBirth(today.plusDays(1));
+        users.saveAndFlush(invalidFutureDob);
+        Course unrestrictedRecommendation = course(sport, "BEGINNER", "ACTIVE");
+        assertEquals(409, assertThrows(ResponseStatusException.class,
+                () -> service.register(request(classFor(unrestrictedRecommendation, 5)), jwt(invalidFutureDob)))
+                .getStatusCode().value());
     }
 
     @Test
@@ -352,6 +427,8 @@ class CourseRegistrationIntegrationTest {
         CourseClass selected = pricedClass("100.00");
         membership(pricedMember, tenPercent, today, today.plusDays(1), "ACTIVE", false);
         membership(pricedMember, twentyPercent, today.minusDays(3), today.plusDays(1), "ACTIVE", false);
+        twentyPercent.setStatus("INACTIVE");
+        plans.saveAndFlush(twentyPercent);
 
         var response = service.register(request(selected), jwt(pricedMember));
         assertEquals(new BigDecimal("100.00"), response.originalPrice());
@@ -890,6 +967,13 @@ class CourseRegistrationIntegrationTest {
         result.setRole(role);
         result.setStatus(status);
         result.setPasswordHash("test-only-unused-hash");
+        result.setDateOfBirth(LocalDate.now(clock.withZone(ZoneId.of("Asia/Ho_Chi_Minh"))).minusYears(25));
+        return users.saveAndFlush(result);
+    }
+
+    private User userAtAge(int age, LocalDate businessDate) {
+        User result = user("MEMBER", "ACTIVE");
+        result.setDateOfBirth(businessDate.minusYears(age));
         return users.saveAndFlush(result);
     }
 

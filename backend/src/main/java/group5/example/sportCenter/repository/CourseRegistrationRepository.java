@@ -12,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.data.domain.Pageable;
 import group5.example.sportCenter.entity.CourseRegistration;
 import group5.example.sportCenter.entity.CourseRegistrationStatus;
+import group5.example.sportCenter.dto.CourseRegistrationRefundContextResponse;
 
 public interface CourseRegistrationRepository extends JpaRepository<CourseRegistration, Integer> {
 
@@ -81,4 +82,13 @@ public interface CourseRegistrationRepository extends JpaRepository<CourseRegist
     List<CourseRegistration> findByMemberIdOrderByRegisteredAtDescIdDesc(Integer memberId);
 
     List<CourseRegistration> findAllByOrderByRegisteredAtDescIdDesc();
+
+    @Query("""
+        select new group5.example.sportCenter.dto.CourseRegistrationRefundContextResponse(
+            registration.id, course.name, offering.name, courseClass.name)
+        from CourseRegistration registration join registration.courseClass courseClass
+        join courseClass.courseOffering offering join offering.course course
+        where registration.id in :ids
+        """)
+    List<CourseRegistrationRefundContextResponse> findRefundContextsByIds(@Param("ids") List<Integer> ids);
 }

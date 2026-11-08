@@ -593,58 +593,6 @@
   margin-bottom: 14px;
 }
 
-.mla-sport-icon {
-  width: 54px;
-  height: 54px;
-  border-radius: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border: 1px solid transparent;
-}
-
-.mla-sport-icon svg {
-  width: 26px;
-  height: 26px;
-}
-
-.mla-sport-icon.blue {
-  background: linear-gradient(135deg, rgba(23, 105, 210, 0.12), #eff6ff);
-  border-color: #dbeafe;
-  color: #1769d2;
-}
-
-.mla-sport-icon.cyan {
-  background: linear-gradient(135deg, rgba(6, 182, 212, 0.12), #ecfeff);
-  border-color: #cffafe;
-  color: #0891b2;
-}
-
-.mla-sport-icon.lime {
-  background: linear-gradient(135deg, rgba(101, 163, 13, 0.12), #f7fee7);
-  border-color: #ecfccb;
-  color: #65a30d;
-}
-
-.mla-sport-icon.amber {
-  background: linear-gradient(135deg, rgba(217, 119, 6, 0.12), #fffbeb);
-  border-color: #fef3c7;
-  color: #d97706;
-}
-
-.mla-sport-icon.rose {
-  background: linear-gradient(135deg, rgba(244, 63, 94, 0.12), #fff1f2);
-  border-color: #ffe4e6;
-  color: #f43f5e;
-}
-
-.mla-sport-icon.orange {
-  background: linear-gradient(135deg, rgba(234, 88, 12, 0.12), #fff7ed);
-  border-color: #ffedd5;
-  color: #ea580c;
-}
-
 .mla-verify-chip {
   display: inline-flex;
   align-items: center;
@@ -1029,22 +977,6 @@
 
 .member-levels-page .member-level-card.mla-hero-card:hover {
   transform: none;
-}
-
-.mla-hero-watermark {
-  position: absolute;
-  right: -24px;
-  bottom: -36px;
-  width: 280px;
-  height: 280px;
-  opacity: 0.08;
-  pointer-events: none;
-  color: #ffffff;
-}
-
-.mla-hero-watermark svg {
-  width: 100%;
-  height: 100%;
 }
 
 .mla-hero-grid {

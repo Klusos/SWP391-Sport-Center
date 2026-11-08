@@ -6,6 +6,7 @@ import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.Pattern;
 import lombok.Getter;
 import lombok.Setter;
+import group5.example.sportCenter.entity.CourseAgePolicy;
 
 @Getter
 @Setter
@@ -22,6 +23,8 @@ public class UpdateCourseRequest {
 
     @Min(value = 0)
     private Integer targetAgeMax;
+
+    private CourseAgePolicy agePolicy;
 
     @NotBlank(message = "Course level is required")
     @Size(max = 50)

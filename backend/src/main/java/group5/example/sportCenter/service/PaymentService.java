@@ -9,6 +9,8 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.ResolverStyle;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -27,6 +29,7 @@ import group5.example.sportCenter.dto.CounterPaymentRequest;
 import group5.example.sportCenter.dto.CreatePaymentRequest;
 import group5.example.sportCenter.dto.ActionablePendingPaymentSummaryResponse;
 import group5.example.sportCenter.dto.PaymentResponse;
+import group5.example.sportCenter.dto.CourseRegistrationRefundContextResponse;
 import group5.example.sportCenter.dto.PendingCoursePaymentResponse;
 import group5.example.sportCenter.dto.PendingPtPaymentResponse;
 import group5.example.sportCenter.entity.MembershipPlan;
@@ -478,9 +481,20 @@ public class PaymentService {
         if (page < 0 || size < 1 || size > 100) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must be nonnegative and size between 1 and 100");
         }
-        return paymentRepository.findByStatus(PaymentStatus.REFUND_REQUIRED,
-                        PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "createdAt", "id")))
-                .map(payment -> toResponse(payment, null));
+        Page<Payment> paymentPage = paymentRepository.findByStatus(PaymentStatus.REFUND_REQUIRED,
+                PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "createdAt", "id")));
+        List<Integer> registrationIds = paymentPage.getContent().stream()
+                .filter(payment -> payment.getPurpose() == PaymentPurpose.COURSE_REGISTRATION)
+                .map(Payment::getReferenceId).filter(java.util.Objects::nonNull).distinct().toList();
+        Map<Integer, CourseRegistrationRefundContextResponse> refundContexts = registrationIds.isEmpty()
+                ? Map.of()
+                : courseRegistrationRepository.findRefundContextsByIds(registrationIds).stream()
+                        .collect(Collectors.toMap(CourseRegistrationRefundContextResponse::registrationId, Function.identity()));
+        return paymentPage.map(payment -> {
+            CourseRegistrationRefundContextResponse context = payment.getPurpose() == PaymentPurpose.COURSE_REGISTRATION
+                    ? refundContexts.get(payment.getReferenceId()) : null;
+            return toResponse(payment, null, context);
+        });
     }
 
     /** Nhân viên xác nhận đã trả tiền lại cho member: REFUND_REQUIRED -> REFUNDED. */
@@ -705,10 +719,18 @@ public class PaymentService {
     }
 
     private PaymentResponse toResponse(Payment p, String paymentUrl) {
+        return toResponse(p, paymentUrl, null);
+    }
+
+    private PaymentResponse toResponse(Payment p, String paymentUrl, CourseRegistrationRefundContextResponse context) {
         return new PaymentResponse(
                 p.getId(), p.getMember().getId(), p.getMember().getName(), p.getAmount(),
                 p.getMethod().name(), p.getPurpose().name(), p.getReferenceId(), p.getStatus().name(),
                 p.getTransactionCode(), paymentUrl, p.getNote(), p.getCreatedAt(), p.getPaidAt(),
-                p.getRefundedAt(), p.getRefundedBy() == null ? null : p.getRefundedBy().getName());
+                p.getRefundedAt(), p.getRefundedBy() == null ? null : p.getRefundedBy().getName(),
+                context == null ? null : context.registrationId(),
+                context == null ? null : context.courseName(),
+                context == null ? null : context.courseOfferingName(),
+                context == null ? null : context.className());
     }
 }

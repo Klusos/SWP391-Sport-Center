@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Navigate, useSearchParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
-import { getPendingCoursePaymentsApi, getMemberPaymentsApi, processCounterPaymentApi } from "../api";
+import { confirmRefundApi, getPendingCoursePaymentsApi, getRefundRequiredPaymentsApi, getMemberPaymentsApi, processCounterPaymentApi } from "../api";
 import { canViewCoursePayments, coursePaymentExpired, coursePaymentMoney, coursePaymentTime, createCoursePaymentQueue } from "../coursePaymentQueue";
+import { refundPurposeLabel, refundQueueRows, refundReferenceLabel } from "../refundQueue.js";
+import { locateCoursePayment, parseCoursePaymentTarget } from "../coursePaymentNavigation.js";
 import { vietnamDate } from "../courseCheckout";
 import "./ReceptionistCoursePayments.css";
 
@@ -24,9 +26,13 @@ function getInitials(name) {
 }
 
 const AVATAR_TONES = ["tone-blue", "tone-orange", "tone-emerald", "tone-indigo"];
+const EMPTY_ROWS = [];
 
 export default function ReceptionistCoursePayments({ token, role, userId, onNavigate, onLogout }) {
   const [queue, setQueue] = useState({ loading: true, data: null, page: 0, error: "" });
+  const [searchParams] = useSearchParams();
+  const [paymentTarget, setPaymentTarget] = useState(null);
+  const [targetMessage, setTargetMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState(null);
   const [uncertain, setUncertain] = useState([]);
@@ -34,8 +40,59 @@ export default function ReceptionistCoursePayments({ token, role, userId, onNavi
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCourseFilter, setSelectedCourseFilter] = useState("ALL");
   const [urgentOnly, setUrgentOnly] = useState(false);
+  const [refundQueue, setRefundQueue] = useState({ loading: true, data: null, page: 0, error: "", notice: "" });
+  const [refundBusyId, setRefundBusyId] = useState(null);
+  const refundBusy = useRef(false);
+  const refundRequest = useRef(0);
   const controller = useRef(null);
   const storageKey = `sportcenter.course-receipts.${userId}.${role}`;
+
+  const loadRefundQueue = useCallback(async (page = 0) => {
+    const requestId = ++refundRequest.current;
+    setRefundQueue((current) => ({ ...current, loading: true, page, error: "" }));
+    try {
+      let activePage = page;
+      let data = await getRefundRequiredPaymentsApi(token, activePage, 50);
+      while (requestId === refundRequest.current && activePage > 0 && refundQueueRows(data).length === 0) {
+        activePage -= 1;
+        data = await getRefundRequiredPaymentsApi(token, activePage, 50);
+      }
+      if (requestId === refundRequest.current) setRefundQueue((current) => ({ ...current, loading: false, data, page: activePage, error: "" }));
+    } catch (requestError) {
+      if (requestId === refundRequest.current) setRefundQueue((current) => ({ ...current, loading: false, page, error: requestError.message || "Không tải được hàng đợi hoàn tiền." }));
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (token && canViewCoursePayments(role)) void loadRefundQueue(0);
+    return () => { refundRequest.current += 1; };
+  }, [token, role, loadRefundQueue]);
+
+  async function confirmRefund(payment) {
+    if (refundBusy.current || payment?.status !== "REFUND_REQUIRED") return;
+    const reference = refundReferenceLabel(payment);
+    const confirmed = window.confirm(`Xác nhận đã hoàn ${coursePaymentMoney(payment.amount)} cho ${payment.memberName || `thành viên #${payment.memberId}`}?\nThanh toán #${payment.id} · ${refundPurposeLabel(payment)} · ${reference}\n\nChỉ xác nhận sau khi đã hoàn tiền thực tế.`);
+    if (!confirmed) return;
+    const note = window.prompt("Ghi chú kiểm toán (không bắt buộc):", "");
+    if (note === null) return;
+    refundBusy.current = true;
+    setRefundBusyId(payment.id);
+    setRefundQueue((current) => ({ ...current, error: "", notice: "" }));
+    try {
+      await confirmRefundApi(token, payment.id, note.trim() || null);
+      setRefundQueue((current) => ({ ...current, notice: `Đã ghi nhận hoàn tiền thanh toán #${payment.id}.` }));
+    } catch (requestError) {
+      setRefundQueue((current) => ({ ...current, error: requestError.status === 401
+        ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
+        : /Only a REFUND_REQUIRED/.test(requestError.message || "")
+          ? "Khoản này đã được xử lý. Hãy làm mới danh sách."
+          : requestError.message || "Không thể xác nhận hoàn tiền." }));
+    } finally {
+      await loadRefundQueue(refundQueue.page);
+      refundBusy.current = false;
+      setRefundBusyId(null);
+    }
+  }
 
   useEffect(() => {
     if (!token || !canViewCoursePayments(role)) return undefined;
@@ -62,7 +119,34 @@ export default function ReceptionistCoursePayments({ token, role, userId, onNavi
     };
   }, [token, role, storageKey]);
 
-  const rows = queue.data?.content || [];
+  useEffect(() => {
+    if (!searchParams.has("paymentId")) return;
+    const target = parseCoursePaymentTarget(searchParams);
+    setPaymentTarget(target.valid ? target : null);
+    setSelectedCourseFilter("ALL"); setUrgentOnly(false);
+    if (!target.valid) { setTargetMessage("Liên kết thanh toán không hợp lệ. Không có giao dịch nào được chọn."); return; }
+    let active = true;
+    setTargetMessage(`Đang tìm chính xác thanh toán #${target.paymentId}…`);
+    locateCoursePayment((page, size) => getPendingCoursePaymentsApi(token, page, size), target)
+      .then((result) => {
+        if (!active) return;
+        if (!result.found) { setTargetMessage(`Không tìm thấy thanh toán #${target.paymentId} trong hàng đợi thanh toán khóa học đang chờ. Có thể giao dịch đã được xử lý hoặc không còn thuộc hàng đợi này.`); return; }
+        setSearchQuery(String(target.paymentId));
+        setTargetMessage(`Đã tìm thấy thanh toán #${target.paymentId} cho đăng ký #${result.row.registrationId}.`);
+        void controller.current?.load(result.page);
+      })
+      .catch((error) => { if (active) setTargetMessage(`Không thể tìm thanh toán #${target.paymentId}: ${error.message || "lỗi tải dữ liệu"}. Hãy làm mới và thử lại.`); });
+    return () => { active = false; };
+  }, [searchParams, token]);
+
+  useEffect(() => {
+    if (!paymentTarget || queue.loading || !queue.data) return;
+    const match = (queue.data?.content ?? EMPTY_ROWS).find((row) => Number(row.paymentId) === paymentTarget.paymentId
+      && (paymentTarget.registrationId == null || Number(row.registrationId) === paymentTarget.registrationId));
+    if (match) document.getElementById(`course-payment-${paymentTarget.paymentId}`)?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+  }, [paymentTarget, queue.loading, queue.data]);
+
+  const rows = queue.data?.content ?? EMPTY_ROWS;
 
   const metrics = useMemo(() => {
     let totalAmount = 0;
@@ -139,6 +223,7 @@ export default function ReceptionistCoursePayments({ token, role, userId, onNavi
               <span>{liveClockLabel}</span>
             </div>
           </div>
+
         </div>
 
         <div className="cp-body">
@@ -280,6 +365,8 @@ export default function ReceptionistCoursePayments({ token, role, userId, onNavi
             </section>
           )}
 
+          {targetMessage && <p className="cp-target-message" role="status">{targetMessage}</p>}
+
           {/* Search & Filter Bar */}
           <section className="cp-filter-bar" aria-label="Bộ lọc tìm kiếm">
             <div className="cp-search-box">
@@ -370,7 +457,7 @@ export default function ReceptionistCoursePayments({ token, role, userId, onNavi
                         const tone = AVATAR_TONES[index % AVATAR_TONES.length];
 
                         return (
-                          <tr key={row.paymentId} className={isUrgent ? "cp-row-urgent" : ""}>
+                          <tr id={`course-payment-${row.paymentId}`} key={row.paymentId} tabIndex={-1} className={`${isUrgent ? "cp-row-urgent" : ""} ${paymentTarget?.paymentId === Number(row.paymentId) ? "cp-row-target" : ""}`}>
                             <td>
                               <div className="cp-member-cell">
                                 <div className={`cp-avatar ${tone}`}>{getInitials(row.memberName)}</div>
@@ -457,6 +544,36 @@ export default function ReceptionistCoursePayments({ token, role, userId, onNavi
               </nav>
             </section>
           )}
+          <section className="cp-refund-queue" aria-labelledby="cp-refund-title">
+            <div className="cp-refund-heading">
+              <div><h2 id="cp-refund-title">Hàng đợi hoàn tiền</h2><p>Tất cả mục đích thanh toán · Chỉ xác nhận sau khi đã hoàn tiền thực tế.</p></div>
+              <button type="button" disabled={refundQueue.loading || refundBusyId !== null} onClick={() => void loadRefundQueue(refundQueue.page)}>Làm mới</button>
+            </div>
+            {refundQueue.notice && <p className="cp-refund-notice" role="status">{refundQueue.notice}</p>}
+            {refundQueue.error && <p className="cp-refund-error" role="alert">{refundQueue.error}</p>}
+            {refundQueue.loading ? <p role="status">Đang tải hàng đợi hoàn tiền…</p>
+              : refundQueue.data == null ? null
+                : refundQueueRows(refundQueue.data).length === 0 ? <p>Không có khoản nào cần hoàn tiền trên trang này.</p>
+                  : <>
+                    <div className="cp-refund-list">{refundQueueRows(refundQueue.data).map((payment) => <article className="cp-refund-item" key={payment.id}>
+                      <div className="cp-refund-item-main">
+                        <strong>Thanh toán #{payment.id} · {payment.memberName || `Thành viên #${payment.memberId}`}</strong>
+                        <span>{refundPurposeLabel(payment)} · {refundReferenceLabel(payment)} · {coursePaymentMoney(payment.amount)} · {payment.status}</span>
+                        {payment.purpose === "COURSE_REGISTRATION" && <span>{[payment.courseName, payment.courseOfferingName, payment.className].filter(Boolean).join(" · ")}</span>}
+                        {payment.note && <small>{payment.note}</small>}
+                      </div>
+                      <button type="button" disabled={refundBusyId !== null || payment.status !== "REFUND_REQUIRED"} onClick={() => void confirmRefund(payment)}>
+                        {refundBusyId === payment.id ? "Đang xử lý…" : "Xác nhận đã hoàn tiền"}
+                      </button>
+                    </article>)}</div>
+                    <nav className="cp-refund-pagination" aria-label="Trang hàng đợi hoàn tiền">
+                      <span>Hiển thị {refundQueueRows(refundQueue.data).length} / {refundQueue.data.totalElements} khoản</span>
+                      <div><button type="button" disabled={refundQueue.loading || refundBusyId !== null || refundQueue.page === 0} onClick={() => void loadRefundQueue(refundQueue.page - 1)}>Trang trước</button>
+                        <span>Trang {refundQueue.page + 1} / {Math.max(1, refundQueue.data.totalPages)}</span>
+                        <button type="button" disabled={refundQueue.loading || refundBusyId !== null || refundQueue.data.last} onClick={() => void loadRefundQueue(refundQueue.page + 1)}>Trang sau</button></div>
+                    </nav>
+                  </>}
+          </section>
         </div>
       </main>
     </div>

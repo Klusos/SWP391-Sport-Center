@@ -28,6 +28,9 @@ import group5.example.sportCenter.entity.CourseRegistrationStatus;
 import group5.example.sportCenter.entity.MemberSportLevel;
 import group5.example.sportCenter.entity.Membership;
 import group5.example.sportCenter.entity.MembershipPlan;
+import group5.example.sportCenter.entity.Payment;
+import group5.example.sportCenter.entity.PaymentPurpose;
+import group5.example.sportCenter.entity.PaymentStatus;
 import group5.example.sportCenter.entity.SportLevel;
 import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
@@ -36,6 +39,7 @@ import group5.example.sportCenter.repository.CourseClassRepository;
 import group5.example.sportCenter.repository.CourseRegistrationRepository;
 import group5.example.sportCenter.repository.MemberSportLevelRepository;
 import group5.example.sportCenter.repository.MembershipRepository;
+import group5.example.sportCenter.repository.PaymentRepository;
 import group5.example.sportCenter.repository.UserRepository;
 import static group5.example.sportCenter.service.AssessmentAccess.error;
 
@@ -51,6 +55,7 @@ public class CourseRegistrationService {
     private static final BigDecimal ZERO_MONEY = new BigDecimal("0.00");
 
     private final CourseRegistrationRepository registrations;
+    private final PaymentRepository payments;
     private final CourseClassRepository courseClasses;
     private final UserRepository users;
     private final MemberSportLevelRepository levels;
@@ -59,12 +64,15 @@ public class CourseRegistrationService {
     private final AssessmentAccess access;
     private final Clock clock;
     private final CourseRegistrationExpirationService expiration;
+    private final CourseAgePolicyEvaluator courseAgePolicyEvaluator;
 
-    public CourseRegistrationService(CourseRegistrationRepository registrations, CourseClassRepository courseClasses,
+    public CourseRegistrationService(CourseRegistrationRepository registrations, PaymentRepository payments,
+            CourseClassRepository courseClasses,
             UserRepository users, MemberSportLevelRepository levels, ClassSessionRepository classSessions,
             MembershipRepository memberships, AssessmentAccess access, Clock clock,
-            CourseRegistrationExpirationService expiration) {
+            CourseRegistrationExpirationService expiration, CourseAgePolicyEvaluator courseAgePolicyEvaluator) {
         this.registrations = registrations;
+        this.payments = payments;
         this.courseClasses = courseClasses;
         this.users = users;
         this.levels = levels;
@@ -73,6 +81,7 @@ public class CourseRegistrationService {
         this.access = access;
         this.clock = clock;
         this.expiration = expiration;
+        this.courseAgePolicyEvaluator = courseAgePolicyEvaluator;
     }
 
     @Transactional
@@ -132,7 +141,7 @@ public class CourseRegistrationService {
         if (!paymentDeadline.isAfter(now)) {
             throw error(HttpStatus.CONFLICT, "CourseOffering registration deadline has passed");
         }
-        validateAgeEligibility(member, course);
+        validateAgeEligibility(member, course, registrationDate);
         validateSportLevel(member, course);
 
         expiration.expireForMember(member.getId(), now);
@@ -221,6 +230,18 @@ public class CourseRegistrationService {
     public CourseRegistrationResponse cancel(Integer id, Jwt jwt) {
         User actor = access.actor(jwt);
         access.requireMember(actor);
+        CourseRegistration candidate = registrations.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Course registration not found with id: " + id));
+        if (!Objects.equals(candidate.getMember().getId(), actor.getId())) {
+            throw error(HttpStatus.FORBIDDEN, "You can only cancel your own CourseRegistration");
+        }
+        if (candidate.getStatus() == CONFIRMED) {
+            return cancelConfirmed(id, actor);
+        }
+
+        // Keep the established pending-hold path unchanged. If payment settles between the
+        // initial read and this lock, ask the member to retry through the paid path so we never
+        // acquire Registration -> Payment locks (callbacks acquire Payment -> Registration).
         CourseRegistration registration = registrations.findByIdForUpdate(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Course registration not found with id: " + id));
         if (!Objects.equals(registration.getMember().getId(), actor.getId())) {
@@ -235,6 +256,98 @@ public class CourseRegistrationService {
             throw error(HttpStatus.CONFLICT, "Only unpaid pending course registrations can be cancelled");
         }
         return response(registrations.save(registration));
+    }
+
+    private CourseRegistrationResponse cancelConfirmed(Integer id, User actor) {
+        List<Integer> successfulPaymentIds = payments.findIdsByPurposeAndReferenceIdAndStatusIn(
+                PaymentPurpose.COURSE_REGISTRATION, id, List.of(PaymentStatus.SUCCESS));
+        if (successfulPaymentIds.isEmpty()) {
+            List<Integer> refundPaymentIds = payments.findIdsByPurposeAndReferenceIdAndStatusIn(
+                    PaymentPurpose.COURSE_REGISTRATION, id,
+                    List.of(PaymentStatus.REFUND_REQUIRED, PaymentStatus.REFUNDED));
+            if (!refundPaymentIds.isEmpty()) {
+                throw error(HttpStatus.CONFLICT,
+                        "Course registration payment is already in a refund workflow; review the payment records");
+            }
+            throw error(HttpStatus.CONFLICT,
+                    "Confirmed course registration has no successful payment; cancellation was not applied");
+        }
+        if (successfulPaymentIds.size() != 1) {
+            throw error(HttpStatus.CONFLICT,
+                    "Course registration has multiple successful payments; cancellation requires payment reconciliation");
+        }
+
+        // Match the settlement path's lock order: Payment first, then CourseRegistration.
+        // Callback processing locks its Payment before CourseRegistrationPaymentHandler locks
+        // the registration, so this avoids the paid-cancellation lock inversion.
+        Payment payment = payments.findByIdForUpdate(successfulPaymentIds.get(0))
+                .orElseThrow(() -> error(HttpStatus.CONFLICT,
+                        "Successful course payment changed; refresh and retry cancellation"));
+        CourseRegistration registration = registrations.findByIdForUpdate(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Course registration not found with id: " + id));
+
+        if (!Objects.equals(registration.getMember().getId(), actor.getId())) {
+            throw error(HttpStatus.FORBIDDEN, "You can only cancel your own CourseRegistration");
+        }
+        if (registration.getStatus() != CONFIRMED) {
+            throw error(HttpStatus.CONFLICT, "Only a confirmed course registration can use paid cancellation");
+        }
+
+        List<Integer> currentSuccessfulIds = payments.findIdsByPurposeAndReferenceIdAndStatusIn(
+                PaymentPurpose.COURSE_REGISTRATION, id, List.of(PaymentStatus.SUCCESS));
+        if (currentSuccessfulIds.size() != 1 || !currentSuccessfulIds.get(0).equals(payment.getId())) {
+            throw error(HttpStatus.CONFLICT,
+                    "Course registration payment records changed or are ambiguous; cancellation requires reconciliation");
+        }
+        if (payment.getPurpose() != PaymentPurpose.COURSE_REGISTRATION
+                || !Objects.equals(payment.getReferenceId(), id)
+                || !Objects.equals(payment.getMember().getId(), registration.getMember().getId())) {
+            throw error(HttpStatus.CONFLICT, "Successful payment does not belong to this course registration");
+        }
+        if (payment.getStatus() != PaymentStatus.SUCCESS) {
+            throw error(HttpStatus.CONFLICT, "Successful payment is already in a refund workflow or was processed");
+        }
+        List<Integer> existingRefundIds = payments.findIdsByPurposeAndReferenceIdAndStatusIn(
+                PaymentPurpose.COURSE_REGISTRATION, id,
+                List.of(PaymentStatus.REFUND_REQUIRED, PaymentStatus.REFUNDED));
+        if (!existingRefundIds.isEmpty()) {
+            throw error(HttpStatus.CONFLICT,
+                    "Course registration already has a payment in a refund workflow; cancellation requires reconciliation");
+        }
+
+        CourseOffering offering = registration.getCourseClass() == null
+                ? null : registration.getCourseClass().getCourseOffering();
+        if (offering == null || offering.getCancellationDeadline() == null) {
+            throw error(HttpStatus.CONFLICT,
+                    "Course offering cancellation deadline is missing; cancellation was not applied");
+        }
+        LocalDateTime now = LocalDateTime.now(clock.withZone(BUSINESS_ZONE));
+        if (!now.isBefore(offering.getCancellationDeadline())) {
+            throw error(HttpStatus.CONFLICT, "Course registration cancellation deadline has passed");
+        }
+
+        registration.setStatus(CourseRegistrationStatus.CANCELLED);
+        registration.setCancelledAt(now);
+        payment.setStatus(PaymentStatus.REFUND_REQUIRED);
+        appendCourseRefundNote(payment, id);
+
+        // Both managed rows are saved in the same transaction. A persistence failure rolls
+        // back the registration cancellation and the refund-required transition together.
+        registrations.save(registration);
+        payments.save(payment);
+        return response(registration);
+    }
+
+    private void appendCourseRefundNote(Payment payment, Integer registrationId) {
+        String audit = "Course registration #" + registrationId + " cancelled; 100% counter refund required.";
+        String existing = payment.getNote();
+        if (existing == null || existing.isBlank()) {
+            payment.setNote(audit);
+        } else if (!existing.contains(audit) && existing.length() + 3 + audit.length() <= 500) {
+            payment.setNote(existing + " | " + audit);
+        }
+        // If the settlement note is already at the column limit, preserve it rather than
+        // truncating payment-provider evidence; status, registration, and cancelledAt remain auditable.
     }
 
     private boolean hasActiveRegistration(Integer memberId, Integer classId) {
@@ -265,17 +378,12 @@ public class CourseRegistrationService {
         }
     }
 
-    private void validateAgeEligibility(User member, Course course) {
-        Integer minimum = course.getTargetAgeMin();
-        Integer maximum = course.getTargetAgeMax();
-        if (minimum == null && maximum == null) return;
-
-        Integer age = member.getAge();
-        if (age == null) {
-            throw error(HttpStatus.CONFLICT, "Member date of birth is required to verify this Course age range");
-        }
-        if ((minimum != null && age < minimum) || (maximum != null && age > maximum)) {
-            throw error(HttpStatus.CONFLICT, "Member does not meet this Course's target age range");
+    private void validateAgeEligibility(User member, Course course, LocalDate registrationDate) {
+        CourseAgePolicyEvaluator.Result result = courseAgePolicyEvaluator.evaluate(
+                course.getAgePolicy(), course.getTargetAgeMin(), course.getTargetAgeMax(),
+                member.getDateOfBirth(), registrationDate);
+        if (!result.allowed()) {
+            throw error(HttpStatus.CONFLICT, result.message());
         }
     }
 
@@ -347,7 +455,7 @@ public class CourseRegistrationService {
                 course.getName(), offering.getId(), offering.getName(), courseClass.getId(), courseClass.getName(),
                 course.getSport().getId(), course.getLevel(), status,
                 registration.getRegisteredAt(), registration.getPaymentDeadline(), registration.getCancelledAt(), registration.getOriginalPrice(),
-                registration.getMembershipDiscount(), registration.getFinalPrice());
+                registration.getMembershipDiscount(), registration.getFinalPrice(), offering.getCancellationDeadline());
     }
 
     private ClassSessionResponse sessionResponse(ClassSession session) {
