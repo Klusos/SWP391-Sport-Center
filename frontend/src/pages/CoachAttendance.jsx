@@ -64,6 +64,8 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
   const [savingMemberId, setSavingMemberId] = useState(null);
   const [rowErrors, setRowErrors] = useState({});
   const [notice, setNotice] = useState("");
+  const [search, setSearch] = useState("");
+  const [savingAll, setSavingAll] = useState(false);
   const [attendanceIds, setAttendanceIds] = useState({});
   const [historyForMemberId, setHistoryForMemberId] = useState(null);
   const [historyMemberId, setHistoryMemberId] = useState(null);
@@ -266,6 +268,104 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
     return "Có thể điểm danh";
   }
 
+  const rowState = (member) => {
+    const rowKey = attendanceRowKey(selectedSessionId, member?.memberId);
+    const currentStatus = member?.attendanceStatus || "NOT_MARKED";
+    const chosenStatus = selectedStatuses[rowKey] ?? currentStatus;
+    return { rowKey, currentStatus, chosenStatus, correcting: currentStatus !== "NOT_MARKED", changed: chosenStatus !== currentStatus };
+  };
+  const canMark = Boolean(roster) && roster.markingAllowed === true && !sessionCancelled;
+  const busy = savingMemberId !== null || savingAll;
+  const stats = members.reduce((acc, member) => {
+    const { chosenStatus } = rowState(member);
+    if (chosenStatus === "PRESENT") acc.present += 1;
+    else if (chosenStatus === "ABSENT") acc.absent += 1;
+    else if (chosenStatus === "EXCUSED") acc.excused += 1;
+    else acc.notMarked += 1;
+    return acc;
+  }, { present: 0, absent: 0, excused: 0, notMarked: 0 });
+  const keyword = search.trim().toLowerCase();
+  const visibleMembers = keyword
+    ? members.filter((member) => `${member?.memberName || ""} ${member?.memberId ?? ""}`.toLowerCase().includes(keyword))
+    : members;
+  const pendingMembers = members.filter((member) => {
+    const state = rowState(member);
+    return state.changed && ["PRESENT", "ABSENT", "EXCUSED"].includes(state.chosenStatus);
+  });
+
+  function markAllPresent() {
+    if (!canMark || busy) return;
+    setSelectedStatuses((current) => {
+      const next = { ...current };
+      members.forEach((member) => { next[attendanceRowKey(selectedSessionId, member?.memberId)] = "PRESENT"; });
+      return next;
+    });
+  }
+
+  async function saveAll() {
+    if (!canMark || busy || pendingMembers.length === 0) return;
+    const missing = pendingMembers.filter((member) => {
+      const state = rowState(member);
+      return state.correcting && !String(reasons[state.rowKey] || "").trim();
+    });
+    if (missing.length > 0) {
+      setRowErrors((current) => {
+        const next = { ...current };
+        missing.forEach((member) => { next[rowState(member).rowKey] = "Vui lòng nhập lý do điều chỉnh."; });
+        return next;
+      });
+      return;
+    }
+    const corrections = pendingMembers.filter((member) => rowState(member).correcting).length;
+    if (corrections > 0 && !window.confirm("Xác nhận điều chỉnh điểm danh của " + corrections + " học viên đã được đánh dấu trước đó?")) return;
+    const sessionId = selectedSessionId;
+    setSavingAll(true);
+    setNotice("");
+    let saved = 0;
+    for (const member of pendingMembers) {
+      const { rowKey, chosenStatus, correcting } = rowState(member);
+      try {
+        const response = await markAttendanceApi(token, sessionId, member.memberId, {
+          status: chosenStatus,
+          note: String(notes[rowKey] ?? member.note ?? "").trim() || null,
+          reason: correcting ? String(reasons[rowKey] || "").trim() : null,
+        });
+        if (!mountedRef.current) return;
+        if (response?.id != null) setAttendanceIds((current) => ({ ...current, [rowKey]: response.id }));
+        saved += 1;
+      } catch (error) {
+        if (mountedRef.current) setRowErrors((current) => ({ ...current, [rowKey]: errorMessage(error, "Không lưu được điểm danh.") }));
+      }
+    }
+    if (!mountedRef.current) return;
+    setSavingAll(false);
+    if (saved > 0) setNotice("Đã lưu điểm danh cho " + saved + "/" + pendingMembers.length + " học viên.");
+    if (String(selectedSessionIdRef.current) === String(sessionId)) await loadRoster(sessionId);
+  }
+
+  function exportCsv() {
+    if (!roster || members.length === 0) return;
+    const escape = (value) => '"' + String(value ?? "").replace(/"/g, '""') + '"';
+    const rows = [["Mã học viên", "Họ tên", "Trạng thái", "Thời điểm đánh dấu", "Ghi chú"]].concat(members.map((member) => {
+      const { rowKey, chosenStatus } = rowState(member);
+      return [member?.memberId, member?.memberName, statusLabel(chosenStatus), member?.markedAt ? formatDateTime(member.markedAt) : "", notes[rowKey] ?? member?.note ?? ""];
+    }));
+    const blob = new Blob(["\uFEFF" + rows.map((row) => row.map(escape).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "diem-danh-buoi-" + selectedSessionId + ".csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function initials(name) {
+    const parts = String(name || "?").trim().split(/\s+/);
+    return ((parts[0]?.[0] || "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase() || "?";
+  }
+
+  const todayLabel = new Date().toLocaleDateString("vi-VN");
+
   return (
     <div className="layout">
       <Sidebar role={role} activePage="coach-attendance" onNavigate={onNavigate} onLogout={onLogout} />
@@ -273,169 +373,206 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
         <div className="coach-attendance-page">
           <header className="coach-attendance-header">
             <div>
-              <p className="pt-eyebrow">SPORTCENTER / COACH</p>
+              <p className="pt-eyebrow">SPORTCENTER › COACH › QUẢN LÝ ĐIỂM DANH</p>
               <h1>Quản lý điểm danh</h1>
-              <p>Chọn buổi học được phân công để xem danh sách Member đã đăng ký.</p>
+              <p>Chọn lớp và buổi học được phân công để điểm danh học viên.</p>
             </div>
-            <button type="button" className="coach-attendance-refresh" onClick={() => void loadSessions()} disabled={sessionsLoading}>
-              {sessionsLoading ? "Đang tải…" : "Làm mới"}
-            </button>
+            <div className="coach-attendance-header-actions">
+              <span className="coach-attendance-today">Hôm nay: <b>{todayLabel}</b></span>
+              <button type="button" className="coach-attendance-refresh" onClick={() => void loadSessions()} disabled={sessionsLoading}>
+                {sessionsLoading ? "Đang tải…" : "Làm mới"}
+              </button>
+            </div>
           </header>
 
           {sessionsError && <p className="coach-attendance-alert is-error" role="alert">{sessionsError}</p>}
           {notice && <p className="coach-attendance-alert is-success" role="status">{notice}</p>}
 
-          <section className="coach-attendance-panel" aria-labelledby="coach-attendance-sessions-title">
-            <div className="coach-attendance-section-heading">
-              <div>
+          <div className="coach-attendance-grid">
+            <aside className="coach-attendance-panel coach-attendance-sidepanel" aria-labelledby="coach-attendance-sessions-title">
+              <div className="coach-attendance-section-heading">
                 <h2 id="coach-attendance-sessions-title">Buổi học được phân công</h2>
-                <p>Chọn lớp trước, sau đó chọn buổi cần điểm danh.</p>
+                <span className="coach-attendance-count">{filteredSessions.length} buổi</span>
               </div>
-              <span>{filteredSessions.length} buổi</span>
-            </div>
-            {sessionsLoading ? <p className="coach-attendance-empty" role="status">Đang tải danh sách buổi học…</p>
-              : sessionsError ? null
-                : sessions.length === 0 ? <p className="coach-attendance-empty">Hiện chưa có buổi học nào được phân công.</p>
-                  : <>
-                    <label className="coach-attendance-class-filter">
-                      <span>Lọc theo lớp</span>
-                      <select value={classFilter} onChange={(event) => chooseClass(event.target.value)}>
-                        <option value="">Chọn lớp để xem các buổi học</option>
-                        {classOptions.map((option) => <option key={option.key} value={option.key}>
-                          {option.name}{option.courseName ? ` · ${option.courseName}` : ""} · {option.sessionCount} buổi
-                        </option>)}
-                      </select>
-                    </label>
-                    {!classFilter ? <p className="coach-attendance-selection-hint">Hãy chọn một lớp để lọc danh sách buổi học được phân công.</p>
-                      : filteredSessions.length === 0 ? <p className="coach-attendance-empty">Lớp này hiện chưa có buổi học nào.</p>
-                        : <div className="coach-attendance-sessions">
-                    {filteredSessions.map((session) => {
-                      const id = session?.classSessionId;
-                      const active = String(id) === String(selectedSessionId);
-                      return <button
-                        type="button"
-                        className={"coach-attendance-session" + (active ? " is-selected" : "")}
-                        key={id ?? String(session?.courseClassId) + "-" + String(session?.startTime)}
-                        onClick={() => id != null && chooseSession(id)}
-                        disabled={id == null}
-                        aria-pressed={active}
-                      >
-                        <span className="coach-attendance-session-title">
-                          <strong>{session?.courseName || session?.courseOfferingName || "Khóa học"}</strong>
-                          <span>{session?.courseClassName || (session?.courseClassId != null ? "Lớp #" + session.courseClassId : "Chưa có tên lớp")}</span>
-                          {(session?.sportName || session?.sportId != null) && <span>{session?.sportName || "Môn thể thao"}{session?.sportId != null ? " · Sport #" + session.sportId : ""}</span>}
-                        </span>
-                        <span className="coach-attendance-session-time">
-                          <strong>{formatDateTime(session?.startTime)}</strong>
-                          <span>{formatTime(session?.startTime)} – {formatTime(session?.endTime)}</span>
-                        </span>
-                        <span className={"coach-attendance-badge status-" + String(session?.sessionStatus || "unknown").toLowerCase()}>
-                          {SESSION_STATUS_LABELS[session?.sessionStatus] || session?.sessionStatus || "Chưa xác định"}
-                        </span>
-                        <span className="coach-attendance-availability">{sessionAvailability(session)}</span>
-                      </button>;
-                    })}
-                  </div>}
-                  </>}
-          </section>
+              <p className="coach-attendance-sub">Chọn lớp trước, sau đó chọn buổi cần điểm danh.</p>
+              {sessionsLoading ? <p className="coach-attendance-empty" role="status">Đang tải danh sách buổi học…</p>
+                : sessionsError ? null
+                  : sessions.length === 0 ? <p className="coach-attendance-empty">Hiện chưa có buổi học nào được phân công.</p>
+                    : <>
+                      <label className="coach-attendance-class-filter">
+                        <span>Lọc theo lớp</span>
+                        <select value={classFilter} onChange={(event) => chooseClass(event.target.value)}>
+                          <option value="">Chọn lớp để xem các buổi học</option>
+                          {classOptions.map((option) => <option key={option.key} value={option.key}>
+                            {option.name}{option.courseName ? ` · ${option.courseName}` : ""} · {option.sessionCount} buổi
+                          </option>)}
+                        </select>
+                      </label>
+                      {!classFilter ? <p className="coach-attendance-selection-hint">Hãy chọn một lớp để lọc danh sách buổi học được phân công.</p>
+                        : filteredSessions.length === 0 ? <p className="coach-attendance-empty">Lớp này hiện chưa có buổi học nào.</p>
+                          : <div className="coach-attendance-sessions">
+                            {filteredSessions.map((session) => {
+                              const id = session?.classSessionId;
+                              const active = String(id) === String(selectedSessionId);
+                              return <button
+                                type="button"
+                                className={"coach-attendance-session" + (active ? " is-selected" : "")}
+                                key={id ?? String(session?.courseClassId) + "-" + String(session?.startTime)}
+                                onClick={() => id != null && chooseSession(id)}
+                                disabled={id == null}
+                                aria-pressed={active}
+                              >
+                                <span className="coach-attendance-session-top">
+                                  {session?.sportName && <span className="coach-attendance-chip">{session.sportName}</span>}
+                                  <span className={"coach-attendance-badge status-" + String(session?.sessionStatus || "unknown").toLowerCase()}>
+                                    {SESSION_STATUS_LABELS[session?.sessionStatus] || session?.sessionStatus || "Chưa xác định"}
+                                  </span>
+                                </span>
+                                <strong>{session?.courseName || session?.courseOfferingName || "Khóa học"}</strong>
+                                <span className="coach-attendance-session-sub">
+                                  {session?.courseClassName || (session?.courseClassId != null ? "Lớp #" + session.courseClassId : "Chưa có tên lớp")} · Buổi #{id ?? "—"}
+                                </span>
+                                <span className="coach-attendance-session-foot">
+                                  <span>{formatDateTime(session?.startTime)} – {formatTime(session?.endTime)}</span>
+                                  <span className="coach-attendance-availability">{sessionAvailability(session)}</span>
+                                </span>
+                              </button>;
+                            })}
+                          </div>}
+                    </>}
+            </aside>
 
-          {selectedSessionId && <section className="coach-attendance-panel" aria-labelledby="coach-attendance-roster-title">
-            <div className="coach-attendance-section-heading">
-              <div>
-                <h2 id="coach-attendance-roster-title">Danh sách điểm danh</h2>
-                <p>{roster?.courseClassName || selectedSession?.courseClassName || "Lớp học"} · Buổi #{roster?.classSessionId || selectedSessionId}</p>
-              </div>
-              <span>{members.length} Member</span>
-            </div>
-
-            {rosterLoading ? <p className="coach-attendance-empty" role="status">Đang tải danh sách Member…</p>
-              : rosterError ? <p className="coach-attendance-alert is-error" role="alert">{rosterError}</p>
-                : !roster ? <p className="coach-attendance-empty">Chưa có dữ liệu danh sách điểm danh.</p>
-                  : <>
-                    <div className="coach-attendance-session-meta">
-                      <span>{formatDateTime(roster.startTime)}</span>
-                      <span>{formatTime(roster.startTime)} – {formatTime(roster.endTime)}</span>
-                      <span className={"coach-attendance-badge status-" + String(roster.sessionStatus || "unknown").toLowerCase()}>
-                        {SESSION_STATUS_LABELS[roster.sessionStatus] || roster.sessionStatus || "Chưa xác định"}
-                      </span>
+            <div className="coach-attendance-content">
+              {!selectedSessionId ? <section className="coach-attendance-panel coach-attendance-placeholder">
+                <h2>Danh sách điểm danh</h2>
+                <p>Chọn một buổi học ở cột bên trái để xem và điểm danh học viên.</p>
+              </section> : <>
+                <section className="coach-attendance-panel" aria-labelledby="coach-attendance-roster-title">
+                  <div className="coach-attendance-roster-head">
+                    <div>
+                      <h2 id="coach-attendance-roster-title">
+                        Danh sách điểm danh{" "}
+                        <span className={"coach-attendance-badge status-" + String(roster?.sessionStatus || selectedSession?.sessionStatus || "unknown").toLowerCase()}>
+                          {SESSION_STATUS_LABELS[roster?.sessionStatus || selectedSession?.sessionStatus] || roster?.sessionStatus || "Chưa xác định"}
+                        </span>
+                      </h2>
+                      <p className="coach-attendance-sub">
+                        <b>{roster?.courseClassName || selectedSession?.courseClassName || "Lớp học"} · Buổi #{roster?.classSessionId || selectedSessionId}</b>
+                        {" · "}{formatDateTime(roster?.startTime || selectedSession?.startTime)} – {formatTime(roster?.endTime || selectedSession?.endTime)}
+                      </p>
                     </div>
-                    {sessionCancelled && <p className="coach-attendance-alert is-warning">Buổi học đã hủy. Danh sách chỉ xem được, không thể đánh dấu hoặc điều chỉnh.</p>}
-                    {!sessionCancelled && roster.markingAllowed !== true && <p className="coach-attendance-alert is-warning">Chưa đến giờ bắt đầu buổi học. Có thể xem danh sách nhưng chưa thể điểm danh.</p>}
-                    {members.length === 0 ? <p className="coach-attendance-empty">Không có Member đăng ký CONFIRMED cho buổi học này.</p>
-                      : <>
-                        <div className="coach-attendance-table-wrap">
-                          <table className="coach-attendance-table">
-                            <thead><tr><th>Member</th><th>Trạng thái</th><th>Lần đánh dấu gần nhất</th><th>Ghi chú</th><th>Thao tác</th></tr></thead>
-                            <tbody>{members.map((member) => {
-                              const memberId = member?.memberId;
-                              const rowKey = attendanceRowKey(selectedSessionId, memberId);
-                              const currentStatus = member?.attendanceStatus || "NOT_MARKED";
-                              const chosenStatus = selectedStatuses[rowKey] ?? currentStatus;
-                              const correcting = currentStatus !== "NOT_MARKED";
-                              const changed = chosenStatus !== currentStatus;
-                              const canSave = roster.markingAllowed === true && !sessionCancelled && changed
-                                && (!correcting || String(reasons[rowKey] || "").trim().length > 0);
-                              const attendanceId = member?.attendanceId ?? attendanceIds[rowKey];
-                              const historyAvailable = attendanceId != null;
-                              return <tr key={memberId ?? member?.memberName}>
-                                <td><strong>{member?.memberName || "Member"}</strong><small>ID: {memberId ?? "—"}</small></td>
-                                <td>
-                                  <span className={"coach-attendance-badge attendance-" + String(currentStatus).toLowerCase()}>{statusLabel(currentStatus)}</span>
-                                  <label className="coach-attendance-select-label" htmlFor={"attendance-" + memberId}>Trạng thái cập nhật</label>
-                                  <select id={"attendance-" + memberId} value={chosenStatus}
-                                    onChange={(event) => setRowValue(setSelectedStatuses, rowKey, event.target.value)}
-                                    disabled={!roster.markingAllowed || sessionCancelled || savingMemberId !== null}>
-                                    {["NOT_MARKED", "PRESENT", "ABSENT", "EXCUSED"].map((status) =>
-                                      <option key={status} value={status} disabled={status === "NOT_MARKED"}>{statusLabel(status)}</option>)}
-                                  </select>
-                                  {correcting && changed && <label className="coach-attendance-reason">
-                                    <span>Lý do điều chỉnh <b aria-hidden="true">*</b></span>
-                                    <input maxLength={500} value={reasons[rowKey] ?? ""}
-                                      onChange={(event) => setRowValue(setReasons, rowKey, event.target.value)}
-                                      disabled={savingMemberId !== null} placeholder="Nhập lý do điều chỉnh" />
-                                  </label>}
-                                </td>
-                                <td>{member?.markedAt ? <><span>{formatDateTime(member.markedAt)}</span><small>Nhân viên ID: {member?.markedById ?? "—"}</small></> : <span>Chưa đánh dấu</span>}</td>
-                                <td><textarea aria-label={"Ghi chú điểm danh Member " + (memberId ?? "")} maxLength={500}
-                                  value={notes[rowKey] ?? member?.note ?? ""}
-                                  onChange={(event) => setRowValue(setNotes, rowKey, event.target.value)}
-                                  disabled={!roster.markingAllowed || sessionCancelled || savingMemberId !== null}
-                                  placeholder="Ghi chú không bắt buộc" /></td>
-                                <td>
-                                  <button type="button" className="coach-attendance-save"
-                                    disabled={!canSave || savingMemberId !== null}
-                                    onClick={() => void saveAttendance(member)}>
-                                    {savingMemberId === memberId ? "Đang lưu…" : correcting ? "Lưu điều chỉnh" : "Lưu điểm danh"}
-                                  </button>
-                                  {historyAvailable
-                                    ? <button type="button" className="coach-attendance-history-button"
-                                      disabled={historyLoading} onClick={() => void openHistory(memberId, attendanceId)}>Lịch sử</button>
-                                    : correcting && <small className="coach-attendance-history-unavailable">API roster chưa trả mã bản ghi để mở lịch sử.</small>}
-                                  {rowErrors[rowKey] && <small className="coach-attendance-row-error" role="alert">{rowErrors[rowKey]}</small>}
-                                </td>
-                              </tr>;
-                            })}</tbody>
-                          </table>
-                        </div>
-                        <p className="coach-attendance-footnote">API trả thời gian buổi học không kèm múi giờ; giao diện hiển thị theo giờ địa phương của thiết bị. Máy chủ vẫn xác nhận thời điểm và quyền điểm danh.</p>
-                      </>}
-                  </>}
-          </section>}
+                    <span className="coach-attendance-code">Mã buổi: #{roster?.classSessionId || selectedSessionId}</span>
+                  </div>
 
-          {historyForMemberId != null && <section className="coach-attendance-panel coach-attendance-history" aria-labelledby="attendance-history-title">
-            <div className="coach-attendance-section-heading">
-              <h2 id="attendance-history-title">Lịch sử điểm danh · Member #{historyMemberId}</h2>
-              <button type="button" className="coach-attendance-history-button" onClick={() => setHistoryForMemberId(null)}>Đóng</button>
+                  {rosterLoading ? <p className="coach-attendance-empty" role="status">Đang tải danh sách học viên…</p>
+                    : rosterError ? <p className="coach-attendance-alert is-error" role="alert">{rosterError}</p>
+                      : !roster ? <p className="coach-attendance-empty">Chưa có dữ liệu danh sách điểm danh.</p>
+                        : <>
+                          <div className="coach-attendance-stats">
+                            <div className="stat stat-total"><span>Tổng học viên</span><strong>{members.length}</strong></div>
+                            <div className="stat stat-present"><span>Có mặt</span><strong>{stats.present}</strong></div>
+                            <div className="stat stat-absent"><span>Vắng mặt</span><strong>{stats.absent}</strong></div>
+                            <div className="stat stat-excused"><span>Có phép</span><strong>{stats.excused}</strong></div>
+                            <div className="stat stat-pending"><span>Chưa điểm danh</span><strong>{stats.notMarked}</strong></div>
+                          </div>
+                          {sessionCancelled && <p className="coach-attendance-alert is-warning"><b>Lưu ý:</b> Buổi học đã hủy. Danh sách chỉ xem được, không thể đánh dấu hoặc điều chỉnh.</p>}
+                          {!sessionCancelled && roster.markingAllowed !== true && <p className="coach-attendance-alert is-warning"><b>Lưu ý:</b> Chưa đến giờ bắt đầu buổi học. Huấn luyện viên có thể xem danh sách nhưng chưa thể điểm danh.</p>}
+                        </>}
+                </section>
+
+                {roster && !rosterLoading && !rosterError && <section className="coach-attendance-panel coach-attendance-roster">
+                  {members.length === 0 ? <p className="coach-attendance-empty">Không có học viên đăng ký CONFIRMED cho buổi học này.</p> : <>
+                    <div className="coach-attendance-toolbar">
+                      <input type="search" className="coach-attendance-search" placeholder="Tìm kiếm tên, mã học viên…"
+                        aria-label="Tìm học viên" value={search} onChange={(event) => setSearch(event.target.value)} />
+                      <button type="button" className="coach-attendance-history-button" onClick={markAllPresent} disabled={!canMark || busy}>✓ Đánh dấu tất cả có mặt</button>
+                      <button type="button" className="coach-attendance-history-button" onClick={exportCsv}>⭳ Xuất file</button>
+                    </div>
+                    <div className="coach-attendance-table-wrap">
+                      <table className="coach-attendance-table">
+                        <thead><tr><th>Học viên</th><th>Trạng thái điểm danh</th><th>Cập nhật gần nhất</th><th>Ghi chú buổi học</th><th>Thao tác</th></tr></thead>
+                        <tbody>{visibleMembers.length === 0 ? <tr><td colSpan={5}>Không tìm thấy học viên phù hợp.</td></tr> : visibleMembers.map((member) => {
+                          const memberId = member?.memberId;
+                          const { rowKey, chosenStatus, correcting, changed } = rowState(member);
+                          const canSave = canMark && changed && (!correcting || String(reasons[rowKey] || "").trim().length > 0);
+                          const attendanceId = member?.attendanceId ?? attendanceIds[rowKey];
+                          return <tr key={memberId ?? member?.memberName}>
+                            <td>
+                              <div className="coach-attendance-member">
+                                <span className="coach-attendance-avatar">{initials(member?.memberName)}</span>
+                                <span><strong>{member?.memberName || "Học viên"}</strong><small>#{memberId ?? "—"}</small></span>
+                              </div>
+                            </td>
+                            <td>
+                              <div className="coach-attendance-segment" role="group" aria-label={"Trạng thái điểm danh " + (member?.memberName || memberId)}>
+                                {["PRESENT", "ABSENT", "EXCUSED"].map((status) => <label
+                                  key={status}
+                                  className={"seg seg-" + status.toLowerCase() + (chosenStatus === status ? " is-active" : "") + (!canMark || busy ? " is-disabled" : "")}
+                                >
+                                  <input type="radio" name={"attendance-" + memberId} value={status}
+                                    checked={chosenStatus === status}
+                                    disabled={!roster.markingAllowed || sessionCancelled || busy}
+                                    onChange={(event) => setRowValue(setSelectedStatuses, rowKey, event.target.value)} />
+                                  {statusLabel(status)}
+                                </label>)}
+                              </div>
+                              {correcting && changed && <label className="coach-attendance-reason">
+                                <span>Lý do điều chỉnh <b aria-hidden="true">*</b></span>
+                                <input maxLength={500} value={reasons[rowKey] ?? ""}
+                                  onChange={(event) => setRowValue(setReasons, rowKey, event.target.value)}
+                                  disabled={busy} placeholder="Nhập lý do điều chỉnh" />
+                              </label>}
+                            </td>
+                            <td>{member?.markedAt
+                              ? <><strong>{formatTime(member.markedAt)}</strong><small>{formatDateTime(member.markedAt)}</small></>
+                              : <em className="coach-attendance-muted">Chưa có dữ liệu</em>}</td>
+                            <td><input className="coach-attendance-note" aria-label={"Ghi chú điểm danh học viên " + (memberId ?? "")} maxLength={500}
+                              value={notes[rowKey] ?? member?.note ?? ""}
+                              onChange={(event) => setRowValue(setNotes, rowKey, event.target.value)}
+                              disabled={!canMark || busy} placeholder="Ghi chú…" /></td>
+                            <td>
+                              <div className="coach-attendance-actions">
+                                <button type="button" className="coach-attendance-save" disabled={!canSave || busy} onClick={() => void saveAttendance(member)}>
+                                  {savingMemberId === memberId ? "Đang lưu…" : "Lưu"}
+                                </button>
+                                {attendanceId != null
+                                  ? <button type="button" className="coach-attendance-history-button" title="Lịch sử điểm danh" aria-label="Lịch sử điểm danh"
+                                    disabled={historyLoading} onClick={() => void openHistory(memberId, attendanceId)}>⟲</button>
+                                  : correcting && <small className="coach-attendance-history-unavailable">Chưa có mã bản ghi.</small>}
+                              </div>
+                              {rowErrors[rowKey] && <small className="coach-attendance-row-error" role="alert">{rowErrors[rowKey]}</small>}
+                            </td>
+                          </tr>;
+                        })}</tbody>
+                      </table>
+                    </div>
+                    <div className="coach-attendance-footer">
+                      <span>Hiển thị {visibleMembers.length} / {members.length} học viên trong danh sách lớp</span>
+                      <button type="button" className="coach-attendance-save coach-attendance-save-all" disabled={!canMark || busy || pendingMembers.length === 0} onClick={() => void saveAll()}>
+                        {savingAll ? "Đang lưu…" : "Lưu toàn bộ điểm danh" + (pendingMembers.length ? " (" + pendingMembers.length + ")" : "")}
+                      </button>
+                    </div>
+                  </>}
+                </section>}
+
+                {historyForMemberId != null && <section className="coach-attendance-panel coach-attendance-history" aria-labelledby="attendance-history-title">
+                  <div className="coach-attendance-section-heading">
+                    <h2 id="attendance-history-title">Lịch sử điểm danh · Học viên #{historyMemberId}</h2>
+                    <button type="button" className="coach-attendance-history-button" onClick={() => setHistoryForMemberId(null)}>Đóng</button>
+                  </div>
+                  {historyLoading ? <p role="status">Đang tải lịch sử…</p>
+                    : historyError ? <p className="coach-attendance-alert is-error" role="alert">{historyError}</p>
+                      : history.length === 0 ? <p className="coach-attendance-empty">Chưa có sự kiện lịch sử.</p>
+                        : <ol className="coach-attendance-history-list">{history.map((event) => <li key={event?.id ?? String(event?.changedAt) + "-" + String(event?.newStatus)}>
+                          <strong>{event?.oldStatus ? statusLabel(event.oldStatus) + " → " + statusLabel(event.newStatus) : "Đánh dấu ban đầu: " + statusLabel(event?.newStatus)}</strong>
+                          <span>{formatDateTime(event?.changedAt)} · Người thực hiện ID: {event?.changedById ?? "—"}</span>
+                          {event?.reason && <p>Lý do: {event.reason}</p>}
+                        </li>)}</ol>}
+                </section>}
+
+              </>}
             </div>
-            {historyLoading ? <p role="status">Đang tải lịch sử…</p>
-              : historyError ? <p className="coach-attendance-alert is-error" role="alert">{historyError}</p>
-                : history.length === 0 ? <p className="coach-attendance-empty">Chưa có sự kiện lịch sử.</p>
-                  : <ol className="coach-attendance-history-list">{history.map((event) => <li key={event?.id ?? String(event?.changedAt) + "-" + String(event?.newStatus)}>
-                    <strong>{event?.oldStatus ? statusLabel(event.oldStatus) + " → " + statusLabel(event.newStatus) : "Đánh dấu ban đầu: " + statusLabel(event?.newStatus)}</strong>
-                    <span>{formatDateTime(event?.changedAt)} · Người thực hiện ID: {event?.changedById ?? "—"}</span>
-                    {event?.reason && <p>Lý do: {event.reason}</p>}
-                  </li>)}</ol>}
-          </section>}
+          </div>
         </div>
       </main>
     </div>

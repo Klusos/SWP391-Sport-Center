@@ -132,3 +132,68 @@
   .dash-main .dash-stat { transition: none; }
   .dash-main .dash-stat:hover { transform: none; }
 }
+
+/* ===== Admin & Coach dashboard: unified with receptionist design (.rc-main) ===== */
+.rc-main.dash-main { display: block; }
+.rc-main .rc-content > .queue-state { padding: 40px; border: 1px dashed var(--rc-line-strong); border-radius: 14px; background: #fff; color: var(--rc-sub); text-align: center; }
+.rc-main .dash-stats { gap: 18px; margin: 0; }
+.rc-main .dash-stats.cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.rc-main .dash-stat { position: static; display: grid; gap: 12px; min-height: 0; padding: 19px 21px; border: 1px solid var(--rc-line); border-radius: 14px; background: #fff; box-shadow: 0 2px 8px rgb(11 25 44 / 4%); }
+.rc-main .dash-stat:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgb(30 96 213 / 8%); }
+.rc-main .dash-stat header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.rc-main .dash-stat header > span { color: var(--rc-sub); font-size: 13px; font-weight: 600; line-height: 1.35; }
+.rc-main .dash-tile { display: grid; width: 43px; height: 43px; flex: none; place-items: center; border-radius: 11px; background: #eff4ff; color: var(--rc-primary); font-style: normal; }
+.rc-main .dash-tile.green { background: var(--rc-green-bg); color: var(--rc-green); }
+.rc-main .dash-tile.orange { background: var(--rc-amber-bg); color: var(--rc-amber); }
+.rc-main .dash-tile.red { background: #fee2e2; color: #dc2626; }
+.rc-main .dash-stat > strong { color: var(--rc-navy); font-size: 30px; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
+.rc-main .dash-stat-note { display: flex; align-items: center; gap: 7px; min-height: 17px; color: var(--rc-sub); font-size: 11px; }
+.rc-main .dash-stat-note span { width: 6px; height: 6px; border-radius: 50%; background: var(--rc-muted); }
+.rc-main .dash-stat-note.green { color: var(--rc-green); } .rc-main .dash-stat-note.green span { background: var(--rc-green); }
+.rc-main .dash-stat-note.orange { color: var(--rc-amber); } .rc-main .dash-stat-note.orange span { background: var(--rc-amber); }
+.rc-main .dash-stat-note.blue { color: var(--rc-primary); } .rc-main .dash-stat-note.blue span { background: var(--rc-primary); }
+
+.rc-main .admin-dashboard { display: grid; gap: 24px; }
+.rc-main .dash-grid { gap: 20px; margin: 0; align-items: start; }
+.rc-main .dash-grid.wide { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+.rc-main .dash-card, .rc-main .admin-dashboard .dash-card { margin: 0; padding: 21px; border: 1px solid var(--rc-line); border-radius: 14px; background: #fff; box-shadow: 0 2px 8px rgb(11 25 44 / 4%); }
+.rc-main .dash-card > h2, .rc-main.dash-main .dash-card > h2 { margin: 0 0 14px; padding-bottom: 12px; border-bottom: 1px solid var(--rc-line); color: var(--rc-navy); font-size: 17px; font-weight: 700; }
+.rc-main .dash-card h2 small { padding: 3px 9px; border-radius: 999px; background: #f1f5f9; color: var(--rc-sub); font-size: 11px; font-weight: 600; }
+.rc-main .dash-empty { display: grid; min-height: 84px; place-items: center; padding: 18px; border: 1px dashed var(--rc-line-strong); border-radius: 10px; background: #f8fafc; color: var(--rc-sub); text-align: center; }
+.rc-main .dash-error { border-radius: 10px; background: #fef2f2; color: #991b1b; }
+.rc-main .coach-dashboard-link, .rc-main .admin-revenue-link { display: inline-flex; align-items: center; gap: 5px; margin-top: 14px; padding: 5px 8px; border-radius: 7px; color: var(--rc-primary); font-size: 12px; font-weight: 650; text-decoration: none; }
+.rc-main .coach-dashboard-link::after, .rc-main .admin-revenue-link::after { content: "→"; }
+.rc-main .coach-dashboard-link:hover, .rc-main .admin-revenue-link:hover { background: #eff4ff; }
+
+.rc-main .dash-rows { gap: 8px; }
+.rc-main .dash-rows li { align-items: center; padding: 12px 14px; border: 1px solid var(--rc-line); border-radius: 10px; background: #fff; transition: border-color .15s ease, box-shadow .15s ease; }
+.rc-main .dash-rows li:last-child { border-bottom: 1px solid var(--rc-line); }
+.rc-main .dash-rows li:hover { border-color: #bfdbfe; box-shadow: 0 4px 13px rgb(30 96 213 / 6%); }
+.rc-main .dash-rows li b { color: var(--rc-navy); }
+.rc-main .dash-rows li small { color: var(--rc-sub); }
+.rc-main .dash-rows li > em { font-size: 12px; color: var(--rc-sub); }
+.rc-main .dash-rows .dash-assessment-status { border-color: #fde68a; background: var(--rc-amber-bg); color: var(--rc-amber); }
+.rc-main .dash-progress-row { display: grid !important; grid-template-columns: 1fr auto; row-gap: 8px; }
+.rc-main .dash-meter { grid-column: 1 / -1; display: block; height: 6px; overflow: hidden; border-radius: 999px; background: #eef2f7; }
+.rc-main .dash-meter u { display: block; height: 100%; border-radius: 999px; background: var(--rc-primary); text-decoration: none; }
+.rc-main .dash-meter u.orange { background: #f59e0b; } .rc-main .dash-meter u.green { background: #10b981; }
+.rc-main .txt-green { color: var(--rc-green); } .rc-main .txt-orange { color: var(--rc-amber); } .rc-main .txt-blue { color: var(--rc-primary); }
+
+.rc-main .dash-sessions { gap: 8px; }
+.rc-main .dash-sessions li { padding: 12px 14px; border: 1px solid var(--rc-line); border-radius: 10px; transition: border-color .15s ease, box-shadow .15s ease; }
+.rc-main .dash-sessions li:last-child { border-bottom: 1px solid var(--rc-line); }
+.rc-main .dash-sessions li:hover { border-color: #bfdbfe; box-shadow: 0 4px 13px rgb(30 96 213 / 6%); }
+.rc-main .dash-sessions b { color: var(--rc-navy); }
+.rc-main .dash-sessions small { color: var(--rc-sub); font-size: 11px; }
+.rc-main .dash-sessions span { color: var(--rc-sub); font-size: 12px; }
+.rc-main .dash-status { padding: 4px 10px; border: 1px solid var(--rc-line); border-radius: 999px; background: #f1f5f9; color: var(--rc-sub); font-size: 11px; font-weight: 700; font-style: normal; letter-spacing: .02em; white-space: nowrap; }
+.rc-main .dash-status.st-active, .rc-main .dash-status.st-completed, .rc-main .dash-status.st-confirmed { border-color: #a7f3d0; background: var(--rc-green-bg); color: var(--rc-green); }
+.rc-main .dash-status.st-scheduled { border-color: #bfdbfe; background: #eff4ff; color: var(--rc-primary); }
+.rc-main .dash-status.st-cancelled, .rc-main .dash-status.st-inactive { border-color: #fecaca; background: #fef2f2; color: #dc2626; }
+
+.rc-main .admin-dashboard .admin-sports-toggle { margin-top: 12px; border-color: var(--rc-line); background: #f8fafc; color: var(--rc-primary); }
+.rc-main .admin-revenue-total { margin-bottom: 8px; padding: 9px 12px; border-radius: 9px; background: #f8fafc; }
+
+@media (max-width: 1300px) { .rc-main .dash-stats.cols-5 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 1100px) { .rc-main .dash-stats, .rc-main .dash-stats.cols-5 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rc-main .dash-grid.wide { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) { .rc-main .dash-stats, .rc-main .dash-stats.cols-5 { grid-template-columns: minmax(0, 1fr); } .rc-main .dash-sessions li { grid-template-columns: 1fr; } }
