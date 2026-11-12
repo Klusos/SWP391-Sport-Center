@@ -258,3 +258,70 @@
   .coach-attendance-main .coach-attendance-session { transition: none; }
   .coach-attendance-main .coach-attendance-session:hover:not(:disabled) { transform: none; }
 }
+
+/* ===== Redesign: two-column layout ===== */
+.coach-attendance-main .coach-attendance-page { max-width: 1400px; }
+.coach-attendance-header-actions { display: flex; align-items: center; gap: 12px; }
+.coach-attendance-today { padding: 9px 14px; border: 1px solid #dce6f1; border-radius: 10px; background: #fff; font-size: 13px; color: var(--text-sub); }
+.coach-attendance-grid { display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.coach-attendance-content { display: grid; gap: 16px; min-width: 0; }
+.coach-attendance-content > .coach-attendance-panel { margin: 0; }
+.coach-attendance-sidepanel { position: sticky; top: 16px; margin: 0 !important; }
+.coach-attendance-sub { margin: 0 0 12px; color: var(--text-sub); font-size: 13px; }
+.coach-attendance-count { padding: 3px 10px; border-radius: 999px; background: #e8f0fb; color: #1767d2 !important; font-weight: 700; }
+.coach-attendance-sessions { display: grid; gap: 10px; }
+.coach-attendance-main .coach-attendance-session { display: grid; grid-template-columns: 1fr; gap: 6px; }
+.coach-attendance-session-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.coach-attendance-chip { padding: 3px 9px; border-radius: 6px; background: #e8f0fb; color: #1767d2; font-size: 11px; font-weight: 700; }
+.coach-attendance-session-sub { color: var(--text-sub); font-size: 13px; }
+.coach-attendance-session-foot { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; padding-top: 8px; border-top: 1px solid #edf2f7; font-size: 12px; color: var(--text-sub); }
+.coach-attendance-roster-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
+.coach-attendance-roster-head h2 { margin: 0 0 4px; color: #123b63; font-size: 20px; }
+.coach-attendance-code { padding: 6px 12px; border-radius: 8px; background: #eef3f9; color: #123b63; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.coach-attendance-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.coach-attendance-stats .stat { padding: 14px 16px; border-radius: 12px; display: grid; gap: 6px; }
+.coach-attendance-stats .stat span { font-size: 12px; font-weight: 700; }
+.coach-attendance-stats .stat strong { font-size: 28px; line-height: 1; }
+.stat-total { background: #eaf1fd; color: #1767d2; }
+.stat-present { background: #e7f7ef; color: #0e8a57; }
+.stat-absent { background: #fdecee; color: #d6293e; }
+.stat-excused { background: #fff4e0; color: #b86e00; }
+.stat-pending { background: #fff8dd; color: #a86a00; }
+.coach-attendance-toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.coach-attendance-search { flex: 1 1 220px; min-height: 40px; border: 1px solid #cbd8e6; border-radius: 9px; padding: 8px 12px; font: inherit; font-size: 13px; }
+.coach-attendance-member { display: flex; align-items: center; gap: 10px; }
+.coach-attendance-avatar { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #dbe8fb; color: #1767d2; font-size: 12px; font-weight: 800; flex: none; }
+.coach-attendance-segment { display: inline-flex; padding: 3px; border-radius: 10px; background: #eef3f9; gap: 2px; }
+.coach-attendance-segment .seg { border: 0; border-radius: 8px; padding: 7px 12px; background: transparent; color: #4a5f78; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.coach-attendance-segment .seg:disabled { cursor: not-allowed; opacity: .55; }
+.coach-attendance-segment .seg.is-active.seg-present { background: #0e9f6e; color: #fff; }
+.coach-attendance-segment .seg.is-active.seg-absent { background: #e02f45; color: #fff; }
+.coach-attendance-segment .seg.is-active.seg-excused { background: #f59e0b; color: #fff; }
+.coach-attendance-main .coach-attendance-table .coach-attendance-note { width: 100%; min-width: 110px; min-height: 36px; margin: 0; border: 1px solid #cbd8e6; border-radius: 8px; padding: 6px 9px; font: inherit; font-size: 13px; }
+.coach-attendance-muted { color: var(--text-sub); font-size: 12px; }
+.coach-attendance-actions { display: flex; align-items: center; gap: 6px; }
+.coach-attendance-actions .coach-attendance-history-button { margin: 0; min-width: 36px; padding: 6px 9px; }
+.coach-attendance-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; color: var(--text-sub); font-size: 13px; }
+.coach-attendance-main .coach-attendance-save-all { min-height: 42px; padding: 9px 18px; }
+.coach-attendance-placeholder h2 { margin: 0 0 6px; color: #123b63; font-size: 18px; }
+.coach-attendance-placeholder p { margin: 0; color: var(--text-sub); }
+@media (max-width: 1000px) {
+  .coach-attendance-grid { grid-template-columns: 1fr; }
+  .coach-attendance-sidepanel { position: static; }
+}
+.coach-attendance-segment .seg { position: relative; border-radius: 8px; padding: 7px 12px; color: #4a5f78; font-size: 12px; font-weight: 700; cursor: pointer; }
+.coach-attendance-segment .seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: inherit; }
+.coach-attendance-segment .seg.is-disabled { cursor: not-allowed; opacity: .55; }
+.coach-attendance-segment .seg:focus-within { outline: 3px solid rgba(23,103,210,.25); }
+
+/* ===== Polish ===== */
+.coach-attendance-content { gap: 16px; }
+.coach-attendance-main .coach-attendance-roster { padding: 0; overflow: hidden; }
+.coach-attendance-roster .coach-attendance-toolbar { margin: 0; padding: 16px 20px; }
+.coach-attendance-roster .coach-attendance-table-wrap { border: 0; border-top: 1px solid #e0e8f1; border-radius: 0; }
+.coach-attendance-roster .coach-attendance-table td { vertical-align: middle; }
+.coach-attendance-roster .coach-attendance-footer { margin: 0; padding: 14px 20px; border-top: 1px solid #e0e8f1; background: #fbfdff; }
+.coach-attendance-roster > .coach-attendance-empty { margin: 20px; }
+.coach-attendance-sidepanel .coach-attendance-section-heading { margin-bottom: 8px; padding-bottom: 10px; }
+.coach-attendance-sidepanel .coach-attendance-class-filter { max-width: none; }
+.coach-attendance-main .coach-attendance-header-actions .coach-attendance-refresh { min-height: 38px; }
