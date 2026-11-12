@@ -156,6 +156,21 @@ class ConsultationRequestIntegrationTest {
     }
 
     @Test
+    void serviceRejectsMissingOrInvalidEmailAndAllowsRepeatedConsultationsForOneEmail() {
+        for (String invalidEmail : new String[] { null, "", "   ", "not-an-email" }) {
+            assertStatus(400, () -> service.create(request(invalidEmail, null), null));
+        }
+
+        String email = uniqueEmail();
+        ConsultationResponse first = service.create(request("  " + email + "  ", null), null);
+        ConsultationResponse second = service.create(request(email, null), null);
+
+        assertEquals(email, first.email());
+        assertEquals(email, second.email());
+        assertEquals(2, consultations.count(), "Consultation emails are not unique account identifiers");
+    }
+
+    @Test
     void pendingRequestCanBeTakenThenCompletedByItsHandler() {
         ConsultationResponse created = service.create(request(uniqueEmail(), null), null);
 
@@ -281,6 +296,29 @@ class ConsultationRequestIntegrationTest {
     }
 
     @Test
+    void legacyConsultationWithoutEmailBlocksAccountCreationButCanLinkAnExistingMember() {
+        ConsultationRequest legacy = new ConsultationRequest();
+        legacy.setName("Legacy Guest");
+        legacy.setPhone("0900000000");
+        legacy.setEmail(null);
+        legacy.setSport(sport);
+        legacy.setStatus(group5.example.sportCenter.entity.ConsultationStatus.IN_PROGRESS);
+        legacy.setHandledBy(receptionist);
+        legacy = consultations.saveAndFlush(legacy);
+        Integer legacyId = legacy.getId();
+
+        var blocked = assertThrows(ResponseStatusException.class, () -> service.createMember(legacyId,
+                new CreateConsultationMemberRequest("temporary-test-password", LocalDate.of(1998, 5, 1)), jwt(receptionist)));
+        assertEquals(400, blocked.getStatusCode().value());
+        assertTrue(blocked.getReason().contains("link an existing MEMBER"));
+        assertNull(service.get(legacyId, jwt(receptionist)).memberId());
+
+        ConsultationResponse linked = service.linkMember(legacyId,
+                new LinkConsultationMemberRequest(member.getId()), jwt(receptionist));
+        assertEquals(member.getId(), linked.memberId());
+    }
+
+    @Test
     void linkingFailureRollsBackTheNewMemberAndConsultationLink() {
         String email = uniqueEmail();
         ConsultationResponse pending = service.create(request(email, null), null);
@@ -386,6 +424,20 @@ class ConsultationRequestIntegrationTest {
     }
 
     @Test
+    void httpCreationTrimsValidEmailAndDoesNotRequireEmailUniqueness() throws Exception {
+        String email = uniqueEmail();
+        String body = "{\"name\":\"Guest\",\"phone\":\"0900000000\",\"email\":\"  "
+                + email + "  \",\"sportId\":" + sport.getId() + "}";
+
+        mvc.perform(post("/api/consultation-requests").contentType("application/json").content(body))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.email").value(email));
+        mvc.perform(post("/api/consultation-requests").contentType("application/json")
+                        .content(body.replace("Guest", "Second Guest")))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.email").value(email));
+        assertEquals(2, consultations.count());
+    }
+
+    @Test
     void httpCreationCoversAgeEmailLengthSportAndJwtIdentityValidation() throws Exception {
         for (int age : List.of(1, 120)) {
             String valid = "{\"name\":\"Guest\",\"phone\":\"0900000000\",\"email\":\""
@@ -398,6 +450,10 @@ class ConsultationRequestIntegrationTest {
         for (String invalid : List.of(
                 "{" + base + ",\"age\":0}",
                 "{" + base + ",\"age\":121}",
+                "{" + base + "}",
+                "{" + base + ",\"email\":null}",
+                "{" + base + ",\"email\":\"\"}",
+                "{" + base + ",\"email\":\"   \"}",
                 "{" + base + ",\"email\":\"not-an-email\"}",
                 "{" + base + ",\"name\":\"\"}",
                 "{" + base + ",\"phone\":\"\"}",
@@ -409,8 +465,8 @@ class ConsultationRequestIntegrationTest {
                     .andExpect(status().isBadRequest());
         }
 
-        String missingSport = "{\"name\":\"Guest\",\"phone\":\"0900000000\",\"sportId\":"
-                + Integer.MAX_VALUE + "}";
+        String missingSport = "{\"name\":\"Guest\",\"phone\":\"0900000000\",\"email\":\""
+                + uniqueEmail() + "\",\"sportId\":" + Integer.MAX_VALUE + "}";
         mvc.perform(post("/api/consultation-requests").contentType("application/json").content(missingSport))
                 .andExpect(status().isNotFound());
 
@@ -418,12 +474,12 @@ class ConsultationRequestIntegrationTest {
         inactive.setName("Inactive-" + UUID.randomUUID());
         inactive.setStatus("INACTIVE");
         inactive = sports.saveAndFlush(inactive);
-        String inactiveSport = "{\"name\":\"Guest\",\"phone\":\"0900000000\",\"sportId\":"
-                + inactive.getId() + "}";
+        String inactiveSport = "{\"name\":\"Guest\",\"phone\":\"0900000000\",\"email\":\""
+                + uniqueEmail() + "\",\"sportId\":" + inactive.getId() + "}";
         mvc.perform(post("/api/consultation-requests").contentType("application/json").content(inactiveSport))
                 .andExpect(status().isConflict());
 
-        String memberSubmission = "{\"name\":\"Member\",\"phone\":\"0900000000\",\"sportId\":"
+        String memberSubmission = "{\"name\":\"Member\",\"phone\":\"0900000000\",\"email\":\"member@example.test\",\"sportId\":"
                 + sport.getId() + ",\"memberId\":" + otherMember.getId() + "}";
         mvc.perform(post("/api/consultation-requests").header("Authorization", bearer(member))
                         .contentType("application/json").content(memberSubmission))

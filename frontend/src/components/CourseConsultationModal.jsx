@@ -7,6 +7,7 @@ export default function CourseConsultationModal({
   onChange,
   profileError,
   error,
+  onEmailInvalid,
   submitting,
   onClose,
   onSubmit,
@@ -105,8 +106,8 @@ export default function CourseConsultationModal({
             <label htmlFor="course-consult-phone">Số điện thoại <span aria-hidden="true">*</span>
               <input id="course-consult-phone" required maxLength={20} autoComplete="tel" value={values.phone} onChange={update("phone")} />
             </label>
-            <label htmlFor="course-consult-email">Email
-              <input id="course-consult-email" type="email" maxLength={150} autoComplete="email" value={values.email} onChange={update("email")} />
+            <label htmlFor="course-consult-email">Email <span aria-hidden="true">*</span>
+              <input id="course-consult-email" type="email" maxLength={150} autoComplete="email" value={values.email} onChange={update("email")} required onInvalid={(event) => { event.preventDefault(); onEmailInvalid?.(); }} />
             </label>
             <label htmlFor="course-consult-age">Tuổi (không bắt buộc)
               <input id="course-consult-age" type="number" min="1" max="120" value={values.age} onChange={update("age")} />
