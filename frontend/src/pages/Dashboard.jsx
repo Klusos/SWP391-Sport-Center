@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import RevenueBars from "../components/RevenueBars";
@@ -33,7 +33,7 @@ const memberUsers = (t) => getUsersApi(t).then((u) => list(u).filter((x) => x.ro
 
 const LOADERS = {
   ADMIN: {
-    members: memberUsers, sports: getSportsApi, coaches: getCoachesApi,
+    me: getCurrentUserApi, members: memberUsers, sports: getSportsApi, coaches: getCoachesApi,
     requests: (t) => getConsultationRequestsApi(t, { size: 100 }),
   },
   RECEPTIONIST: {
@@ -42,6 +42,7 @@ const LOADERS = {
     inProgressRequests: (t) => getConsultationRequestsApi(t, { status: "IN_PROGRESS", page: 0, size: 5 }),
   },
   COACH: {
+    me: getCurrentUserApi,
     bookings: getAssignedPtBookingsApi,
     assessments: getMySkillAssessmentAssignmentsApi,
     sports: getSportsApi,
@@ -85,15 +86,16 @@ function useLoad(token, role) {
 }
 
 /* ---------- small pieces ---------- */
-function Stat({ label, value, color }) {
+function Stat({ label, value, color, icon = "sports", note }) {
   return (
     <div className="dash-stat">
-      <div><span>{label}</span><strong>{value}</strong></div>
-      <i className={"dash-dot " + color} aria-hidden="true" />
+      <header><span>{label}</span><i className={"dash-tile " + color} aria-hidden="true"><ReceptionistIcon name={icon} size={21} /></i></header>
+      <strong>{value}</strong>
+      {note && <p className={"dash-stat-note " + color}><span aria-hidden="true" />{note}</p>}
     </div>
   );
 }
-const Stats = ({ items }) => <div className="dash-stats">{items.map((s) => <Stat key={s.label} {...s} />)}</div>;
+const Stats = ({ items }) => <div className={"dash-stats cols-" + items.length}>{items.map((s) => <Stat key={s.label} {...s} />)}</div>;
 
 function Card({ title, note, className = "", children }) {
   return (
@@ -141,17 +143,20 @@ function Admin({ d, token, errors = {} }) {
   const sum = rows.reduce((a, r) => a + r[1], 0) || 1;
   return <div className="admin-dashboard">
     <Stats items={[
-      { label: "Tổng thành viên", value: total(d.members), color: "blue" },
-      { label: "Bộ môn", value: total(d.sports), color: "green" },
-      { label: "Yêu cầu tư vấn chờ", value: count(d.requests, (r) => r.status === "PENDING"), color: "orange" },
-      { label: "Tổng HLV", value: total(d.coaches), color: "blue" },
+      { label: "Tổng thành viên", value: total(d.members), color: "blue", icon: "members", note: "Tài khoản hội viên" },
+      { label: "Bộ môn", value: total(d.sports), color: "green", icon: "sports", note: "Danh mục hiện có" },
+      { label: "Yêu cầu tư vấn chờ", value: count(d.requests, (r) => r.status === "PENDING"), color: "orange", icon: "consult", note: "Đang chờ tiếp nhận" },
+      { label: "Tổng HLV", value: total(d.coaches), color: "blue", icon: "pt", note: "Huấn luyện viên" },
     ]} />
     <div className="dash-grid wide">
       <AdminRevenueCard token={token} />
       <Card title="Yêu cầu tư vấn">
         <ul className="dash-rows">
           {rows.map(([n, v, c]) => (
-            <li key={n}><span>{n}</span><b className={"txt-" + c}>{Math.round((v / sum) * 100)}% ({v})</b></li>
+            <li key={n} className="dash-progress-row">
+              <span>{n}</span><b className={"txt-" + c}>{Math.round((v / sum) * 100)}% ({v})</b>
+              <i className="dash-meter" aria-hidden="true"><u className={c} style={{ width: Math.round((v / sum) * 100) + "%" }} /></i>
+            </li>
           ))}
         </ul>
       </Card>
@@ -159,7 +164,7 @@ function Admin({ d, token, errors = {} }) {
     <Card title="Bộ môn">
       {errors.sports ? <p className="dash-error" role="alert">Không tải được danh sách bộ môn: {errors.sports}</p> : sports.length === 0 ? <Empty>Chưa có bộ môn nào.</Empty> : (
         <ul className="dash-rows">
-          {visibleSports.map((s) => <li key={s.id}><span>{s.name}</span><em>{s.status}</em></li>)}
+          {visibleSports.map((s) => <li key={s.id}><span>{s.name}</span><em className={"dash-status st-" + String(s.status).toLowerCase()}>{s.status}</em></li>)}
         </ul>
       )}
       {!errors.sports && sports.length > 6 && <button
@@ -175,12 +180,17 @@ function Admin({ d, token, errors = {} }) {
 const RECEPTIONIST_ICON = {
   members: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M22 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75",
   plans: "M3 7h18 M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M7 12h4 M7 16h7",
-  sports: "M12 2 4 6v6c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V6l-8-4z M8 12l2.5 2.5L16 9",
+  sports: "M7 3h12a1 1 0 0 1 1 1v13H7a2 2 0 0 0-2 2V5a2 2 0 0 1 2-2z M5 19a2 2 0 0 0 2 2h13v-4 M9 8h7 M9 12h7",
   pending: "M12 8v4l3 2 M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20",
   search: "M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16 M21 21l-4.35-4.35",
   consult: "M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z",
   sales: "M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8 M12 17.5v-11",
   arrow: "M5 12h14 M13 6l6 6-6 6",
+  cls: "M5 3h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M2 20h20 M7 20l2-4 M17 20l-2-4",
+  cal: "M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
+  pt: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M19 8v6 M22 11h-6",
+  ok: "M22 11.08V12a10 10 0 1 1-5.93-9.14 M22 4 12 14.01l-3-3",
+  enroll: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20 M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z",
 };
 
 function ReceptionistIcon({ name, size = 18 }) {
@@ -284,7 +294,7 @@ function BookingList({ items, who }) {
         <li key={b.id}>
           <div><small>{fmt(b.startTime)}</small><b>{b.sportName || b.sport?.name || "Buổi PT"}</b></div>
           <span>{who(b)}</span>
-          <em>{b.status}</em>
+          <em className={"dash-status st-" + String(b.status).toLowerCase()}>{b.status}</em>
         </li>
       ))}
     </ul>
@@ -300,11 +310,11 @@ function Coach({ d, errors = {} }) {
   const upcomingPt = up;
   return (<>
     <Stats items={[
-      { label: "Lớp được phân công", value: total(d.classes), color: "blue" },
-      { label: "Lượt đăng ký lớp đã xác nhận", value: d.classes == null ? "—" : confirmedEnrollmentCount(classes), color: "green" },
-      { label: "Buổi dạy sắp tới", value: d.teachingSessions == null ? "—" : teachingSessions.length, color: "orange" },
-      { label: "Buổi PT sắp tới", value: d.bookings == null ? "—" : upcomingPt.length, color: "blue" },
-      { label: "Đánh giá cần làm", value: d.assessments == null ? "—" : pending.length, color: "orange" },
+      { label: "Lớp được phân công", value: total(d.classes), color: "blue", icon: "cls", note: "Lớp đang phụ trách" },
+      { label: "Lượt đăng ký lớp đã xác nhận", value: d.classes == null ? "—" : confirmedEnrollmentCount(classes), color: "green", icon: "enroll", note: "Học viên đã xác nhận" },
+      { label: "Buổi dạy sắp tới", value: d.teachingSessions == null ? "—" : teachingSessions.length, color: "orange", icon: "cal", note: "Lịch dạy lớp học" },
+      { label: "Buổi PT sắp tới", value: d.bookings == null ? "—" : upcomingPt.length, color: "blue", icon: "pt", note: "Huấn luyện cá nhân" },
+      { label: "Đánh giá cần làm", value: d.assessments == null ? "—" : pending.length, color: "orange", icon: "ok", note: "Đánh giá kỹ năng đang chờ" },
     ]} />
     <div className="dash-grid wide">
       <Card title="Lớp được phân công" note={errors.classes ? "" : `${classes.length} lớp`}>
@@ -355,13 +365,13 @@ function TeachingSessionList({ items }) {
   return <ul className="dash-sessions">{items.slice(0, 5).map((session) => <li key={session.classSessionId}>
     <div><small>{fmt(session.startTime)}</small><b>{session.courseClassName || "Lớp học"}</b></div>
     <span>{[session.courseName, session.sportName].filter(Boolean).join(" · ")}</span>
-    <em>{session.sessionStatus || "SCHEDULED"}</em>
+    <em className={"dash-status st-" + String(session.sessionStatus || "SCHEDULED").toLowerCase()}>{session.sessionStatus || "SCHEDULED"}</em>
   </li>)}</ul>;
 }
 
 const ICON = {
   pt: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M19 8v6 M22 11h-6",
-  cls: "M22 12h-4l-3 9L9 3l-3 9H2",
+  cls: "M5 3h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M2 20h20 M7 20l2-4 M17 20l-2-4",
   ok: "M22 11.08V12a10 10 0 1 1-5.93-9.14 M22 4 12 14.01l-3-3",
   bill: "M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8 M12 17.5v-11",
   cal: "M8 2v4 M16 2v4 M3 10h18 M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
@@ -547,6 +557,30 @@ export default function Dashboard({ token, role, onLogout, onNavigate }) {
             <div><b>{data.me?.name || (errors.me ? "Không tải được tài khoản" : "Quầy tiếp nhận")}</b><small>Nhân viên lễ tân</small></div></div>
         </header>
         <Receptionist d={data} errors={errors} onNavigate={onNavigate} loading={loading} />
+      </main>
+    </div>;
+  }
+
+  if (role === "ADMIN" || role === "COACH") {
+    const [roleLabel, roleName, intro] = role === "ADMIN"
+      ? ["QUẢN TRỊ", "Quản trị viên", "Theo dõi thành viên, doanh thu, bộ môn và yêu cầu tư vấn toàn trung tâm."]
+      : ["HUẤN LUYỆN VIÊN", "Huấn luyện viên", "Lịch dạy, buổi PT và đánh giá kỹ năng của bạn."];
+    const dateLabel = new Date().toLocaleDateString("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Asia/Ho_Chi_Minh" });
+    return <div className="layout">
+      <Sidebar role={role} activePage="dashboard" onLogout={onLogout} onNavigate={onNavigate} />
+      <main className="main rc-main dash-main">
+        <header className="rc-topbar">
+          <nav className="rc-crumb" aria-label="Điều hướng"><span>SPORTCENTER</span><i>›</i><span>{roleLabel}</span><i>›</i><b>TỔNG QUAN</b></nav>
+          <div className="rc-user"><span className="rc-avatar">{String(data.me?.name || "").trim().split(/\s+/).slice(-2).map((word) => word[0]).join("").toUpperCase() || "—"}</span>
+            <div><b>{data.me?.name || (errors.me ? "Không tải được tài khoản" : roleName)}</b><small>{roleName}</small></div></div>
+        </header>
+        <div className="rc-content">
+          <header className="rc-head">
+            <div><p className="rc-eyebrow">SPORTCENTER / {roleLabel}</p><h1>{title}</h1><p>{sub || intro}</p></div>
+            <span className="rc-date"><ReceptionistIcon name="pending" /><b>{dateLabel}</b><i aria-hidden="true" /><small>Hôm nay</small></span>
+          </header>
+          {loading ? <div className="queue-state">Đang tải dữ liệu…</div> : <View d={data} errors={errors} onNavigate={onNavigate} token={token} />}
+        </div>
       </main>
     </div>;
   }
