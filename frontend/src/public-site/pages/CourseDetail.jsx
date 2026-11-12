@@ -6,6 +6,8 @@ import CourseConsultationModal from "../../components/CourseConsultationModal.js
 import { formatClassScheduleSummary, toggleExpandedClass } from "../../memberCoursePresentation.js";
 import { activeOfferingRegistration, courseRegistrationStatusLabel } from "../../memberCourseRegistration.js";
 import { ageOnVietnamBusinessDate, courseAgePolicyLabel, evaluateCourseAgeEligibility } from "../../courseAgeEligibility.js";
+import { memberOfferingLists, offeringVisibility } from "../../memberCourseOfferingVisibility.js";
+import { CONSULTATION_EMAIL_ERROR, normalizeConsultationEmail } from "../../consultationEmail.js";
 import "../../pages/MemberCourseDetail.css";
 import "./CourseDetail.css";
 import {
@@ -23,30 +25,7 @@ import {
 const INSUFFICIENT_LEVEL_MESSAGE = "Verified sport level is insufficient. Request a consultation and COACH assessment before registering.";
 const BUSINESS_ZONE = "Asia/Ho_Chi_Minh";
 
-function businessDate() {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: BUSINESS_ZONE, year: "numeric", month: "2-digit", day: "2-digit",
-  }).formatToParts(new Date());
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
-}
-
-function registrationOpeningDate(startDate) {
-  if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return "";
-  const [year, month, day] = startDate.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day - 30)).toISOString().slice(0, 10);
-}
-
-function isOfferingOpenNow(offering) {
-  if (!offering) return false;
-  if (String(offering.status).toUpperCase() !== "OPEN") return false;
-  const opening = registrationOpeningDate(offering.startDate);
-  const deadline = offering.registrationDeadline;
-  if (!opening || !deadline) return false;
-  // Backend LocalDateTime values use the project's Asia/Ho_Chi_Minh business zone.
-  const parsedDeadline = new Date(`${deadline}+07:00`);
-  return businessDate() >= opening && !Number.isNaN(parsedDeadline.getTime()) && Date.now() < parsedDeadline.getTime();
-}
+function isOfferingOpenNow(offering) { return offeringVisibility(offering) === "REGISTRABLE"; }
 
 function formatDate(value) {
   if (!value) return "—";
@@ -111,6 +90,8 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
   const hasVerifiedLevel = Boolean(level?.verifiedByCoachId != null && level?.verifiedAt);
   const currentLevel = hasVerifiedLevel ? level.level : "BEGINNER";
   const selectedOffering = offerings.find((item) => String(item.id) === selectedOfferingId) || null;
+  const offeringLists = useMemo(() => memberOfferingLists(offerings), [offerings]);
+  const visibleOfferings = offeringLists.current;
   const selectedClass = classes.find((item) => String(item.id) === selectedClassId) || null;
   const existingOfferingRegistration = memberRoute
     ? activeOfferingRegistration(registrations, selectedOfferingId)
@@ -145,7 +126,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
       setOfferingsLoading(true);
       setLevelsError(""); setProfileError(""); setProfile(null); setProfileLoaded(false); setSessionExpired(false);
       return Promise.allSettled([
-        getCourseOfferingsByCourseApi(auth.accessToken, course.id),
+        getCourseOfferingsByCourseApi(auth.accessToken, course.id, true),
         getMyMemberSportLevelsApi(auth.accessToken),
         getCurrentUserApi(auth.accessToken),
         getMyRegistrationsApi(auth.accessToken),
@@ -154,10 +135,14 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
       if (!results) return;
       if (!active) return;
       const [offeringsResult, levelsResult, profileResult, registrationsResult] = results;
+      const registrationRows = registrationsResult.status === "fulfilled" && Array.isArray(registrationsResult.value)
+        ? registrationsResult.value : [];
+      setRegistrations(registrationRows);
       if (offeringsResult.status === "fulfilled" && Array.isArray(offeringsResult.value)) {
         const nextOfferings = offeringsResult.value;
         setOfferings(nextOfferings);
-        const defaultOffering = nextOfferings.find(isOfferingOpenNow) || nextOfferings[0];
+        const visible = memberOfferingLists(nextOfferings).current;
+        const defaultOffering = visible.find(isOfferingOpenNow) || visible[0];
         setSelectedOfferingId(defaultOffering ? String(defaultOffering.id) : "");
       } else {
         setOfferings([]); setSelectedOfferingId("");
@@ -169,8 +154,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
       if (profileResult.status === "fulfilled") setProfile(profileResult.value);
       else { setProfile(null); setProfileError(profileResult.reason?.message || "Không tải được thông tin hồ sơ."); if (profileResult.reason?.status === 401) setSessionExpired(true); }
       setProfileLoaded(true);
-      if (registrationsResult.status === "fulfilled" && Array.isArray(registrationsResult.value)) setRegistrations(registrationsResult.value);
-      else { setRegistrations([]); if (registrationsResult.reason?.status === 401) setSessionExpired(true); }
+      if (registrationsResult.status === "rejected" && registrationsResult.reason?.status === 401) setSessionExpired(true);
     }).finally(() => { if (active) setOfferingsLoading(false); });
     return () => { active = false; };
   }, [auth?.accessToken, auth?.userId, course, isMember]);
@@ -256,6 +240,11 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
 
   async function submitConsultation(event) {
     event.preventDefault();
+    const email = normalizeConsultationEmail(consultation.email);
+    if (!email) {
+      setConsultationError(CONSULTATION_EMAIL_ERROR);
+      return;
+    }
     if (!isMember || !course || consultationSubmitting || (memberRoute && consultationSubmitLock.current)) return;
     if (memberRoute) consultationSubmitLock.current = true;
     setConsultationSubmitting(true); setConsultationError("");
@@ -266,7 +255,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
       const result = await createMemberConsultationRequestApi(auth.accessToken, {
         name: consultation.name.trim(),
         phone: consultation.phone.trim(),
-        email: consultation.email.trim() || null,
+        email,
         sportId: course.sportId,
         age: consultation.age ? Number(consultation.age) : null,
         experience: consultation.experience.trim() || null,
@@ -328,13 +317,17 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
             {sessionExpired && <p className="banner error" role="alert">Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.</p>}
             {classesError && <p className="banner error" role="alert">{classesError}</p>}
             {offeringsLoading ? <p className="queue-state" role="status">Đang tải các đợt học…</p>
-              : offerings.length === 0 && !classesError ? <p className="queue-state">Khóa học hiện chưa có đợt nào được công bố.</p> : <>
+              : visibleOfferings.length === 0 && !classesError ? <p className="queue-state">Hiện chưa có đợt học đủ điều kiện đăng ký. Vui lòng quay lại sau khi đợt mở đăng ký và có lịch lớp hoàn chỉnh.</p> : <>
+              <div className="member-offering-toolbar">
+                <p className="member-muted">Chỉ hiển thị đợt đang nhận đăng ký và có ít nhất một lớp đủ lịch học.</p>
+              </div>
               <div className="member-offering-list" role="tablist" aria-label="Các đợt học">
-                {offerings.map((item) => <button type="button" role="tab" aria-selected={String(item.id) === selectedOfferingId}
+                {visibleOfferings.map((item) => <button type="button" role="tab" aria-selected={String(item.id) === selectedOfferingId}
                   className={String(item.id) === selectedOfferingId ? "selected" : ""} key={item.id}
                   onClick={() => { setSelectedOfferingId(String(item.id)); setRegistrationError(""); setRegistration(null); setExpandedScheduleClassId(null); setConfirmingRegistration(false); }}>
                   <strong>{item.name || `Đợt #${item.id}`}</strong><span>{item.startDate || "—"} – {item.endDate || "—"}</span>
                   <span>{formatPrice(item.price)} · {item.status || "Chưa rõ trạng thái"}</span>
+                  <small className="member-offering-visibility REGISTRABLE">Đang nhận đăng ký</small>
                 </button>)}
               </div>
               {selectedOffering && <div className="member-offering-facts">
@@ -371,7 +364,10 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
                   : !classesError && <div className="member-class-list">
                     {classes.map((item) => {
                       const schedule = classSchedules[item.id] || [];
-                      const classAvailable = String(item.status).toUpperCase() === "ACTIVE" && isOfferingOpenNow(selectedOffering);
+                      const readyClassIds = Array.isArray(selectedOffering?.registrationReadyClassIds)
+                        ? selectedOffering.registrationReadyClassIds.map(Number) : [];
+                      const classAvailable = String(item.status).toUpperCase() === "ACTIVE"
+                        && isOfferingOpenNow(selectedOffering) && readyClassIds.includes(Number(item.id));
                       const expanded = expandedScheduleClassId === item.id;
                       const scheduleId = `member-class-schedule-${item.id}`;
                       return <div className={`member-class-option${selectedClassId === String(item.id) ? " selected" : ""}`} key={item.id}>
@@ -459,7 +455,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
                 <p>{profileError ? "Không tải được hồ sơ; vui lòng nhập thông tin liên hệ." : "Thông tin liên hệ được lấy từ hồ sơ nếu có; kiểm tra trước khi gửi."}</p></div>
               <label>Họ và tên<input required maxLength={100} value={consultation.name} onChange={(event) => setConsultation({ ...consultation, name: event.target.value })} /></label>
               <label>Số điện thoại<input required maxLength={20} value={consultation.phone} onChange={(event) => setConsultation({ ...consultation, phone: event.target.value })} /></label>
-              <label>Email<input type="email" maxLength={150} value={consultation.email} onChange={(event) => setConsultation({ ...consultation, email: event.target.value })} /></label>
+              <label>Email *<input type="email" required maxLength={150} value={consultation.email} onChange={(event) => setConsultation({ ...consultation, email: event.target.value })} onInvalid={(event) => { event.preventDefault(); setConsultationError(CONSULTATION_EMAIL_ERROR); }} /></label>
               <label>Tuổi (không bắt buộc)<input type="number" min="1" max="120" value={consultation.age} onChange={(event) => setConsultation({ ...consultation, age: event.target.value })} /></label>
               <label>Kinh nghiệm thể thao<textarea value={consultation.experience} onChange={(event) => setConsultation({ ...consultation, experience: event.target.value })} /></label>
               <label>Ghi chú<input maxLength={1000} value={consultation.note} onChange={(event) => setConsultation({ ...consultation, note: event.target.value })} /></label>
@@ -479,6 +475,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
             onChange={setConsultation}
             profileError={profileError}
             error={consultationError}
+            onEmailInvalid={() => setConsultationError(CONSULTATION_EMAIL_ERROR)}
             submitting={consultationSubmitting}
             onClose={() => setConsultationOpen(false)}
             onSubmit={submitConsultation}

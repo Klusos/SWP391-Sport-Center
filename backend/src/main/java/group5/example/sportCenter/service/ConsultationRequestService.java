@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 
+import jakarta.validation.Validator;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -42,6 +43,7 @@ public class ConsultationRequestService {
     private final AssessmentAccess access;
     private final ApplicationEventPublisher events;
     private final AuditLogService auditLogs;
+    private final Validator validator;
 
     public ConsultationRequestService(
             ConsultationRequestRepository consultations,
@@ -50,7 +52,8 @@ public class ConsultationRequestService {
             MemberRegistrationService memberRegistration,
             AssessmentAccess access,
             ApplicationEventPublisher events,
-            AuditLogService auditLogs) {
+            AuditLogService auditLogs,
+            Validator validator) {
         this.consultations = consultations;
         this.users = users;
         this.sports = sports;
@@ -58,10 +61,16 @@ public class ConsultationRequestService {
         this.access = access;
         this.events = events;
         this.auditLogs = auditLogs;
+        this.validator = validator;
     }
 
     @Transactional
     public ConsultationResponse create(CreateConsultationRequest request, Jwt jwt) {
+        if (request == null || validator.validate(request).stream()
+                .anyMatch(violation -> "email".equals(violation.getPropertyPath().toString()))) {
+            throw error(HttpStatus.BAD_REQUEST, "Vui lòng nhập địa chỉ email hợp lệ để đăng ký tư vấn.");
+        }
+
         User member = null;
         if (jwt != null) {
             member = access.actor(jwt);
@@ -78,7 +87,7 @@ public class ConsultationRequestService {
         consultation.setMember(member);
         consultation.setName(request.name().trim());
         consultation.setPhone(request.phone().trim());
-        consultation.setEmail(trimToNull(request.email()));
+        consultation.setEmail(request.email());
         consultation.setSport(sport);
         consultation.setAge(request.age());
         consultation.setExperience(trimToNull(request.experience()));

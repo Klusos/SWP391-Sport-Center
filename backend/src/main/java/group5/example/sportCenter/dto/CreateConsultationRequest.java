@@ -11,9 +11,15 @@ import jakarta.validation.constraints.Size;
 public record CreateConsultationRequest(
         @NotBlank @Size(max = 100) String name,
         @NotBlank @Size(max = 20) String phone,
-        @Email @Size(max = 150) String email,
+        @NotBlank(message = "Vui lòng nhập địa chỉ email hợp lệ để đăng ký tư vấn.")
+        @Email(message = "Vui lòng nhập địa chỉ email hợp lệ để đăng ký tư vấn.")
+        @Size(max = 150) String email,
         @NotNull @Positive Integer sportId,
         @Min(1) @Max(120) Integer age,
         String experience,
         String note) {
+
+    public CreateConsultationRequest {
+        email = email == null ? null : email.trim();
+    }
 }

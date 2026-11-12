@@ -40,11 +40,8 @@ import {
   RENEWAL_NOTICE_DAYS,
 } from "../membershipRenewal";
 import { membershipPurchaseErrorMessage } from "../membershipPurchase";
-import {
-  isMembershipPayment,
-  upgradeBlockedMessage,
-  upgradeErrorMessage,
-} from "../membershipUpgrade";
+import { isMembershipPayment, upgradeBlockedMessage, upgradeErrorMessage } from "../membershipUpgrade";
+import { filterPaymentHistory, paginateItems, sortMembershipHistory } from "../membershipHistoryModel";
 import "./Portal.css";
 import "./MemberMembership.css";
 
@@ -79,6 +76,10 @@ export default function MemberMembership({
   const [paymentReconciliationRequired, setPaymentReconciliationRequired] =
     useState(false);
   const [togglingId, setTogglingId] = useState(null);
+  const [membershipHistoryPage, setMembershipHistoryPage] = useState(0);
+  const [paymentHistoryPage, setPaymentHistoryPage] = useState(0);
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState("");
+  const [paymentPurposeFilter, setPaymentPurposeFilter] = useState("");
   const [upgradeModal, setUpgradeModal] = useState(null);
   const upgradeDialogRef = useRef(null);
   const upgradeSubmitLock = useRef(false);
@@ -87,6 +88,8 @@ export default function MemberMembership({
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
+    setMembershipHistoryPage(0);
+    setPaymentHistoryPage(0);
     try {
       const [user, availablePlans] = await Promise.all([
         getCurrentUserApi(token),
@@ -483,908 +486,246 @@ export default function MemberMembership({
   const today = todayInVietnam();
   const sections = membershipSections(memberships, today);
   const currentMemberships = sections.current;
-  const currentMembership = currentMemberships[0];
+  const membershipHistory = sortMembershipHistory(sections.history);
+  const pagedMembershipHistory = paginateItems(membershipHistory, membershipHistoryPage, 5);
+  const filteredPaymentHistory = filterPaymentHistory(payments, { status: paymentStatusFilter, purpose: paymentPurposeFilter });
+  const pagedPaymentHistory = paginateItems(filteredPaymentHistory, paymentHistoryPage, 10);
   const membershipChain = activeMembershipChain(memberships, today);
   const cancellableId = cancellableMembershipId(membershipChain, today);
-  const pendingRequestFor = (membershipId) =>
-    cancellationRequests.find(
-      (request) =>
-        request.membershipId === membershipId && request.status === "PENDING"
-    );
-
-  // Calculate days remaining on active plan
-  const daysRemaining = useMemo(() => {
-    if (!currentMembership?.endDate) return 0;
-    const end = new Date(currentMembership.endDate);
-    const now = new Date(today);
-    const diff = Math.ceil((end - now) / (1000 * 60 * 60 * 24));
-    return Math.max(0, diff);
-  }, [currentMembership, today]);
-
-  // Current plan details for benefit display
-  const currentPlan = useMemo(() => {
-    if (!currentMembership || !plans) return null;
-    return plans.find((p) => p.name === currentMembership.planName) || null;
-  }, [currentMembership, plans]);
-
-  // Preferred upgrade option
-  const primaryUpgradeOption = upgrade?.options?.[0] || null;
-
-  const renderMembershipRows = (items) =>
-    items.map((membership) => {
-      const last =
-        membership.id === membershipChain[membershipChain.length - 1]?.id;
-      const running = currentMemberships.some((item) => item.id === membership.id);
-      const pendingRequest =
-        membership.id === cancellableId ? pendingRequestFor(membership.id) : null;
-      const requestable =
-        membership.id === cancellableId &&
-        !pendingRequest &&
-        canRequestCancellation(membership, today);
-      return (
-        <div className="mm-chain-row" key={membership.id}>
-          <div className="mm-chain-plan">
-            <b>{membership.planName || "Membership"}</b>
-            <small>
-              {formatDate(membership.startDate)} → {formatDate(membership.endDate)}
-            </small>
-          </div>
-          <span
-            className={
-              "mm-chain-status " + (running ? "running" : "upcoming")
-            }
-          >
-            {running
-              ? statusLabel[membership.status] || membership.status
-              : "Sắp có hiệu lực — chưa có hiệu lực hôm nay"}
-          </span>
-          <div className="mm-chain-renew">
-            {last ? (
-              <button
-                type="button"
-                className={membership.autoRenew ? "" : "secondary"}
-                disabled={togglingId !== null}
-                aria-pressed={Boolean(membership.autoRenew)}
-                onClick={() => void toggleAutoRenew(membership)}
-              >
-                {togglingId === membership.id
-                  ? "Đang lưu…"
-                  : membership.autoRenew
-                  ? "Tự gia hạn: Bật"
-                  : "Tự gia hạn: Tắt"}
-              </button>
-            ) : (
-              <small>Đã có gói nối tiếp</small>
-            )}
-          </div>
-          <div className="mm-chain-cancel">
-            {pendingRequest ? (
-              <>
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={togglingId !== null}
-                  onClick={() => void withdrawRequest(pendingRequest)}
-                >
-                  Rút yêu cầu hủy
-                </button>
-                <small>Đang chờ nhân viên duyệt</small>
-              </>
-            ) : requestable ? (
-              <>
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={togglingId !== null}
-                  onClick={() => void requestCancellation(membership)}
-                >
-                  Yêu cầu hủy gói
-                </button>
-                <small>
-                  Hạn gửi: hết ngày {formatDate(lastRequestDay(membership.startDate))}
-                </small>
-              </>
-            ) : membership.id === cancellableId ? (
-              <small>Đã quá hạn yêu cầu hủy</small>
-            ) : null}
-          </div>
-        </div>
-      );
-    });
+  const pendingRequestFor = (membershipId) => cancellationRequests.find(
+    (request) => request.membershipId === membershipId && request.status === "PENDING");
+  const renderMembershipBenefits = (plan) => {
+    if (!plan || (plan.courseDiscountPercent == null && plan.allowOneOnOneCoaching == null && plan.personalTrainingDiscountPercent == null && plan.allowPersonalTrainingPlan == null)) {
+      return <p className="membership-neutral-note">Chưa có dữ liệu quyền lợi cho gói Membership này. Trạng thái bán của gói không quyết định hiệu lực Membership hiện có.</p>;
+    }
+    return <ul className="membership-benefit-list">
+      {plan.courseDiscountPercent != null && <li><i className="bi bi-check-circle-fill" aria-hidden="true" /><span>Giảm {plan.courseDiscountPercent}% khi đăng ký khóa học</span></li>}
+      {plan.allowOneOnOneCoaching === true && plan.personalTrainingDiscountPercent != null && <li><i className="bi bi-check-circle-fill" aria-hidden="true" /><span>Giảm {plan.personalTrainingDiscountPercent}% khi đặt lịch PT 1-1</span></li>}
+      {plan.allowOneOnOneCoaching === true && plan.personalTrainingDiscountPercent == null && <li><i className="bi bi-info-circle-fill" aria-hidden="true" /><span>Chưa có dữ liệu mức giảm PT 1-1.</span></li>}
+      {plan.allowOneOnOneCoaching === false && <li><i className="bi bi-info-circle-fill" aria-hidden="true" /><span>Gói này không bao gồm quyền lợi PT 1-1</span></li>}
+      {plan.allowPersonalTrainingPlan === true && <li><i className="bi bi-check-circle-fill" aria-hidden="true" /><span>Được phép tạo Individual Training Plan</span></li>}
+      {plan.allowPersonalTrainingPlan === false && <li><i className="bi bi-info-circle-fill" aria-hidden="true" /><span>Gói này không bao gồm quyền tạo Individual Training Plan</span></li>}
+    </ul>;
+  };
+  const renderMembershipRows = (items) => items.map((membership) => {
+    const last = membership.id === membershipChain[membershipChain.length - 1]?.id;
+    const pendingRequest = membership.id === cancellableId ? pendingRequestFor(membership.id) : null;
+    const requestable = membership.id === cancellableId && !pendingRequest && canRequestCancellation(membership, today);
+    return <div className="mm-chain-row" key={membership.id}>
+      <div className="mm-chain-plan"><b>{membership.planName || "Membership"}</b>
+        <small>Mã Membership #{membership.id}</small>
+        <small>{formatDate(membership.startDate)} → {formatDate(membership.endDate)} (ngày kết thúc không bao gồm)</small>
+      </div>
+      <span className="mm-chain-status upcoming">Sắp có hiệu lực — chưa có hiệu lực hôm nay</span>
+      <div className="mm-chain-renew">
+        <small>Tự gia hạn: {membership.autoRenew ? "Bật" : "Tắt"}</small>
+        {last ? <button type="button" className={membership.autoRenew ? "" : "secondary"} disabled={togglingId !== null}
+          aria-pressed={Boolean(membership.autoRenew)} onClick={() => void toggleAutoRenew(membership)}>
+          {togglingId === membership.id ? "Đang lưu…" : membership.autoRenew ? "Tự gia hạn: Bật" : "Tự gia hạn: Tắt"}
+        </button> : <small>Đã có gói nối tiếp</small>}
+      </div>
+      <div className="mm-chain-cancel">
+        {pendingRequest ? <>
+          <button type="button" className="secondary" disabled={togglingId !== null} onClick={() => void withdrawRequest(pendingRequest)}>Rút yêu cầu hủy</button>
+          <small>Đang chờ nhân viên duyệt</small>
+        </> : requestable ? <>
+          <button type="button" className="secondary" disabled={togglingId !== null} onClick={() => void requestCancellation(membership)}>Yêu cầu hủy gói</button>
+          <small>Hạn gửi: hết ngày {formatDate(lastRequestDay(membership.startDate))}</small>
+        </> : membership.id === cancellableId ? <small>Đã quá hạn yêu cầu hủy</small> : null}
+      </div>
+    </div>;
+  });
 
   return (
     <div className="layout">
-      <Sidebar
-        role={role}
-        activePage="member-membership"
-        onLogout={onLogout}
-        onNavigate={onNavigate}
-      />
-      <main className="main member-membership-page member-vip-membership-container">
-        {/* TOP APP BAR HEADER */}
-        <header className="member-membership-header vip-membership-header">
+      <Sidebar role={role} activePage="member-membership" onLogout={onLogout} onNavigate={onNavigate} />
+      <main className="main member-membership-page">
+        <header className="member-membership-header">
           <div>
-            <div className="vip-header-breadcrumb">
-              <span>SPORTCENTER</span>
-              <span className="sep">›</span>
-              <span>HỘI VIÊN</span>
-              <span className="sep">›</span>
-              <span className="active-path">QUẢN LÝ GÓI</span>
-            </div>
-            <h1 className="vip-page-title">Gói thành viên &amp; Quyền lợi</h1>
-            <p className="vip-page-subtitle">
-              Theo dõi thời hạn thẻ hội viên, quyền lợi gói, gia hạn tự động và nâng cấp hạng thẻ.
-            </p>
+            <p className="membership-eyebrow">HỘI VIÊN</p>
+            <h1>Gói thành viên</h1>
+            <p className="subtitle">Quản lý quyền lợi, yêu cầu thanh toán và lịch sử Membership của bạn.</p>
           </div>
-
-          <div className="vip-header-actions">
-            <div className="vip-status-indicator">
-              <span className="status-pulse-dot"></span>
-              <span>
-                {currentMemberships.length > 0
-                  ? "Gói đang kích hoạt"
-                  : "Chưa kích hoạt gói"}
-              </span>
-            </div>
-
-            <button
-              type="button"
-              className="vip-btn-refresh"
-              onClick={() => void load()}
-              disabled={loading}
-              title="Cập nhật thông tin mới nhất"
-            >
-              <svg
-                className={`refresh-icon-svg ${loading ? "spinning" : ""}`}
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-              <span>{loading ? "Đang tải…" : "Làm mới thông tin"}</span>
-            </button>
-          </div>
+          <button type="button" className="membership-refresh" onClick={() => void load()} disabled={loading}>
+            {loading ? "Đang tải…" : "Làm mới"}
+          </button>
         </header>
-
         {error && <div className="banner error" role="alert">{error}</div>}
         {notice && <div className="banner success" role="status">{notice}</div>}
 
-        {/* SECTION 1: HERO - DIGITAL VIP PASS & PRIVILEGES (2-Column Grid 7:5) */}
-        <section className="vip-hero-section">
-          {/* Left: Digital VIP Virtual Card */}
-          <div className="vip-card-digital">
-            <div className="vip-card-overlay-ambient"></div>
-            
-            {/* Top Bar of Card */}
-            <div className="vip-card-topbar">
-              <div className="vip-card-badge-group">
-                <span className="gold-shimmer-badge">
-                  HỘI VIÊN VIP {currentMembership?.planName || "PLATINUM"}
-                </span>
-                <span className="vip-luxury-label">SPORTS CENTER LUXURY</span>
-              </div>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="nfc-icon">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 2a10 10 0 0110 10 10 10 0 01-10 10M12 6a6 6 0 016 6 6 6 0 01-6 6M12 10a2 2 0 012 2 2 2 0 01-2 2" />
-              </svg>
-            </div>
-
-            {/* Middle: Golden Chip, Member Name, ID & QR */}
-            <div className="vip-card-middle">
-              <div className="vip-card-info-col">
-                <div className="emv-chip-gold">
-                  <span className="chip-line"></span>
-                </div>
-                <span className="card-sub-label">Họ &amp; Tên Hội viên</span>
-                <h2 className="card-member-name">
-                  {currentUser?.fullName || "RILEY CHEN"}
-                </h2>
-                <p className="card-member-id">
-                  #MEM-2026-{String(currentUser?.id || "005").padStart(3, "0")}
-                </p>
-              </div>
-
-              {/* Check-in QR Badge */}
-              <div className="vip-qr-badge">
-                <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h6v6H3V3zm12 0h6v6h-6V3zm0 12h6v6h-6v-6zm-12 0h6v6H3v-6zm3-3v3m9 0v3m0-6h3m-3 3h3M9 6H6v3h3V6zm12 0h-3v3h3V6zM9 18H6v3h3v-3z" />
-                </svg>
-                <span className="qr-caption">CHECK-IN NHANH</span>
-              </div>
-            </div>
-
-            {/* Bottom Meta Information */}
-            <div className="vip-card-bottom">
-              <div className="dates-range-group">
-                <div>
-                  <span className="date-label">Ngày bắt đầu</span>
-                  <strong className="date-val">
-                    {formatDate(currentMembership?.startDate) || "01/10/2026"}
-                  </strong>
-                </div>
-                <span className="date-sep">───</span>
-                <div>
-                  <span className="date-label">Ngày hết hạn</span>
-                  <strong className="date-val">
-                    {formatDate(currentMembership?.endDate) || "31/12/2026"}
-                  </strong>
-                </div>
-              </div>
-
-              <div className="pills-status-group">
-                <span className="pill-active-days">
-                  Còn {daysRemaining > 0 ? daysRemaining : 50} ngày hiệu lực
-                </span>
-
-                {currentMembership ? (
-                  <button
-                    type="button"
-                    className={`pill-autorenew-btn ${currentMembership.autoRenew ? "active" : ""}`}
-                    disabled={togglingId !== null}
-                    onClick={() => void toggleAutoRenew(currentMembership)}
-                    title="Nhấp để thay đổi trạng thái tự gia hạn"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                    <span>
-                      {togglingId === currentMembership.id
-                        ? "Đang lưu…"
-                        : currentMembership.autoRenew
-                        ? "Tự gia hạn: BẬT"
-                        : "Tự gia hạn: TẮT"}
-                    </span>
-                  </button>
-                ) : (
-                  <span className="pill-autorenew-btn">
-                    Tự gia hạn: BẬT
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Right: Current Privileges Card */}
-          <div className="vip-privileges-card">
-            <div>
-              <div className="privileges-card-titlebar">
-                <div className="privilege-icon-crown">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 2l3 7h6l-5 4 2 7-6-4-6 4 2-7-5-4h6z" />
-                  </svg>
-                </div>
-                <h3 className="privilege-title">Quyền lợi thành viên hiện tại</h3>
-              </div>
-
-              <ul className="privilege-checklist">
-                <li className="privilege-item">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" className="privilege-check-icon">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span>Miễn phí 100% ra vào tất cả cụm sân tập &amp; phòng Gym</span>
-                </li>
-                <li className="privilege-item">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" className="privilege-check-icon">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span>
-                    Giảm {currentPlan?.courseDiscountPercent ?? 20}% khi đăng ký các khóa học đào tạo
-                  </span>
-                </li>
-                <li className="privilege-item">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" className="privilege-check-icon">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span>
-                    Giảm {currentPlan?.personalTrainingDiscountPercent ?? 15}% khi đặt lịch Huấn luyện viên cá nhân (PT 1-1)
-                  </span>
-                </li>
-                <li className="privilege-item">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" className="privilege-check-icon">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span>Miễn phí tủ đồ thông minh Smart Locker cá nhân</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="privilege-actions-footer">
-              {primaryUpgradeOption ? (
-                <button
-                  type="button"
-                  className="btn-upgrade-gold"
-                  disabled={busyPlanId !== null || pendingMembershipPayments.length > 0}
-                  onClick={() => openUpgradeModal(primaryUpgradeOption)}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 2l3 7h6l-5 4 2 7-6-4-6 4 2-7-5-4h6z" />
-                  </svg>
-                  <span>Nâng cấp lên gói {primaryUpgradeOption.planName || "Kim Cương (Diamond)"} →</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="btn-upgrade-gold"
-                  onClick={() => {
-                    const upgradeSection = document.getElementById("availablePlansSection");
-                    upgradeSection?.scrollIntoView({ behavior: "smooth" });
-                  }}
-                >
-                  <span>Xem các gói thành viên đang mở đăng ký →</span>
-                </button>
-              )}
-
-              {cancellableId && currentMembership ? (
-                <button
-                  type="button"
-                  className="btn-link-cancel"
-                  onClick={() => requestCancellation(currentMembership)}
-                >
-                  Yêu cầu hủy gói / Hoàn tiền tại quầy
-                </button>
-              ) : (
-                <p className="text-secondary-sub">Chính sách bảo lưu &amp; hỗ trợ tại quầy lễ tân</p>
-              )}
-            </div>
-          </div>
-        </section>
-
-        {/* SECTION 2: TWO-PANEL INTERMEDIATE (Upcoming Package & Pending Payments) */}
-        <section className="vip-two-panels-grid">
-          {/* Panel 1: Upcoming Queued Membership */}
-          <div className="vip-panel-card">
-            <div>
-              <div className="panel-card-header">
-                <div className="panel-title-with-icon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  <h3>Chuỗi gói thành viên tương lai</h3>
-                </div>
-                <span className="badge-pill-queued">
-                  {sections.upcoming.length} gói chờ
-                </span>
-              </div>
-
-              {sections.upcoming.length === 0 ? (
-                <div className="panel-empty-callout">
-                  <p>Không có gói nào đang chờ đến ngày bắt đầu.</p>
-                  <small>Gói tự gia hạn hoặc đăng ký trước sẽ tự động xuất hiện tại đây và kích hoạt liền mạch.</small>
-                </div>
-              ) : (
-                <div className="queued-package-box">
-                  <div className="queued-top-row">
-                    <div>
-                      <h4>Gói {sections.upcoming[0].planName}</h4>
-                      <p className="queued-dates">
-                        Bắt đầu {formatDate(sections.upcoming[0].startDate)} →{" "}
-                        {formatDate(sections.upcoming[0].endDate)}
-                      </p>
+        <div className="membership-overview-grid">
+          <section className="dash-card membership-current-card" aria-labelledby="membership-current-title">
+            <div className="membership-section-heading"><div><p className="membership-eyebrow">TÌNH TRẠNG HỘI VIÊN</p><h2 id="membership-current-title">Gói đang có hiệu lực</h2></div></div>
+            {loading ? <p role="status">Đang tải thông tin Membership…</p> : currentMemberships.length === 0
+              ? <div className="membership-empty-current"><p>Bạn chưa có Membership đang hiệu lực.</p><span>Membership sắp có hiệu lực và lịch sử được hiển thị bên dưới.</span></div>
+              : <div className="membership-current-details">{currentMemberships.map((membership) => {
+                  const last = membership.id === membershipChain[membershipChain.length - 1]?.id;
+                  const pendingRequest = membership.id === cancellableId ? pendingRequestFor(membership.id) : null;
+                  const requestable = membership.id === cancellableId && !pendingRequest && canRequestCancellation(membership, today);
+                  const remainingDays = membership.endDate
+                    ? Math.max(0, Math.round((Date.parse(`${membership.endDate}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000))
+                    : null;
+                  return <article className="membership-current-entry" key={membership.id}>
+                    <div className="membership-current-entry-heading"><strong className="membership-current-name">{membership.planName || "—"}</strong><span className="membership-status-badge active">{statusLabel[membership.status] || membership.status}</span></div>
+                    <div className="membership-date-pair">
+                      <div><span className="membership-field-label">Ngày bắt đầu</span><strong>{formatDate(membership.startDate)}</strong></div>
+                      <div><span className="membership-field-label">Ngày hết hạn (không bao gồm)</span><strong>{formatDate(membership.endDate)}</strong></div>
                     </div>
-                    <span className="badge-ready-seamless">
-                      Đã chuẩn bị liền mạch
-                    </span>
-                  </div>
-                  <div className="queued-notice-row">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10" />
-                      <path d="M12 16v-4m0-4h.01" />
-                    </svg>
-                    <span>
-                      Hệ thống tự động kích hoạt vào 00:00 ngày{" "}
-                      {formatDate(sections.upcoming[0].startDate)}, không gián đoạn dịch vụ.
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="panel-footer-row">
-              <span className="policy-note">Chính sách duy trì: Ưu đãi giữ nguyên mức giá VIP cũ</span>
-              <a href="#availablePlansSection" className="link-action-details">Chi tiết gia hạn</a>
-            </div>
-          </div>
-
-          {/* Panel 2: Pending Payments Request */}
-          <div className="vip-panel-card">
-            <div>
-              <div className="panel-card-header">
-                <div className="panel-title-with-icon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2" />
-                  </svg>
-                  <h3>Yêu cầu thanh toán đang chờ</h3>
-                </div>
-                {pendingMembershipPayments.length > 0 ? (
-                  <span className="badge-pill-amber">
-                    {pendingMembershipPayments[0].method === "ONLINE"
-                      ? "Chờ xác nhận VNPay"
-                      : "Chờ tại quầy"}
-                  </span>
-                ) : (
-                  <span className="badge-pill-green">Đã hoàn tất</span>
-                )}
-              </div>
-
-              {pendingMembershipPayments.length === 0 ? (
-                <div className="panel-empty-callout">
-                  <p>Không có yêu cầu thanh toán gói nào đang chờ.</p>
-                  <small>Mọi giao dịch mua mới và gia hạn của bạn đã được đối soát thành công.</small>
-                </div>
-              ) : (
-                <div className="pending-payment-box">
-                  <div className="pending-top-row">
-                    <div>
-                      <span className="invoice-code">
-                        Mã hóa đơn: #{pendingMembershipPayments[0].id}
-                      </span>
-                      <h4 className="pending-plan-name">
-                        {pendingMembershipPayments[0].purpose === "UPGRADE"
-                          ? "Nâng cấp lên "
-                          : isAutoRenewalPayment(pendingMembershipPayments[0])
-                          ? "Gia hạn tự động "
-                          : "Gia hạn "}
-                        {(plans || []).find(
-                          (item) =>
-                            Number(item.id) ===
-                            Number(pendingMembershipPayments[0].referenceId)
-                        )?.name || `Gói #${pendingMembershipPayments[0].referenceId}`}
-                      </h4>
-                      <p className="pending-amount-display">
-                        {money(pendingMembershipPayments[0].amount)}
-                      </p>
-                    </div>
-                    <div className="pending-deadline-box">
-                      <span className="deadline-label">Hết hạn thanh toán:</span>
-                      <span className="deadline-val">23:59 hôm nay</span>
-                    </div>
-                  </div>
-
-                  <div className="pending-actions-row">
-                    {pendingMembershipPayments[0].method === "ONLINE" ? (
-                      <button
-                        type="button"
-                        className="btn-pay-vnpay"
-                        onClick={() => {
-                          if (validVnpayUrl(pendingMembershipPayments[0].paymentUrl)) {
-                            window.location.assign(pendingMembershipPayments[0].paymentUrl);
-                          } else {
-                            setError("Liên kết VNPay Sandbox không hợp lệ. Vui lòng làm mới trang.");
-                          }
-                        }}
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <rect x="2" y="5" width="20" height="14" rx="2" />
-                          <line x1="2" y1="10" x2="22" y2="10" />
-                        </svg>
-                        <span>Thanh toán ngay qua VNPay Sandbox</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="btn-pay-vnpay"
-                        disabled={cancelingId !== null || busyPlanId !== null}
-                        onClick={() => void switchToVnpay(pendingMembershipPayments[0])}
-                      >
-                        <span>Chuyển sang VNPay</span>
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      className="btn-cancel-pending"
-                      disabled={cancelingId !== null}
-                      onClick={() => void cancelPendingPayment(pendingMembershipPayments[0])}
-                    >
-                      {cancelingId === pendingMembershipPayments[0].id
-                        ? "Đang hủy…"
-                        : "Hủy yêu cầu"}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <p className="panel-footer-note">
-              Lưu ý: Môi trường thử nghiệm VNPay Sandbox sẽ cập nhật kết quả tự động về cổng hội viên.
-            </p>
-          </div>
-        </section>
-
-        {/* SECTION 3: EXPLORE OTHER MEMBERSHIP PLANS (Catalog Grid) */}
-        <section className="vip-catalog-section" id="availablePlansSection">
-          <div className="catalog-header-title">
-            <h2>Các gói hội viên đang mở đăng ký</h2>
-            <p>Lựa chọn gói tập phù hợp với nhu cầu và mục tiêu thể thao của bạn.</p>
-          </div>
-
-          {loading ? (
-            <div className="queue-state" role="status">Đang tải gói…</div>
-          ) : !plans?.length ? (
-            <p className="dash-empty">Hiện chưa có gói ACTIVE nào.</p>
-          ) : (
-            <div className="pf-plans vip-plans-grid">
-              {plans.map((plan, index) => {
-                const isCurrent = currentMemberships.some((m) => m.planName === plan.name);
-                const isHighlight = isCurrent || index === 1;
-                return (
-                  <article
-                    key={plan.id}
-                    className={`pf-plan vip-plan-card ${isHighlight ? "plan-highlight" : ""}`}
-                  >
-                    {isCurrent ? (
-                      <div className="badge-plan-top-ribbon">
-                        ĐANG SỬ DỤNG · PHỔ BIẾN NHẤT
+                    <div className="membership-current-meta"><span>Mã Membership #{membership.id}</span>{remainingDays !== null && <span>Còn {remainingDays} ngày hiệu lực</span>}</div>
+                    <div className="membership-current-actions">
+                      <div className="membership-auto-renew-control"><span>Tự gia hạn: <strong>{membership.autoRenew ? "Bật" : "Tắt"}</strong></span>
+                        {last && <button type="button" className={membership.autoRenew ? "" : "secondary"} disabled={togglingId !== null} aria-pressed={Boolean(membership.autoRenew)} onClick={() => void toggleAutoRenew(membership)}>{togglingId === membership.id ? "Đang lưu…" : membership.autoRenew ? "Tắt tự gia hạn" : "Bật tự gia hạn"}</button>}
+                        {!last && <small>Đã có Membership nối tiếp</small>}
                       </div>
-                    ) : index === 2 ? (
-                      <div className="badge-plan-top-ribbon gold">
-                        ĐẶC QUYỀN TỐI THƯỢNG
-                      </div>
-                    ) : null}
-
-                    <div>
-                      <div className="plan-title-row">
-                        <h3>{plan.name}</h3>
-                        <p className="plan-duration">Thời hạn: {plan.durationMonths} Tháng</p>
-                      </div>
-
-                      <div className="plan-price-block">
-                        <span className="price-big">{money(plan.price)}</span>
-                        <span className="price-period">/ {plan.durationMonths} tháng</span>
-                      </div>
-
-                      <ul className="plan-features-list">
-                        <li>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span>Full access toàn bộ sân tập &amp; phòng Gym</span>
-                        </li>
-                        <li>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span>Giảm {plan.courseDiscountPercent ?? 0}% khi đăng ký khóa học</span>
-                        </li>
-                        <li>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span>
-                            {plan.allowOneOnOneCoaching
-                              ? `Giảm ${plan.personalTrainingDiscountPercent ?? 0}% khi thuê Huấn luyện viên PT 1-1`
-                              : "Không gồm PT 1-1"}
-                          </span>
-                        </li>
-                        <li>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span>Tủ đồ thông minh Smart Locker tiện ích</span>
-                        </li>
-                      </ul>
+                      <div className="mm-chain-cancel">{pendingRequest ? <><button type="button" className="secondary" disabled={togglingId !== null} onClick={() => void withdrawRequest(pendingRequest)}>Rút yêu cầu hủy</button><small>Đang chờ nhân viên duyệt</small></> : requestable ? <><button type="button" className="secondary" disabled={togglingId !== null} onClick={() => void requestCancellation(membership)}>Yêu cầu hủy gói</button><small>Hạn gửi: hết ngày {formatDate(lastRequestDay(membership.startDate))}</small></> : membership.id === cancellableId ? <small>Đã quá hạn yêu cầu hủy</small> : null}</div>
                     </div>
-
-                    <div className="member-membership-payment-actions">
-                      <button
-                        type="button"
-                        className={`btn-purchase-plan ${isHighlight ? "btn-highlight" : ""}`}
-                        disabled={
-                          busyPlanId !== null ||
-                          pendingMembershipPayments.length > 0 ||
-                          paymentReconciliationRequired
-                        }
-                        onClick={() => openPurchaseModal(plan)}
-                      >
-                        {busyPlanId === plan.id
-                          ? "Đang tạo yêu cầu…"
-                          : currentMemberships.length
-                          ? "Mua / gia hạn"
-                          : "Mua gói"}
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        {/* SECTION 4: UPGRADE OPTIONS DETAILED (If member has alternative upgrade options) */}
-        {!loading && upgrade?.currentMembershipId && (
-          <section className="dash-card vip-upgrade-options-section">
-            <h2>Nâng cấp gói trực tiếp</h2>
-            <p className="subtitle">
-              Gói mới có hiệu lực ngay và giữ nguyên ngày hết hạn {upgrade.currentEndDate}. Bạn chỉ trả phần chênh lệch cho {upgrade.remainingDays} ngày còn lại (tính tháng 30 ngày, làm tròn lên 1.000 ₫). Không hạ cấp giữa kỳ và không hoàn tiền phần chênh lệch.
-            </p>
-            {upgrade.blockedReason ? (
-              <p className="dash-empty">{upgradeBlockedMessage(upgrade.blockedReason)}</p>
-            ) : upgrade.options.length === 0 ? (
-              <p className="dash-empty">Bạn đang dùng gói cao nhất có thể nâng cấp.</p>
-            ) : (
-              <div className="pf-plans">
-                {upgrade.options.map((option) => (
-                  <article key={option.planId} className="pf-plan">
-                    <h2>
-                      {upgrade.currentPlanName} → {option.planName}
-                    </h2>
-                    <strong>{money(option.amount)}</strong>
-                    <small>
-                      Giá gói {money(option.planPrice)} / {option.durationMonths} tháng · Giảm khóa học {option.courseDiscountPercent}% · Giảm PT {option.personalTrainingDiscountPercent}%
-                    </small>
-                    <div className="member-membership-payment-actions">
-                      <button
-                        type="button"
-                        disabled={
-                          busyPlanId !== null || pendingMembershipPayments.length > 0
-                        }
-                        onClick={() => openUpgradeModal(option)}
-                      >
-                        {busyPlanId === option.planId ? "Đang tạo yêu cầu…" : "Nâng cấp"}
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
+                  </article>;
+                })}</div>}
+            {hasOverlappingEffectiveMemberships(sections) && <p className="banner info" role="status">Có nhiều Membership cùng hiệu lực hôm nay. Hệ thống không tự thay đổi dữ liệu; vui lòng liên hệ lễ tân nếu cần kiểm tra.</p>}
+            {membershipChain.length > 0 && <p className="membership-policy-note">Bật tự gia hạn có thể tạo yêu cầu thanh toán đang chờ gần ngày hết hạn. Hệ thống không tự động trừ tiền hoặc kích hoạt gói gia hạn nếu chưa có thanh toán thành công. Yêu cầu hủy Membership sắp có hiệu lực cần gửi trước ít nhất {CANCELLATION_NOTICE_HOURS} giờ.</p>}
           </section>
-        )}
 
-        {/* SECTION 5: MEMBERSHIP CHAIN & HISTORY (Collapsible/Full details) */}
-        <section className="dash-card">
-          <h2>Lịch sử các gói thành viên</h2>
-          {loading ? (
-            <p role="status">Đang tải thông tin…</p>
-          ) : sections.history.length === 0 ? (
-            <p className="dash-empty">Chưa có gói thành viên trong lịch sử.</p>
-          ) : (
-            <div className="mm-chain">
-              {sections.history.map((membership) => (
-                <div className="mm-chain-row" key={membership.id}>
-                  <div className="mm-chain-plan">
-                    <b>{membership.planName || "Membership"}</b>
-                    <small>
-                      {formatDate(membership.startDate)} → {formatDate(membership.endDate)}
-                    </small>
-                  </div>
-                  <span className="mm-chain-status">
-                    {String(membership.status).toUpperCase() === "ACTIVE" &&
-                    membership.endDate &&
-                    String(membership.endDate) <= today
-                      ? `Hết hiệu lực (trạng thái ${membership.status})`
-                      : statusLabel[String(membership.status).toUpperCase()] ||
-                        membership.status ||
-                        "Không rõ trạng thái"}
-                  </span>
-                  <small>Gói trong lịch sử</small>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* SECTION 6: PAYMENT TRANSACTIONS AUDIT TABLE */}
-        <section className="dash-card vip-history-card">
-          <h2>Lịch sử giao dịch thanh toán</h2>
-          {loading ? (
-            <p role="status">Đang tải lịch sử thanh toán…</p>
-          ) : !payments?.length ? (
-            <p className="dash-empty">Bạn chưa có giao dịch nào.</p>
-          ) : (
-            <div className="member-payment-history">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Mã</th>
-                    <th>Thời gian</th>
-                    <th>Nội dung</th>
-                    <th>Hình thức</th>
-                    <th>Số tiền</th>
-                    <th>Trạng thái</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payments.map((payment) => (
-                    <tr key={payment.id}>
-                      <td>#{payment.id}</td>
-                      <td>{formatDateTime(payment.createdAt)}</td>
-                      <td>
-                        {paymentPurposeLabel[payment.purpose] || payment.purpose}
-                        {isAutoRenewalPayment(payment) ? " (tự gia hạn)" : ""}
-                      </td>
-                      <td>{paymentMethodLabel[payment.method] || payment.method}</td>
-                      <td>{money(payment.amount)}</td>
-                      <td>
-                        <span
-                          className={`member-payment-status ${String(
-                            payment.status
-                          ).toLowerCase()}`}
-                        >
-                          {paymentStatusLabel[payment.status] || payment.status}
-                        </span>
-                        {payment.status === "REFUNDED" && payment.refundedAt && (
-                          <small>{formatDateTime(payment.refundedAt)}</small>
-                        )}
-                        {payment.status === "REFUND_REQUIRED" && (
-                          <small>Liên hệ lễ tân để nhận tiền</small>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      </main>
-
-      {/* MODAL: UPGRADE CONFIRMATION DIALOG */}
-      {upgradeModal && (
-        <div
-          className="mm-upgrade-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget && busyPlanId === null)
-              closeUpgradeModal();
-          }}
-        >
-          <section
-            ref={upgradeDialogRef}
-            className="mm-upgrade-dialog"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="mm-upgrade-title"
-            aria-describedby="mm-upgrade-description"
-            aria-busy={busyPlanId !== null}
-            tabIndex={-1}
-          >
-            <header className="mm-upgrade-dialog-header">
-              <div>
-                <p className="mm-upgrade-eyebrow">SPORTCENTER / MEMBERSHIP</p>
-                <h2 id="mm-upgrade-title">Xác nhận nâng cấp</h2>
-              </div>
-              <button
-                type="button"
-                className="mm-upgrade-close"
-                aria-label="Đóng hộp thoại"
-                onClick={closeUpgradeModal}
-                disabled={busyPlanId !== null}
-              >
-                ×
-              </button>
-            </header>
-            <div className="mm-upgrade-summary" id="mm-upgrade-description">
-              <p>
-                <span>Gói hiện tại</span>
-                <strong>{upgradeModal.currentPlanName}</strong>
-              </p>
-              <p>
-                <span>Gói nâng cấp</span>
-                <strong>{upgradeModal.option.planName}</strong>
-              </p>
-              <p>
-                <span>Số ngày còn lại</span>
-                <strong>{upgradeModal.remainingDays}</strong>
-              </p>
-              <p>
-                <span>Ngày hết hạn hiện tại</span>
-                <strong>{formatDate(upgradeModal.currentEndDate)}</strong>
-              </p>
-              <div className="mm-upgrade-amount">
-                <span>Số tiền nâng cấp</span>
-                <strong>{money(upgradeModal.option.amount)}</strong>
-              </div>
-            </div>
-            <p className="mm-upgrade-explanation">
-              Gói mới có hiệu lực ngay sau khi thanh toán thành công và giữ nguyên ngày hết hạn Membership hiện tại. Báo giá và số tiền được lấy từ hệ thống.
-            </p>
-            {error && (
-              <p className="mm-upgrade-error" role="alert">
-                {error}
-              </p>
-            )}
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (upgradeSubmitLock.current || busyPlanId !== null || pendingMembershipPayments.length > 0 || !upgradeModal.method) return;
-                upgradeSubmitLock.current = true;
-                upgradeBusyRef.current = true;
-                void startUpgrade(upgradeModal.option, upgradeModal.method).then(
-                  (submitted) => {
-                    if (!submitted) {
-                      upgradeSubmitLock.current = false;
-                      upgradeBusyRef.current = false;
-                    }
-                  }
-                );
-              }}
-            >
-              <fieldset
-                className="mm-upgrade-methods"
-                disabled={busyPlanId !== null}
-              >
-                <legend>Chọn phương thức thanh toán</legend>
-                {[
-                  { value: "COUNTER", label: "Thanh toán tại quầy (COUNTER)" },
-                  { value: "ONLINE", label: "VNPay Sandbox (ONLINE)" },
-                ].map((method) => (
-                  <label
-                    className={
-                      "mm-upgrade-method" +
-                      (upgradeModal.method === method.value ? " selected" : "")
-                    }
-                    key={method.value}
-                  >
-                    <input
-                      type="radio"
-                      name="upgrade-payment-method"
-                      value={method.value}
-                      checked={upgradeModal.method === method.value}
-                      onChange={() =>
-                        setUpgradeModal((current) => ({
-                          ...current,
-                          method: method.value,
-                        }))
-                      }
-                    />
-                    <span>{method.label}</span>
-                  </label>
-                ))}
-              </fieldset>
-              <footer className="mm-upgrade-actions">
-                <button
-                  type="button"
-                  className="mm-upgrade-cancel"
-                  onClick={closeUpgradeModal}
-                  disabled={busyPlanId !== null}
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  className="mm-upgrade-confirm"
-                  disabled={
-                    busyPlanId !== null || pendingMembershipPayments.length > 0
-                  }
-                >
-                  {busyPlanId === upgradeModal.option.planId
-                    ? "Đang tạo yêu cầu…"
-                    : "Xác nhận nâng cấp"}
-                </button>
-              </footer>
-            </form>
+          <section className="dash-card membership-benefits-card" aria-labelledby="membership-benefits-title">
+            <div className="membership-section-heading"><div><p className="membership-eyebrow">QUYỀN LỢI</p><h2 id="membership-benefits-title">Quyền lợi Membership</h2></div><span className="membership-icon" aria-hidden="true"><i className="bi bi-award-fill" /></span></div>
+            {loading ? <p role="status">Đang tải quyền lợi…</p> : currentMemberships.length === 0
+              ? <p className="membership-neutral-note">Quyền lợi theo gói sẽ hiển thị khi bạn có Membership đang hiệu lực.</p>
+              : <div className="membership-benefits-groups">{currentMemberships.map((membership) => {
+                  const plan = (plans || []).find((item) => Number(item.id) === Number(membership.planId)) || null;
+                  return <div className="membership-benefit-group" key={membership.id}>{currentMemberships.length > 1 && <h3>{membership.planName || "Membership"} · #{membership.id}</h3>}{renderMembershipBenefits(plan)}</div>;
+                })}</div>}
           </section>
         </div>
-      )}
 
-      {/* MODAL: PAYMENT METHOD MODAL FOR PURCHASING PLANS */}
-      {paymentModalPlan && (
-        <PaymentMethodModal
-          amount={money(paymentModalPlan.price)}
-          context={`Gói ${paymentModalPlan.name} · ${
-            paymentModalPlan.durationMonths
-          } tháng · ${
-            currentMemberships.length ? "mua hoặc gia hạn" : "mua mới"
-          }`}
-          busy={busyPlanId === paymentModalPlan.id}
-          error={error}
-          canContinue={
-            !paymentReconciliationRequired &&
-            pendingMembershipPayments.length === 0
-          }
-          onCancel={closePaymentModal}
-          onSuccess={() => setPaymentModalPlan(null)}
-          onContinue={(method) => startPurchase(paymentModalPlan, method)}
-        />
-      )}
+        <section className="dash-card membership-queue-section" aria-labelledby="membership-queue-title">
+          <div className="membership-section-heading">
+            <div><p className="membership-eyebrow">ĐÃ ĐƯỢC GHI NHẬN</p><h2 id="membership-queue-title">Membership sắp có hiệu lực</h2></div>
+            {!loading && <span className="membership-count-badge">{sections.upcoming.length}</span>}
+          </div>
+          {loading ? <p role="status">Đang tải Membership…</p> : sections.upcoming.length === 0
+            ? <p className="dash-empty">Không có Membership nào đang chờ đến ngày bắt đầu.</p>
+            : <div className="mm-chain">{renderMembershipRows(sections.upcoming)}</div>}
+        </section>
+
+        {!loading && upgrade?.currentMembershipId && <section className="dash-card" aria-labelledby="membership-upgrade-title">
+          <div className="membership-section-heading"><div><p className="membership-eyebrow">LỰA CHỌN TỪ HỆ THỐNG</p><h2 id="membership-upgrade-title">Nâng cấp Membership</h2></div></div>
+          {upgrade.blockedReason
+            ? <p className="dash-empty">{upgradeBlockedMessage(upgrade.blockedReason)}</p>
+            : !upgrade.options?.length
+              ? <p className="dash-empty">Hiện không có lựa chọn nâng cấp nào được hệ thống cung cấp.</p>
+              : <div className="membership-card-grid">{upgrade.options.map((option) => <article className="membership-plan-card membership-upgrade-card" key={option.planId}>
+                  <div><span className="membership-card-kicker">NÂNG CẤP ĐƯỢC PHÉP</span><h3>{upgrade.currentPlanName} → {option.planName}</h3></div>
+                  <strong className="membership-price">{money(option.amount)}</strong>
+                  <p>Giá gói {money(option.planPrice)} · {option.durationMonths} tháng · Giảm khóa học {option.courseDiscountPercent}% · Giảm PT {option.personalTrainingDiscountPercent}%</p>
+                  <button type="button" disabled={busyPlanId !== null || pendingMembershipPayments.length > 0} onClick={() => openUpgradeModal(option)}>
+                    {busyPlanId === option.planId ? "Đang tạo yêu cầu…" : "Nâng cấp"}
+                  </button>
+                </article>)}</div>}
+        </section>}
+
+        <section className="dash-card membership-pending-section" aria-labelledby="membership-pending-title">
+          <div className="membership-section-heading"><div><p className="membership-eyebrow">TRẠNG THÁI TỪ MÁY CHỦ</p><h2 id="membership-pending-title">Thanh toán Membership đang chờ</h2></div>
+            {!loading && <span className={pendingMembershipPayments.length ? "membership-count-badge pending" : "membership-count-badge"}>{pendingMembershipPayments.length}</span>}
+          </div>
+          {loading ? <p role="status">Đang tải thanh toán…</p> : pendingMembershipPayments.length === 0
+            ? <p className="dash-empty">Không có yêu cầu thanh toán Membership đang chờ.</p>
+            : <div className="membership-pending-list">{pendingMembershipPayments.map((payment) => {
+                const plan = (plans || []).find((item) => Number(item.id) === Number(payment.referenceId));
+                const title = payment.purpose === "UPGRADE"
+                  ? "Nâng cấp lên " + (plan?.name || "gói #" + payment.referenceId)
+                  : isAutoRenewalPayment(payment)
+                    ? "Gia hạn " + (plan?.name || "gói #" + payment.referenceId)
+                    : plan?.name || "Gói #" + payment.referenceId;
+                return <article className="membership-pending-card" key={payment.id}>
+                  <div className="membership-pending-main"><div><span className="membership-field-label">{title}</span><strong>Thanh toán #{payment.id}</strong></div>
+                    <span className={"member-payment-status " + String(payment.status).toLowerCase()}>{paymentStatusLabel[payment.status] || payment.status}</span></div>
+                  <dl className="membership-payment-facts"><div><dt>Số tiền</dt><dd>{money(payment.amount)}</dd></div><div><dt>Phương thức</dt><dd>{paymentMethodLabel[payment.method] || payment.method}</dd></div><div><dt>Tạo lúc</dt><dd>{formatDateTime(payment.createdAt)}</dd></div></dl>
+                  <div className="membership-payment-actions">
+                    {payment.purpose === "MEMBERSHIP" && payment.method === "COUNTER" && <button type="button" className="button-secondary" disabled={cancelingId !== null || busyPlanId !== null} onClick={() => void switchToVnpay(payment)}>Chuyển sang VNPay</button>}
+                    {payment.method === "ONLINE" && <button type="button" disabled={cancelingId !== null} onClick={() => { if (validVnpayUrl(payment.paymentUrl)) window.location.assign(payment.paymentUrl); else setError("Liên kết VNPay không hợp lệ. Vui lòng làm mới trạng thái thanh toán."); }}>Tiếp tục thanh toán</button>}
+                    <button type="button" className="button-secondary" disabled={cancelingId !== null || busyPlanId !== null} onClick={() => void cancelPendingPayment(payment)}>{cancelingId === payment.id ? "Đang hủy…" : "Hủy yêu cầu"}</button>
+                  </div>
+                </article>;
+              })}</div>}
+          {pendingMembershipPayments.length > 0 && <p className="membership-policy-note">Không thể tạo thêm yêu cầu Membership khi vẫn còn yêu cầu đang chờ. Hãy kiểm tra trạng thái thanh toán trước khi thử lại.</p>}
+        </section>
+
+        <section className="dash-card" aria-labelledby="membership-plans-title">
+          <div className="membership-section-heading"><div><p className="membership-eyebrow">GÓI ĐANG MỞ BÁN</p><h2 id="membership-plans-title">Các gói thành viên</h2></div></div>
+          {loading ? <p role="status">Đang tải danh sách gói…</p> : !plans?.length
+            ? <p className="dash-empty">Hiện chưa có gói ACTIVE nào được mở bán.</p>
+            : <div className="membership-card-grid">{plans.map((plan) => <article className="membership-plan-card" key={plan.id}>
+                <div><span className="membership-card-kicker">{plan.durationMonths} tháng</span><h3>{plan.name}</h3></div>
+                <strong className="membership-price">{money(plan.price)}</strong>
+                {plan.description && <p>{plan.description}</p>}
+                <ul className="membership-plan-benefits">
+                  {plan.courseDiscountPercent != null && <li>Giảm khóa học {plan.courseDiscountPercent}%</li>}
+                  {plan.allowOneOnOneCoaching === true && plan.personalTrainingDiscountPercent != null && <li>Giảm PT 1-1 {plan.personalTrainingDiscountPercent}%</li>}
+                  {plan.allowOneOnOneCoaching === false && <li>Không bao gồm PT 1-1</li>}
+                  {plan.allowPersonalTrainingPlan === true && <li>Được phép tạo Individual Training Plan</li>}
+                  {plan.allowPersonalTrainingPlan === false && <li>Không bao gồm Individual Training Plan</li>}
+                </ul>
+                <button type="button" disabled={busyPlanId !== null || pendingMembershipPayments.length > 0 || paymentReconciliationRequired} onClick={() => openPurchaseModal(plan)}>
+                  {busyPlanId === plan.id ? "Đang tạo yêu cầu…" : currentMemberships.length ? "Mua / gia hạn" : "Mua gói"}
+                </button>
+              </article>)}</div>}
+          <p className="membership-policy-note">Membership chỉ được kích hoạt hoặc gia hạn sau khi máy chủ xác nhận thanh toán thành công.</p>
+        </section>
+
+        <section className="dash-card" aria-labelledby="membership-history-title">
+          <div className="membership-section-heading"><div><p className="membership-eyebrow">LỊCH SỬ</p><h2 id="membership-history-title">Lịch sử Membership</h2></div></div>
+          {loading ? <p role="status">Đang tải lịch sử…</p> : sections.history.length === 0
+            ? <p className="dash-empty">Chưa có Membership trong lịch sử.</p>
+            : <><div className="mm-chain">{pagedMembershipHistory.items.map((membership) => <div className="mm-chain-row history-row" key={membership.id}>
+                <div className="mm-chain-plan"><b>{membership.planName || "Membership"}</b><small>{formatDate(membership.startDate)} → {formatDate(membership.endDate)}</small></div>
+                <span className="mm-chain-status">{String(membership.status).toUpperCase() === "ACTIVE" && membership.endDate && String(membership.endDate) <= today ? "Hết hiệu lực (trạng thái " + membership.status + ")" : statusLabel[String(membership.status).toUpperCase()] || membership.status || "Không rõ trạng thái"}</span>
+                <span>Mã Membership #{membership.id}</span>
+              </div>)}</div><HistoryPagination label="Membership" page={pagedMembershipHistory.page} pageCount={pagedMembershipHistory.pageCount} onPageChange={setMembershipHistoryPage} /> </>}
+        </section>
+
+        <section className="dash-card" aria-labelledby="membership-payment-history-title">
+          <div className="membership-section-heading"><div><p className="membership-eyebrow">ĐỐI SOÁT GIAO DỊCH</p><h2 id="membership-payment-history-title">Lịch sử thanh toán</h2></div></div>
+          {loading ? <p role="status">Đang tải lịch sử thanh toán…</p> : !payments?.length
+            ? <p className="dash-empty">Bạn chưa có giao dịch thanh toán nào.</p>
+            : <>
+              <div className="membership-history-filters">
+                <label>Trạng thái thanh toán<select value={paymentStatusFilter} onChange={(event) => { setPaymentStatusFilter(event.target.value); setPaymentHistoryPage(0); }}><option value="">Tất cả</option>{[...new Set(payments.map((payment) => payment.status).filter(Boolean))].sort().map((status) => <option key={status} value={status}>{paymentStatusLabel[status] || status}</option>)}</select></label>
+                <label>Mục đích<select value={paymentPurposeFilter} onChange={(event) => { setPaymentPurposeFilter(event.target.value); setPaymentHistoryPage(0); }}><option value="">Tất cả</option>{[...new Set(payments.map((payment) => payment.purpose).filter(Boolean))].sort().map((purpose) => <option key={purpose} value={purpose}>{paymentPurposeLabel[purpose] || purpose}</option>)}</select></label>
+              </div>
+              {filteredPaymentHistory.length === 0 ? <p className="dash-empty">Không có giao dịch khớp bộ lọc.</p> : <>
+                <div className="member-payment-history"><table><thead><tr><th>Mã</th><th>Thời gian</th><th>Nội dung</th><th>Hình thức</th><th>Số tiền</th><th>Trạng thái</th></tr></thead>
+                  <tbody>{pagedPaymentHistory.items.map((payment) => <tr key={payment.id}><td>#{payment.id}</td><td>{formatDateTime(payment.createdAt)}</td><td>{paymentPurposeLabel[payment.purpose] || payment.purpose}{isAutoRenewalPayment(payment) ? " (tự gia hạn)" : ""}</td><td>{paymentMethodLabel[payment.method] || payment.method}</td><td>{money(payment.amount)}</td>
+                    <td><span className={"member-payment-status " + String(payment.status).toLowerCase()}>{paymentStatusLabel[payment.status] || payment.status}</span>{payment.status === "REFUNDED" && payment.refundedAt && <small>{formatDateTime(payment.refundedAt)}</small>}{payment.status === "REFUND_REQUIRED" && <small>Liên hệ lễ tân để nhận tiền</small>}</td></tr>)}</tbody>
+                </table></div><HistoryPagination label="thanh toán" page={pagedPaymentHistory.page} pageCount={pagedPaymentHistory.pageCount} onPageChange={setPaymentHistoryPage} />
+              </>}
+            </>}
+        </section>
+
+        {!loading && cancellationRequests.length > 0 && <section className="dash-card" aria-labelledby="membership-cancellation-title">
+          <div className="membership-section-heading"><div><p className="membership-eyebrow">YÊU CẦU</p><h2 id="membership-cancellation-title">Yêu cầu hủy Membership</h2></div></div>
+          <ul className="dash-rows">{cancellationRequests.map((request) => <li key={request.id}><span><b>{request.planName}</b> · {formatDate(request.startDate)} → {formatDate(request.endDate)}<br /><small>Gửi lúc {formatDateTime(request.requestedAt)}{request.reason ? " · Lý do: " + request.reason : ""}{request.decidedAt && request.status !== "WITHDRAWN" ? " · Xử lý lúc " + formatDateTime(request.decidedAt) : ""}{request.decisionNote ? " · Ghi chú: " + request.decisionNote : ""}</small></span><em>{requestStatusLabel[request.status] || request.status}</em></li>)}</ul>
+        </section>}
+      </main>
+      {upgradeModal && <div className="mm-upgrade-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && busyPlanId === null) closeUpgradeModal(); }}>
+        <section ref={upgradeDialogRef} className="mm-upgrade-dialog" role="dialog" aria-modal="true" aria-labelledby="mm-upgrade-title" aria-describedby="mm-upgrade-description" aria-busy={busyPlanId !== null} tabIndex={-1}>
+          <header className="mm-upgrade-dialog-header"><div><p className="mm-upgrade-eyebrow">SPORTCENTER · MEMBERSHIP</p><h2 id="mm-upgrade-title">Xác nhận nâng cấp</h2></div><button type="button" className="mm-upgrade-close" aria-label="Đóng hộp thoại" onClick={closeUpgradeModal} disabled={busyPlanId !== null}>×</button></header>
+          <div className="mm-upgrade-summary" id="mm-upgrade-description"><p><span>Gói hiện tại</span><strong>{upgradeModal.currentPlanName}</strong></p><p><span>Gói nâng cấp</span><strong>{upgradeModal.option.planName}</strong></p><p><span>Số ngày còn lại</span><strong>{upgradeModal.remainingDays}</strong></p><p><span>Ngày hết hạn</span><strong>{formatDate(upgradeModal.currentEndDate)}</strong></p><div className="mm-upgrade-amount"><span>Số tiền nâng cấp</span><strong>{money(upgradeModal.option.amount)}</strong></div></div>
+          <p className="mm-upgrade-explanation">Giá và điều kiện nâng cấp được lấy từ lựa chọn do hệ thống cung cấp.</p>
+          {error && <p className="mm-upgrade-error" role="alert">{error}</p>}
+          <form onSubmit={(event) => { event.preventDefault(); if (upgradeSubmitLock.current || busyPlanId !== null || pendingMembershipPayments.length > 0 || !upgradeModal.method) return; upgradeSubmitLock.current = true; upgradeBusyRef.current = true; void startUpgrade(upgradeModal.option, upgradeModal.method).then((submitted) => { if (!submitted) { upgradeSubmitLock.current = false; upgradeBusyRef.current = false; } }); }}>
+            <fieldset className="mm-upgrade-methods" disabled={busyPlanId !== null}><legend>Chọn phương thức thanh toán</legend>{[{ value: "COUNTER", label: "Thanh toán tại quầy (COUNTER)" }, { value: "ONLINE", label: "VNPay Sandbox (ONLINE)" }].map((method) => <label className={"mm-upgrade-method" + (upgradeModal.method === method.value ? " selected" : "")} key={method.value}><input type="radio" name="upgrade-payment-method" value={method.value} checked={upgradeModal.method === method.value} onChange={() => setUpgradeModal((current) => ({ ...current, method: method.value }))} /><span>{method.label}</span></label>)}</fieldset>
+            <footer className="mm-upgrade-actions"><button type="button" className="mm-upgrade-cancel" onClick={closeUpgradeModal} disabled={busyPlanId !== null}>Đóng</button><button type="submit" className="mm-upgrade-confirm" disabled={busyPlanId !== null || pendingMembershipPayments.length > 0}>{busyPlanId === upgradeModal.option.planId ? "Đang tạo yêu cầu…" : "Xác nhận nâng cấp"}</button></footer>
+          </form>
+        </section>
+      </div>}
+      {paymentModalPlan && <PaymentMethodModal amount={money(paymentModalPlan.price)} context={"Gói " + paymentModalPlan.name + " · " + paymentModalPlan.durationMonths + " tháng · " + (currentMemberships.length ? "mua hoặc gia hạn" : "mua mới")} busy={busyPlanId === paymentModalPlan.id} error={error} canContinue={!paymentReconciliationRequired && pendingMembershipPayments.length === 0} onCancel={closePaymentModal} onSuccess={() => setPaymentModalPlan(null)} onContinue={(method) => startPurchase(paymentModalPlan, method)} />}
     </div>
   );
+}
+
+function HistoryPagination({ label, page, pageCount, onPageChange }) {
+  return <nav className="membership-history-pagination" aria-label={`Phân trang lịch sử ${label}`}>
+    <button type="button" className="button-secondary" aria-label={`Trang trước trong lịch sử ${label}`} disabled={page <= 0} onClick={() => onPageChange(page - 1)}>Trước</button>
+    <span aria-live="polite">Trang {page + 1} / {pageCount}</span>
+    <button type="button" className="button-secondary" aria-label={`Trang tiếp theo trong lịch sử ${label}`} disabled={page + 1 >= pageCount} onClick={() => onPageChange(page + 1)}>Tiếp</button>
+  </nav>;
 }

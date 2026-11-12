@@ -5,8 +5,9 @@ import { formatTargetAgeRange } from "../memberCoursePresentation.js";
 import { courseRegistrationStatus } from "../memberCourseRegistration.js";
 import "./Portal.css";
 import "./MemberCourses.css";
-import { cancelCourseRegistrationApi, getMyPaymentsApi, getMyRegistrationsApi, getPublicSportsApi, getPublicCoursesBySportApi } from "../api";
+import { cancelCourseRegistrationApi, getMyClassSessionsApi, getMyPaymentsApi, getMyRegistrationsApi, getPublicSportsApi, getPublicCoursesBySportApi } from "../api";
 import { coursePaymentInfo, paidCancellationEligibility, cancellationErrorMessage } from "../courseCancellation.js";
+import { memberRegistrationSections } from "../memberRegistrationSections.js";
 const list = (d) => Array.isArray(d) ? d : d?.content ?? [];
 function formatVietnamDateTime(value) {
   if (!value) return "deadline unavailable";
@@ -20,6 +21,8 @@ export default function MemberCourses({ token, role, onLogout, onNavigate }) {
   const [sports, setSports] = useState([]), [sportId, setSportId] = useState(null), [courses, setCourses] = useState([]);
   const [loadingSports, setLoadingSports] = useState(true), [loadingCourses, setLoadingCourses] = useState(false), [error, setError] = useState("");
   const [registrations, setRegistrations] = useState([]), [registrationsLoading, setRegistrationsLoading] = useState(true), [registrationsError, setRegistrationsError] = useState("");
+  const [classSessions, setClassSessions] = useState([]), [classSessionsLoading, setClassSessionsLoading] = useState(true), [classSessionsError, setClassSessionsError] = useState("");
+  const [registrationTab, setRegistrationTab] = useState("CURRENT"), [visibleHistoryCount, setVisibleHistoryCount] = useState(10);
   const [payments, setPayments] = useState([]), [paymentsLoading, setPaymentsLoading] = useState(true), [paymentsError, setPaymentsError] = useState("");
   const [cancellingId, setCancellingId] = useState(null), [paidCancelId, setPaidCancelId] = useState(null), [paidCancelSuccessId, setPaidCancelSuccessId] = useState(null), [cancelError, setCancelError] = useState("");
   async function cancelHold(id) {
@@ -41,6 +44,12 @@ export default function MemberCourses({ token, role, onLogout, onNavigate }) {
       .catch((e) => { if (active) { setRegistrations([]); setRegistrationsError(e.message || "Không tải được lịch sử đăng ký."); } })
       .finally(() => { if (active) setRegistrationsLoading(false); }); return () => { active = false; };
   }, [token]);
+  useEffect(() => { let active = true;
+    getMyClassSessionsApi(token).then((data) => { if (active) { setClassSessions(list(data)); setClassSessionsError(""); } })
+      .catch((e) => { if (active) { setClassSessions([]); setClassSessionsError(e.message || "Không tải được lịch các lớp đã đăng ký."); } })
+      .finally(() => { if (active) setClassSessionsLoading(false); });
+    return () => { active = false; };
+  }, [token]);
   useEffect(() => {
     let active = true;
     const refreshRegistrations = () => getMyRegistrationsApi(token)
@@ -50,6 +59,17 @@ export default function MemberCourses({ token, role, onLogout, onNavigate }) {
     window.addEventListener("focus", refreshRegistrations);
     return () => { active = false; window.clearInterval(interval); window.removeEventListener("focus", refreshRegistrations); };
   }, [token]);
+  async function retryRegistrationData() {
+    setRegistrationsLoading(true); setRegistrationsError(""); setClassSessionsLoading(true); setClassSessionsError("");
+    const [registrationResult, sessionsResult] = await Promise.allSettled([
+      getMyRegistrationsApi(token), getMyClassSessionsApi(token),
+    ]);
+    if (registrationResult.status === "fulfilled") setRegistrations(list(registrationResult.value));
+    else setRegistrationsError(registrationResult.reason?.message || "Không tải được lịch sử đăng ký.");
+    if (sessionsResult.status === "fulfilled") setClassSessions(list(sessionsResult.value));
+    else { setClassSessions([]); setClassSessionsError(sessionsResult.reason?.message || "Không tải được lịch các lớp đã đăng ký."); }
+    setRegistrationsLoading(false); setClassSessionsLoading(false);
+  }
   async function cancelConfirmedRegistration(item) {
     if (paidCancelId !== null || cancellingId !== null) return;
     const info = coursePaymentInfo(payments, item.id);
@@ -80,6 +100,10 @@ export default function MemberCourses({ token, role, onLogout, onNavigate }) {
     window.addEventListener("focus", refreshPaymentStatus);
     return () => { active = false; window.clearInterval(interval); window.removeEventListener("focus", refreshPaymentStatus); };
   }, [token]);
+  const registrationSections = memberRegistrationSections(registrations, classSessions);
+  const registrationRows = registrationTab === "CURRENT"
+    ? registrationSections.current
+    : registrationSections.history.slice(0, visibleHistoryCount);
   return <div className="layout"><Sidebar role={role} activePage="member-courses" onLogout={onLogout} onNavigate={onNavigate}/><main className="main member-courses-page">
     <div className="member-courses-shell">
       <header className="member-courses-hero">
@@ -132,13 +156,26 @@ export default function MemberCourses({ token, role, onLogout, onNavigate }) {
         <div className="member-course-section-head member-course-history-heading"><div><span className="member-courses-eyebrow">THEO DÕI</span><h2 id="member-course-history-title">Lớp học đã đăng ký</h2>
           <p>Trạng thái giữ chỗ, thanh toán và lớp học của bạn.</p></div><Link className="member-course-schedule-link" to="/member/schedule">Xem lịch học <span aria-hidden="true">→</span></Link></div>
         {registrationsLoading ? <p className="member-course-history-state" role="status">Đang tải đăng ký…</p>
-          : registrationsError ? <p className="banner error" role="alert">{registrationsError}</p>
+          : registrationsError ? <div><p className="banner error" role="alert">{registrationsError}</p><button type="button" className="member-registration-show-more" onClick={() => void retryRegistrationData()}>Thử tải lại</button></div>
             : registrations.length === 0 ? <p className="member-course-history-state">Bạn chưa có đăng ký CONFIRMED nào.</p>
-              : <div className="member-registration-list">{registrations.map((item) => <article className="member-registration-row" key={item.id}>
+              : <>
+                <div className="member-registration-tabs" role="tablist" aria-label="Lọc đăng ký khóa học">
+                  <button type="button" role="tab" aria-selected={registrationTab === "CURRENT"} className={registrationTab === "CURRENT" ? "selected" : ""}
+                    onClick={() => setRegistrationTab("CURRENT")}>Đang tham gia ({registrationSections.current.length})</button>
+                  <button type="button" role="tab" aria-selected={registrationTab === "HISTORY"} className={registrationTab === "HISTORY" ? "selected" : ""}
+                    onClick={() => setRegistrationTab("HISTORY")}>Lịch sử đăng ký ({registrationSections.history.length})</button>
+                </div>
+                {classSessionsLoading && <p className="member-course-history-note" role="status">Đang tải lịch các lớp để xác định đăng ký đã hoàn tất hay chưa.</p>}
+                {classSessionsError && <div><p className="member-course-history-note" role="status">{classSessionsError} Các đăng ký đã xác nhận được giữ trong mục đang tham gia khi chưa xác minh được lịch.</p><button type="button" className="member-registration-show-more" onClick={() => void retryRegistrationData()}>Thử tải lại lịch</button></div>}
+                {!classSessionsLoading && registrationTab === "CURRENT" && registrationSections.current.some((item) => item.scheduleUnavailable)
+                  && <p className="member-course-history-note" role="status">Một số đăng ký đã xác nhận chưa có lịch tin cậy để xác định đã hoàn tất; chúng vẫn được giữ trong mục đang tham gia.</p>}
+                <div className="member-registration-list">
+                {registrationRows.length === 0 && <p className="member-course-history-state">{registrationTab === "CURRENT" ? "Không có đăng ký đang tham gia hoặc còn hạn thanh toán." : "Chưa có lịch sử đăng ký."}</p>}
+                {registrationRows.map((item) => <article className="member-registration-row" key={item.id}>
                 <div className="member-registration-details"><strong>{item.className || `Lớp #${item.classId}`}</strong><span>{[item.courseName, item.courseOfferingName].filter(Boolean).join(" · ") || "Thông tin khóa học không khả dụng"}</span></div>
                 <span className={"member-registration-status " + (item.status === "PENDING_PAYMENT" ? "pending" : item.status === "CANCELLED" ? "cancelled" : "")}>{item.status === "PENDING_PAYMENT" ? "Chờ thanh toán" : item.status === "CONFIRMED" ? "Đã xác nhận" : item.status === "CANCELLED" ? "Đã hủy" : item.status === "EXPIRED" ? "Đã hết hạn" : item.status}</span>
                 {item.status === "PENDING_PAYMENT" && <span className="member-registration-deadline">Thanh toán trước {formatVietnamDateTime(item.paymentDeadline)} (giờ Việt Nam).</span>}
-                {item.status === "CONFIRMED" && (() => {
+                {item.status === "CONFIRMED" && registrationTab === "CURRENT" && (() => {
                   const info = coursePaymentInfo(payments, item.id);
                   const eligibility = paidCancellationEligibility(item, payments, new Date());
                   const reason = paymentsLoading ? "Đang xác minh thanh toán…" : paymentsError ? "Chưa thể xác minh khoản thanh toán." : eligibility.reason === "deadline-unavailable" ? "Chưa có hạn hủy đáng tin cậy từ máy chủ." : eligibility.reason === "deadline-passed" ? "Đã qua hạn hủy theo thời gian hiển thị; máy chủ xác nhận điều kiện cuối cùng." : eligibility.reason === "payment-unverified" ? "Chưa xác minh được duy nhất một khoản thanh toán thành công." : null;
@@ -157,7 +194,10 @@ export default function MemberCourses({ token, role, onLogout, onNavigate }) {
                 <div className="member-registration-actions"><Link to={`/member/course-checkout/${item.id}`}>{item.status === "PENDING_PAYMENT" ? "Thanh toán / theo dõi" : "Xem thanh toán"}</Link>
                   {item.status === "PENDING_PAYMENT" && <button type="button" disabled={cancellingId !== null} onClick={() => void cancelHold(item.id)}>{cancellingId === item.id ? "Đang hủy…" : "Hủy giữ chỗ"}</button>}
                   {item.courseId != null && <Link to={`/member/courses/${item.courseId}`}>Xem khóa học</Link>}</div>
-              </article>)}</div>}
+              </article>)}</div>
+                {registrationTab === "HISTORY" && registrationSections.history.length > visibleHistoryCount
+                  && <button type="button" className="member-registration-show-more" onClick={() => setVisibleHistoryCount((count) => count + 10)}>Xem thêm lịch sử</button>}
+              </>}
         {cancelError && <p className="banner error" role="alert">{cancelError}</p>}
       </section>
     </div>

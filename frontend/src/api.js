@@ -1,6 +1,15 @@
 export const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || "http://localhost:8080";
 const API_BASE = API_BASE_URL.replace(/\/$/, "");
 let unauthorizedHandler = null;
+let activeAuthToken;
+let authGeneration = 0;
+
+export function setActiveAuthToken(token) {
+  if (activeAuthToken !== token) {
+    activeAuthToken = token;
+    authGeneration += 1;
+  }
+}
 
 export function setUnauthorizedHandler(handler) {
   unauthorizedHandler = typeof handler === "function" ? handler : null;
@@ -16,16 +25,23 @@ function getBearerToken(headers) {
   return match?.[1] || null;
 }
 
-async function request(path, options = {}) {
+async function request(path, options = {}, controls = {}) {
   const requestToken = getBearerToken(options.headers);
+  const requestGeneration = authGeneration;
+  if (requestToken && activeAuthToken !== undefined && requestToken !== activeAuthToken) {
+    throw new Error("Authentication changed before this request could be sent");
+  }
   const response = await fetch(API_BASE + path, options);
   const text = await response.text();
   let data = {};
   if (text) {
     try { data = JSON.parse(text); } catch { data = {}; }
   }
+  if (requestToken && requestGeneration !== authGeneration && !controls.allowAuthGenerationChange) {
+    throw new Error("Authentication changed while this request was in progress");
+  }
   if (!response.ok) {
-    if (response.status === 401 && requestToken) {
+    if (response.status === 401 && requestToken && controls.notifyUnauthorized !== false) {
       unauthorizedHandler?.(requestToken);
     }
     const error = new Error(data.message || data.detail || ("Request failed (" + response.status + ")"));
@@ -45,6 +61,13 @@ export function loginApi(email, password) {
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
   });
+}
+
+export function logoutApi(token) {
+  return request("/api/auth/logout", {
+    method: "POST",
+    headers: authenticatedHeaders(token),
+  }, { allowAuthGenerationChange: true, notifyUnauthorized: false });
 }
 
 export function createMemberApi(token, payload) {
@@ -280,8 +303,9 @@ export function getPublicCourseApi(courseId) {
   });
 }
 
-export function getCourseOfferingsByCourseApi(token, courseId) {
-  return request("/api/course-offerings/course/" + encodeURIComponent(courseId), {
+export function getCourseOfferingsByCourseApi(token, courseId, includeRegistrationReadiness = false) {
+  const readinessQuery = includeRegistrationReadiness ? "?includeRegistrationReadiness=true" : "";
+  return request("/api/course-offerings/course/" + encodeURIComponent(courseId) + readinessQuery, {
     headers: authenticatedHeaders(token),
   });
 }
@@ -667,6 +691,10 @@ export function getOfferingsApi(token, courseId) {
   return request("/api/course-offerings/course/" + encodeURIComponent(courseId), { headers: authenticatedHeaders(token) });
 }
 
+export function getOfferingApi(token, offeringId) {
+  return request("/api/course-offerings/" + encodeURIComponent(offeringId), { headers: authenticatedHeaders(token) });
+}
+
 export function saveOfferingApi(token, offeringId, payload) {
   return request(offeringId ? "/api/course-offerings/" + encodeURIComponent(offeringId) : "/api/course-offerings", {
     method: offeringId ? "PUT" : "POST",
@@ -677,6 +705,10 @@ export function saveOfferingApi(token, offeringId, payload) {
 
 export function getClassesApi(token, offeringId) {
   return request("/api/classes/offering/" + encodeURIComponent(offeringId), { headers: authenticatedHeaders(token) });
+}
+
+export function getClassApi(token, classId) {
+  return request("/api/classes/" + encodeURIComponent(classId), { headers: authenticatedHeaders(token) });
 }
 
 export function saveClassApi(token, classId, payload) {

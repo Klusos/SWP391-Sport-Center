@@ -65,12 +65,14 @@ public class CourseRegistrationService {
     private final Clock clock;
     private final CourseRegistrationExpirationService expiration;
     private final CourseAgePolicyEvaluator courseAgePolicyEvaluator;
+    private final ClassSessionService classSessionService;
 
     public CourseRegistrationService(CourseRegistrationRepository registrations, PaymentRepository payments,
             CourseClassRepository courseClasses,
             UserRepository users, MemberSportLevelRepository levels, ClassSessionRepository classSessions,
             MembershipRepository memberships, AssessmentAccess access, Clock clock,
-            CourseRegistrationExpirationService expiration, CourseAgePolicyEvaluator courseAgePolicyEvaluator) {
+            CourseRegistrationExpirationService expiration, CourseAgePolicyEvaluator courseAgePolicyEvaluator,
+            ClassSessionService classSessionService) {
         this.registrations = registrations;
         this.payments = payments;
         this.courseClasses = courseClasses;
@@ -82,6 +84,7 @@ public class CourseRegistrationService {
         this.clock = clock;
         this.expiration = expiration;
         this.courseAgePolicyEvaluator = courseAgePolicyEvaluator;
+        this.classSessionService = classSessionService;
     }
 
     @Transactional
@@ -132,8 +135,19 @@ public class CourseRegistrationService {
 
         LocalDateTime now = LocalDateTime.now(clock.withZone(BUSINESS_ZONE));
         LocalDate registrationDate = now.toLocalDate();
-        validateRegistrationWindow(offering, registrationDate);
         validateRegistrationDeadline(offering, now);
+        LocalDateTime scheduledOpeningAt = offering.getRegistrationDeadline().minusDays(14);
+        if (now.isBefore(scheduledOpeningAt)) {
+            throw error(HttpStatus.CONFLICT, "CourseOffering registration opens at " + scheduledOpeningAt
+                    + " (14 days before the registration deadline, Vietnam time)");
+        }
+        if (offering.getEndDate() == null || registrationDate.isAfter(offering.getEndDate())) {
+            throw error(HttpStatus.CONFLICT, "CourseOffering has ended and is unavailable for registration");
+        }
+        if (!classSessionService.isRegistrationReady(courseClass)) {
+            throw error(HttpStatus.CONFLICT,
+                    "CourseClass schedule is incomplete or invalid; registration requires all planned sessions to be scheduled");
+        }
         LocalDateTime paymentDeadline = now.plusHours(24);
         if (offering.getRegistrationDeadline().isBefore(paymentDeadline)) {
             paymentDeadline = offering.getRegistrationDeadline();
@@ -370,14 +384,6 @@ public class CourseRegistrationService {
         }
     }
 
-    private void validateRegistrationWindow(CourseOffering offering, LocalDate registrationDate) {
-        LocalDate opensOn = offering.getStartDate().minusDays(30);
-        if (registrationDate.isBefore(opensOn)) {
-            throw error(HttpStatus.CONFLICT, "CourseOffering registration opens on " + opensOn
-                    + "; registration date is " + registrationDate);
-        }
-    }
-
     private void validateAgeEligibility(User member, Course course, LocalDate registrationDate) {
         CourseAgePolicyEvaluator.Result result = courseAgePolicyEvaluator.evaluate(
                 course.getAgePolicy(), course.getTargetAgeMin(), course.getTargetAgeMax(),
@@ -455,7 +461,8 @@ public class CourseRegistrationService {
                 course.getName(), offering.getId(), offering.getName(), courseClass.getId(), courseClass.getName(),
                 course.getSport().getId(), course.getLevel(), status,
                 registration.getRegisteredAt(), registration.getPaymentDeadline(), registration.getCancelledAt(), registration.getOriginalPrice(),
-                registration.getMembershipDiscount(), registration.getFinalPrice(), offering.getCancellationDeadline());
+                registration.getMembershipDiscount(), registration.getFinalPrice(), offering.getCancellationDeadline(),
+                offering.getPlannedSessions());
     }
 
     private ClassSessionResponse sessionResponse(ClassSession session) {

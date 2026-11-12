@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
+import ReceptionistRefundQueue from "../components/ReceptionistRefundQueue.jsx";
 import { getMemberPaymentsApi, getPendingPtPaymentsApi, processCounterPaymentApi } from "../api";
 import { canViewPtPayments, createPtCounterQueue, ptPaymentExpired, ptPaymentMoney } from "../ptPaymentFlow";
 import { vietnamDate } from "../courseCheckout";
@@ -460,6 +461,7 @@ export default function ReceptionistPtPayments({ token, role, userId, onNavigate
               </nav>
             </section>
           )}
+          <ReceptionistRefundQueue token={token} purposes={["PT_BOOKING"]} groups={[{ id: "pt", title: "Ho\u00e0n ti\u1ec1n bu\u1ed5i PT", description: "Y\u00eau c\u1ea7u ho\u00e0n ti\u1ec1n booking PT" }]} />
         </div>
       </main>
     </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPublicConsultationRequestApi, getPublicSportsApi } from "../../api";
+import { CONSULTATION_EMAIL_ERROR, normalizeConsultationEmail } from "../../consultationEmail.js";
 
 const EMPTY_FORM = {
   name: "",
@@ -37,6 +38,12 @@ export default function ConsultForm() {
 
   async function handleSubmit(event) {
     event.preventDefault();
+    const email = normalizeConsultationEmail(form.email);
+    if (!email) {
+      setError(CONSULTATION_EMAIL_ERROR);
+      setSent(false);
+      return;
+    }
     setSubmitting(true);
     setError("");
     setSent(false);
@@ -44,7 +51,7 @@ export default function ConsultForm() {
       await createPublicConsultationRequestApi({
         name: form.name.trim(),
         phone: form.phone.trim(),
-        email: form.email.trim() || null,
+        email,
         sportId: Number(form.sportId),
         age: form.age ? Number(form.age) : null,
         experience: form.experience.trim() || null,
@@ -64,7 +71,7 @@ export default function ConsultForm() {
       <h3>TƯ VẤN GHI DANH</h3>
       <input className="form-control" name="name" type="text" placeholder="Họ và tên" aria-label="Họ và tên" maxLength={100} value={form.name} onChange={handleChange} required />
       <input className="form-control" name="phone" type="tel" placeholder="Số điện thoại" aria-label="Số điện thoại" maxLength={20} value={form.phone} onChange={handleChange} required />
-      <input className="form-control" name="email" type="email" placeholder="Email (không bắt buộc)" aria-label="Email (không bắt buộc)" maxLength={150} value={form.email} onChange={handleChange} />
+      <input className="form-control" name="email" type="email" placeholder="Email" aria-label="Email" maxLength={150} value={form.email} onChange={handleChange} required onInvalid={(event) => { event.preventDefault(); setError(CONSULTATION_EMAIL_ERROR); setSent(false); }} />
       <select className="form-control" name="sportId" aria-label="Môn học" value={form.sportId} onChange={handleChange} required disabled={loadingSports || sports.length === 0}>
         <option value="">{loadingSports ? "Đang tải môn học…" : "Chọn môn học"}</option>
         {sports.map((sport) => <option key={sport.id} value={sport.id}>{sport.name}</option>)}

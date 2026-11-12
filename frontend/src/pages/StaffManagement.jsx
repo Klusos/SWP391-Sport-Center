@@ -315,7 +315,7 @@ export default function StaffManagement({ token, role, onLogout, onNavigate }) {
   return (
     <div className="layout">
       <Sidebar role={role} activePage="staff" onNavigate={onNavigate} onLogout={onLogout} />
-      <main className="main staff-page">
+      <main className="main"><div className="staff-page staff-management-page">
         <h1>Quản lý nhân sự</h1>
         <p className="subtitle">Quản lý tài khoản COACH, RECEPTIONIST và chuyên môn Coach.</p>
         {notice && <div className="banner success" role="status">{notice}</div>}
@@ -325,10 +325,10 @@ export default function StaffManagement({ token, role, onLogout, onNavigate }) {
             <label htmlFor="staffSearch">Tìm theo tên, email, ID, vai trò hoặc trạng thái</label>
             <input id="staffSearch" type="search" placeholder="Nhập từ khóa để tìm kiếm…" value={query} onChange={(event) => setQuery(event.target.value)} />
           </div>
-          <div className="staff-toolbar-actions">
-            <button type="button" onClick={load} disabled={loading}>{loading ? "Đang tải…" : "Làm mới"}</button>
-            <button type="button" className="btn-primary" onClick={() => { setCreating((value) => !value); setSelected(null); setForm(EMPTY_FORM); setCreateImage(null); setCreateImagePreview(""); }}>{creating ? "Đóng form" : "+ Tạo nhân sự"}</button>
-          </div>
+
+          <button type="button" className="staff-toolbar-refresh" onClick={load} disabled={loading}>{loading ? "Đang tải…" : "Làm mới"}</button>
+          <button type="button" className="btn-primary staff-toolbar-create" onClick={() => { setCreating((value) => !value); setSelected(null); setForm(EMPTY_FORM); setCreateImage(null); setCreateImagePreview(""); }}>{creating ? "Đóng form" : "+ Tạo nhân sự"}</button>
+
         </div>
 
         {creating && <form className="form-card staff-create-form" onSubmit={createStaff}>
@@ -425,6 +425,7 @@ export default function StaffManagement({ token, role, onLogout, onNavigate }) {
             <p>Không có API xóa chuyên môn; bản ghi hiện có được giữ lại.</p>
           </form>}
         </section>}
+        </div>
       </main>
     </div>
   );

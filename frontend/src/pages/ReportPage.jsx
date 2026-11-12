@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
 import { getAdminRevenueReportApi } from "../api";
 import RevenueBars from "../components/RevenueBars";
-import { defaultRevenueRange, formatVnd, REVENUE_PURPOSES } from "../revenueReport";
+import { defaultReportRevenueRange, formatVnd, isValidRevenueRange, REVENUE_DATE_PRESETS, revenueDatePresetRange, REVENUE_PURPOSES } from "../revenueReport";
 import "./ReportPage.css";
 
 const purposeTotals = (report) => report?.revenueByPurpose || {};
 
 export default function ReportPage({ token }) {
-  const [range, setRange] = useState(() => defaultRevenueRange());
+  const [initialRange] = useState(() => defaultReportRevenueRange());
+  const [range, setRange] = useState(initialRange);
   const [groupBy, setGroupBy] = useState("MONTH");
-  const [applied, setApplied] = useState(() => ({ ...defaultRevenueRange(), groupBy: "MONTH" }));
+  const [activePreset, setActivePreset] = useState("THIS_MONTH");
+  const [applied, setApplied] = useState(() => ({ ...initialRange, groupBy: "MONTH" }));
   const [result, setResult] = useState(null);
   const [retry, setRetry] = useState(0);
   const [filterError, setFilterError] = useState("");
@@ -46,12 +48,24 @@ export default function ReportPage({ token }) {
       setFilterError("Vui lòng chọn ngày bắt đầu và ngày kết thúc.");
       return;
     }
-    if (range.to < range.from) {
+    if (!isValidRevenueRange(range)) {
       setFilterError("Ngày kết thúc phải bằng hoặc sau ngày bắt đầu.");
       return;
     }
     setFilterError("");
     setApplied({ ...range, groupBy });
+  }
+
+  function choosePreset(preset) {
+    const presetRange = revenueDatePresetRange(preset);
+    if (!presetRange) return;
+    setRange(presetRange);
+    setActivePreset(preset);
+    setFilterError("");
+  }
+
+  function refreshApplied() {
+    if (!visibleLoading) setRetry((current) => current + 1);
   }
 
   return (
@@ -61,15 +75,34 @@ export default function ReportPage({ token }) {
           <h1>Báo cáo doanh thu</h1>
           <p>Doanh thu được tính từ giao dịch SUCCESS theo thời điểm xác nhận thanh toán.</p>
         </div>
-        <button className="btn-light" type="button" onClick={() => window.print()}>In báo cáo</button>
+        <div className="revenue-page-actions">
+          <button className="btn-light" type="button" onClick={refreshApplied} disabled={visibleLoading}>
+            {visibleLoading ? "Đang tải…" : "Làm mới"}
+          </button>
+          <button className="btn-light" type="button" onClick={() => window.print()}>In báo cáo</button>
+        </div>
       </div>
 
       <form className="panel revenue-filters" onSubmit={applyFilters}>
+        <fieldset className="revenue-presets" aria-label="Khoảng ngày nhanh">
+          <legend>Chọn nhanh</legend>
+          {REVENUE_DATE_PRESETS.map(([preset, label]) => (
+            <button
+              key={preset}
+              type="button"
+              className={`revenue-preset${activePreset === preset ? " is-active" : ""}`}
+              aria-pressed={activePreset === preset}
+              onClick={() => choosePreset(preset)}
+            >
+              {label}
+            </button>
+          ))}
+        </fieldset>
         <label> Từ ngày
-          <input type="date" value={range.from} onChange={(event) => setRange((current) => ({ ...current, from: event.target.value }))} required />
+          <input type="date" value={range.from} onChange={(event) => { setRange((current) => ({ ...current, from: event.target.value })); setActivePreset(""); }} required />
         </label>
         <label> Đến ngày
-          <input type="date" value={range.to} onChange={(event) => setRange((current) => ({ ...current, to: event.target.value }))} required />
+          <input type="date" value={range.to} onChange={(event) => { setRange((current) => ({ ...current, to: event.target.value })); setActivePreset(""); }} required />
         </label>
         <label> Nhóm theo
           <select value={groupBy} onChange={(event) => setGroupBy(event.target.value)}>
@@ -86,7 +119,7 @@ export default function ReportPage({ token }) {
       {!visibleLoading && visibleError ? (
         <div className="panel revenue-state revenue-error" role="alert">
           <p>{visibleError}</p>
-          <button className="btn-light" type="button" onClick={() => setRetry((current) => current + 1)}>Thử lại</button>
+          <button className="btn-light" type="button" onClick={refreshApplied} disabled={visibleLoading}>Thử lại</button>
         </div>
       ) : null}
       {!visibleLoading && !visibleError && report ? (

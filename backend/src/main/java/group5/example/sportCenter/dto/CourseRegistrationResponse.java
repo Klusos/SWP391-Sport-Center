@@ -21,5 +21,6 @@ public record CourseRegistrationResponse(
         BigDecimal originalPrice,
         BigDecimal membershipDiscount,
         BigDecimal finalPrice,
-        LocalDateTime cancellationDeadline) {
+        LocalDateTime cancellationDeadline,
+        Integer plannedSessions) {
 }

@@ -11,6 +11,7 @@ import {
   getPublicSportsApi,
 } from "../api";
 import { getMemberRelevantSports } from "../memberSportEligibility";
+import { CONSULTATION_EMAIL_ERROR, normalizeConsultationEmail } from "../consultationEmail.js";
 import "./Membertheme.css";
 import "./MemberLevelsAssessments.css";
 
@@ -381,6 +382,11 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
       setModalError("Vui lòng điền đầy đủ Họ tên, Số điện thoại và chọn Bộ môn.");
       return;
     }
+    const email = normalizeConsultationEmail(consultForm.email);
+    if (!email) {
+      setModalError(CONSULTATION_EMAIL_ERROR);
+      return;
+    }
     submitLockRef.current = true;
     setModalSubmitting(true);
     setModalError("");
@@ -388,7 +394,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
       await createMemberConsultationRequestApi(token, {
         name: consultForm.name.trim(),
         phone: consultForm.phone.trim(),
-        email: consultForm.email.trim() || null,
+        email,
         sportId: Number(consultForm.sportId),
         age: null,
         experience: consultForm.experience.trim() || null,
@@ -1685,12 +1691,14 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                     <span>Email liên hệ</span>
                     <input
                       type="email"
+                      required
                       maxLength={150}
                       value={consultForm.email}
+                      onInvalid={(event) => { event.preventDefault(); setModalError(CONSULTATION_EMAIL_ERROR); }}
                       onChange={(e) =>
                         setConsultForm((prev) => ({ ...prev, email: e.target.value }))
                       }
-                      placeholder="Nhập email (không bắt buộc)"
+                      placeholder="Email bắt buộc"
                     />
                   </label>
 

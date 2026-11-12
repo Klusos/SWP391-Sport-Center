@@ -31,9 +31,14 @@ test("receptionist registration navigates instead of confirming; payment page hi
   assert.match(registration, /navigate\(`\/receptionist\/course-payments\?paymentId=\$\{encodeURIComponent\(payment\.id\)\}&registrationId=\$\{encodeURIComponent\(registration\.id\)\}`\)/);
   assert.doesNotMatch(registration, /processCounterPaymentApi|confirmReceipt/);
   assert.match(registration, /createOrReusePayment\(registration\)/);
-  assert.match(payments, /parseCoursePaymentTarget\(searchParams\)/);
+  assert.match(payments, /useMemo\(\(\) => searchParams\.has\("paymentId"\)[\s\S]*parseCoursePaymentTarget\(searchParams\)/);
   assert.match(payments, /locateCoursePayment\(/);
-  assert.match(payments, /setTargetMessage\(`[^`]*#\$\{target\.paymentId\}[^`]*`\)/);
-  assert.match(payments, /paymentTarget\?\.paymentId === Number\(row\.paymentId\)/);
+  assert.match(payments, /setTargetLookup\(\{ key: lookupKey, message:/);
+  assert.match(payments, /paymentTarget\?\.paymentId/);
+  assert.doesNotMatch(payments, /setPaymentTarget/);
+  const lookupEffect = payments.match(/useEffect\(\(\) => \{[\s\S]*?\}, \[paymentTarget, token\]\);/)?.[0] || "";
+  assert.match(lookupEffect, /locateCoursePayment\([\s\S]*\.then\(/);
+  assert.doesNotMatch(lookupEffect, /setSelectedCourseFilter|setUrgentOnly/);
+  assert.match(lookupEffect, /let active = true;[\s\S]*if \(!active\) return;/);
   assert.match(payments, /onClick=\{\(\) => void controller\.current\?\.receive\(row\)\}/);
 });

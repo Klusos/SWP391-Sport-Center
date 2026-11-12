@@ -8,7 +8,9 @@
   --sp-surface: #ffffff;
   --sp-radius: 12px;
   --sp-shadow: 0 1px 2px rgba(11, 37, 69, .05), 0 6px 20px rgba(11, 37, 69, .06);
-  max-width: 1280px;
+}
+.staff-management-page {
+  width: 100%; min-width: 0; box-sizing: border-box;
 }
 
 .staff-page h1 { color: var(--sp-ink); font-size: 2rem; margin: 0 0 4px; letter-spacing: -.01em; }
@@ -47,12 +49,12 @@
 
 /* ----- Toolbar ----- */
 .staff-toolbar {
-  display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap;
-  margin-bottom: 20px;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end; gap: 12px; width: 100%; min-width: 0;
+  box-sizing: border-box; margin-bottom: 20px;
 }
-.staff-search { flex: 1 1 320px; display: flex; flex-direction: column; gap: 6px; }
-.staff-toolbar-actions { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
-.staff-toolbar-actions button { flex: 0 0 auto; min-width: 110px; }
+.staff-search { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.staff-toolbar > button { min-width: 0; max-width: 100%; padding-inline: 14px; }
 .staff-search input { height: 42px; }
 
 /* ----- Form controls ----- */
@@ -115,6 +117,7 @@
 /* ----- Table ----- */
 .staff-page .queue-table-wrap {
   background: var(--sp-surface); border: 1px solid var(--sp-border);
+  width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box;
   border-radius: 16px; box-shadow: var(--sp-shadow); overflow-x: auto;
 }
 .staff-page .queue-table { width: 100%; border-collapse: collapse; min-width: 0; }
@@ -135,6 +138,7 @@
 .staff-page .queue-table td:last-child { padding-right: 24px; }
 /* email dài được phép xuống dòng thay vì làm bảng tràn ngang */
 .staff-page .queue-table td:nth-child(3) { overflow-wrap: anywhere; }
+.staff-page .queue-table td:nth-child(2) { overflow-wrap: anywhere; }
 .staff-page .queue-table td .status-pill { white-space: nowrap; }
 .staff-page .queue-table tbody tr:hover { background: #f6f9fe; }
 .staff-page .queue-table td:last-child { text-align: right; white-space: nowrap; }
@@ -173,6 +177,17 @@
 @media (max-width: 760px) {
   .staff-page .grid-2 { grid-template-columns: 1fr; }
   .staff-page .form-card { --sp-pad-x: 18px; padding: 20px var(--sp-pad-x); }
-  .staff-toolbar-actions { width: 100%; }
-  .staff-toolbar-actions button { flex: 1 1 0; }
+  .staff-toolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .staff-search { grid-column: 1 / -1; }
+  .staff-toolbar > button { width: 100%; }
+  .staff-toolbar > .staff-toolbar-refresh, .staff-toolbar > .staff-toolbar-create { min-width: 0; }
+}
+
+@media (max-width: 480px) {
+  .staff-toolbar { grid-template-columns: minmax(0, 1fr); }
+  .staff-search { grid-column: auto; }
+}
+
+@media (max-width: 1200px) {
+  .staff-page .queue-table { min-width: 900px; }
 }

@@ -119,3 +119,9 @@
 .member-refund-status.pending { background:#fff5dc; color:#805b00; }
 .member-refund-status.complete { background:#e9f8ef; color:#176b3b; }
 .member-registration-cancellation button:focus-visible { outline:3px solid rgb(23 110 217 / 25%); outline-offset:2px; }
+.member-registration-tabs { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 14px; }
+.member-registration-tabs button,.member-registration-show-more { min-height:38px; padding:7px 12px; border:1px solid #d3e0ed; border-radius:9px; background:#fff; color:#245b89; font:inherit; font-size:12px; font-weight:750; cursor:pointer; }
+.member-registration-tabs button.selected { border-color:#176ed9; background:#176ed9; color:#fff; }
+.member-registration-tabs button:focus-visible,.member-registration-show-more:focus-visible { outline:3px solid rgb(23 110 217 / 25%); outline-offset:2px; }
+.member-registration-show-more { display:block; margin:12px auto 0; }
+.member-course-history-note { margin:0 0 12px; padding:9px 12px; border-radius:8px; background:#f4f8fc; color:#52677c; font-size:12px; line-height:1.5; }
