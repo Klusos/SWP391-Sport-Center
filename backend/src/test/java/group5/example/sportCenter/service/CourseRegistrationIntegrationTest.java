@@ -113,6 +113,7 @@ class CourseRegistrationIntegrationTest {
     @Autowired DataSource dataSource;
     @Autowired Clock clock;
     @MockitoSpyBean CourseRegistrationRepository registrationSpy;
+    @MockitoSpyBean ClassSessionService registrationReadiness;
 
     private MockMvc mvc;
     private User member;
@@ -122,7 +123,8 @@ class CourseRegistrationIntegrationTest {
     @BeforeEach
     void setUp() {
         mvc = MockMvcBuilders.webAppContextSetup(context).addFilters(security).build();
-        now = LocalDateTime.now(clock);
+        now = LocalDateTime.now(clock.withZone(ZoneId.of("Asia/Ho_Chi_Minh")));
+        org.mockito.Mockito.doReturn(true).when(registrationReadiness).isRegistrationReady(any());
         member = user("MEMBER", "ACTIVE");
         sport = sport("ACTIVE");
     }
@@ -158,6 +160,38 @@ class CourseRegistrationIntegrationTest {
         registrations.saveAndFlush(saved);
         assertEquals(1, service.myCourseSessions(jwt(member)).size());
         assertEquals(selected.getId(), service.myCourseSessions(jwt(member)).get(0).classId());
+    }
+
+    @Test
+    void registrationOpensAtFourteenDayBoundaryAndClosesAtExclusiveDeadline() {
+        Course course = course(sport, "BEGINNER", "ACTIVE");
+        CourseOffering offering = offering(course, "OPEN", now.plusDays(14).plusSeconds(1));
+        CourseClass selected = courseClass(offering, "ACTIVE", 5);
+        assertEquals(409, assertThrows(ResponseStatusException.class,
+                () -> service.register(request(selected), jwt(member))).getStatusCode().value(),
+                "one second before scheduled opening is unavailable");
+
+        offering.setRegistrationDeadline(now.plusDays(14)); // scheduledOpeningAt == now
+        offerings.saveAndFlush(offering);
+        assertEquals("PENDING_PAYMENT", service.register(request(selected), jwt(member)).status());
+
+        User anotherMember = user("MEMBER", "ACTIVE");
+        offering.setRegistrationDeadline(now);
+        offerings.saveAndFlush(offering);
+        assertEquals(409, assertThrows(ResponseStatusException.class,
+                () -> service.register(request(courseClass(offering, "ACTIVE", 5)), jwt(anotherMember)))
+                .getStatusCode().value(), "the registration deadline is exclusive");
+    }
+
+    @Test
+    void registrationRejectsWhenPersistedClassScheduleIsNotReady() {
+        Course course = course(sport, "BEGINNER", "ACTIVE");
+        CourseClass selected = classFor(course, 5);
+        org.mockito.Mockito.doReturn(false).when(registrationReadiness).isRegistrationReady(any());
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> service.register(request(selected), jwt(member)));
+        assertEquals(409, error.getStatusCode().value());
+        assertTrue(error.getReason().contains("schedule is incomplete or invalid"));
     }
 
     @Test
@@ -391,29 +425,23 @@ class CourseRegistrationIntegrationTest {
     }
 
     @Test
-    void registrationWindowOpensOnTheThirtiethCalendarDay() {
-        LocalDate registrationDate = LocalDate.now(clock.withZone(ZoneId.of("Asia/Ho_Chi_Minh")));
+    void registrationWindowOpensFourteenDaysBeforeExclusiveDeadlineAndLateReadinessOpensImmediately() {
         Course tooEarlyCourse = course(sport, "BEGINNER", "ACTIVE");
-        CourseOffering tooEarlyOffering = offering(tooEarlyCourse, "OPEN", now.plusHours(1));
-        tooEarlyOffering.setStartDate(registrationDate.plusDays(31));
+        CourseOffering tooEarlyOffering = offering(tooEarlyCourse, "OPEN", now.plusDays(14).plusSeconds(1));
         offerings.saveAndFlush(tooEarlyOffering);
         assertEquals(409, assertThrows(ResponseStatusException.class,
                 () -> service.register(request(courseClass(tooEarlyOffering, "ACTIVE", 3)), jwt(member)))
                 .getStatusCode().value());
 
         Course exactCourse = course(sport, "BEGINNER", "ACTIVE");
-        CourseOffering exactOffering = offering(exactCourse, "OPEN", now.plusHours(1));
-        exactOffering.setStartDate(registrationDate.plusDays(30));
+        CourseOffering exactOffering = offering(exactCourse, "OPEN", now.plusDays(14));
         offerings.saveAndFlush(exactOffering);
         assertEquals("PENDING_PAYMENT", service.register(
                 request(courseClass(exactOffering, "ACTIVE", 3)), jwt(member)).status());
 
         Course insideCourse = course(sport, "BEGINNER", "ACTIVE");
-        CourseOffering insideOffering = offering(insideCourse, "OPEN", now.plusHours(1));
-        insideOffering.setStartDate(registrationDate.plusDays(20));
+        CourseOffering insideOffering = offering(insideCourse, "OPEN", now.plusDays(10));
         offerings.saveAndFlush(insideOffering);
-        assertEquals(registrationDate.plusDays(20),
-                offerings.findById(insideOffering.getId()).orElseThrow().getStartDate());
         assertEquals("PENDING_PAYMENT", service.register(
                 request(courseClass(insideOffering, "ACTIVE", 3)), jwt(user("MEMBER", "ACTIVE"))).status());
     }

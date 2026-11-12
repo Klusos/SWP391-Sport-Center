@@ -3,6 +3,7 @@ package group5.example.sportCenter.service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Clock;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.http.HttpStatus;
@@ -19,6 +20,9 @@ import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.CourseOfferingRepository;
 import group5.example.sportCenter.repository.ClassSessionRepository;
 import group5.example.sportCenter.repository.CourseRepository;
+import group5.example.sportCenter.repository.CourseClassRepository;
+import group5.example.sportCenter.repository.CourseRegistrationRepository;
+import group5.example.sportCenter.entity.CourseRegistrationStatus;
 
 @Service
 @Transactional(readOnly = true)
@@ -28,16 +32,26 @@ public class CourseOfferingService {
     private final CourseRepository courseRepository;
     private final ClassSessionRepository classSessionRepository;
     private final Clock clock;
+    private final CourseClassRepository courseClassRepository;
+    private final ClassSessionService classSessionService;
+    private final CourseRegistrationRepository courseRegistrationRepository;
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     public CourseOfferingService(
             CourseOfferingRepository courseOfferingRepository,
             CourseRepository courseRepository,
             ClassSessionRepository classSessionRepository,
+            CourseClassRepository courseClassRepository,
+            ClassSessionService classSessionService,
+            CourseRegistrationRepository courseRegistrationRepository,
             Clock clock) {
 
         this.courseOfferingRepository = courseOfferingRepository;
         this.courseRepository = courseRepository;
         this.classSessionRepository = classSessionRepository;
+        this.courseClassRepository = courseClassRepository;
+        this.classSessionService = classSessionService;
+        this.courseRegistrationRepository = courseRegistrationRepository;
         this.clock = clock;
     }
 
@@ -107,17 +121,15 @@ public class CourseOfferingService {
 
     public List<CourseOfferingResponse> getOfferingsByCourse(
             Integer courseId) {
+        return getOfferingsByCourse(courseId, false);
+    }
 
+    public List<CourseOfferingResponse> getOfferingsByCourse(Integer courseId, boolean includeRegistrationReadiness) {
         if (!courseRepository.existsById(courseId)) {
-            throw new ResourceNotFoundException(
-                    "Course not found with id: " + courseId);
+            throw new ResourceNotFoundException("Course not found with id: " + courseId);
         }
-
-        return courseOfferingRepository
-                .findByCourseId(courseId)
-                .stream()
-                .map(this::toResponse)
-                .toList();
+        return courseOfferingRepository.findByCourseId(courseId).stream()
+                .map(offering -> toResponse(offering, includeRegistrationReadiness)).toList();
     }
 
     @Transactional
@@ -134,6 +146,27 @@ public class CourseOfferingService {
 
         boolean plannedSessionsChanged = !sameInteger(request.getPlannedSessions(), offering.getPlannedSessions());
         boolean sessionDurationChanged = !sameInteger(request.getSessionDuration(), offering.getSessionDuration());
+        boolean commercialFieldsChanged = !sameMoney(request.getPrice(), offering.getPrice())
+                || plannedSessionsChanged || sessionDurationChanged
+                || !Objects.equals(request.getStartDate(), offering.getStartDate())
+                || !Objects.equals(request.getEndDate(), offering.getEndDate())
+                || !Objects.equals(request.getRegistrationDeadline(), offering.getRegistrationDeadline())
+                || !Objects.equals(request.getCancellationDeadline(), offering.getCancellationDeadline());
+        LocalDateTime originalOpening = offering.getRegistrationDeadline().minusDays(14);
+        if (commercialFieldsChanged && !LocalDateTime.now(clock.withZone(BUSINESS_ZONE)).isBefore(originalOpening)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Commercial CourseOffering terms are locked from the scheduled registration opening time (14 days before the current registration deadline)");
+        }
+        boolean registrationSensitiveScheduleChange = plannedSessionsChanged || sessionDurationChanged
+                || !Objects.equals(request.getStartDate(), offering.getStartDate())
+                || !Objects.equals(request.getEndDate(), offering.getEndDate())
+                || !Objects.equals(request.getCancellationDeadline(), offering.getCancellationDeadline());
+        if (registrationSensitiveScheduleChange
+                && courseRegistrationRepository.existsByCourseClass_CourseOffering_IdAndStatusIn(id,
+                        List.of(CourseRegistrationStatus.CONFIRMED, CourseRegistrationStatus.PENDING_PAYMENT))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "CourseOffering schedule and cancellation terms cannot change while confirmed or pending registrations exist");
+        }
         if (plannedSessionsChanged) {
             validatePlannedSessions(request.getPlannedSessions());
         }
@@ -156,6 +189,20 @@ public class CourseOfferingService {
                                 request.getSessionDuration().intValueExact()))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "CourseOffering sessionDuration cannot change because existing ClassSessions would no longer match it");
+        }
+
+        if (plannedSessionsChanged) {
+            java.util.Map<Integer, Long> activeSessionCounts = classSessionRepository
+                    .findByCourseClass_CourseOffering_Id(id).stream()
+                    .filter(session -> !"CANCELLED".equalsIgnoreCase(session.getStatus()))
+                    .collect(java.util.stream.Collectors.groupingBy(
+                            session -> session.getCourseClass().getId(), java.util.stream.Collectors.counting()));
+            long requestedPlanned = request.getPlannedSessions() == null ? -1
+                    : request.getPlannedSessions().longValue();
+            if (activeSessionCounts.values().stream().anyMatch(count -> count > requestedPlanned)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "CourseOffering plannedSessions cannot be reduced below an existing Class schedule count");
+            }
         }
 
         if (classSessionRepository.existsOutsideOfferingRange(id,
@@ -192,6 +239,11 @@ public class CourseOfferingService {
     private boolean sameInteger(java.math.BigDecimal requested, Integer persisted) {
         return requested == null ? persisted == null
                 : persisted != null && requested.compareTo(java.math.BigDecimal.valueOf(persisted)) == 0;
+    }
+
+    private boolean sameMoney(java.math.BigDecimal requested, java.math.BigDecimal persisted) {
+        return requested == null ? persisted == null
+                : persisted != null && requested.compareTo(persisted) == 0;
     }
 
     private void validateNumericRules(java.math.BigDecimal plannedSessions, java.math.BigDecimal durationMinutes) {
@@ -240,8 +292,8 @@ public class CourseOfferingService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Start date must be before end date");
         }
 
-        LocalDate today = LocalDate.now(clock);
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        LocalDateTime now = LocalDateTime.now(clock.withZone(BUSINESS_ZONE));
         if (validateNotPast && startDate.isBefore(today)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A new or changed offering startDate cannot be in the past");
         }
@@ -269,10 +321,27 @@ public class CourseOfferingService {
         }
     }
 
-    private CourseOfferingResponse toResponse(
-            CourseOffering offering) {
+    private CourseOfferingResponse toResponse(CourseOffering offering) {
+        return toResponse(offering, false);
+    }
+
+    private CourseOfferingResponse toResponse(CourseOffering offering, boolean includeRegistrationReadiness) {
 
         Course course = offering.getCourse();
+
+        LocalDateTime scheduledOpeningAt = offering.getRegistrationDeadline() == null
+                ? null : offering.getRegistrationDeadline().minusDays(14);
+        List<Integer> readyClassIds = includeRegistrationReadiness
+                ? courseClassRepository.findByCourseOfferingId(offering.getId()).stream()
+                        .filter(classSessionService::isRegistrationReady)
+                        .map(group5.example.sportCenter.entity.CourseClass::getId).toList()
+                : List.of();
+        LocalDateTime now = LocalDateTime.now(clock.withZone(BUSINESS_ZONE));
+        boolean available = "OPEN".equalsIgnoreCase(offering.getStatus()) && scheduledOpeningAt != null
+                && !now.isBefore(scheduledOpeningAt) && offering.getRegistrationDeadline() != null
+                && now.isBefore(offering.getRegistrationDeadline())
+                && offering.getEndDate() != null && !LocalDate.now(clock.withZone(BUSINESS_ZONE)).isAfter(offering.getEndDate())
+                && includeRegistrationReadiness && !readyClassIds.isEmpty();
 
         return new CourseOfferingResponse(
                 offering.getId(),
@@ -295,7 +364,10 @@ public class CourseOfferingService {
                 offering.getRegistrationDeadline(),
                 offering.getCancellationDeadline(),
 
-                offering.getStatus()
+                offering.getStatus(),
+                scheduledOpeningAt,
+                readyClassIds,
+                available
         );
     }
 }

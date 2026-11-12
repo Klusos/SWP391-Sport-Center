@@ -280,8 +280,9 @@ export function getPublicCourseApi(courseId) {
   });
 }
 
-export function getCourseOfferingsByCourseApi(token, courseId) {
-  return request("/api/course-offerings/course/" + encodeURIComponent(courseId), {
+export function getCourseOfferingsByCourseApi(token, courseId, includeRegistrationReadiness = false) {
+  const readinessQuery = includeRegistrationReadiness ? "?includeRegistrationReadiness=true" : "";
+  return request("/api/course-offerings/course/" + encodeURIComponent(courseId) + readinessQuery, {
     headers: authenticatedHeaders(token),
   });
 }
@@ -667,6 +668,10 @@ export function getOfferingsApi(token, courseId) {
   return request("/api/course-offerings/course/" + encodeURIComponent(courseId), { headers: authenticatedHeaders(token) });
 }
 
+export function getOfferingApi(token, offeringId) {
+  return request("/api/course-offerings/" + encodeURIComponent(offeringId), { headers: authenticatedHeaders(token) });
+}
+
 export function saveOfferingApi(token, offeringId, payload) {
   return request(offeringId ? "/api/course-offerings/" + encodeURIComponent(offeringId) : "/api/course-offerings", {
     method: offeringId ? "PUT" : "POST",
@@ -677,6 +682,10 @@ export function saveOfferingApi(token, offeringId, payload) {
 
 export function getClassesApi(token, offeringId) {
   return request("/api/classes/offering/" + encodeURIComponent(offeringId), { headers: authenticatedHeaders(token) });
+}
+
+export function getClassApi(token, classId) {
+  return request("/api/classes/" + encodeURIComponent(classId), { headers: authenticatedHeaders(token) });
 }
 
 export function saveClassApi(token, classId, payload) {

@@ -45,10 +45,11 @@ public class CourseOfferingController {
 
     @GetMapping("/course/{courseId}")
     public List<CourseOfferingResponse> getOfferingsByCourse(
-            @PathVariable Integer courseId) {
+            @PathVariable Integer courseId,
+            @RequestParam(name = "includeRegistrationReadiness", defaultValue = "false") boolean includeRegistrationReadiness) {
 
         return courseOfferingService
-                .getOfferingsByCourse(courseId);
+                .getOfferingsByCourse(courseId, includeRegistrationReadiness);
     }
 
     @PutMapping("/{id}")

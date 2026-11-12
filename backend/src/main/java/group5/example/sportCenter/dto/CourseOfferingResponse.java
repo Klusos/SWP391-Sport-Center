@@ -3,6 +3,7 @@ package group5.example.sportCenter.dto;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -34,4 +35,7 @@ public class CourseOfferingResponse {
     private LocalDateTime cancellationDeadline;
 
     private String status;
+    private LocalDateTime scheduledOpeningAt;
+    private List<Integer> registrationReadyClassIds;
+    private boolean registrationAvailable;
 }

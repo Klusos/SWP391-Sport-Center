@@ -63,6 +63,9 @@ public interface CourseRegistrationRepository extends JpaRepository<CourseRegist
     boolean existsByMemberIdAndCourseClass_CourseOffering_IdAndStatus(
             Integer memberId, Integer offeringId, CourseRegistrationStatus status);
 
+    boolean existsByCourseClass_CourseOffering_IdAndStatusIn(
+            Integer offeringId, List<CourseRegistrationStatus> statuses);
+
     @Query("select count(registration) from CourseRegistration registration "
             + "where registration.courseClass.id = :classId and registration.status = :status")
     long countByClassIdAndStatus(@Param("classId") Integer classId,

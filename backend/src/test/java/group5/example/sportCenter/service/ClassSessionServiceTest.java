@@ -1,6 +1,7 @@
 package group5.example.sportCenter.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -31,6 +32,7 @@ import group5.example.sportCenter.entity.Coach;
 import group5.example.sportCenter.entity.Course;
 import group5.example.sportCenter.entity.CourseClass;
 import group5.example.sportCenter.entity.CourseOffering;
+import group5.example.sportCenter.entity.CourseRegistrationStatus;
 import group5.example.sportCenter.entity.Facility;
 import group5.example.sportCenter.entity.Sport;
 import group5.example.sportCenter.entity.ClassSession;
@@ -41,12 +43,14 @@ import group5.example.sportCenter.repository.CourseClassRepository;
 import group5.example.sportCenter.repository.CourseOfferingRepository;
 import group5.example.sportCenter.repository.FacilityRepository;
 import group5.example.sportCenter.repository.PersonalTrainingBookingRepository;
+import group5.example.sportCenter.repository.CourseRegistrationRepository;
 
 @ExtendWith(MockitoExtension.class)
 class ClassSessionServiceTest {
 
     private static final LocalDateTime NOW = LocalDateTime.parse("2026-10-11T12:00:00");
-    private static final Clock FIXED_CLOCK = Clock.fixed(NOW.toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
+    private static final Clock FIXED_CLOCK = Clock.fixed(
+            NOW.atZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")).toInstant(), ZoneOffset.UTC);
 
     @Mock
     private ClassSessionRepository classSessionRepository;
@@ -60,6 +64,8 @@ class ClassSessionServiceTest {
     private CoachRepository coachRepository;
     @Mock
     private PersonalTrainingBookingRepository ptBookingRepository;
+    @Mock
+    private CourseRegistrationRepository registrations;
     private ClassSessionService service;
 
     private CourseClass courseClass;
@@ -70,7 +76,7 @@ class ClassSessionServiceTest {
     void setUp() {
         service = new ClassSessionService(classSessionRepository, courseClassRepository, courseOfferingRepository,
                 facilityRepository, coachRepository, FIXED_CLOCK,
-                new CoachScheduleConflictService(classSessionRepository, ptBookingRepository, FIXED_CLOCK));
+                new CoachScheduleConflictService(classSessionRepository, ptBookingRepository, FIXED_CLOCK), registrations);
 
         Sport sport = new Sport();
         sport.setId(4);
@@ -86,6 +92,7 @@ class ClassSessionServiceTest {
 
         Coach coach = new Coach();
         coach.setId(9);
+        coach.setStatus("ACTIVE");
         courseClass = new CourseClass();
         courseClass.setId(3);
         courseClass.setName("Morning class");
@@ -119,6 +126,62 @@ class ClassSessionServiceTest {
 
         assertEquals("SCHEDULED", response.status());
         assertTrue(response.warnings().isEmpty());
+    }
+
+    @Test
+    void registrationReadinessRequiresEveryPlannedNonCancelledValidSession() {
+        courseClass.setStatus("ACTIVE");
+        offering.setPlannedSessions(2);
+        ClassSession first = new ClassSession();
+        first.setId(41); first.setCourseClass(courseClass); first.setFacility(facility);
+        first.setStartTime(NOW.plusDays(2)); first.setEndTime(NOW.plusDays(2).plusHours(1)); first.setStatus("SCHEDULED");
+        when(classSessionRepository.findByCourseClassId(3)).thenReturn(List.of(first));
+        assertFalse(service.isRegistrationReady(courseClass), "one past or future session cannot satisfy two planned sessions");
+
+        ClassSession cancelled = new ClassSession();
+        cancelled.setId(42); cancelled.setCourseClass(courseClass); cancelled.setFacility(facility);
+        cancelled.setStartTime(NOW.plusDays(4)); cancelled.setEndTime(NOW.plusDays(4).plusHours(1)); cancelled.setStatus("CANCELLED");
+        when(classSessionRepository.findByCourseClassId(3)).thenReturn(List.of(first, cancelled));
+        assertFalse(service.isRegistrationReady(courseClass), "CANCELLED sessions do not count toward readiness");
+
+        ClassSession second = new ClassSession();
+        second.setId(43); second.setCourseClass(courseClass); second.setFacility(facility);
+        second.setStartTime(NOW.plusDays(4)); second.setEndTime(NOW.plusDays(4).plusHours(1)); second.setStatus("SCHEDULED");
+        when(classSessionRepository.findByCourseClassId(3)).thenReturn(List.of(first, second));
+        assertTrue(service.isRegistrationReady(courseClass));
+    }
+
+    @Test
+    void confirmedRegistrationsBlockScheduleMutationWithoutMemberReschedulingWorkflow() {
+        when(registrations.countByClassIdAndStatus(3, CourseRegistrationStatus.CONFIRMED)).thenReturn(1L);
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.create(request(6, null, NOW.plusDays(2), NOW.plusDays(2).plusHours(1))));
+        assertTrue(error.getMessage().contains("Member schedule-change workflow"));
+    }
+
+    @Test
+    void elapsedScheduledSessionCannotBeMovedIntoFuture() {
+        ClassSession existing = scheduledSession(12, facility);
+        existing.setStartTime(NOW.minusDays(2));
+        existing.setEndTime(NOW.minusDays(2).plusHours(1));
+        when(classSessionRepository.findById(12)).thenReturn(Optional.of(existing));
+        UpdateClassSessionRequest request = updateRequest(3, 6,
+                NOW.plusDays(2), NOW.plusDays(2).plusHours(1));
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.update(12, request));
+        assertTrue(error.getMessage().contains("scheduled end time has passed"));
+    }
+
+    @Test
+    void confirmedClassMembersBlockSilentSessionCancellation() {
+        ClassSession existing = scheduledSession(12, facility);
+        existing.setStartTime(NOW.plusDays(1));
+        existing.setEndTime(NOW.plusDays(1).plusHours(1));
+        when(classSessionRepository.findById(12)).thenReturn(Optional.of(existing));
+        when(registrations.countByClassIdAndStatus(3, CourseRegistrationStatus.CONFIRMED)).thenReturn(1L);
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.updateStatus(12, statusRequest("CANCELLED")));
+        assertTrue(error.getMessage().contains("Member schedule-change workflow"));
     }
 
     @Test

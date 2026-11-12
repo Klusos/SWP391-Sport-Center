@@ -25,18 +25,24 @@ import org.springframework.web.server.ResponseStatusException;
 
 import group5.example.sportCenter.dto.UpdateCourseOfferingRequest;
 import group5.example.sportCenter.entity.Course;
+import group5.example.sportCenter.entity.CourseClass;
 import group5.example.sportCenter.entity.CourseOffering;
 import group5.example.sportCenter.entity.ClassSession;
 import group5.example.sportCenter.entity.Sport;
 import group5.example.sportCenter.repository.ClassSessionRepository;
 import group5.example.sportCenter.repository.CourseOfferingRepository;
 import group5.example.sportCenter.repository.CourseRepository;
+import group5.example.sportCenter.repository.CourseClassRepository;
+import group5.example.sportCenter.repository.CourseRegistrationRepository;
 
 @ExtendWith(MockitoExtension.class)
 class CourseOfferingServiceTest {
     @Mock private CourseOfferingRepository offerings;
     @Mock private CourseRepository courses;
     @Mock private ClassSessionRepository sessions;
+    @Mock private CourseClassRepository classes;
+    @Mock private ClassSessionService classSessionService;
+    @Mock private CourseRegistrationRepository registrations;
 
     private CourseOfferingService service;
     private CourseOffering offering;
@@ -44,7 +50,7 @@ class CourseOfferingServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new CourseOfferingService(offerings, courses, sessions,
+        service = new CourseOfferingService(offerings, courses, sessions, classes, classSessionService, registrations,
                 Clock.fixed(LocalDateTime.parse("2026-01-01T00:00:00").toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
         Sport sport = new Sport();
         sport.setId(7);
@@ -121,6 +127,81 @@ class CourseOfferingServiceTest {
                 () -> service.updateOffering(11, request));
 
         assertEquals(400, error.getStatusCode().value());
+    }
+
+    @Test
+    void registrationDeadlineNoLongerUsesThePreviousThirtyDayStartDateRule() {
+        var create = createRequest(10, 60);
+        create.setRegistrationDeadline(LocalDateTime.of(2026, 12, 10, 23, 59));
+        create.setCancellationDeadline(LocalDateTime.of(2026, 12, 12, 0, 0));
+        prepareCreate();
+        assertDoesNotThrow(() -> service.createOffering(create));
+        request.setRegistrationDeadline(LocalDateTime.of(2026, 12, 10, 23, 59));
+        request.setCancellationDeadline(LocalDateTime.of(2026, 12, 12, 0, 0));
+        when(offerings.save(any(CourseOffering.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(sessions.existsOutsideOfferingRange(any(), any(), any())).thenReturn(false);
+        assertDoesNotThrow(() -> service.updateOffering(11, request));
+    }
+
+    @Test
+    void commercialFieldsLockAtOriginalScheduledOpeningAndCannotBeUnlockedByMovingDeadline() {
+        service = new CourseOfferingService(offerings, courses, sessions, classes, classSessionService, registrations,
+                Clock.fixed(LocalDateTime.parse("2026-12-26T12:00:00").toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
+        request.setPrice(new BigDecimal("150.00"));
+        request.setRegistrationDeadline(LocalDateTime.of(2027, 2, 1, 12, 0));
+        when(offerings.findByIdForScheduleUpdate(11)).thenReturn(Optional.of(offering));
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> service.updateOffering(11, request));
+        assertEquals(409, error.getStatusCode().value());
+        verify(offerings, never()).save(offering);
+    }
+
+    @Test
+    void scheduleTermsCannotChangeWhenConfirmedOrPendingRegistrationsExist() {
+        request.setStartDate(LocalDate.of(2027, 1, 11));
+        when(offerings.findByIdForScheduleUpdate(11)).thenReturn(Optional.of(offering));
+        when(registrations.existsByCourseClass_CourseOffering_IdAndStatusIn(11,
+                java.util.List.of(group5.example.sportCenter.entity.CourseRegistrationStatus.CONFIRMED,
+                        group5.example.sportCenter.entity.CourseRegistrationStatus.PENDING_PAYMENT)))
+                .thenReturn(true);
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> service.updateOffering(11, request));
+
+        assertEquals(409, error.getStatusCode().value());
+        verify(offerings, never()).save(offering);
+    }
+
+    @Test
+    void descriptiveChangesRemainPossibleAfterLockAndEqualMoneyIgnoresScale() {
+        service = new CourseOfferingService(offerings, courses, sessions, classes, classSessionService, registrations,
+                Clock.fixed(LocalDateTime.parse("2026-12-26T12:00:00").toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
+        request.setName("Updated descriptive title");
+        request.setPrice(new BigDecimal("100"));
+        when(offerings.findByIdForScheduleUpdate(11)).thenReturn(Optional.of(offering));
+        when(offerings.save(any(CourseOffering.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(sessions.existsOutsideOfferingRange(any(), any(), any())).thenReturn(false);
+
+        assertDoesNotThrow(() -> service.updateOffering(11, request));
+    }
+
+    @Test
+    void responseCarriesVietnamScheduledOpeningAndReadyClassIds() {
+        CourseClass readyClass = new CourseClass();
+        readyClass.setId(33);
+        readyClass.setStatus("ACTIVE");
+        when(courses.existsById(9)).thenReturn(true);
+        when(offerings.findByCourseId(9)).thenReturn(java.util.List.of(offering));
+        when(classes.findByCourseOfferingId(11)).thenReturn(java.util.List.of(readyClass));
+        when(classSessionService.isRegistrationReady(readyClass)).thenReturn(true);
+        service = new CourseOfferingService(offerings, courses, sessions, classes, classSessionService, registrations,
+                Clock.fixed(LocalDateTime.parse("2026-12-26T12:00:00").toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
+
+        var response = service.getOfferingsByCourse(9, true).get(0);
+
+        assertEquals(LocalDateTime.of(2026, 12, 26, 12, 0), response.getScheduledOpeningAt());
+        assertEquals(java.util.List.of(33), response.getRegistrationReadyClassIds());
+        assertEquals(true, response.isRegistrationAvailable());
     }
 
     @Test

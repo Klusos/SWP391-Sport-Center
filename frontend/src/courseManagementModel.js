@@ -39,3 +39,68 @@ export function buildCoursePayload(form, editing = false) {
   if (editing) payload.status = form.status;
   return payload;
 }
+
+export function vietnamBusinessDate(value = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(value);
+  const dateParts = Object.fromEntries(parts.map(({ type, value: part }) => [type, part]));
+  return `${dateParts.year}-${dateParts.month}-${dateParts.day}`;
+}
+
+export function offeringTimeStatus(offering, businessDate = vietnamBusinessDate()) {
+  const startDate = offering?.startDate;
+  const endDate = offering?.endDate;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate || "") || !/^\d{4}-\d{2}-\d{2}$/.test(endDate || "") || startDate > endDate) return null;
+  if (businessDate < startDate) return "UPCOMING";
+  if (businessDate <= endDate) return "ONGOING";
+  return "PAST";
+}
+
+export function filterCourseOfferings(offerings, { search = "", timeStatus = "", status = "", sort = "NEWEST", businessDate } = {}) {
+  const query = search.trim().toLocaleLowerCase("vi-VN");
+  return (Array.isArray(offerings) ? offerings : [])
+    .filter((offering) => !query || String(offering.name || "").toLocaleLowerCase("vi-VN").includes(query))
+    .filter((offering) => !timeStatus || offeringTimeStatus(offering, businessDate) === timeStatus)
+    .filter((offering) => !status || String(offering.status || "").toUpperCase() === status.toUpperCase())
+    .sort((left, right) => {
+      const byDate = String(right.startDate || "").localeCompare(String(left.startDate || ""));
+      return (sort === "OLDEST" ? -byDate : byDate) || Number(right.id || 0) - Number(left.id || 0);
+    });
+}
+
+export function filterCourseClasses(classes, { search = "", status = "" } = {}) {
+  const query = search.trim().toLocaleLowerCase("vi-VN");
+  return (Array.isArray(classes) ? classes : [])
+    .filter((item) => !query || String(item.name || "").toLocaleLowerCase("vi-VN").includes(query))
+    .filter((item) => !status || String(item.status || "").toUpperCase() === status.toUpperCase())
+    .sort((left, right) => String(left.name || "").localeCompare(String(right.name || ""), "vi-VN"));
+}
+
+export function filterClassSessions(sessions, { status = "" } = {}) {
+  return (Array.isArray(sessions) ? sessions : [])
+    .filter((session) => !status || String(session.status || "").toUpperCase() === status.toUpperCase())
+    .sort((left, right) => String(left.startTime || "").localeCompare(String(right.startTime || ""))
+      || Number(left.id || 0) - Number(right.id || 0));
+}
+
+export function paginateItems(items, page = 0, pageSize = 10) {
+  const safePageSize = Math.max(1, Math.floor(pageSize));
+  const pageCount = Math.max(1, Math.ceil(items.length / safePageSize));
+  const pageIndex = Math.min(Math.max(0, Math.floor(page)), pageCount - 1);
+  return {
+    items: items.slice(pageIndex * safePageSize, (pageIndex + 1) * safePageSize),
+    page: pageIndex,
+    pageCount,
+    total: items.length,
+  };
+}
+
+export function qualifiedClassCoaches(coaches, coachSports, sportId) {
+  if (sportId == null) return [];
+  const qualifiedIds = new Set((coachSports || [])
+    .filter((assignment) => Number(assignment?.sportId) === Number(sportId))
+    .map((assignment) => Number(assignment?.coachId)));
+  return (coaches || []).filter((coach) =>
+    String(coach?.status || "").toUpperCase() === "ACTIVE" && qualifiedIds.has(Number(coach?.id)));
+}

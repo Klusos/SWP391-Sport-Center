@@ -25,6 +25,7 @@ import group5.example.sportCenter.repository.CoachRepository;
 import group5.example.sportCenter.repository.CourseClassRepository;
 import group5.example.sportCenter.repository.CourseOfferingRepository;
 import group5.example.sportCenter.repository.FacilityRepository;
+import group5.example.sportCenter.repository.CourseRegistrationRepository;
 
 @Service
 @Transactional
@@ -42,6 +43,7 @@ public class ClassSessionService {
     private final CoachRepository coachRepository;
     private final CoachScheduleConflictService coachScheduleConflicts;
     private final Clock clock;
+    private final CourseRegistrationRepository registrations;
 
     @Autowired
     public ClassSessionService(
@@ -50,9 +52,11 @@ public class ClassSessionService {
             CourseOfferingRepository courseOfferingRepository,
             FacilityRepository facilityRepository,
             CoachRepository coachRepository,
-            CoachScheduleConflictService coachScheduleConflicts) {
+            CoachScheduleConflictService coachScheduleConflicts,
+            CourseRegistrationRepository registrations,
+            Clock clock) {
         this(classSessionRepository, courseClassRepository, courseOfferingRepository, facilityRepository, coachRepository,
-                Clock.systemDefaultZone(), coachScheduleConflicts);
+                clock, coachScheduleConflicts, registrations);
     }
 
     ClassSessionService(
@@ -62,13 +66,15 @@ public class ClassSessionService {
             FacilityRepository facilityRepository,
             CoachRepository coachRepository,
             Clock clock,
-            CoachScheduleConflictService coachScheduleConflicts) {
+            CoachScheduleConflictService coachScheduleConflicts,
+            CourseRegistrationRepository registrations) {
         this.classSessionRepository = classSessionRepository;
         this.courseClassRepository = courseClassRepository;
         this.courseOfferingRepository = courseOfferingRepository;
         this.facilityRepository = facilityRepository;
         this.coachRepository = coachRepository;
         this.clock = clock;
+        this.registrations = registrations;
         this.coachScheduleConflicts = coachScheduleConflicts;
     }
 
@@ -92,6 +98,7 @@ public class ClassSessionService {
 
     public ClassSessionResponse create(CreateClassSessionRequest request) {
         CourseClass courseClass = lockCourseClass(request.getClassId());
+        rejectScheduleMutationForConfirmedRegistrations(courseClass.getId());
         lockOffering(courseClass);
         Facility facility = findFacility(request.getFacilityId());
         facility = lockScheduleResources(courseClass, facility);
@@ -124,8 +131,16 @@ public class ClassSessionService {
         if (isTerminal(session.getStatus())) {
             throw new IllegalArgumentException("A ClassSession in a terminal state cannot be rescheduled");
         }
+        if (session.getEndTime() != null
+                && !session.getEndTime().isAfter(LocalDateTime.now(clock.withZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh"))))) {
+            throw new IllegalArgumentException("A ClassSession whose scheduled end time has passed cannot be rescheduled");
+        }
+        if (session.getCourseClass() != null) {
+            rejectScheduleMutationForConfirmedRegistrations(session.getCourseClass().getId());
+        }
 
         CourseClass courseClass = lockCourseClass(request.getClassId());
+        rejectScheduleMutationForConfirmedRegistrations(courseClass.getId());
         lockOffering(courseClass);
         Facility facility = findFacility(request.getFacilityId());
         facility = lockScheduleResources(courseClass, facility);
@@ -161,7 +176,10 @@ public class ClassSessionService {
             return toResponse(session);
         }
 
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = LocalDateTime.now(clock.withZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")));
+        if (CANCELLED.equals(nextStatus)) {
+            rejectScheduleMutationForConfirmedRegistrations(session.getCourseClass().getId());
+        }
         if (COMPLETED.equals(nextStatus) && now.isBefore(session.getEndTime())) {
             throw new IllegalArgumentException("A ClassSession can be completed only at or after its endTime");
         }
@@ -265,6 +283,38 @@ public class ClassSessionService {
         return conflicts;
     }
 
+    /** Registration requires the persisted class schedule to contain every planned, valid session. */
+    @Transactional(readOnly = true)
+    public boolean isRegistrationReady(CourseClass courseClass) {
+        if (courseClass == null || !"ACTIVE".equalsIgnoreCase(courseClass.getStatus())) return false;
+        if (courseClass.getCoach() == null || !"ACTIVE".equalsIgnoreCase(courseClass.getCoach().getStatus())) return false;
+        Integer planned = courseClass.getCourseOffering().getPlannedSessions();
+        if (planned == null || planned < 1) return false;
+        List<ClassSession> scheduled = classSessionRepository.findByCourseClassId(courseClass.getId()).stream()
+                .filter(session -> !CANCELLED.equalsIgnoreCase(session.getStatus()))
+                .toList();
+        if (scheduled.size() != planned) return false;
+        LocalDateTime businessNow = LocalDateTime.now(clock.withZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")));
+        for (ClassSession session : scheduled) {
+            if (!SCHEDULED.equalsIgnoreCase(session.getStatus())
+                    && !COMPLETED.equalsIgnoreCase(session.getStatus())) return false;
+            if (COMPLETED.equalsIgnoreCase(session.getStatus()) && session.getEndTime() != null
+                    && session.getEndTime().isAfter(businessNow)) return false;
+            Facility facility = session.getFacility();
+            if (facility == null || !"ACTIVE".equalsIgnoreCase(facility.getStatus())) return false;
+            try {
+                validateRange(session.getStartTime(), session.getEndTime());
+                validateWithinOffering(courseClass, session.getStartTime(), session.getEndTime());
+                validateOfferingDuration(courseClass, session.getStartTime(), session.getEndTime());
+                validateFacilitySport(courseClass, facility);
+                validateConflicts(courseClass, facility, session.getStartTime(), session.getEndTime(), session.getId());
+            } catch (RuntimeException invalidSchedule) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private CourseClass lockCourseClass(Integer classId) {
         return courseClassRepository.findByIdForScheduleUpdate(classId)
                 .orElseThrow(() -> new ResourceNotFoundException("CourseClass not found with id: " + classId));
@@ -289,7 +339,7 @@ public class ClassSessionService {
     }
 
     private void validateCompletedTime(String status, LocalDateTime endTime) {
-        if (COMPLETED.equals(status) && endTime.isAfter(LocalDateTime.now(clock))) {
+        if (COMPLETED.equals(status) && endTime.isAfter(LocalDateTime.now(clock.withZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh"))))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "A ClassSession cannot be created as COMPLETED before its endTime");
         }
@@ -306,6 +356,14 @@ public class ClassSessionService {
 
     private boolean isTerminal(String status) {
         return COMPLETED.equalsIgnoreCase(status) || CANCELLED.equalsIgnoreCase(status);
+    }
+
+    private void rejectScheduleMutationForConfirmedRegistrations(Integer classId) {
+        if (registrations.countByClassIdAndStatus(classId,
+                group5.example.sportCenter.entity.CourseRegistrationStatus.CONFIRMED) > 0) {
+            throw new IllegalArgumentException(
+                    "Class schedule cannot be changed after confirmed registrations because a Member schedule-change workflow is unavailable");
+        }
     }
 
     private ClassSession findSession(Integer id) {
@@ -338,7 +396,7 @@ public class ClassSessionService {
         boolean keepingSameFacility = currentFacility != null
                 && currentFacility.getId().equals(requestedFacility.getId());
         boolean futureScheduledSession = SCHEDULED.equalsIgnoreCase(session.getStatus())
-                && requestedStartTime.isAfter(LocalDateTime.now(clock));
+                && requestedStartTime.isAfter(LocalDateTime.now(clock.withZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh"))));
 
         if (keepingSameFacility && futureScheduledSession) {
             throw new IllegalArgumentException(

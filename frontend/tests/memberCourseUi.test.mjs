@@ -57,7 +57,7 @@ test("Member course grid uses a fluid shell and responsive one, two, and three-c
 
 test("Member course detail selects real offerings and classes and displays authoritative catalog values", async () => {
   const detail = await read("../src/public-site/pages/CourseDetail.jsx");
-  assert.match(detail, /offerings\.map\(\(item\)/);
+  assert.match(detail, /visibleOfferings\.map\(\(item\)/);
   assert.match(detail, /aria-selected=\{String\(item\.id\) === selectedOfferingId\}/);
   assert.match(detail, /setSelectedOfferingId\(String\(item\.id\)\)/);
   assert.match(detail, /formatPrice\(item\.price\)/);

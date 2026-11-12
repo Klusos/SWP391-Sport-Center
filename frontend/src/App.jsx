@@ -6,6 +6,7 @@ import {
   Routes,
   useLocation,
   useNavigate,
+  useParams,
 } from "react-router-dom";
 
 import NotificationBell from "./components/NotificationBell";
@@ -34,7 +35,7 @@ import StaffAttendance from "./pages/StaffAttendance";
 import MemberAttendance from "./pages/MemberAttendance";
 import MemberLevelsAssessments from "./pages/MemberLevelsAssessments";
 import Dashboard from "./pages/Dashboard";
-import CourseManagement from "./pages/CourseManagement";
+import CourseManagementPages from "./pages/CourseManagementPages";
 import CourseList from "./pages/CourseList";
 import CourseForm from "./pages/CourseForm";
 import CourseCheckout from "./pages/CourseCheckout";
@@ -59,6 +60,14 @@ import Home from "./public-site/pages/Home";
 import CourseDetail from "./public-site/pages/CourseDetail";
 
 import "./public-site/styles.css";
+
+function AdminCourseRouteRedirect({ depth }) {
+  const { courseId, offeringId, classId } = useParams();
+  let destination = `/staff/courses/${courseId}`;
+  if (depth >= 2) destination += `/offerings/${offeringId}`;
+  if (depth >= 3) destination += `/classes/${classId}`;
+  return <Navigate to={destination} replace />;
+}
 
 const STAFF_ROLES = ["ADMIN", "RECEPTIONIST"];
 const AUTH_STORAGE_KEY = "sportcenter.auth";
@@ -444,7 +453,9 @@ export default function App() {
             />
             <Route path="/staff/courses/new" element={<CourseForm {...staff} />} />
             <Route path="/staff/courses/:courseId/edit" element={<CourseForm {...staff} />} />
-            <Route path="/staff/courses/:courseId" element={<CourseManagement {...staff} />} />
+            <Route path="/staff/courses/:courseId/offerings/:offeringId/classes/:classId" element={<CourseManagementPages {...staff} />} />
+            <Route path="/staff/courses/:courseId/offerings/:offeringId" element={<CourseManagementPages {...staff} />} />
+            <Route path="/staff/courses/:courseId" element={<CourseManagementPages {...staff} />} />
 
             <Route
               path="/admin/notifications/broadcast"
@@ -470,6 +481,10 @@ export default function App() {
                 path="/admin/courses"
                 element={<Navigate to="/staff/courses" replace />}
               />
+
+              <Route path="/admin/courses/:courseId/offerings/:offeringId/classes/:classId" element={<AdminCourseRouteRedirect depth={3} />} />
+              <Route path="/admin/courses/:courseId/offerings/:offeringId" element={<AdminCourseRouteRedirect depth={2} />} />
+              <Route path="/admin/courses/:courseId" element={<AdminCourseRouteRedirect depth={1} />} />
 
               <Route
                 path="/admin/classes"

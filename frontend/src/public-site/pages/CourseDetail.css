@@ -201,6 +201,15 @@
 .member-course-detail .member-offering-list button[aria-selected="true"] { border-color: #2478d2; background: #eff6ff; box-shadow: 0 0 0 2px rgb(36 120 210 / 12%); }
 .member-course-detail .member-offering-list button strong { color: #1b436a; font-size: 14px; }
 .member-course-detail .member-offering-list button span { line-height: 1.5; }
+.member-course-detail .member-offering-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:12px 0; }
+.member-course-detail .member-offering-toolbar .member-muted { margin:0; }
+.member-course-detail .member-offering-history-toggle { flex:0 0 auto; padding:8px 11px; border:1px solid #cbd9e8; border-radius:8px; background:#fff; color:#225984; font:inherit; font-size:12px; font-weight:700; cursor:pointer; }
+.member-course-detail .member-offering-history-toggle:focus-visible { outline:3px solid rgb(23 110 217 / 25%); outline-offset:2px; }
+.member-course-detail .member-offering-visibility { color:#47627c; font-size:11px; font-weight:700; }
+.member-course-detail .member-offering-visibility.REGISTRABLE { color:#176b3b; }
+.member-course-detail .member-offering-visibility.UPCOMING { color:#805b00; }
+.member-course-detail .member-offering-visibility.HISTORY { color:#657386; }
+@media (max-width:700px) { .member-course-detail .member-offering-toolbar { align-items:flex-start; flex-direction:column; } }
 .member-course-detail .member-offering-facts {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
   gap: 10px;
