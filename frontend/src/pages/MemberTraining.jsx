@@ -23,6 +23,7 @@ const classKey = (item) => String(item?.courseClass?.classId ?? "");
 
 export default function MemberTraining({ token, role, onLogout, onNavigate }) {
   const [classes, setClasses] = useState(null);
+  const [selectedClassId, setSelectedClassId] = useState(null);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const latestRequest = useRef(0);
@@ -214,5 +215,5 @@ function ClassResults({ item }) {
         </li>)}</ul>}
       </div>
     </div>
-  </section>;
+  );
 }

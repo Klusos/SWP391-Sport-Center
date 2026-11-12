@@ -1041,7 +1041,7 @@ legend {
 /* Mọi chữ và phần tử con đều ép màu trắng rõ ràng, selector cụ thể hơn
    (.member-level-card .xxx) để chắc chắn thắng mọi rule cũ trùng tên class. */
 .member-level-card,
-.member-level-card * {
+.member-level-card *:not(button):not(.mla-glass-cta):not(a):not(button *) {
   color: #fff;
 }
 

@@ -16,22 +16,52 @@ import {
 } from "../api";
 import { validVnpayUrl } from "../courseCheckout";
 import {
-  canRequestCancellation, CANCELLATION_NOTICE_HOURS, cancellationRequestErrorMessage, formatDate, formatDateTime, lastRequestDay,
-  paymentMethodLabel, paymentPurposeLabel, paymentStatusLabel, requestStatusLabel,
+  canRequestCancellation,
+  CANCELLATION_NOTICE_HOURS,
+  cancellationRequestErrorMessage,
+  formatDate,
+  formatDateTime,
+  lastRequestDay,
+  paymentMethodLabel,
+  paymentPurposeLabel,
+  paymentStatusLabel,
+  requestStatusLabel,
 } from "../membershipCancellation";
-import { hasOverlappingEffectiveMemberships, membershipSections, todayInVietnam } from "../membershipDates";
-import { activeMembershipChain, autoRenewalOnlineReplacementPayload, cancellableMembershipId, isAutoRenewalPayment, RENEWAL_NOTICE_DAYS } from "../membershipRenewal";
+import {
+  hasOverlappingEffectiveMemberships,
+  membershipSections,
+  todayInVietnam,
+} from "../membershipDates";
+import {
+  activeMembershipChain,
+  autoRenewalOnlineReplacementPayload,
+  cancellableMembershipId,
+  isAutoRenewalPayment,
+  RENEWAL_NOTICE_DAYS,
+} from "../membershipRenewal";
 import { membershipPurchaseErrorMessage } from "../membershipPurchase";
 import { isMembershipPayment, upgradeBlockedMessage, upgradeErrorMessage } from "../membershipUpgrade";
 import { filterPaymentHistory, paginateItems, sortMembershipHistory } from "../membershipHistoryModel";
 import "./Portal.css";
 import "./MemberMembership.css";
 
-const rows = (value) => Array.isArray(value) ? value : value?.content ?? [];
-const money = (value) => value == null ? "—" : Number(value).toLocaleString("vi-VN") + " ₫";
-const statusLabel = { ACTIVE: "Đang hoạt động", EXPIRED: "Đã hết hạn", UPGRADED: "Đã nâng cấp", CANCELLED: "Đã hủy" };
+const rows = (value) => (Array.isArray(value) ? value : value?.content ?? []);
+const money = (value) =>
+  value == null ? "—" : Number(value).toLocaleString("vi-VN") + " ₫";
+const statusLabel = {
+  ACTIVE: "Đang hoạt động",
+  EXPIRED: "Đã hết hạn",
+  UPGRADED: "Đã nâng cấp",
+  CANCELLED: "Đã hủy",
+};
 
-export default function MemberMembership({ token, role, onLogout, onNavigate }) {
+export default function MemberMembership({
+  token,
+  role,
+  onLogout,
+  onNavigate,
+}) {
+  const [currentUser, setCurrentUser] = useState(null);
   const [plans, setPlans] = useState(null);
   const [memberships, setMemberships] = useState(null);
   const [payments, setPayments] = useState(null);
@@ -43,7 +73,8 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
   const [busyPlanId, setBusyPlanId] = useState(null);
   const [cancelingId, setCancelingId] = useState(null);
   const [paymentModalPlan, setPaymentModalPlan] = useState(null);
-  const [paymentReconciliationRequired, setPaymentReconciliationRequired] = useState(false);
+  const [paymentReconciliationRequired, setPaymentReconciliationRequired] =
+    useState(false);
   const [togglingId, setTogglingId] = useState(null);
   const [membershipHistoryPage, setMembershipHistoryPage] = useState(0);
   const [paymentHistoryPage, setPaymentHistoryPage] = useState(0);
@@ -64,17 +95,23 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
         getCurrentUserApi(token),
         getPublicMembershipPlansApi(),
       ]);
-      const [ownMemberships, ownPayments, upgradeOptions, ownRequests] = await Promise.all([
-        getMembershipsByMemberApi(token, user.id),
-        getMyPaymentsApi(token),
-        getMembershipUpgradeOptionsApi(token, user.id),
-        getMyCancellationRequestsApi(token),
-      ]);
+      setCurrentUser(user);
+      const [ownMemberships, ownPayments, upgradeOptions, ownRequests] =
+        await Promise.all([
+          getMembershipsByMemberApi(token, user.id),
+          getMyPaymentsApi(token),
+          getMembershipUpgradeOptionsApi(token, user.id),
+          getMyCancellationRequestsApi(token),
+        ]);
       setMemberships(rows(ownMemberships));
       setPayments(rows(ownPayments));
       setUpgrade(upgradeOptions);
       setCancellationRequests(rows(ownRequests));
-      setPlans(rows(availablePlans).filter((plan) => String(plan?.status).toUpperCase() === "ACTIVE"));
+      setPlans(
+        rows(availablePlans).filter(
+          (plan) => String(plan?.status).toUpperCase() === "ACTIVE"
+        )
+      );
       setPaymentReconciliationRequired(false);
       return rows(ownPayments);
     } catch (requestError) {
@@ -83,11 +120,14 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
       setPlans([]);
       setUpgrade(null);
       setCancellationRequests([]);
-      setError(requestError.status === 401
-        ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
-        : requestError.status === 403
+      setError(
+        requestError.status === 401
+          ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
+          : requestError.status === 403
           ? "Tài khoản không có quyền xem thông tin gói hội viên."
-          : requestError.message || "Không tải được thông tin hội viên và thanh toán.");
+          : requestError.message ||
+            "Không tải được thông tin hội viên và thanh toán."
+      );
       return false;
     } finally {
       setLoading(false);
@@ -97,7 +137,9 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
   useEffect(() => {
     let active = true;
     Promise.resolve().then(() => active && load());
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [load]);
 
   useEffect(() => {
@@ -105,8 +147,14 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
     const previousFocus = document.activeElement;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    (upgradeDialogRef.current?.querySelector('input[name="upgrade-payment-method"]:checked')
-      || upgradeDialogRef.current?.querySelector('input[name="upgrade-payment-method"]'))?.focus();
+    (
+      upgradeDialogRef.current?.querySelector(
+        'input[name="upgrade-payment-method"]:checked'
+      ) ||
+      upgradeDialogRef.current?.querySelector(
+        'input[name="upgrade-payment-method"]'
+      )
+    )?.focus();
 
     function handleKeyDown(event) {
       if (event.key === "Escape" && !upgradeBusyRef.current) {
@@ -115,7 +163,11 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
         return;
       }
       if (event.key !== "Tab") return;
-      const focusable = [...(upgradeDialogRef.current?.querySelectorAll("button:not(:disabled), input:not(:disabled)") || [])];
+      const focusable = [
+        ...(upgradeDialogRef.current?.querySelectorAll(
+          "button:not(:disabled), input:not(:disabled)"
+        ) || []),
+      ];
       if (!focusable.length) {
         event.preventDefault();
         upgradeDialogRef.current?.focus();
@@ -139,22 +191,34 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
       if (previousFocus?.isConnected) previousFocus.focus();
     };
   }, [upgradeModal]);
-  const pendingMembershipPayments = useMemo(() => (payments || []).filter(
-    (payment) => isMembershipPayment(payment?.purpose) && payment?.status === "PENDING",
-  ), [payments]);
+
+  const pendingMembershipPayments = useMemo(
+    () =>
+      (payments || []).filter(
+        (payment) =>
+          isMembershipPayment(payment?.purpose) && payment?.status === "PENDING"
+      ),
+    [payments]
+  );
 
   async function startUpgrade(option, method) {
-    if (busyPlanId !== null || pendingMembershipPayments.length > 0) return false;
+    if (busyPlanId !== null || pendingMembershipPayments.length > 0)
+      return false;
     setBusyPlanId(option.planId);
     setError("");
     setNotice("");
     try {
-      const payment = await createPaymentApi(token, { method, purpose: "UPGRADE", referenceId: Number(option.planId) });
+      const payment = await createPaymentApi(token, {
+        method,
+        purpose: "UPGRADE", referenceId: Number(option.planId),
+      });
       setPayments((current) => [payment, ...(current || [])]);
       if (method === "ONLINE") {
         if (!validVnpayUrl(payment.paymentUrl)) {
           await load();
-          setError(`Đã tạo thanh toán nâng cấp #${payment.id}, nhưng máy chủ không trả về liên kết VNPay Sandbox hợp lệ. Hãy làm mới trạng thái hoặc hủy yêu cầu rồi thử lại.`);
+          setError(
+            `Đã tạo thanh toán nâng cấp #${payment.id}, nhưng máy chủ không trả về liên kết VNPay Sandbox hợp lệ. Hãy làm mới trạng thái hoặc hủy yêu cầu rồi thử lại.`
+          );
           return false;
         }
         setUpgradeModal(null);
@@ -193,6 +257,7 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
     if (busyPlanId !== null || upgradeBusyRef.current) return;
     setUpgradeModal(null);
   }
+
   async function startPurchase(plan, method) {
     if (busyPlanId !== null || pendingMembershipPayments.length > 0 || paymentReconciliationRequired) return false;
     setBusyPlanId(plan.id);
@@ -205,23 +270,34 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
         referenceId: Number(plan.id),
         autoRenew: false,
       });
-      setPayments((current) => [payment, ...(current || []).filter((item) => item.id !== payment.id)]);
+      setPayments((current) => [
+        payment,
+        ...(current || []).filter((item) => item.id !== payment.id),
+      ]);
       const refreshedPayments = await load();
-      const paymentVisibleInHistory = Array.isArray(refreshedPayments)
-        && refreshedPayments.some((item) => Number(item.id) === Number(payment.id));
+      const paymentVisibleInHistory =
+        Array.isArray(refreshedPayments) &&
+        refreshedPayments.some((item) => Number(item.id) === Number(payment.id));
       if (!paymentVisibleInHistory) {
         setPaymentReconciliationRequired(true);
-        setPayments((current) => [payment, ...(current || []).filter((item) => item.id !== payment.id)]);
+        setPayments((current) => [
+          payment,
+          ...(current || []).filter((item) => item.id !== payment.id),
+        ]);
       }
       if (method === "ONLINE") {
         if (!validVnpayUrl(payment.paymentUrl)) {
-          setError(`Đã tạo thanh toán #${payment.id}, nhưng máy chủ không trả về liên kết VNPay Sandbox hợp lệ. Thanh toán vẫn đang chờ; không tạo lại hoặc tự hủy. Hãy làm mới trạng thái và liên hệ lễ tân nếu cần hỗ trợ.`);
+          setError(
+            `Đã tạo thanh toán #${payment.id}, nhưng máy chủ không trả về liên kết VNPay Sandbox hợp lệ. Thanh toán vẫn đang chờ; không tạo lại hoặc tự hủy. Hãy làm mới trạng thái và liên hệ lễ tân nếu cần hỗ trợ.`
+          );
           return true;
         }
         window.location.assign(payment.paymentUrl);
         return true;
       } else {
-        setNotice(`Đã tạo yêu cầu thanh toán #${payment.id}. Vui lòng thanh toán tại quầy; gói chưa được kích hoạt.`);
+        setNotice(
+          `Đã tạo yêu cầu thanh toán #${payment.id}. Vui lòng thanh toán tại quầy; gói chưa được kích hoạt.`
+        );
         return true;
       }
     } catch (requestError) {
@@ -236,7 +312,13 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
   }
 
   function openPurchaseModal(plan) {
-    if (loading || busyPlanId !== null || pendingMembershipPayments.length > 0 || paymentReconciliationRequired) return;
+    if (
+      loading ||
+      busyPlanId !== null ||
+      pendingMembershipPayments.length > 0 ||
+      paymentReconciliationRequired
+    )
+      return;
     setError("");
     setPaymentModalPlan(plan);
   }
@@ -248,20 +330,33 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
 
   async function cancelPendingPayment(payment) {
     if (cancelingId !== null) return;
-    if (!window.confirm(`Hủy yêu cầu thanh toán #${payment.id}? Thao tác này không hủy một gói đã được thanh toán.`)) return;
+    if (
+      !window.confirm(
+        `Hủy yêu cầu thanh toán #${payment.id}? Thao tác này không hủy một gói đã được thanh toán.`
+      )
+    )
+      return;
     setCancelingId(payment.id);
     setError("");
     setNotice("");
     try {
       const updated = await cancelPaymentApi(token, payment.id);
-      setPayments((current) => (current || []).map((item) => item.id === updated.id ? updated : item));
-      setNotice(`Yêu cầu thanh toán #${updated.id} đã được hủy. Bạn có thể tạo yêu cầu mới.`);
+      setPayments((current) =>
+        (current || []).map((item) =>
+          item.id === updated.id ? updated : item
+        )
+      );
+      setNotice(
+        `Yêu cầu thanh toán #${updated.id} đã được hủy. Bạn có thể tạo yêu cầu mới.`
+      );
     } catch (requestError) {
-      setError(requestError.status === 401
-        ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
-        : requestError.status === 403
+      setError(
+        requestError.status === 401
+          ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
+          : requestError.status === 403
           ? "Bạn chỉ có thể hủy thanh toán của chính mình."
-          : requestError.message || "Không thể hủy yêu cầu thanh toán.");
+          : requestError.message || "Không thể hủy yêu cầu thanh toán."
+      );
       await load();
     } finally {
       setCancelingId(null);
@@ -271,38 +366,57 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
   async function toggleAutoRenew(membership) {
     if (togglingId !== null) return;
     const enable = !membership.autoRenew;
-    if (!enable && !window.confirm("Tắt tự gia hạn? Yêu cầu gia hạn tự động chưa thanh toán (nếu có) sẽ bị hủy.")) return;
+    if (
+      !enable &&
+      !window.confirm(
+        "Tắt tự gia hạn? Yêu cầu gia hạn tự động chưa thanh toán (nếu có) sẽ bị hủy."
+      )
+    )
+      return;
     setTogglingId(membership.id);
     setError("");
     setNotice("");
     try {
       await setAutoRenewApi(token, membership.id, enable);
       await load();
-      setNotice(enable
-        ? `Đã bật tự gia hạn. ${RENEWAL_NOTICE_DAYS} ngày trước khi gói “${membership.planName}” hết hạn, hệ thống sẽ tạo yêu cầu gia hạn và gửi thông báo cho bạn.`
-        : "Đã tắt tự gia hạn.");
+      setNotice(
+        enable
+          ? `Đã bật tự gia hạn. ${RENEWAL_NOTICE_DAYS} ngày trước khi gói “${membership.planName}” hết hạn, hệ thống sẽ tạo yêu cầu gia hạn và gửi thông báo cho bạn.`
+          : "Đã tắt tự gia hạn."
+      );
     } catch (requestError) {
-      setError(requestError.status === 401
-        ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
-        : requestError.message || "Không thể thay đổi tự gia hạn.");
+      setError(
+        requestError.status === 401
+          ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
+          : requestError.message || "Không thể thay đổi tự gia hạn."
+      );
     } finally {
       setTogglingId(null);
     }
   }
 
-  // A pending counter request (e.g. an auto-renewal) can be paid online instead: cancel it, then create the ONLINE one.
   async function switchToVnpay(payment) {
     if (cancelingId !== null || busyPlanId !== null) return;
-    if (!window.confirm(`Chuyển yêu cầu #${payment.id} sang thanh toán VNPay Sandbox? Yêu cầu tại quầy sẽ được hủy và thay bằng yêu cầu online cùng số tiền.`)) return;
+    if (
+      !window.confirm(
+        `Chuyển yêu cầu #${payment.id} sang thanh toán VNPay Sandbox? Yêu cầu tại quầy sẽ được hủy và thay bằng yêu cầu online cùng số tiền.`
+      )
+    )
+      return;
     setCancelingId(payment.id);
     setError("");
     setNotice("");
     try {
       await cancelPaymentApi(token, payment.id);
-      const online = await createPaymentApi(token, autoRenewalOnlineReplacementPayload(payment));
+      const online = await createPaymentApi(
+        token,
+        autoRenewalOnlineReplacementPayload(payment)
+      );
       if (!validVnpayUrl(online.paymentUrl)) {
         await load();
-        setError(`Đã tạo thanh toán #${online.id}, nhưng máy chủ không trả về liên kết VNPay Sandbox hợp lệ. Hãy làm mới trạng thái hoặc liên hệ lễ tân.`);
+        setError(
+          `Đã tạo thanh toán #${online.id}, nhưng máy chủ không trả về liên kết VNPay Sandbox hợp lệ. Hãy làm mới trạng thái hoặc liên hệ lễ tân.`
+        );
         return;
       }
       window.location.assign(online.paymentUrl);
@@ -317,16 +431,27 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
 
   async function requestCancellation(membership) {
     if (togglingId !== null) return;
-    const reason = window.prompt(`Gửi yêu cầu hủy gói “${membership.planName}” (${formatDate(membership.startDate)} → ${formatDate(membership.endDate)})? `
-      + "Nếu được duyệt, khoản đã thanh toán cho gói này được hoàn 100% tại quầy. Lý do (không bắt buộc):", "");
+    const reason = window.prompt(
+      `Gửi yêu cầu hủy gói “${membership.planName}” (${formatDate(
+        membership.startDate
+      )} → ${formatDate(membership.endDate)})? ` +
+        "Nếu được duyệt, khoản đã thanh toán cho gói này được hoàn 100% tại quầy. Lý do (không bắt buộc):",
+      ""
+    );
     if (reason === null) return;
     setTogglingId(membership.id);
     setError("");
     setNotice("");
     try {
-      await requestMembershipCancellationApi(token, membership.id, reason.trim() || null);
+      await requestMembershipCancellationApi(
+        token,
+        membership.id,
+        reason.trim() || null
+      );
       await load();
-      setNotice(`Đã gửi yêu cầu hủy gói “${membership.planName}”. Gói vẫn giữ nguyên cho đến khi nhân viên duyệt; bạn sẽ nhận thông báo kết quả.`);
+      setNotice(
+        `Đã gửi yêu cầu hủy gói “${membership.planName}”. Gói vẫn giữ nguyên cho đến khi nhân viên duyệt; bạn sẽ nhận thông báo kết quả.`
+      );
     } catch (requestError) {
       setError(cancellationRequestErrorMessage(requestError));
       await load();
@@ -337,7 +462,12 @@ export default function MemberMembership({ token, role, onLogout, onNavigate }) 
 
   async function withdrawRequest(request) {
     if (togglingId !== null) return;
-    if (!window.confirm(`Rút yêu cầu hủy gói “${request.planName}”? Gói sẽ tiếp tục như bình thường.`)) return;
+    if (
+      !window.confirm(
+        `Rút yêu cầu hủy gói “${request.planName}”? Gói sẽ tiếp tục như bình thường.`
+      )
+    )
+      return;
     setTogglingId(request.membershipId);
     setError("");
     setNotice("");
