@@ -28,6 +28,40 @@ export function defaultRevenueRange(now = new Date(), months = 8) {
   };
 }
 
+function shiftBusinessDate(date, offsetDays) {
+  const [year, month, day] = date.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + offsetDays));
+  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}-${String(shifted.getUTCDate()).padStart(2, "0")}`;
+}
+
+export function defaultReportRevenueRange(now = new Date()) {
+  const today = hcmDate(now);
+  return { from: `${today.slice(0, 7)}-01`, to: today };
+}
+
+export const REVENUE_DATE_PRESETS = [
+  ["TODAY", "Hôm nay"],
+  ["LAST_7_DAYS", "7 ngày gần nhất"],
+  ["THIS_MONTH", "Tháng này"],
+  ["LAST_30_DAYS", "30 ngày gần nhất"],
+];
+
+export function revenueDatePresetRange(preset, now = new Date()) {
+  const today = hcmDate(now);
+  const firstOfMonth = `${today.slice(0, 7)}-01`;
+  switch (preset) {
+    case "TODAY": return { from: today, to: today };
+    case "LAST_7_DAYS": return { from: shiftBusinessDate(today, -6), to: today };
+    case "THIS_MONTH": return { from: firstOfMonth, to: today };
+    case "LAST_30_DAYS": return { from: shiftBusinessDate(today, -29), to: today };
+    default: return null;
+  }
+}
+
+export function isValidRevenueRange({ from, to } = {}) {
+  return Boolean(from && to && to >= from);
+}
+
 export function formatVnd(value) {
   return new Intl.NumberFormat("vi-VN", {
     style: "currency",
