@@ -33,24 +33,23 @@ test("cancellation errors are converted to safe user-facing text", () => {
  assert.notEqual(cancellationErrorMessage({ message: deadline }), deadline);
  assert.notEqual(cancellationErrorMessage({ message: internal }), internal);
 });
-test("course refund queue and confirmation are on Course & PT Payments only", async () => {
+test("refund queues and confirmation are on their matching Course and PT payment pages", async () => {
  const sales = await read("../src/pages/ReceptionistMembershipSales.jsx");
  const payments = await read("../src/pages/ReceptionistCoursePayments.jsx");
  assert.doesNotMatch(sales, /getRefundRequiredPaymentsApi|confirmRefundApi|refunds\.content/);
- assert.match(payments, /getRefundRequiredPaymentsApi\(token, activePage, 50\)/);
- assert.match(payments, /refundPurposeLabel\(payment\)/);
- assert.match(payments, /refundReferenceLabel\(payment\)/);
- assert.match(payments, /payment\.courseName/);
- assert.match(payments, /payment\.courseOfferingName/);
- assert.match(payments, /payment\.className/);
- assert.match(payments, /window\.confirm/);
- assert.match(payments, /window\.prompt/);
- assert.match(payments, /confirmRefundApi\(token, payment\.id, note\.trim\(\) \|\| null\)/);
- assert.match(payments, /refundBusy\.current \|\| payment\?\.status !== "REFUND_REQUIRED"/);
- assert.match(payments, /refundQueue\.loading/);
- assert.match(payments, /refundQueue\.error/);
- assert.match(payments, /refundQueue\.notice/);
- assert.match(payments, /refundQueueRows\(refundQueue\.data\)\.length === 0/);
+ const refundQueue = await read("../src/components/ReceptionistRefundQueue.jsx");
+ const ptPayments = await read("../src/pages/ReceptionistPtPayments.jsx");
+ assert.match(payments, /purposes=\{\["COURSE_REGISTRATION", "MEMBERSHIP", "UPGRADE"\]\}/);
+ assert.match(ptPayments, /purposes=\{\["PT_BOOKING"\]\}/);
+ assert.match(refundQueue, /refundPurposeLabel\(payment\)/);
+ assert.match(refundQueue, /refundReferenceLabel\(payment\)/);
+ assert.match(refundQueue, /payment\.courseName/);
+ assert.match(refundQueue, /confirmRefundApi\(token, payment\.id, note\.trim\(\) \|\| null\)/);
+ assert.match(refundQueue, /payment\?\.status !== "REFUND_REQUIRED"/);
+ assert.match(refundQueue, /queue\.loading/);
+ assert.match(refundQueue, /queue\.error/);
+ assert.match(refundQueue, /queue\.notice/);
+ assert.doesNotMatch(ptPayments, /confirmRefundApi/);
 });
 
 test("Member course detail keeps its upper checkout card and separate schedule action", async () => {
