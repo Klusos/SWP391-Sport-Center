@@ -2,6 +2,7 @@ package group5.example.sportCenter.security;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
@@ -49,6 +50,7 @@ public class JwtService {
                 )
                 .claim("email", user.getEmail())
                 .claim("role", user.getRole())
+                .claim("jti", UUID.randomUUID().toString())
                 .build();
 
         JwsHeader header = JwsHeader

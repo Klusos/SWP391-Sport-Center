@@ -8,12 +8,14 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import group5.example.sportCenter.exception.ApiErrorResponseWriter;
 import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.repository.UserRepository;
+import group5.example.sportCenter.service.JwtRevocationService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -27,10 +29,15 @@ public final class CurrentAccountAuthorizationFilter extends OncePerRequestFilte
 
     private final UserRepository users;
     private final ApiErrorResponseWriter errors;
+    private final JwtRevocationService revocations;
 
-    public CurrentAccountAuthorizationFilter(UserRepository users, ApiErrorResponseWriter errors) {
+    public CurrentAccountAuthorizationFilter(
+            UserRepository users,
+            ApiErrorResponseWriter errors,
+            JwtRevocationService revocations) {
         this.users = users;
         this.errors = errors;
+        this.revocations = revocations;
     }
 
     @Override
@@ -41,6 +48,34 @@ public final class CurrentAccountAuthorizationFilter extends OncePerRequestFilte
 
         if (SecurityContextHolder.getContext().getAuthentication() instanceof JwtAuthenticationToken jwtAuth
                 && jwtAuth.isAuthenticated()) {
+            Jwt jwt = jwtAuth.getToken();
+            String jti = jwt.getClaimAsString("jti");
+            if (!JwtRevocationFingerprint.isValidJti(jti)) {
+                reject(response, HttpStatus.UNAUTHORIZED, "The token identifier is missing or invalid");
+                return;
+            }
+
+            boolean logoutRequest = "POST".equalsIgnoreCase(request.getMethod())
+                    && "/api/auth/logout".equals(requestPath(request));
+            if (logoutRequest) {
+                // Logout only records this signed token identifier and exposes no account data.
+                filterChain.doFilter(request, response);
+                return;
+            }
+
+            final boolean revoked;
+            try {
+                revoked = revocations.isRevoked(jti);
+            } catch (RuntimeException exception) {
+                reject(response, HttpStatus.SERVICE_UNAVAILABLE,
+                        "Authentication status could not be verified");
+                return;
+            }
+            if (revoked) {
+                reject(response, HttpStatus.UNAUTHORIZED, "The token has been revoked");
+                return;
+            }
+
             final Integer userId;
             try {
                 userId = Integer.valueOf(jwtAuth.getToken().getSubject());
@@ -80,5 +115,11 @@ public final class CurrentAccountAuthorizationFilter extends OncePerRequestFilte
     private void reject(HttpServletResponse response, HttpStatus status, String message) throws IOException {
         SecurityContextHolder.clearContext();
         errors.write(response, status, message);
+    }
+
+    private String requestPath(HttpServletRequest request) {
+        String requestUri = request.getRequestURI();
+        String contextPath = request.getContextPath();
+        return requestUri.startsWith(contextPath) ? requestUri.substring(contextPath.length()) : requestUri;
     }
 }

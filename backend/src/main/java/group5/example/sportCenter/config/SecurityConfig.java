@@ -24,6 +24,7 @@ import group5.example.sportCenter.repository.UserRepository;
 import group5.example.sportCenter.exception.ApiErrorResponseWriter;
 import group5.example.sportCenter.security.ApiSecurityErrorHandler;
 import group5.example.sportCenter.security.CurrentAccountAuthorizationFilter;
+import group5.example.sportCenter.service.JwtRevocationService;
 
 @Configuration
 public class SecurityConfig {
@@ -33,6 +34,7 @@ public class SecurityConfig {
             HttpSecurity http,
             Converter<Jwt, AbstractAuthenticationToken> jwtAuthenticationConverter,
             UserRepository userRepository,
+            JwtRevocationService jwtRevocationService,
             ApiErrorResponseWriter apiErrors,
             ApiSecurityErrorHandler securityErrors
     ) throws Exception {
@@ -51,6 +53,7 @@ public class SecurityConfig {
                 .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/api/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/auth/logout").authenticated()
                 .requestMatchers(HttpMethod.GET, "/api/public/sports").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/public/sports/*/courses", "/api/public/courses/*").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/public/membership-plans").permitAll()
@@ -238,7 +241,7 @@ public class SecurityConfig {
             );
 
         http.addFilterAfter(
-                new CurrentAccountAuthorizationFilter(userRepository, apiErrors),
+                new CurrentAccountAuthorizationFilter(userRepository, apiErrors, jwtRevocationService),
                 BearerTokenAuthenticationFilter.class);
 
         return http.build();

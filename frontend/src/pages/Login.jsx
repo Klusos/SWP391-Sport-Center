@@ -1,8 +1,7 @@
 ﻿import { useState } from "react";
-import { loginApi } from "../api";
 import { Link } from "react-router-dom";
 
-export default function Login({ onLoginSuccess, sessionExpired = false }) {
+export default function Login({ onLogin, sessionExpired = false }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -13,16 +12,7 @@ export default function Login({ onLoginSuccess, sessionExpired = false }) {
     setError("");
     setLoading(true);
     try {
-      const data = await loginApi(email, password);
-      if (!data?.accessToken || typeof data.accessToken !== "string") {
-        setError("The login response did not include an access token. Please contact support.");
-        return;
-      }
-      if (!["ADMIN", "RECEPTIONIST", "MEMBER", "COACH"].includes(data.role)) {
-        setError("This account does not have a supported application role.");
-        return;
-      }
-      onLoginSuccess(data);
+      await onLogin(email, password);
     } catch (requestError) {
       if (requestError.status === 415) {
         setError("The server rejected the login content type. This frontend sends application/json; verify the running frontend and backend endpoint versions.");

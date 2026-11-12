@@ -10,7 +10,15 @@ import {
 } from "react-router-dom";
 
 import NotificationBell from "./components/NotificationBell";
-import { setUnauthorizedHandler } from "./api";
+import { loginApi, logoutApi, setActiveAuthToken, setUnauthorizedHandler } from "./api";
+import {
+  clearLegacyTabAuth,
+  clearSharedAuthIfToken,
+  readSharedAuth,
+  subscribeToSharedAuth,
+  withAuthTransitionLock,
+  writeSharedAuth,
+} from "./authStorage";
 import AdminNotificationBroadcast from "./pages/AdminNotificationBroadcast";
 import AdminAuditLogs from "./pages/AdminAuditLogs";
 import ConsultationQueue from "./pages/ConsultationQueue";
@@ -70,17 +78,11 @@ function AdminCourseRouteRedirect({ depth }) {
 }
 
 const STAFF_ROLES = ["ADMIN", "RECEPTIONIST"];
-const AUTH_STORAGE_KEY = "sportcenter.auth";
-
-function readStoredAuth() {
-  try {
-    const value = JSON.parse(sessionStorage.getItem(AUTH_STORAGE_KEY) || "null");
-    return value?.accessToken && ["ADMIN", "RECEPTIONIST", "COACH", "MEMBER"].includes(value.role)
-      ? value
-      : null;
-  } catch {
-    return null;
-  }
+function initializeAuth() {
+  clearLegacyTabAuth();
+  const stored = readSharedAuth();
+  setActiveAuthToken(stored?.accessToken ?? null);
+  return stored;
 }
 
 const home = (role) => {
@@ -174,27 +176,38 @@ function AdminRoute({ auth }) {
 }
 
 export default function App() {
-  const [auth, setAuth] = useState(readStoredAuth);
+  const [auth, setAuth] = useState(initializeAuth);
   const navigate = useNavigate();
   const location = useLocation();
   const authRef = useRef(auth);
   const handledUnauthorizedToken = useRef(null);
+  const [logoutError, setLogoutError] = useState("");
 
   const handleUnauthorized = useCallback((token) => {
-    const currentAuth = authRef.current;
-    if (!currentAuth || currentAuth.accessToken !== token || handledUnauthorizedToken.current === token) {
-      return;
-    }
+    void withAuthTransitionLock(async () => {
+      const currentAuth = authRef.current;
+      if (!currentAuth || currentAuth.accessToken !== token || handledUnauthorizedToken.current === token) {
+        return;
+      }
 
-    handledUnauthorizedToken.current = token;
-    authRef.current = null;
-    try {
-      sessionStorage.removeItem(AUTH_STORAGE_KEY);
-    } catch {
-      // Ignore unavailable browser storage.
-    }
-    setAuth(null);
-    navigate("/login", { replace: true, state: { sessionExpired: true } });
+      const sharedAuth = readSharedAuth();
+      if (sharedAuth?.accessToken !== token) {
+        if (sharedAuth?.accessToken !== currentAuth.accessToken) {
+          authRef.current = sharedAuth;
+          setActiveAuthToken(sharedAuth?.accessToken ?? null);
+          setAuth(sharedAuth);
+        }
+        return;
+      }
+
+      handledUnauthorizedToken.current = token;
+      if (clearSharedAuthIfToken(token)) {
+        authRef.current = null;
+        setActiveAuthToken(null);
+        setAuth(null);
+        navigate("/login", { replace: true, state: { sessionExpired: true } });
+      }
+    }).catch(() => {});
   }, [navigate]);
 
   useEffect(() => {
@@ -202,49 +215,128 @@ export default function App() {
     return () => setUnauthorizedHandler(null);
   }, [handleUnauthorized]);
 
-  function handleLogin(data) {
-    authRef.current = data;
+  useEffect(() => subscribeToSharedAuth((nextAuth) => {
+    const currentAuth = authRef.current;
+    const currentToken = currentAuth?.accessToken ?? null;
+    const nextToken = nextAuth?.accessToken ?? null;
+    if (currentToken === nextToken) return;
+
+    authRef.current = nextAuth;
+    setLogoutError("");
     handledUnauthorizedToken.current = null;
-    setAuth(data);
-    try {
-      sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data));
-    } catch {
-      // Keep this login active in memory if session storage is unavailable.
-    }
+    setActiveAuthToken(nextToken);
+    setAuth(nextAuth);
+  }), []);
 
-    const returnPath = location.state?.from;
+  useEffect(() => {
+    authRef.current = auth;
+    setActiveAuthToken(auth?.accessToken ?? null);
+  }, [auth]);
 
-    // Quay lại trang chi tiết khóa học nếu hội viên đăng nhập từ đó.
-    const courseReturn =
-      data.role === "MEMBER" &&
-      typeof returnPath === "string" &&
-      (/^\/member\/(?:course-checkout\/[1-9]\d*|membership)(?:\?[^#]*)?$/.test(returnPath) ||
-        /^\/member\/courses\/[1-9]\d*$/.test(returnPath) ||
-        /^\/khoa-hoc\/[1-9]\d*$/.test(returnPath));
+  async function handleLogin(email, password) {
+    setLogoutError("");
+    return withAuthTransitionLock(async () => {
+      const previousAuth = readSharedAuth();
+      const data = await loginApi(email, password);
+      if (!data?.accessToken || typeof data.accessToken !== "string") {
+        throw new Error("Phản hồi đăng nhập không có access token hợp lệ.");
+      }
+      if (!["ADMIN", "RECEPTIONIST", "COACH", "MEMBER"].includes(data.role)) {
+        throw new Error("Tài khoản không có vai trò được hỗ trợ.");
+      }
 
-    const memberCoursePath = courseReturn
-      ? returnPath.replace(/^\/khoa-hoc\//, "/member/courses/")
-      : returnPath;
+      if (previousAuth?.accessToken && previousAuth.accessToken !== data.accessToken) {
+        try {
+          await logoutApi(previousAuth.accessToken);
+        } catch (revokeError) {
+          // Do not publish the new identity when the old token could not be revoked.
+          try { await logoutApi(data.accessToken); } catch { /* best-effort cleanup only */ }
+          if (revokeError.status === 401) {
+            // The old credential is already unusable; account switching can proceed.
+          } else {
+            const error = new Error("Không thể thu hồi phiên đăng nhập trước. Vui lòng thử lại; tài khoản hiện tại chưa thay đổi.");
+            error.status = revokeError.status;
+            throw error;
+          }
+        }
+      }
 
-    navigate(
-      courseReturn ? memberCoursePath : home(data.role),
-      { replace: true }
-    );
+      const currentShared = readSharedAuth();
+      if ((currentShared?.accessToken ?? null) !== (previousAuth?.accessToken ?? null)) {
+        try { await logoutApi(data.accessToken); } catch { /* avoid retaining an unpublished credential where possible */ }
+        throw new Error("Phiên đăng nhập đã thay đổi ở tab khác. Vui lòng thử đăng nhập lại.");
+      }
+      if (!writeSharedAuth(data)) {
+        try { await logoutApi(data.accessToken); } catch { /* best-effort cleanup only */ }
+        throw new Error("Không thể lưu phiên đăng nhập dùng chung. Vui lòng thử lại.");
+      }
+
+      authRef.current = data;
+      handledUnauthorizedToken.current = null;
+      setActiveAuthToken(data.accessToken);
+      setAuth(data);
+
+      const returnPath = location.state?.from;
+
+      // Return Members to the requested course when login began there.
+      const courseReturn =
+        data.role === "MEMBER" &&
+        typeof returnPath === "string" &&
+        (/^\/member\/(?:course-checkout\/[1-9]\d*|membership)(?:\?[^#]*)?$/.test(returnPath) ||
+          /^\/member\/courses\/[1-9]\d*$/.test(returnPath) ||
+          /^\/khoa-hoc\/[1-9]\d*$/.test(returnPath));
+
+      const memberCoursePath = courseReturn
+        ? returnPath.replace(/^\/khoa-hoc\//, "/member/courses/")
+        : returnPath;
+
+      navigate(
+        courseReturn ? memberCoursePath : home(data.role),
+        { replace: true }
+      );
+      return data;
+    });
   }
 
-  function handleLogout(returnTo) {
-    authRef.current = null;
-    setAuth(null);
+  async function handleLogout(returnTo) {
+    setLogoutError("");
     try {
-      sessionStorage.removeItem(AUTH_STORAGE_KEY);
-    } catch {
-      // Ignore unavailable browser storage.
-    }
+      return await withAuthTransitionLock(async () => {
+        const previousAuth = readSharedAuth() ?? authRef.current;
+        const token = previousAuth?.accessToken;
+        if (token) {
+          try {
+            await logoutApi(token);
+          } catch (error) {
+            if (error.status !== 401) {
+              setLogoutError("Không thể xác nhận đăng xuất với máy chủ. Phiên hiện tại vẫn được giữ để bạn có thể thử lại.");
+              return false;
+            }
+            // A 401 means this credential is already unusable, not that revocation succeeded.
+          }
+          clearSharedAuthIfToken(token);
+        }
 
-    navigate("/login", {
-      replace: true,
-      state: returnTo ? { from: returnTo } : undefined,
-    });
+        const latestAuth = readSharedAuth();
+        if (latestAuth) {
+          authRef.current = latestAuth;
+          setActiveAuthToken(latestAuth.accessToken);
+          setAuth(latestAuth);
+          return false;
+        }
+        authRef.current = null;
+        setActiveAuthToken(null);
+        setAuth(null);
+        navigate("/login", {
+          replace: true,
+          state: returnTo ? { from: returnTo } : undefined,
+        });
+        return true;
+      });
+    } catch {
+      setLogoutError("Không thể đồng bộ đăng xuất giữa các tab. Vui lòng thử lại.");
+      return false;
+    }
   }
 
   const staff = {
@@ -321,7 +413,8 @@ export default function App() {
 
   return (
     <>
-      <Routes>
+      {logoutError && <div className="error-text global-auth-error" role="alert">{logoutError}</div>}
+      <Routes key={auth?.accessToken || "anonymous"}>
         {/* Website công khai */}
         <Route element={<PublicLayout />}>
           <Route path="/" element={<Home />} />
@@ -360,7 +453,7 @@ export default function App() {
               <Navigate to={home(auth.role)} replace />
             ) : (
               <Login
-                onLoginSuccess={handleLogin}
+                onLogin={handleLogin}
                 sessionExpired={Boolean(location.state?.sessionExpired)}
               />
             )
