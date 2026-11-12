@@ -529,6 +529,11 @@ export default function App() {
           />
 
           <Route
+            path="/member/training/:classId"
+            element={<MemberTraining {...member} />}
+          />
+
+          <Route
             path="/member/training"
             element={<MemberTraining {...member} />}
           />
