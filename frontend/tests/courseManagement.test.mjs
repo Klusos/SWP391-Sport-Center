@@ -194,3 +194,12 @@ test("Class detail puts its status beside the title and reuses accessible class 
   assert.match(pages, /availability\.canComplete/);
   assert.match(pages, /availability\.canCancel/);
 });
+test("Auto Schedule requires an explicit facility before Preview or Generate", async () => {
+  const panel = await readFile(new URL("../src/pages/ClassSessionGenerationPanel.jsx", import.meta.url), "utf8");
+  assert.match(panel, /if \(!facilityId\) throw new Error/);
+  assert.match(panel, /aria-required="true"/);
+  assert.match(panel, /facilityId: Number\(facilityId\)/);
+  assert.match(panel, /previewClassSessionGenerationApi\(token, request\)/);
+  assert.match(panel, /confirmClassSessionGenerationApi\(token, request\)/);
+  assert.doesNotMatch(panel, /Cơ sở \(không bắt buộc\)|Chưa chọn cơ sở/);
+});

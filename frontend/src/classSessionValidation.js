@@ -30,6 +30,7 @@ function minuteValue(value) {
 }
 
 export function validateClassSessionSchedule(form, offering) {
+  if (form?.facilityId === "" || form?.facilityId == null) return "Vui lòng chọn cơ sở cho buổi học.";
   const start = parseDateTimeLocal(form?.startTime);
   const end = parseDateTimeLocal(form?.endTime);
   if (!start || !end) return "Vui lòng nhập ngày giờ bắt đầu và kết thúc hợp lệ.";

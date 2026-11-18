@@ -29,6 +29,7 @@ export default function ClassSessionGenerationPanel({ token, courseClass, offeri
   const selectedFacility = activeFacilities.find((facility) => String(facility.id) === facilityId);
 
   function payload() {
+    if (!facilityId) throw new Error("Vui lòng chọn cơ sở trước khi xem trước hoặc tạo lịch.");
     if (weekdays.length === 0) throw new Error("Chọn ít nhất một ngày trong tuần.");
     if (!startTime) throw new Error("Nhập giờ bắt đầu mỗi ngày.");
     if (!firstDate) throw new Error("Chọn ngày bắt đầu áp dụng.");
@@ -40,7 +41,7 @@ export default function ClassSessionGenerationPanel({ token, courseClass, offeri
       courseClassId: Number(courseClass.id),
       weekdays,
       startTime,
-      facilityId: facilityId ? Number(facilityId) : null,
+      facilityId: Number(facilityId),
       firstEligibleDate: firstDate,
       requestedSessionCount,
     };
@@ -103,8 +104,8 @@ export default function ClassSessionGenerationPanel({ token, courseClass, offeri
         <label>Giờ bắt đầu<input type="time" value={startTime} onChange={(event) => { setStartTime(event.target.value); setPreview(null); }} required /></label>
         <label>Ngày áp dụng đầu tiên<input type="date" value={firstDate} min={offering.startDate} max={offering.endDate} onChange={(event) => { setFirstDate(event.target.value); setPreview(null); }} required /></label>
         <label>Số buổi cần tạo<input type="number" min="1" max={remaining || undefined} step="1" value={count} onChange={(event) => { setCount(event.target.value); setPreview(null); }} disabled={remaining === 0} required /></label>
-        <label>Cơ sở (không bắt buộc)<select value={facilityId} onChange={(event) => { setFacilityId(event.target.value); setPreview(null); }}>
-          <option value="">Chưa chọn cơ sở</option>{activeFacilities.map((facility) => <option value={facility.id} key={facility.id}>{facility.name}</option>)}
+        <label>Cơ sở<select value={facilityId} aria-required="true" onChange={(event) => { setFacilityId(event.target.value); setPreview(null); }}>
+          <option value="">Chọn cơ sở</option>{activeFacilities.map((facility) => <option value={facility.id} key={facility.id}>{facility.name}</option>)}
         </select></label>
       </div>
       <p className="session-generation-hint">Giờ kết thúc được tính theo thời lượng của đợt học. Ngày kết thúc của đợt được tính trọn ngày. Các buổi hiện có giữ nguyên; lịch thủ công và lịch tự động cùng dùng chỉ tiêu này.</p>
