@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Sidebar from "../components/Sidebar";
 import AdminTopBar from "../components/AdminTopBar";
 import "./MemberList.css";
+import { applyMemberDetailRequestIfCurrent } from "../memberDetailRequests.js";
 import {
   createMemberProfileApi,
   deactivateMemberApi,
@@ -66,8 +68,20 @@ export default function MemberList({ token, role, currentUserName, onLogout, onN
   const [accountSaving, setAccountSaving] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [deactivating, setDeactivating] = useState(false);
+  const detailRequestRef = useRef(0);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const detailDialogRef = useRef(null);
+  const detailCloseButtonRef = useRef(null);
+  const detailTriggerRef = useRef(null);
+  const closeDetailRef = useRef(null);
+  const detailBusyRef = useRef(false);
   const allowed = role === "ADMIN" || role === "RECEPTIONIST";
   const isAdmin = role === "ADMIN";
+  const detailBusy = accountSaving || profileSaving || deactivating;
+  const detailDirty = Boolean(selected && (
+    JSON.stringify(account) !== JSON.stringify(accountForm(selected.user))
+    || JSON.stringify(profile) !== JSON.stringify(profileForm(selected.profile))
+  ));
 
   const loadMembers = useCallback(async () => {
     setLoading(true);
@@ -105,25 +119,36 @@ export default function MemberList({ token, role, currentUserName, onLogout, onN
   const pageCount = Math.ceil(filtered.length / PAGE_SIZE);
   const pageMembers = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-  async function openDetail(memberId) {
+  async function openDetail(memberId, trigger) {
+    detailTriggerRef.current = trigger;
+    const requestId = ++detailRequestRef.current;
+    setDetailOpen(true);
+    setSelected(null);
+    setAccount(null);
+    setProfile(null);
     setDetailLoading(true);
     setDetailError("");
     setNotice("");
     setEditing(false);
-    try {
-      const user = await getUserApi(token, memberId);
-      if (user.role !== "MEMBER") throw new Error("Tài khoản này không còn là MEMBER.");
-      const memberProfile = profiles.find((item) => item.memberId === user.id) || null;
-      setSelected({ user, profile: memberProfile });
-      setAccount(accountForm(user));
-      setProfile(profileForm(memberProfile));
-    } catch (requestError) {
-      setDetailError(requestError.status === 403
-        ? "Bạn không có quyền xem thành viên này."
-        : requestError.message || "Không tải được thông tin thành viên.");
-    } finally {
-      setDetailLoading(false);
-    }
+    await applyMemberDetailRequestIfCurrent(
+      getUserApi(token, memberId).then((user) => {
+        if (user.role !== "MEMBER") throw new Error("Tài khoản này không còn là MEMBER.");
+        return user;
+      }),
+      {
+        isCurrent: () => requestId === detailRequestRef.current,
+        onSuccess: (user) => {
+          const memberProfile = profiles.find((item) => item.memberId === user.id) || null;
+          setSelected({ user, profile: memberProfile });
+          setAccount(accountForm(user));
+          setProfile(profileForm(memberProfile));
+        },
+        onError: (requestError) => setDetailError(requestError.status === 403
+          ? "Bạn không có quyền xem thành viên này."
+          : requestError.message || "Không tải được thông tin thành viên."),
+        onSettled: () => setDetailLoading(false),
+      },
+    );
   }
 
   async function saveAccount(event) {
@@ -199,7 +224,86 @@ export default function MemberList({ token, role, currentUserName, onLogout, onN
     }
   }
 
+  function closeDetail() {
+    if (detailBusy) return false;
+    if (detailDirty && !window.confirm("B\u1ea1n c\u00f3 thay đ\u1ed5i ch\u01b0a l\u01b0u. B\u1ea1n c\u00f3 mu\u1ed1n đ\u00f3ng v\u00e0 b\u1ecf thay đ\u1ed5i kh\u00f4ng?")) return false;
+    detailRequestRef.current += 1;
+    setDetailOpen(false);
+    setDetailLoading(false);
+    setDetailError("");
+    setEditing(false);
+    if (selected) {
+      setAccount(accountForm(selected.user));
+      setProfile(profileForm(selected.profile));
+    }
+    return true;
+  }
+
+  useEffect(() => {
+    closeDetailRef.current = closeDetail;
+    detailBusyRef.current = detailBusy;
+  });
+
+  useEffect(() => {
+    if (!detailOpen) return undefined;
+    const previousFocus = document.activeElement;
+    const trigger = detailTriggerRef.current;
+    const previousOverflow = document.body.style.overflow;
+    const previousPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    const currentPaddingRight = Number.parseFloat(getComputedStyle(document.body).paddingRight) || 0;
+    const appRoot = document.getElementById("root");
+    const previousInert = appRoot?.inert;
+    document.body.style.setProperty("overflow", "hidden");
+    if (scrollbarWidth > 0) document.body.style.setProperty("padding-right", `${currentPaddingRight + scrollbarWidth}px`);
+    if (appRoot) appRoot.inert = true;
+    detailCloseButtonRef.current?.focus();
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape" && !detailBusyRef.current) {
+        event.preventDefault();
+        closeDetailRef.current?.();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = [...(detailDialogRef.current?.querySelectorAll(
+        "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex='-1'])",
+      ) || [])].filter((element) => element.getClientRects().length > 0);
+      if (!focusable.length) {
+        event.preventDefault();
+        detailDialogRef.current?.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const activeIndex = focusable.indexOf(document.activeElement);
+      if (event.shiftKey && activeIndex <= 0) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && activeIndex === focusable.length - 1) {
+        event.preventDefault();
+        first.focus();
+      } else if (activeIndex < 0) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      if (previousOverflow) document.body.style.setProperty("overflow", previousOverflow);
+      else document.body.style.removeProperty("overflow");
+      if (previousPaddingRight) document.body.style.setProperty("padding-right", previousPaddingRight);
+      else document.body.style.removeProperty("padding-right");
+      if (appRoot) appRoot.inert = previousInert;
+      const focusTarget = trigger?.isConnected ? trigger : previousFocus;
+      if (focusTarget?.isConnected) focusTarget.focus();
+    };
+  }, [detailOpen]);
+
   return (
+    <>
     <div className="layout">
       <Sidebar role={role} activePage="members" onNavigate={onNavigate} onLogout={onLogout} />
       <main className={`main member-list-main${isAdmin ? " is-admin" : ""}`}>
@@ -214,12 +318,12 @@ export default function MemberList({ token, role, currentUserName, onLogout, onN
         {error && <div className="banner error" role="alert">{error}</div>}
         {forbidden && <p className="queue-state">Danh sách thành viên hiện không khả dụng.</p>}
 
-        {allowed && <div className={`member-list-workspace${selected ? " has-selection" : ""}`}>
+        {allowed && <div className="member-list-workspace">
           <section className="member-list-table-column">
           <div className="member-list-toolbar">
             <label className="member-search-label" htmlFor="memberSearch">Tìm tên, email, số điện thoại, ID hoặc trạng thái</label>
             <input id="memberSearch" type="search" placeholder="Tìm tên, email, SĐT hoặc ID" value={query}
-              onChange={(event) => { setQuery(event.target.value); setPage(0); setSelected(null); }} />
+              onChange={(event) => { detailRequestRef.current += 1; setDetailLoading(false); setQuery(event.target.value); setPage(0); setSelected(null); }} />
             <button type="button" onClick={loadMembers} disabled={loading}>{loading ? "Đang tải…" : "Làm mới"}</button>
           </div>
 
@@ -235,7 +339,7 @@ export default function MemberList({ token, role, currentUserName, onLogout, onN
                         <td>#{member.id}</td><td><span className="member-name-cell"><i className={`member-initials tone-${Number(member.id || 0) % 4}`}>{memberInitials(member.name)}</i><b>{member.name || `Thành viên #${member.id}`}</b></span></td><td className="member-contact-cell" title={member.email || undefined}>{member.email || "—"}</td><td className="member-contact-cell" title={member.phone || undefined}>{member.phone || "—"}</td>
                         <td><span className={"status-pill status-" + String(member.status).toLowerCase()}>{member.status === "ACTIVE" ? "Ho\u1ea1t \u0111\u1ed9ng" : "Ng\u1eebng ho\u1ea1t \u0111\u1ed9ng"}</span></td>
                         <td>{memberProfile ? "Có hồ sơ" : "Chưa có hồ sơ"}</td>
-                        <td><button type="button" onClick={() => openDetail(member.id)} disabled={detailLoading}>Chi tiết</button></td>
+                        <td><button type="button" onClick={(event) => openDetail(member.id, event.currentTarget)} aria-haspopup="dialog" aria-expanded={detailOpen && selected?.user.id === member.id} disabled={detailLoading}>Chi tiết</button></td>
                       </tr>;
                     })}</tbody>
                   </table>
@@ -250,11 +354,32 @@ export default function MemberList({ token, role, currentUserName, onLogout, onN
               </>}
           </section>
 
-          <aside className="member-list-detail-column">
-        {detailLoading && <div className="queue-state" role="status">Đang tải chi tiết…</div>}
+        </div>}
+        </div>
+      </main>
+    </div>
+    {detailOpen && createPortal(
+      <div className="member-list-modal">
+        <section
+          ref={detailDialogRef}
+          className="member-list-modal-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="member-detail-dialog-title"
+          aria-busy={detailLoading || detailBusy}
+          tabIndex={-1}
+        >
+          <header className="member-list-modal-header">
+            <h2 id="member-detail-dialog-title">Th&#244;ng tin th&#224;nh vi&#234;n</h2>
+            <button ref={detailCloseButtonRef} className="member-list-modal-close" type="button" aria-label="&#272;&#243;ng th&#244;ng tin th&#224;nh vi&#234;n" onClick={() => closeDetailRef.current?.()} disabled={detailBusy}>
+              <span aria-hidden="true">&#215;</span>
+            </button>
+          </header>
+          {detailLoading && <div className="queue-state" role="status">Đang tải chi tiết…</div>}
         {detailError && <div className="banner error" role="alert">{detailError}</div>}
-        {selected && <section className="member-detail form-card" aria-labelledby="member-detail-title">
-          <div className="member-detail-heading">
+          {notice && <div className="banner success" role="status">{notice}</div>}
+          {selected && <section className="member-detail form-card" aria-labelledby="member-detail-title">
+            <div className="member-detail-heading">
             <div className="member-detail-identity">
               <i className={`member-initials tone-${Number(selected.user.id || 0) % 4}`}>{memberInitials(selected.user.name)}</i>
               <div className="member-detail-person">
@@ -267,11 +392,6 @@ export default function MemberList({ token, role, currentUserName, onLogout, onN
               {isAdmin && <button type="button" onClick={() => setEditing((value) => !value)}>{editing ? "\u0110\u00f3ng ch\u1ec9nh s\u1eeda" : "Ch\u1ec9nh s\u1eeda"}</button>}
               {isAdmin && selected.user.status === "ACTIVE" && <button type="button" onClick={deactivate} disabled={deactivating}>{deactivating ? "\u0110ang x\u1eed l\u00fd\u2026" : "V\u00f4 hi\u1ec7u h\u00f3a"}</button>}
             </div>
-            <button className="member-detail-close" type="button" title="Đóng thông tin thành viên" aria-label="Đóng thông tin thành viên" onClick={() => setSelected(null)}>
-              <svg className="member-detail-close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path d="m6 6 12 12M18 6 6 18" />
-              </svg>
-            </button>
           </div>
 
           {!editing ? <div className="member-detail-grid member-detail-sections">
@@ -315,11 +435,12 @@ export default function MemberList({ token, role, currentUserName, onLogout, onN
               <button type="submit" disabled={profileSaving}>{profileSaving ? "Đang lưu…" : selected.profile ? "Lưu hồ sơ" : "Tạo hồ sơ"}</button>
             </form>
           </div>}
-        </section>}
-          </aside>
-        </div>}
-        </div>
-      </main>
-    </div>
+
+          </section>}
+        </section>
+      </div>,
+      document.body,
+    )}
+    </>
   );
 }
