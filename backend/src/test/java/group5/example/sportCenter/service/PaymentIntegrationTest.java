@@ -802,8 +802,8 @@ class PaymentIntegrationTest {
         CourseRegistration registration = registration(member, "200000.00", "0.00");
         PaymentResponse first = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
                 registration.getId(), PaymentMethod.COUNTER), jwt(member));
-        PaymentResponse second = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
-                registration.getId(), PaymentMethod.COUNTER), jwt(member));
+        Payment second = courseQueueFixture(registration, PaymentMethod.COUNTER,
+                PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.PENDING);
         service.processAtCounter(first.getId(), counter(true), jwt(receptionist));
 
         CountDownLatch ready = new CountDownLatch(2);
@@ -858,17 +858,102 @@ class PaymentIntegrationTest {
         }
     }
 
+    private boolean createCoursePaymentConcurrently(Integer registrationId, PaymentMethod method,
+            CountDownLatch ready, CountDownLatch start) throws Exception {
+        ready.countDown();
+        assertTrue(start.await(5, TimeUnit.SECONDS));
+        try {
+            service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION, registrationId, method), jwt(member));
+            return true;
+        } catch (ResponseStatusException exception) {
+            if (exception.getStatusCode().value() != 409) throw exception;
+            return false;
+        }
+    }
+
     @Test
-    void secondPendingPaymentForAlreadyPaidRegistrationNeedsRefund() {
+    void courseRegistrationRejectsDuplicatePendingPaymentAndSuccessfulRegistrationCannotBePaidAgain() {
         CourseRegistration registration = registration(member, "200000.00", "0.00");
         PaymentResponse first = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
                 registration.getId(), PaymentMethod.COUNTER), jwt(member));
-        PaymentResponse second = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
-                registration.getId(), PaymentMethod.COUNTER), jwt(member));
+
+        ResponseStatusException duplicate = assertThrows(ResponseStatusException.class,
+                () -> service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                        registration.getId(), PaymentMethod.COUNTER), jwt(member)));
+        assertEquals(409, duplicate.getStatusCode().value());
+        assertEquals(1, payments.findByMemberIdOrderByCreatedAtDesc(member.getId()).stream()
+                .filter(payment -> payment.getPurpose() == PaymentPurpose.COURSE_REGISTRATION
+                        && payment.getReferenceId().equals(registration.getId())
+                        && payment.getStatus() == PaymentStatus.PENDING).count());
 
         assertEquals("SUCCESS", service.processAtCounter(first.getId(), counter(true), jwt(receptionist)).getStatus());
-        assertEquals("REFUND_REQUIRED",
-                service.processAtCounter(second.getId(), counter(true), jwt(receptionist)).getStatus());
+        assertThrows(IllegalArgumentException.class, () -> service.createPayment(
+                request(PaymentPurpose.COURSE_REGISTRATION, registration.getId(), PaymentMethod.COUNTER), jwt(member)));
+    }
+
+    @Test
+    void courseRegistrationPendingGuardIsMethodIndependentAndCancelledPaymentCanBeRetried() {
+        CourseRegistration counterRegistration = registration(member, "200000.00", "0.00");
+        PaymentResponse counter = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                counterRegistration.getId(), PaymentMethod.COUNTER), jwt(member));
+        ResponseStatusException onlineDuplicate = assertThrows(ResponseStatusException.class,
+                () -> service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                        counterRegistration.getId(), PaymentMethod.ONLINE), jwt(member)));
+        assertEquals(409, onlineDuplicate.getStatusCode().value());
+
+        service.cancelPayment(counter.getId(), jwt(member));
+        PaymentResponse onlineRetry = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                counterRegistration.getId(), PaymentMethod.ONLINE), jwt(member));
+        assertEquals(PaymentStatus.PENDING.name(), onlineRetry.getStatus());
+        assertEquals(PaymentMethod.ONLINE.name(), onlineRetry.getMethod());
+
+        CourseRegistration onlineRegistration = registration(member, "200000.00", "0.00");
+        PaymentResponse online = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                onlineRegistration.getId(), PaymentMethod.ONLINE), jwt(member));
+        ResponseStatusException counterDuplicate = assertThrows(ResponseStatusException.class,
+                () -> service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                        onlineRegistration.getId(), PaymentMethod.COUNTER), jwt(member)));
+        assertEquals(409, counterDuplicate.getStatusCode().value());
+        assertEquals(PaymentStatus.PENDING.name(), online.getStatus());
+    }
+
+    @Test
+    void concurrentCoursePaymentRequestsCreateAtMostOnePendingPayment() throws Exception {
+        CourseRegistration registration = registration(member, "200000.00", "0.00");
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<Boolean> first = pool.submit(() -> createCoursePaymentConcurrently(
+                    registration.getId(), PaymentMethod.COUNTER, ready, start));
+            Future<Boolean> second = pool.submit(() -> createCoursePaymentConcurrently(
+                    registration.getId(), PaymentMethod.ONLINE, ready, start));
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            assertEquals(1, (first.get(10, TimeUnit.SECONDS) ? 1 : 0)
+                    + (second.get(10, TimeUnit.SECONDS) ? 1 : 0));
+        } finally {
+            pool.shutdownNow();
+        }
+        assertEquals(1, payments.findByMemberIdOrderByCreatedAtDesc(member.getId()).stream()
+                .filter(payment -> payment.getPurpose() == PaymentPurpose.COURSE_REGISTRATION
+                        && payment.getReferenceId().equals(registration.getId())
+                        && payment.getStatus() == PaymentStatus.PENDING).count());
+    }
+
+    @Test
+    void coursePaymentGuardIsScopedToItsRegistrationAndExpiredHoldRemainsUnpayable() {
+        CourseRegistration firstRegistration = registration(member, "200000.00", "0.00");
+        CourseRegistration secondRegistration = registration(member, "250000.00", "0.00");
+        service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                firstRegistration.getId(), PaymentMethod.COUNTER), jwt(member));
+        PaymentResponse independent = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION,
+                secondRegistration.getId(), PaymentMethod.ONLINE), jwt(member));
+        assertEquals(PaymentStatus.PENDING.name(), independent.getStatus());
+
+        setDeadline(secondRegistration, now());
+        assertThrows(IllegalArgumentException.class, () -> service.createPayment(
+                request(PaymentPurpose.COURSE_REGISTRATION, secondRegistration.getId(), PaymentMethod.COUNTER), jwt(member)));
     }
 
     @Test
@@ -1518,7 +1603,8 @@ class PaymentIntegrationTest {
     void courseQueueSettlementConfirmsOnlyOnceAndRemovesAllAttemptsForThatHold() throws Exception {
         var hold = registration(member, "200000.00", "0.00");
         var payment = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION, hold.getId(), PaymentMethod.COUNTER), jwt(member));
-        var second = service.createPayment(request(PaymentPurpose.COURSE_REGISTRATION, hold.getId(), PaymentMethod.COUNTER), jwt(member));
+        var second = courseQueueFixture(hold, PaymentMethod.COUNTER,
+                PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.PENDING);
         mvc.perform(patch("/api/payments/" + payment.getId() + "/counter").header("Authorization", bearer(receptionist))
                         .contentType("application/json").content("{\"success\":true}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("SUCCESS"));

@@ -167,10 +167,29 @@ public class PaymentService {
             }
         }
 
+        if (request.getPurpose() == PaymentPurpose.COURSE_REGISTRATION) {
+            // Use the member row as the outer lock, matching course-payment settlement, then
+            // serialize attempts on the registration row before checking for a pending payment.
+            // The member lock keeps creation and settlement on a consistent lock order
+            // (MEMBER -> PAYMENT -> REGISTRATION for settlement; MEMBER -> REGISTRATION for creation).
+            Integer lockedMemberId = member.getId();
+            member = userRepository.findByIdForBookingUpdate(lockedMemberId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + lockedMemberId));
+            courseRegistrationRepository.findByIdForPaymentUpdate(request.getReferenceId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Course registration not found with id: " + request.getReferenceId()));
+        }
+
         // The upgrade quote checks pending payments itself and must be stored with the payment.
         MembershipUpgradeService.Quote upgradeQuote = request.getPurpose() == PaymentPurpose.UPGRADE
                 ? membershipUpgradeService.quote(member, request.getReferenceId()) : null;
         BigDecimal amount = upgradeQuote != null ? upgradeQuote.amount() : resolveAmountAndValidate(request, member);
+        if (request.getPurpose() == PaymentPurpose.COURSE_REGISTRATION
+                && paymentRepository.existsByPurposeAndReferenceIdAndStatus(
+                        PaymentPurpose.COURSE_REGISTRATION, request.getReferenceId(), PaymentStatus.PENDING)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "A pending payment already exists for this course registration; cancel it before retrying or changing method");
+        }
         if (request.getPurpose() == PaymentPurpose.MEMBERSHIP) {
             LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
             if (membershipRepository.existsByMemberIdAndStatusAndStartDateGreaterThan(
@@ -471,6 +490,7 @@ public class PaymentService {
     private boolean requiresMemberFirstLock(PendingAutoRenewalLockRow candidate) {
         return candidate.purpose() == PaymentPurpose.MEMBERSHIP
                 || candidate.purpose() == PaymentPurpose.UPGRADE
+                || candidate.purpose() == PaymentPurpose.COURSE_REGISTRATION
                 || MembershipAutoRenewalService.sourceMembershipId(candidate.note()) != null;
     }
 
