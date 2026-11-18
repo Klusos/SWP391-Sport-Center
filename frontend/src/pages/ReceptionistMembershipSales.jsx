@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import AdminTopBar from "../components/AdminTopBar";
+import ReceptionistRefundQueue from "../components/ReceptionistRefundQueue.jsx";
 import {
   cancelMembershipApi,
   createPaymentApi,
@@ -18,6 +19,7 @@ import { todayInVietnam } from "../membershipDates";
 import { activeMembershipChain, cancellableMembershipId, cancelMembershipErrorMessage, isAutoRenewalPayment } from "../membershipRenewal";
 import { isMembershipPayment, upgradeErrorMessage } from "../membershipUpgrade";
 import { membershipPlanBenefits } from "../membershipPlanPresentation.js";
+import { MEMBERSHIP_REFUND_PURPOSES } from "../refundQueue.js";
 import "./ReceptionistMembershipSales.css";
 
 const rows = (value) => Array.isArray(value) ? value : value?.content ?? [];
@@ -299,6 +301,13 @@ export default function ReceptionistMembershipSales({ token, role, currentUserNa
           </div>)}
         <p className="membership-sales-note">Chỉ duyệt được khi gói chưa bắt đầu và là gói sau cùng. Yêu cầu chưa xử lý sẽ tự hết hiệu lực khi gói bắt đầu.</p>
       </section>
+
+      <ReceptionistRefundQueue token={token} purposes={MEMBERSHIP_REFUND_PURPOSES} groups={[{
+        id: "membership",
+        purposes: MEMBERSHIP_REFUND_PURPOSES,
+        title: "Ho\u00e0n ti\u1ec1n h\u1ed9i vi\u00ean",
+        description: "Kho\u1ea3n h\u1ed9i vi\u00ean v\u00e0 n\u00e2ng c\u1ea5p g\u00f3i \u0111\u00e3 y\u00eau c\u1ea7u ho\u00e0n ti\u1ec1n",
+      }]} />
 
       {loading ? <p role="status">Đang tải thành viên và gói hội viên…</p> : <div className="membership-sales-checkout-layout">
         <div className="membership-sales-steps">

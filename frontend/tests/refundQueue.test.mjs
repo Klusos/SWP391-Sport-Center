@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { confirmRefundApi, getRefundRequiredPaymentsApi } from "../src/api.js";
-import { loadAllRefundQueuePages, REFUND_PURPOSES, refundPurposeLabel, refundQueuePage, refundQueueRows, refundQueueRowsForPurposes, refundReferenceLabel } from "../src/refundQueue.js";
+import { COURSE_REFUND_PURPOSES, loadAllRefundQueuePages, MEMBERSHIP_REFUND_PURPOSES, PT_REFUND_PURPOSES, REFUND_PURPOSES, refundPurposeLabel, refundQueuePage, refundQueueRows, refundQueueRowsForPurposes, refundReferenceLabel } from "../src/refundQueue.js";
 
 test("refund purposes are explicitly classified and each keeps its purpose-scoped reference", () => {
   assert.deepEqual(REFUND_PURPOSES, ["MEMBERSHIP", "COURSE_REGISTRATION", "PT_BOOKING", "UPGRADE"]);
@@ -31,20 +31,25 @@ test("course refund context, actual amount, payment status and pagination rows a
 });
 
 test("refund categories are purpose-specific and membership and upgrade refunds stay discoverable", () => {
+  assert.deepEqual(COURSE_REFUND_PURPOSES, ["COURSE_REGISTRATION"]);
+  assert.deepEqual(PT_REFUND_PURPOSES, ["PT_BOOKING"]);
+  assert.deepEqual(MEMBERSHIP_REFUND_PURPOSES, ["MEMBERSHIP", "UPGRADE"]);
   const payments = [
     { id: 11001, purpose: "COURSE_REGISTRATION", status: "REFUND_REQUIRED" },
     { id: 11002, purpose: "PT_BOOKING", status: "REFUND_REQUIRED" },
     { id: 11003, purpose: "MEMBERSHIP", status: "REFUND_REQUIRED" },
     { id: 11004, purpose: "UPGRADE", status: "REFUND_REQUIRED" },
   ];
-  const course = refundQueueRowsForPurposes(payments, ["COURSE_REGISTRATION"]);
-  const pt = refundQueueRowsForPurposes(payments, ["PT_BOOKING"]);
-  const other = refundQueueRowsForPurposes(payments, ["MEMBERSHIP", "UPGRADE"]);
+  const course = refundQueueRowsForPurposes(payments, COURSE_REFUND_PURPOSES);
+  const pt = refundQueueRowsForPurposes(payments, PT_REFUND_PURPOSES);
+  const membership = refundQueueRowsForPurposes(payments, MEMBERSHIP_REFUND_PURPOSES);
   assert.deepEqual(course.map(({ id }) => id), [11001]);
   assert.deepEqual(pt.map(({ id }) => id), [11002]);
-  assert.deepEqual(other.map(({ id }) => id), [11003, 11004]);
+  assert.deepEqual(membership.map(({ id }) => id), [11003, 11004]);
   assert.equal(course.some(({ purpose }) => purpose === "PT_BOOKING"), false);
   assert.equal(pt.some(({ purpose }) => purpose === "COURSE_REGISTRATION"), false);
+  const displayedIds = [...course, ...pt, ...membership].map(({ id }) => id);
+  assert.equal(new Set(displayedIds).size, displayedIds.length, "a payment must appear in one refund category only");
   assert.ok(payments.every(({ status }) => status === "REFUND_REQUIRED"));
   assert.equal(refundQueueRowsForPurposes([{ id: 1, status: "REFUNDED", purpose: "PT_BOOKING" }], ["PT_BOOKING"])[0].status, "REFUNDED");
 });
@@ -81,22 +86,23 @@ test("refund list and confirmation keep the existing authenticated endpoints and
   } finally { globalThis.fetch = original; }
 });
 
-test("only Course & PT Payments renders refund confirmation actions", async () => {
+test("refund pages use disjoint purposes and the shared confirmation workflow", async () => {
   const coursePayments = await readFile(new URL("../src/pages/ReceptionistCoursePayments.jsx", import.meta.url), "utf8");
   const ptPayments = await readFile(new URL("../src/pages/ReceptionistPtPayments.jsx", import.meta.url), "utf8");
   const refundComponent = await readFile(new URL("../src/components/ReceptionistRefundQueue.jsx", import.meta.url), "utf8");
   const membershipSales = await readFile(new URL("../src/pages/ReceptionistMembershipSales.jsx", import.meta.url), "utf8");
-  assert.match(coursePayments, /purposes=\{\["COURSE_REGISTRATION", "MEMBERSHIP", "UPGRADE"\]\}/);
-  assert.match(coursePayments, /id: "other", purposes: \["MEMBERSHIP", "UPGRADE"\]/);
-  assert.match(ptPayments, /purposes=\{\["PT_BOOKING"\]\}/);
+  const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
+  assert.match(coursePayments, /<ReceptionistRefundQueue token=\{token\} purposes=\{COURSE_REFUND_PURPOSES\}/);
+  assert.match(ptPayments, /<ReceptionistRefundQueue token=\{token\} purposes=\{PT_REFUND_PURPOSES\}/);
+  assert.match(membershipSales, /<ReceptionistRefundQueue token=\{token\} purposes=\{MEMBERSHIP_REFUND_PURPOSES\}/);
   assert.equal((coursePayments.match(/<ReceptionistRefundQueue\b/g) || []).length, 1);
   assert.equal((ptPayments.match(/<ReceptionistRefundQueue\b/g) || []).length, 1);
-  assert.doesNotMatch(coursePayments, /className="cp-refund-queue"|aria-labelledby="cp-refund-title"|Hàng đợi hoàn tiền|Tất cả mục đích thanh toán/);
   assert.match(refundComponent, /refundQueueRowsForPurposes\(queue\.payments, group\.purposes \?\? purposes\)/);
   assert.match(refundComponent, /loadAllRefundQueuePages/);
   assert.match(refundComponent, /confirmRefundApi\(token, payment\.id/);
   assert.match(refundComponent, /payment\?\.status !== "REFUND_REQUIRED"/);
-  assert.doesNotMatch(membershipSales, /getRefundRequiredPaymentsApi|confirmRefundApi/);
   assert.doesNotMatch(ptPayments, /confirmRefundApi/);
   assert.match(membershipSales, /getCancellationRequestsApi/);
+  assert.match(app, /<Route element=\{<ReceptionistRoute auth=\{auth\} \/>\}>\s*<Route\s+path="\/receptionist\/membership-sales"/);
+  assert.match(app, /<Route element=\{<AdminRoute auth=\{auth\} \/>\}>[\s\S]*?<Route path="\/admin\/membership-sales"/);
 });

@@ -33,14 +33,15 @@ test("cancellation errors are converted to safe user-facing text", () => {
  assert.notEqual(cancellationErrorMessage({ message: deadline }), deadline);
  assert.notEqual(cancellationErrorMessage({ message: internal }), internal);
 });
-test("refund queues and confirmation are on their matching Course and PT payment pages", async () => {
+test("refund queues and confirmation are on their matching Course, PT, and Membership pages", async () => {
  const sales = await read("../src/pages/ReceptionistMembershipSales.jsx");
  const payments = await read("../src/pages/ReceptionistCoursePayments.jsx");
- assert.doesNotMatch(sales, /getRefundRequiredPaymentsApi|confirmRefundApi|refunds\.content/);
  const refundQueue = await read("../src/components/ReceptionistRefundQueue.jsx");
  const ptPayments = await read("../src/pages/ReceptionistPtPayments.jsx");
- assert.match(payments, /purposes=\{\["COURSE_REGISTRATION", "MEMBERSHIP", "UPGRADE"\]\}/);
- assert.match(ptPayments, /purposes=\{\["PT_BOOKING"\]\}/);
+ assert.match(payments, /purposes=\{COURSE_REFUND_PURPOSES\}/);
+ assert.match(ptPayments, /purposes=\{PT_REFUND_PURPOSES\}/);
+ assert.match(sales, /purposes=\{MEMBERSHIP_REFUND_PURPOSES\}/);
+ assert.match(sales, /title: "Ho\\u00e0n ti\\u1ec1n h\\u1ed9i vi\\u00ean"/);
  assert.match(refundQueue, /refundPurposeLabel\(payment\)/);
  assert.match(refundQueue, /refundReferenceLabel\(payment\)/);
  assert.match(refundQueue, /payment\.courseName/);

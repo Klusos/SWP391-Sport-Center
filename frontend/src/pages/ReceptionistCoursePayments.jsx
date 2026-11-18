@@ -5,6 +5,7 @@ import AdminTopBar from "../components/AdminTopBar";
 import { getPendingCoursePaymentsApi, getMemberPaymentsApi, processCounterPaymentApi } from "../api";
 import { canViewCoursePayments, coursePaymentExpired, coursePaymentMoney, coursePaymentTime, createCoursePaymentQueue } from "../coursePaymentQueue";
 import ReceptionistRefundQueue from "../components/ReceptionistRefundQueue.jsx";
+import { COURSE_REFUND_PURPOSES } from "../refundQueue.js";
 import { locateCoursePayment, parseCoursePaymentTarget } from "../coursePaymentNavigation.js";
 import { vietnamDate } from "../courseCheckout";
 import "./ReceptionistCoursePayments.css";
@@ -504,7 +505,7 @@ export default function ReceptionistCoursePayments({ token, role, userId, curren
               </nav>
             </section>
           )}
-          <ReceptionistRefundQueue token={token} purposes={["COURSE_REGISTRATION", "MEMBERSHIP", "UPGRADE"]} groups={[{ id: "course", title: "Ho\u00e0n ti\u1ec1n kh\u00f3a h\u1ecdc", description: "Y\u00eau c\u1ea7u ho\u00e0n ti\u1ec1n \u0111\u0103ng k\u00fd kh\u00f3a h\u1ecdc" }, { id: "other", purposes: ["MEMBERSHIP", "UPGRADE"], title: "Ho\u00e0n ti\u1ec1n h\u1ed9i vi\u00ean v\u00e0 n\u00e2ng c\u1ea5p", description: "C\u00e1c m\u1ee5c \u0111\u00edch ho\u00e0n ti\u1ec1n kh\u00e1c" }]} />
+          <ReceptionistRefundQueue token={token} purposes={COURSE_REFUND_PURPOSES} groups={[{ id: "course", title: "Ho\u00e0n ti\u1ec1n kh\u00f3a h\u1ecdc", description: "Y\u00eau c\u1ea7u ho\u00e0n ti\u1ec1n \u0111\u0103ng k\u00fd kh\u00f3a h\u1ecdc" }]} />
         </div>
       </main>
     </div>

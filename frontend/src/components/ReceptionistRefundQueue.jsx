@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { confirmRefundApi, getRefundRequiredPaymentsApi } from "../api";
 import { coursePaymentMoney } from "../coursePaymentQueue";
 import { loadAllRefundQueuePages, refundPurposeLabel, refundQueuePage, refundQueueRowsForPurposes, refundReferenceLabel } from "../refundQueue.js";
+import "./ReceptionistRefundQueue.css";
 
 const API_PAGE_SIZE = 100;
 const DISPLAY_PAGE_SIZE = 10;
