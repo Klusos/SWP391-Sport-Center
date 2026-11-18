@@ -25,6 +25,7 @@ public class ClassSessionGenerationRequest {
     @NotNull(message = "Daily start time is required")
     private LocalTime startTime;
 
+    @NotNull(message = "Facility ID is required for automatic schedule generation")
     private Integer facilityId;
     private LocalDate firstEligibleDate;
 

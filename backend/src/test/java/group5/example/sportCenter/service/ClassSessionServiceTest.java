@@ -117,11 +117,12 @@ class ClassSessionServiceTest {
     @Test
     void createsScheduledSessionByDefault() {
         stubAvailableClass();
+        when(facilityRepository.findById(6)).thenReturn(Optional.of(facility));
         when(classSessionRepository.save(any(ClassSession.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(classSessionRepository.countByCourseClassIdAndStatusNot(3, "CANCELLED")).thenReturn(1L);
 
-        ClassSessionResponse response = service.create(request(null, null,
+        ClassSessionResponse response = service.create(request(6, null,
                 NOW.plusDays(2), NOW.plusDays(2).plusHours(1)));
 
         assertEquals("SCHEDULED", response.status());
@@ -153,10 +154,51 @@ class ClassSessionServiceTest {
 
     @Test
     void confirmedRegistrationsBlockScheduleMutationWithoutMemberReschedulingWorkflow() {
-        when(registrations.countByClassIdAndStatus(3, CourseRegistrationStatus.CONFIRMED)).thenReturn(1L);
+        when(facilityRepository.findById(6)).thenReturn(Optional.of(facility));
+        when(registrations.countOccupiedSeats(org.mockito.ArgumentMatchers.eq(3),
+                org.mockito.ArgumentMatchers.eq(CourseRegistrationStatus.CONFIRMED),
+                org.mockito.ArgumentMatchers.eq(CourseRegistrationStatus.PENDING_PAYMENT),
+                any(LocalDateTime.class))).thenReturn(1L);
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
                 () -> service.create(request(6, null, NOW.plusDays(2), NOW.plusDays(2).plusHours(1))));
         assertTrue(error.getMessage().contains("Member schedule-change workflow"));
+    }
+
+    @Test
+    void activePendingPaymentHoldBlocksManualSessionScheduleChanges() {
+        ClassSession existing = scheduledSession(12, facility);
+        when(classSessionRepository.findById(12)).thenReturn(Optional.of(existing));
+        when(facilityRepository.findById(6)).thenReturn(Optional.of(facility));
+        when(registrations.countOccupiedSeats(org.mockito.ArgumentMatchers.eq(3),
+                org.mockito.ArgumentMatchers.eq(CourseRegistrationStatus.CONFIRMED),
+                org.mockito.ArgumentMatchers.eq(CourseRegistrationStatus.PENDING_PAYMENT),
+                any(LocalDateTime.class))).thenReturn(1L);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.update(12, updateRequest(3, 6, existing.getStartTime().plusDays(1),
+                        existing.getEndTime().plusDays(1))));
+
+        assertTrue(error.getMessage().contains("active payment reservations"));
+    }
+
+    @Test
+    void noOpSessionTimeUpdateDoesNotInvokeActiveRegistrationScheduleGuard() {
+        ClassSession existing = scheduledSession(12, facility);
+        when(classSessionRepository.findById(12)).thenReturn(Optional.of(existing));
+        stubAvailableClass();
+        when(facilityRepository.findById(6)).thenReturn(Optional.of(facility));
+        when(classSessionRepository.existsByFacilityIdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThanAndIdNot(
+                org.mockito.ArgumentMatchers.eq(6), org.mockito.ArgumentMatchers.eq("CANCELLED"),
+                any(LocalDateTime.class), any(LocalDateTime.class), org.mockito.ArgumentMatchers.eq(12)))
+                .thenReturn(false);
+        when(classSessionRepository.save(any(ClassSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(classSessionRepository.countByCourseClassIdAndStatusNot(3, "CANCELLED")).thenReturn(1L);
+
+        service.update(12, updateRequest(3, 6, existing.getStartTime(), existing.getEndTime()));
+
+        verify(registrations, org.mockito.Mockito.never()).countOccupiedSeats(org.mockito.ArgumentMatchers.eq(3),
+                org.mockito.ArgumentMatchers.eq(CourseRegistrationStatus.CONFIRMED),
+                org.mockito.ArgumentMatchers.eq(CourseRegistrationStatus.PENDING_PAYMENT), any(LocalDateTime.class));
     }
 
     @Test
@@ -218,16 +260,11 @@ class ClassSessionServiceTest {
     }
 
     @Test
-    void permitsNullFacilityOnCreate() {
-        stubAvailableClass();
-        when(classSessionRepository.save(any(ClassSession.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
-        when(classSessionRepository.countByCourseClassIdAndStatusNot(3, "CANCELLED")).thenReturn(1L);
-
-        ClassSessionResponse response = service.create(request(null, null,
-                NOW.plusDays(2), NOW.plusDays(2).plusHours(1)));
-
-        assertEquals(null, response.facilityId());
+    void rejectsMissingFacilityOnCreate() {
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> service.create(request(null, null,
+                        NOW.plusDays(2), NOW.plusDays(2).plusHours(1))));
+        assertEquals(400, exception.getStatusCode().value());
     }
 
     @Test
@@ -252,13 +289,14 @@ class ClassSessionServiceTest {
     }
 
     @Test
-    void checksCoachOverlapEvenWithoutFacility() {
+    void checksCoachOverlapWithFacilityAssigned() {
         stubAvailableClass();
+        when(facilityRepository.findById(6)).thenReturn(Optional.of(facility));
         when(classSessionRepository.existsByCourseClass_Coach_IdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThan(
                 9, "CANCELLED", LocalDateTime.parse("2026-10-12T11:00:00"),
                 LocalDateTime.parse("2026-10-12T10:00:00"))).thenReturn(true);
 
-        assertThrows(IllegalArgumentException.class, () -> service.create(request(null, null,
+        assertThrows(IllegalArgumentException.class, () -> service.create(request(6, null,
                 LocalDateTime.parse("2026-10-12T10:00:00"), LocalDateTime.parse("2026-10-12T11:00:00"))));
     }
 
@@ -285,18 +323,19 @@ class ClassSessionServiceTest {
     @Test
     void allowsSessionAtInclusiveOfferingDateBoundaries() {
         stubAvailableClass();
+        when(facilityRepository.findById(6)).thenReturn(Optional.of(facility));
         LocalDate start = courseClass.getCourseOffering().getStartDate();
         LocalDate end = courseClass.getCourseOffering().getEndDate();
         when(classSessionRepository.save(any(ClassSession.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
         when(classSessionRepository.countByCourseClassIdAndStatusNot(3, "CANCELLED")).thenReturn(1L);
 
-        ClassSessionResponse response = service.create(request(null, null,
+        ClassSessionResponse response = service.create(request(6, null,
                 start.atStartOfDay(), start.atTime(1, 0)));
 
         assertEquals("SCHEDULED", response.status());
 
-        ClassSessionResponse lastDayResponse = service.create(request(null, null,
+        ClassSessionResponse lastDayResponse = service.create(request(6, null,
                 end.atTime(22, 59), end.atTime(23, 59)));
         assertEquals("SCHEDULED", lastDayResponse.status());
     }
@@ -363,16 +402,14 @@ class ClassSessionServiceTest {
         existing.setEndTime(LocalDateTime.parse("2026-10-12T11:00:00"));
         existing.setStatus("SCHEDULED");
         when(classSessionRepository.findById(12)).thenReturn(Optional.of(existing));
+        when(facilityRepository.findById(6)).thenReturn(Optional.of(facility));
         when(classSessionRepository.existsByCourseClass_Coach_IdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThanAndIdNot(
                 9, "CANCELLED", LocalDateTime.parse("2026-10-12T11:00:00"),
                 LocalDateTime.parse("2026-10-12T10:00:00"), 12)).thenReturn(false);
         when(classSessionRepository.save(existing)).thenReturn(existing);
         when(classSessionRepository.countByCourseClassIdAndStatusNot(3, "CANCELLED")).thenReturn(1L);
 
-        UpdateClassSessionRequest request = new UpdateClassSessionRequest();
-        request.setClassId(3);
-        request.setStartTime(existing.getStartTime());
-        request.setEndTime(existing.getEndTime());
+        UpdateClassSessionRequest request = updateRequest(3, 6, existing.getStartTime(), existing.getEndTime());
         service.update(12, request);
 
         verify(classSessionRepository).existsByCourseClass_Coach_IdAndStatusNotAndStartTimeLessThanAndEndTimeGreaterThanAndIdNot(
@@ -386,11 +423,10 @@ class ClassSessionServiceTest {
         existing.setStatus("SCHEDULED");
         when(classSessionRepository.findById(12)).thenReturn(Optional.of(existing));
         when(courseClassRepository.findByIdForScheduleUpdate(77)).thenReturn(Optional.empty());
+        when(facilityRepository.findById(6)).thenReturn(Optional.of(facility));
 
-        UpdateClassSessionRequest request = new UpdateClassSessionRequest();
-        request.setClassId(77);
-        request.setStartTime(NOW.plusDays(1));
-        request.setEndTime(NOW.plusDays(1).plusHours(1));
+        UpdateClassSessionRequest request = updateRequest(77, 6,
+                NOW.plusDays(1), NOW.plusDays(1).plusHours(1));
 
         assertThrows(ResourceNotFoundException.class, () -> service.update(12, request));
     }
@@ -421,7 +457,7 @@ class ClassSessionServiceTest {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
                 () -> service.update(12, request));
 
-        assertTrue(exception.getMessage().contains("select another ACTIVE facility or cancel"));
+        assertTrue(exception.getMessage().contains("Only ACTIVE facilities can be assigned"));
     }
 
     @Test

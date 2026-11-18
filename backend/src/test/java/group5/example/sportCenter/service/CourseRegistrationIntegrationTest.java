@@ -47,6 +47,8 @@ import org.springframework.web.server.ResponseStatusException;
 import group5.example.sportCenter.dto.CreateCourseRegistrationRequest;
 import group5.example.sportCenter.dto.UpdateClassRequest;
 import group5.example.sportCenter.entity.ClassSession;
+import group5.example.sportCenter.entity.Attendance;
+import group5.example.sportCenter.entity.AttendanceStatus;
 import group5.example.sportCenter.entity.Coach;
 import group5.example.sportCenter.entity.CoachSport;
 import group5.example.sportCenter.entity.Course;
@@ -63,6 +65,7 @@ import group5.example.sportCenter.entity.SportLevel;
 import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.ClassSessionRepository;
+import group5.example.sportCenter.repository.AttendanceRepository;
 import group5.example.sportCenter.repository.CoachRepository;
 import group5.example.sportCenter.repository.CoachSportRepository;
 import group5.example.sportCenter.repository.CourseClassRepository;
@@ -92,6 +95,7 @@ class CourseRegistrationIntegrationTest {
     }
 
     @Autowired CourseRegistrationService service;
+    @Autowired AttendanceService attendanceService;
     @Autowired CourseClassService courseClassService;
     @MockitoSpyBean CourseRegistrationExpirationService registrationExpiration;
     @Autowired MembershipService membershipService;
@@ -105,6 +109,7 @@ class CourseRegistrationIntegrationTest {
     @Autowired CourseOfferingRepository offerings;
     @Autowired CourseClassRepository classes;
     @Autowired ClassSessionRepository sessions;
+    @Autowired AttendanceRepository attendanceRows;
     @Autowired CoachRepository coaches;
     @Autowired CoachSportRepository coachSports;
     @Autowired JwtService tokens;
@@ -745,6 +750,88 @@ class CourseRegistrationIntegrationTest {
     }
 
     @Test
+    void coachReassignmentIsBlockedByConfirmedAndUnexpiredPendingRegistrations() {
+        CourseClass selected = classFor(course(sport, "BEGINNER", "ACTIVE"), 5);
+        prepareClassForUpdate(selected);
+        Coach replacement = qualifiedCoach(sport);
+        registration(member, selected, CourseRegistrationStatus.CONFIRMED, null);
+
+        ResponseStatusException confirmedConflict = assertThrows(ResponseStatusException.class,
+                () -> courseClassService.updateClass(selected.getId(), updateCoach(selected, replacement)));
+        assertEquals(409, confirmedConflict.getStatusCode().value());
+
+        CourseClass pendingClass = classFor(course(sport, "BEGINNER", "ACTIVE"), 5);
+        prepareClassForUpdate(pendingClass);
+        Coach pendingReplacement = qualifiedCoach(sport);
+        registration(user("MEMBER", "ACTIVE"), pendingClass, CourseRegistrationStatus.PENDING_PAYMENT,
+                now.plusSeconds(1));
+
+        ResponseStatusException pendingConflict = assertThrows(ResponseStatusException.class,
+                () -> courseClassService.updateClass(pendingClass.getId(), updateCoach(pendingClass, pendingReplacement)));
+        assertEquals(409, pendingConflict.getStatusCode().value());
+    }
+
+    @Test
+    void expiredOrCancelledRegistrationsDoNotBlockCoachReassignmentAndNoOpIsAllowed() {
+        CourseClass selected = classFor(course(sport, "BEGINNER", "ACTIVE"), 5);
+        prepareClassForUpdate(selected);
+        Coach replacement = qualifiedCoach(sport);
+        registration(member, selected, CourseRegistrationStatus.PENDING_PAYMENT, now);
+        registration(user("MEMBER", "ACTIVE"), selected, CourseRegistrationStatus.CANCELLED, now.plusDays(1));
+
+        assertEquals(replacement.getId(), courseClassService.updateClass(selected.getId(),
+                updateCoach(selected, replacement)).getCoachId());
+        CourseRegistration expired = registrations.findByMemberIdAndCourseClassIdAndStatus(
+                member.getId(), selected.getId(), CourseRegistrationStatus.PENDING_PAYMENT).orElseThrow();
+        expired.setStatus(CourseRegistrationStatus.EXPIRED);
+        registrations.saveAndFlush(expired);
+
+        CourseClass noOpClass = classFor(course(sport, "BEGINNER", "ACTIVE"), 5);
+        prepareClassForUpdate(noOpClass);
+        registration(user("MEMBER", "ACTIVE"), noOpClass, CourseRegistrationStatus.CONFIRMED, null);
+        assertEquals(noOpClass.getCoach().getId(), courseClassService.updateClass(noOpClass.getId(),
+                updateCoach(noOpClass, noOpClass.getCoach())).getCoachId());
+    }
+
+    @Test
+    void inactiveClassCannotAcceptNewRegistrationButExistingEntitlementsRemain() throws Exception {
+        CourseClass selected = classFor(course(sport, "BEGINNER", "ACTIVE"), 5);
+        CourseClass entitledClass = selected;
+        prepareClassForUpdate(entitledClass);
+        ClassSession entitledSession = new ClassSession();
+        entitledSession.setCourseClass(entitledClass);
+        entitledSession.setStartTime(now.plusDays(2));
+        entitledSession.setEndTime(now.plusDays(2).plusHours(1));
+        entitledSession.setStatus("SCHEDULED");
+        sessions.saveAndFlush(entitledSession);
+        Attendance priorAttendance = new Attendance();
+        priorAttendance.setClassSession(entitledSession);
+        priorAttendance.setMember(member);
+        priorAttendance.setStatus(AttendanceStatus.PRESENT);
+        priorAttendance.setMarkedBy(entitledClass.getCoach().getUser());
+        priorAttendance.setMarkedAt(now);
+        attendanceRows.saveAndFlush(priorAttendance);
+        CourseRegistration confirmed = registration(member, entitledClass, CourseRegistrationStatus.CONFIRMED, null);
+        CourseRegistration pending = registration(user("MEMBER", "ACTIVE"), entitledClass,
+                CourseRegistrationStatus.PENDING_PAYMENT, now.plusHours(1));
+
+        UpdateClassRequest deactivate = updateCapacity(entitledClass, entitledClass.getCapacity());
+        deactivate.setStatus("INACTIVE");
+        courseClassService.updateClass(entitledClass.getId(), deactivate);
+
+        assertEquals("INACTIVE", classes.findById(entitledClass.getId()).orElseThrow().getStatus());
+        assertThrows(ResponseStatusException.class, () -> service.register(request(entitledClass), jwt(user("MEMBER", "ACTIVE"))));
+        assertEquals(CourseRegistrationStatus.CONFIRMED, registrations.findById(confirmed.getId()).orElseThrow().getStatus());
+        assertEquals(CourseRegistrationStatus.PENDING_PAYMENT, registrations.findById(pending.getId()).orElseThrow().getStatus());
+        assertEquals(1, service.myCourseSessions(jwt(member)).stream()
+                .filter(session -> session.id().equals(entitledSession.getId())).count());
+        assertTrue(attendanceService.mine(jwt(member)).stream()
+                .anyMatch(record -> record.attendanceId().equals(priorAttendance.getId())));
+        mvc.perform(get("/api/course-registrations/me").header("Authorization", bearer(member)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].classId").value(entitledClass.getId()));
+    }
+
+    @Test
     void memberHistoryGetProjectsExpiredPendingHoldsReadOnlyAndPreservesOtherStatuses() throws Exception {
         CourseClass selected = classFor(course(sport, "BEGINNER", "ACTIVE"), 2);
         User validMember = user("MEMBER", "ACTIVE");
@@ -829,6 +916,26 @@ class CourseRegistrationIntegrationTest {
         request.setCapacity(capacity);
         request.setStatus(selected.getStatus());
         return request;
+    }
+
+    private UpdateClassRequest updateCoach(CourseClass selected, Coach coach) {
+        UpdateClassRequest request = updateCapacity(selected, selected.getCapacity());
+        request.setCoachId(coach.getId());
+        return request;
+    }
+
+    private Coach qualifiedCoach(Sport forSport) {
+        User coachUser = user("COACH", "ACTIVE");
+        Coach candidate = new Coach();
+        candidate.setUser(coachUser);
+        candidate.setStatus("ACTIVE");
+        candidate = coaches.saveAndFlush(candidate);
+        CoachSport qualification = new CoachSport();
+        qualification.setCoach(candidate);
+        qualification.setSport(forSport);
+        qualification.setExperienceYears(1);
+        coachSports.saveAndFlush(qualification);
+        return candidate;
     }
 
     private void prepareClassForUpdate(CourseClass selected) {

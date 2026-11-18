@@ -72,7 +72,7 @@ public class ClassSessionGenerationService {
         for (ClassSessionGenerationPreviewResponse.Candidate candidate : preview.candidates()) {
             CreateClassSessionRequest create = new CreateClassSessionRequest();
             create.setClassId(courseClass.getId());
-            create.setFacilityId(facility == null ? null : facility.getId());
+            create.setFacilityId(facility.getId());
             create.setStartTime(candidate.startTime());
             create.setEndTime(candidate.endTime());
             create.setStatus("SCHEDULED");
@@ -158,6 +158,9 @@ public class ClassSessionGenerationService {
     }
 
     private void validateRequest(ClassSessionGenerationRequest request) {
+        if (request == null || request.getFacilityId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Facility ID is required for automatic schedule generation");
+        }
         if (request == null || request.getWeekdays() == null || request.getWeekdays().isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Select at least one weekday");
         }

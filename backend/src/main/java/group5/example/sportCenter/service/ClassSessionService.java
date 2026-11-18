@@ -97,10 +97,10 @@ public class ClassSessionService {
     }
 
     public ClassSessionResponse create(CreateClassSessionRequest request) {
+        Facility facility = requireFacility(request.getFacilityId());
         CourseClass courseClass = lockCourseClass(request.getClassId());
-        rejectScheduleMutationForConfirmedRegistrations(courseClass.getId());
+        rejectScheduleMutationForActiveRegistrations(courseClass.getId());
         lockOffering(courseClass);
-        Facility facility = findFacility(request.getFacilityId());
         facility = lockScheduleResources(courseClass, facility);
         requireActiveFacility(facility, "Only ACTIVE facilities can be assigned to a new ClassSession");
         validateFacilitySport(courseClass, facility);
@@ -135,15 +135,24 @@ public class ClassSessionService {
                 && !session.getEndTime().isAfter(LocalDateTime.now(clock.withZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh"))))) {
             throw new IllegalArgumentException("A ClassSession whose scheduled end time has passed cannot be rescheduled");
         }
-        if (session.getCourseClass() != null) {
-            rejectScheduleMutationForConfirmedRegistrations(session.getCourseClass().getId());
-        }
-
+        Facility facility = requireFacility(request.getFacilityId());
         CourseClass courseClass = lockCourseClass(request.getClassId());
-        rejectScheduleMutationForConfirmedRegistrations(courseClass.getId());
+        boolean scheduleChanged = !java.util.Objects.equals(session.getStartTime(), request.getStartTime())
+                || !java.util.Objects.equals(session.getEndTime(), request.getEndTime())
+                || session.getCourseClass() == null
+                || !java.util.Objects.equals(session.getCourseClass().getId(), courseClass.getId());
+        if (scheduleChanged) {
+            if (session.getCourseClass() != null) {
+                rejectScheduleMutationForActiveRegistrations(session.getCourseClass().getId());
+            }
+            if (session.getCourseClass() == null
+                    || !java.util.Objects.equals(session.getCourseClass().getId(), courseClass.getId())) {
+                rejectScheduleMutationForActiveRegistrations(courseClass.getId());
+            }
+        }
         lockOffering(courseClass);
-        Facility facility = findFacility(request.getFacilityId());
         facility = lockScheduleResources(courseClass, facility);
+        requireActiveFacility(facility, "Only ACTIVE facilities can be assigned to a ClassSession");
         validateFacilitySport(courseClass, facility);
         validateRange(request.getStartTime(), request.getEndTime());
         validateWithinOffering(courseClass, request.getStartTime(), request.getEndTime());
@@ -366,6 +375,16 @@ public class ClassSessionService {
         }
     }
 
+    private void rejectScheduleMutationForActiveRegistrations(Integer classId) {
+        LocalDateTime now = LocalDateTime.now(clock.withZone(java.time.ZoneId.of("Asia/Ho_Chi_Minh")));
+        if (registrations.countOccupiedSeats(classId,
+                group5.example.sportCenter.entity.CourseRegistrationStatus.CONFIRMED,
+                group5.example.sportCenter.entity.CourseRegistrationStatus.PENDING_PAYMENT, now) > 0) {
+            throw new IllegalArgumentException(
+                    "Class schedule cannot be changed while confirmed registrations or active payment reservations exist because a Member schedule-change workflow is unavailable");
+        }
+    }
+
     private ClassSession findSession(Integer id) {
         return classSessionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("ClassSession not found with id: " + id));
@@ -377,18 +396,22 @@ public class ClassSessionService {
     }
 
     private Facility findFacility(Integer facilityId) {
-        if (facilityId == null) {
-            return null;
-        }
         return facilityRepository.findById(facilityId)
                 .orElseThrow(() -> new ResourceNotFoundException("Facility not found with id: " + facilityId));
+    }
+
+    private Facility requireFacility(Integer facilityId) {
+        if (facilityId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Facility ID is required for a ClassSession");
+        }
+        return findFacility(facilityId);
     }
 
     private void validateFacilityForUpdate(
             ClassSession session,
             Facility requestedFacility,
             LocalDateTime requestedStartTime) {
-        if (requestedFacility == null || "ACTIVE".equalsIgnoreCase(requestedFacility.getStatus())) {
+        if ("ACTIVE".equalsIgnoreCase(requestedFacility.getStatus())) {
             return;
         }
 
@@ -410,7 +433,7 @@ public class ClassSessionService {
     }
 
     private void requireActiveFacility(Facility facility, String message) {
-        if (facility != null && !"ACTIVE".equalsIgnoreCase(facility.getStatus())) {
+        if (!"ACTIVE".equalsIgnoreCase(facility.getStatus())) {
             throw new IllegalArgumentException(message);
         }
     }

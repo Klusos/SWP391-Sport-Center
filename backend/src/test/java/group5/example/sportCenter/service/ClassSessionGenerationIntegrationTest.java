@@ -48,6 +48,8 @@ import group5.example.sportCenter.entity.Coach;
 import group5.example.sportCenter.entity.Course;
 import group5.example.sportCenter.entity.CourseClass;
 import group5.example.sportCenter.entity.CourseOffering;
+import group5.example.sportCenter.entity.CourseRegistration;
+import group5.example.sportCenter.entity.CourseRegistrationStatus;
 import group5.example.sportCenter.entity.Facility;
 import group5.example.sportCenter.entity.Sport;
 import group5.example.sportCenter.entity.User;
@@ -66,6 +68,7 @@ import group5.example.sportCenter.repository.FacilityRepository;
 import group5.example.sportCenter.repository.SportRepository;
 import group5.example.sportCenter.repository.UserRepository;
 import group5.example.sportCenter.repository.PersonalTrainingBookingRepository;
+import group5.example.sportCenter.repository.CourseRegistrationRepository;
 import group5.example.sportCenter.security.JwtService;
 
 @SpringBootTest
@@ -88,6 +91,7 @@ class ClassSessionGenerationIntegrationTest {
     @Autowired UserRepository userRows;
     @Autowired CoachSportRepository coachSportRows;
     @Autowired PersonalTrainingBookingRepository ptBookingRows;
+    @Autowired CourseRegistrationRepository registrationRows;
     @Autowired JwtService jwtService;
     @Autowired JdbcTemplate jdbc;
     @Autowired EntityManager entityManager;
@@ -162,7 +166,7 @@ class ClassSessionGenerationIntegrationTest {
     @Test
     void generatesWeeklyDatesChronologicallyWithPersistedOfferingDurationAndInclusiveBoundaries() {
         ClassSessionGenerationRequest request = request(List.of(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY),
-                LocalTime.of(10, 0), START, 4, null);
+                LocalTime.of(10, 0), START, 4, facility.getId());
         var preview = generation.preview(request);
         assertTrue(preview.canGenerate());
         assertEquals(List.of(START.atTime(10, 0), START.plusDays(2).atTime(10, 0),
@@ -172,22 +176,121 @@ class ClassSessionGenerationIntegrationTest {
 
         var result = generation.generate(request);
         assertEquals(4, result.createdCount());
+        assertTrue(result.sessions().stream().allMatch(session -> facility.getId().equals(session.facilityId())));
         assertEquals(4L, sessionRows.countByCourseClassIdAndStatusNot(courseClass.getId(), "CANCELLED"));
 
-        ClassSessionGenerationRequest boundary = request(List.of(DayOfWeek.SUNDAY), LocalTime.of(22, 0), END, 1, null);
+        ClassSessionGenerationRequest boundary = request(List.of(DayOfWeek.SUNDAY), LocalTime.of(22, 0), END, 1, facility.getId());
         assertTrue(generation.preview(boundary).canGenerate());
     }
 
     @Test
+    void generatedSessionsUseSelectedFacilityAndExistingSessionFacilityIsPreserved() {
+        Facility originalFacility = new Facility();
+        originalFacility.setSport(facility.getSport());
+        originalFacility.setSports(new LinkedHashSet<>(List.of(facility.getSport())));
+        originalFacility.setName("Original session facility " + UUID.randomUUID());
+        originalFacility.setType("STUDIO");
+        originalFacility.setStatus("ACTIVE");
+        originalFacility = facilityRows.saveAndFlush(originalFacility);
+        ClassSession existing = session(START.plusDays(1).atTime(9, 0), START.plusDays(1).atTime(10, 0),
+                "SCHEDULED", originalFacility);
+        existing = sessionRows.saveAndFlush(existing);
+        ClassSession cancelled = session(START.plusDays(2).atTime(9, 0), START.plusDays(2).atTime(10, 0),
+                "CANCELLED", originalFacility);
+        cancelled = sessionRows.saveAndFlush(cancelled);
+
+        var generated = generation.generate(request(List.of(DayOfWeek.MONDAY), LocalTime.of(12, 0),
+                START, 1, facility.getId()));
+
+        assertEquals(facility.getId(), generated.sessions().getFirst().facilityId());
+        assertEquals(originalFacility.getId(), sessionRows.findById(existing.getId()).orElseThrow().getFacility().getId());
+        assertTrue(sessionRows.findById(cancelled.getId()).isPresent());
+    }
+
+    @Test
+    void autoScheduleAndManualCreateRequireFacilityAndManualEditCanAssignOne() throws Exception {
+        ClassSessionGenerationRequest missing = request(List.of(DayOfWeek.MONDAY), LocalTime.NOON, START, 1, null);
+        ResponseStatusException previewError = assertThrows(ResponseStatusException.class,
+                () -> generation.preview(missing));
+        assertEquals(400, previewError.getStatusCode().value());
+        ResponseStatusException generateError = assertThrows(ResponseStatusException.class,
+                () -> generation.generate(missing));
+        assertEquals(400, generateError.getStatusCode().value());
+
+        String body = "{\"courseClassId\":" + courseClass.getId()
+                + ",\"weekdays\":[\"MONDAY\"],\"startTime\":\"12:00:00\",\"firstEligibleDate\":\"2027-01-04\",\"requestedSessionCount\":1}";
+        mvc.perform(post("/api/class-sessions/generation/preview").header("Authorization", bearer(admin))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/class-sessions/generation/confirm").header("Authorization", bearer(admin))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isBadRequest());
+        String manualBody = "{\"classId\":" + courseClass.getId()
+                + ",\"startTime\":\"2027-01-04T10:00:00\",\"endTime\":\"2027-01-04T11:00:00\",\"status\":\"SCHEDULED\"}";
+        mvc.perform(post("/api/class-sessions").header("Authorization", bearer(admin))
+                        .contentType("application/json").content(manualBody))
+                .andExpect(status().isBadRequest());
+
+        ResponseStatusException missingManualFacility = assertThrows(ResponseStatusException.class,
+                () -> classSessions.create(createSession(START.atTime(10, 0), null)));
+        assertEquals(400, missingManualFacility.getStatusCode().value());
+        assertTrue(classSessions.create(createSession(START.atTime(10, 0), facility.getId())).id() > 0);
+
+        ClassSession scheduled = sessionRows.saveAndFlush(session(START.plusDays(7).atTime(10, 0),
+                START.plusDays(7).atTime(11, 0), "SCHEDULED", facility));
+        Integer scheduledId = scheduled.getId();
+        ResponseStatusException missingUpdateFacility = assertThrows(ResponseStatusException.class,
+                () -> classSessions.update(scheduledId, updateSession(scheduled, null)));
+        assertEquals(400, missingUpdateFacility.getStatusCode().value());
+
+        Facility alternate = createCompatibleFacility("Alternate session facility");
+        Integer alternateId = alternate.getId();
+        assertEquals(alternateId, classSessions.update(scheduledId, updateSession(scheduled, alternateId)).facilityId());
+        alternate.setStatus("INACTIVE");
+        facilityRows.saveAndFlush(alternate);
+        assertThrows(IllegalArgumentException.class,
+                () -> classSessions.update(scheduledId, updateSession(scheduled, alternateId)));
+        alternate.setStatus("ACTIVE");
+        facilityRows.saveAndFlush(alternate);
+        Sport otherSport = sport("Manual edit incompatible sport");
+        Facility incompatible = new Facility();
+        incompatible.setSport(otherSport);
+        incompatible.setSports(new LinkedHashSet<>(List.of(otherSport)));
+        incompatible.setName("Incompatible session facility " + UUID.randomUUID());
+        incompatible.setType("STUDIO");
+        incompatible.setStatus("ACTIVE");
+        incompatible = facilityRows.saveAndFlush(incompatible);
+        Integer incompatibleId = incompatible.getId();
+        assertThrows(IllegalArgumentException.class,
+                () -> classSessions.update(scheduledId, updateSession(scheduled, incompatibleId)));
+
+        ClassSession historical = sessionRows.saveAndFlush(session(START.minusDays(7).atTime(10, 0),
+                START.minusDays(7).atTime(11, 0), "CANCELLED", null));
+        Integer historicalId = historical.getId();
+        IllegalArgumentException cancelledEdit = assertThrows(IllegalArgumentException.class,
+                () -> classSessions.update(historicalId, updateSession(historical, null)));
+        assertTrue(cancelledEdit.getMessage().contains("terminal state"));
+        assertTrue(sessionRows.findById(historicalId).orElseThrow().getFacility() == null);
+
+        ClassSession completed = sessionRows.saveAndFlush(session(START.minusDays(14).atTime(10, 0),
+                START.minusDays(14).atTime(11, 0), "COMPLETED", null));
+        Integer completedId = completed.getId();
+        IllegalArgumentException completedEdit = assertThrows(IllegalArgumentException.class,
+                () -> classSessions.update(completedId, updateSession(completed, null)));
+        assertTrue(completedEdit.getMessage().contains("terminal state"));
+        assertTrue(sessionRows.findById(completedId).orElseThrow().getFacility() == null);
+    }
+
+    @Test
     void reportsInsufficientDatesAndRejectsCountsAboveRemainingTarget() {
-        ClassSessionGenerationRequest tooMany = request(List.of(DayOfWeek.MONDAY), LocalTime.NOON, START, 9, null);
+        ClassSessionGenerationRequest tooMany = request(List.of(DayOfWeek.MONDAY), LocalTime.NOON, START, 9, facility.getId());
         var preview = generation.preview(tooMany);
         assertFalse(preview.canGenerate());
         assertTrue(preview.conflicts().stream().anyMatch(text -> text.contains("planned-session slots")));
         assertThrows(ResponseStatusException.class, () -> generation.generate(tooMany));
 
         ClassSessionGenerationRequest insufficient = request(List.of(DayOfWeek.SUNDAY), LocalTime.NOON,
-                END.minusDays(1), 2, null);
+                END.minusDays(1), 2, facility.getId());
         var shortPreview = generation.preview(insufficient);
         assertFalse(shortPreview.canGenerate());
         assertTrue(shortPreview.conflicts().stream().anyMatch(text -> text.contains("Only 1 matching weekdays")));
@@ -205,6 +308,8 @@ class ClassSessionGenerationIntegrationTest {
         ClassSession conflicting = session(START.plusDays(7).atTime(10, 0), START.plusDays(7).atTime(11, 0),
                 "SCHEDULED", facility);
         sessionRows.saveAndFlush(conflicting);
+        assertThrows(IllegalArgumentException.class,
+                () -> classSessions.create(createSession(START.plusDays(7).atTime(10, 0), facility.getId())));
         var conflictPreview = generation.preview(request(List.of(DayOfWeek.MONDAY), LocalTime.of(10, 0),
                 START, 2, facility.getId()));
         assertFalse(conflictPreview.canGenerate());
@@ -223,10 +328,14 @@ class ClassSessionGenerationIntegrationTest {
         assertFalse(inactivePreview.canGenerate());
         assertTrue(inactivePreview.candidates().getFirst().conflicts().stream()
                 .anyMatch(text -> text.contains("ACTIVE facilities")));
+        assertThrows(IllegalArgumentException.class,
+                () -> classSessions.create(createSession(START.atTime(12, 0), facility.getId())));
+        assertThrows(ResponseStatusException.class, () -> generation.generate(
+                request(List.of(DayOfWeek.MONDAY), LocalTime.NOON, START, 1, facility.getId())));
         facility.setStatus("ACTIVE");
         facilityRows.saveAndFlush(facility);
 
-        var preview = generation.preview(request(List.of(DayOfWeek.MONDAY), LocalTime.NOON, START, 1, null));
+        var preview = generation.preview(request(List.of(DayOfWeek.MONDAY), LocalTime.NOON, START, 1, facility.getId()));
         assertEquals(60, preview.sessionDurationMinutes());
         assertEquals(60, java.time.Duration.between(preview.candidates().getFirst().startTime(),
                 preview.candidates().getFirst().endTime()).toMinutes());
@@ -300,13 +409,13 @@ class ClassSessionGenerationIntegrationTest {
         ptBooking(coach, start, start.plusHours(1), PersonalTrainingBookingStatus.PENDING_PAYMENT,
                 LocalDateTime.now().plusMinutes(15));
 
-        ClassSessionGenerationRequest request = request(List.of(DayOfWeek.MONDAY), LocalTime.of(10, 0), START, 1, null);
+        ClassSessionGenerationRequest request = request(List.of(DayOfWeek.MONDAY), LocalTime.of(10, 0), START, 1, facility.getId());
         var preview = generation.preview(request);
         assertFalse(preview.canGenerate());
         assertTrue(preview.candidates().getFirst().conflicts().stream().anyMatch(text -> text.contains("PT Booking")));
         assertThrows(ResponseStatusException.class, () -> generation.generate(request));
         assertThrows(IllegalArgumentException.class,
-                () -> classSessions.create(createSession(start, null)));
+                () -> classSessions.create(createSession(start, facility.getId())));
     }
 
     @Test
@@ -320,10 +429,70 @@ class ClassSessionGenerationIntegrationTest {
 
         UpdateClassSessionRequest update = new UpdateClassSessionRequest();
         update.setClassId(courseClass.getId());
+        update.setFacilityId(facility.getId());
         update.setStartTime(conflictStart);
         update.setEndTime(conflictStart.plusHours(1));
 
         assertThrows(IllegalArgumentException.class, () -> classSessions.update(existingId, update));
+    }
+
+    @Test
+    void validPendingRegistrationHoldBlocksOnlyActualSessionScheduleChanges() {
+        LocalDateTime originalStart = START.plusDays(1).atTime(10, 0);
+        ClassSession existing = sessionRows.saveAndFlush(
+                session(originalStart, originalStart.plusHours(1), "SCHEDULED", facility));
+        CourseRegistration hold = new CourseRegistration();
+        hold.setMember(member);
+        hold.setCourseClass(courseClass);
+        hold.setStatus(CourseRegistrationStatus.PENDING_PAYMENT);
+        hold.setRegisteredAt(LocalDateTime.now());
+        hold.setPaymentDeadline(LocalDateTime.now().plusHours(1));
+        hold.setOriginalPrice(new BigDecimal("100.00"));
+        hold.setMembershipDiscount(BigDecimal.ZERO.setScale(2));
+        hold.setFinalPrice(new BigDecimal("100.00"));
+        registrationRows.saveAndFlush(hold);
+
+        assertEquals(originalStart, classSessions.update(existing.getId(),
+                updateSession(existing, facility.getId())).startTime());
+
+        UpdateClassSessionRequest changedSchedule = updateSession(existing, facility.getId());
+        changedSchedule.setStartTime(originalStart.plusDays(1));
+        changedSchedule.setEndTime(originalStart.plusDays(1).plusHours(1));
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> classSessions.update(existing.getId(), changedSchedule));
+        assertTrue(error.getMessage().contains("active payment reservations"));
+    }
+
+    @Test
+    void expiredPendingAndCancelledRegistrationsDoNotBlockSessionRescheduling() {
+        LocalDateTime originalStart = START.plusDays(1).atTime(10, 0);
+        ClassSession existing = sessionRows.saveAndFlush(
+                session(originalStart, originalStart.plusHours(1), "SCHEDULED", facility));
+        CourseRegistration expired = registration(member, CourseRegistrationStatus.PENDING_PAYMENT,
+                LocalDateTime.now().minusSeconds(1));
+        CourseRegistration cancelled = registration(member, CourseRegistrationStatus.CANCELLED,
+                LocalDateTime.now().plusDays(1));
+        registrationRows.saveAndFlush(expired);
+        registrationRows.saveAndFlush(cancelled);
+
+        UpdateClassSessionRequest update = updateSession(existing, facility.getId());
+        update.setStartTime(originalStart.plusDays(1));
+        update.setEndTime(originalStart.plusDays(1).plusHours(1));
+
+        assertEquals(update.getStartTime(), classSessions.update(existing.getId(), update).startTime());
+    }
+
+    private CourseRegistration registration(User owner, CourseRegistrationStatus status, LocalDateTime deadline) {
+        CourseRegistration registration = new CourseRegistration();
+        registration.setMember(owner);
+        registration.setCourseClass(courseClass);
+        registration.setStatus(status);
+        registration.setRegisteredAt(LocalDateTime.now());
+        registration.setPaymentDeadline(deadline);
+        registration.setOriginalPrice(new BigDecimal("100.00"));
+        registration.setMembershipDiscount(BigDecimal.ZERO.setScale(2));
+        registration.setFinalPrice(new BigDecimal("100.00"));
+        return registration;
     }
 
     @Test
@@ -334,9 +503,9 @@ class ClassSessionGenerationIntegrationTest {
         ptBooking(coach, classStart, classStart.plusHours(1), PersonalTrainingBookingStatus.PENDING_PAYMENT,
                 LocalDateTime.now().minusSeconds(1));
 
-        var preview = generation.preview(request(List.of(DayOfWeek.MONDAY), LocalTime.of(11, 0), START, 1, null));
+        var preview = generation.preview(request(List.of(DayOfWeek.MONDAY), LocalTime.of(11, 0), START, 1, facility.getId()));
         assertTrue(preview.canGenerate());
-        assertEquals(1, generation.generate(request(List.of(DayOfWeek.MONDAY), LocalTime.of(11, 0), START, 1, null))
+        assertEquals(1, generation.generate(request(List.of(DayOfWeek.MONDAY), LocalTime.of(11, 0), START, 1, facility.getId()))
                 .createdCount());
     }
 
@@ -414,13 +583,14 @@ class ClassSessionGenerationIntegrationTest {
 
     @Test
     void confirmRevalidatesAfterPreviewAndAdminOnlyEndpointsRejectOtherRoles() throws Exception {
-        ClassSessionGenerationRequest request = request(List.of(DayOfWeek.MONDAY), LocalTime.of(10, 0), START, 1, null);
+        ClassSessionGenerationRequest request = request(List.of(DayOfWeek.MONDAY), LocalTime.of(10, 0), START, 1, facility.getId());
         assertTrue(generation.preview(request).canGenerate());
         sessionRows.saveAndFlush(session(START.atTime(10, 0), START.atTime(11, 0), "SCHEDULED", null));
         assertThrows(ResponseStatusException.class, () -> generation.generate(request));
 
         String body = "{\"courseClassId\":" + courseClass.getId()
-                + ",\"weekdays\":[\"MONDAY\"],\"startTime\":\"10:00:00\",\"firstEligibleDate\":\"2027-01-04\",\"requestedSessionCount\":1}";
+                + ",\"weekdays\":[\"MONDAY\"],\"startTime\":\"10:00:00\",\"facilityId\":" + facility.getId()
+                + ",\"firstEligibleDate\":\"2027-01-04\",\"requestedSessionCount\":1}";
         mvc.perform(post("/api/class-sessions/generation/preview").header("Authorization", bearer(admin))
                         .contentType("application/json").content(body))
                 .andExpect(status().isOk());
@@ -446,7 +616,7 @@ class ClassSessionGenerationIntegrationTest {
     @Test
     void rejectsRepeatedWeekdaysAndRollsBackWhenPersistenceFailsMidBatch() {
         ClassSessionGenerationRequest repeated = request(List.of(DayOfWeek.MONDAY, DayOfWeek.MONDAY),
-                LocalTime.of(9, 0), START, 2, null);
+                LocalTime.of(9, 0), START, 2, facility.getId());
         ResponseStatusException invalid = assertThrows(ResponseStatusException.class,
                 () -> generation.preview(repeated));
         assertEquals(400, invalid.getStatusCode().value());
@@ -462,7 +632,7 @@ class ClassSessionGenerationIntegrationTest {
         }).when(sessionRows).save(any(ClassSession.class));
 
         ClassSessionGenerationRequest request = request(List.of(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY),
-                LocalTime.of(9, 0), START, 2, null);
+                LocalTime.of(9, 0), START, 2, facility.getId());
         assertThrows(DataIntegrityViolationException.class, () -> generation.generate(request));
         assertEquals(0L, sessionRows.countByCourseClassIdAndStatusNot(courseClass.getId(), "CANCELLED"));
     }
@@ -472,7 +642,7 @@ class ClassSessionGenerationIntegrationTest {
         offering.setPlannedSessions(3);
         offeringRows.saveAndFlush(offering);
         ClassSessionGenerationRequest request = request(List.of(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY),
-                LocalTime.of(9, 0), START, 3, null);
+                LocalTime.of(9, 0), START, 3, facility.getId());
         try (var executor = Executors.newFixedThreadPool(2)) {
             Callable<Integer> call = () -> generation.generate(request).createdCount();
             List<Future<Integer>> futures = executor.invokeAll(List.of(call, call));
@@ -518,6 +688,25 @@ class ClassSessionGenerationIntegrationTest {
         request.setEndTime(start.plusMinutes(offering.getSessionDuration()));
         request.setStatus("SCHEDULED");
         return request;
+    }
+
+    private UpdateClassSessionRequest updateSession(ClassSession session, Integer facilityId) {
+        UpdateClassSessionRequest request = new UpdateClassSessionRequest();
+        request.setClassId(courseClass.getId());
+        request.setFacilityId(facilityId);
+        request.setStartTime(session.getStartTime());
+        request.setEndTime(session.getEndTime());
+        return request;
+    }
+
+    private Facility createCompatibleFacility(String namePrefix) {
+        Facility alternate = new Facility();
+        alternate.setSport(facility.getSport());
+        alternate.setSports(new LinkedHashSet<>(List.of(facility.getSport())));
+        alternate.setName(namePrefix + " " + UUID.randomUUID());
+        alternate.setType("STUDIO");
+        alternate.setStatus("ACTIVE");
+        return facilityRows.saveAndFlush(alternate);
     }
 
     private Sport sport(String prefix) {

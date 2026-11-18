@@ -213,12 +213,12 @@ public class CourseClassService {
         }
 
         if (!Objects.equals(previousCoachId, coach.getId())) {
-            if (courseRegistrationRepository.countByClassIdAndStatus(courseClass.getId(),
-                    CourseRegistrationStatus.CONFIRMED) > 0) {
+            LocalDateTime now = LocalDateTime.now(clock.withZone(BUSINESS_ZONE));
+            if (courseRegistrationRepository.countOccupiedSeats(courseClass.getId(),
+                    CourseRegistrationStatus.CONFIRMED, CourseRegistrationStatus.PENDING_PAYMENT, now) > 0) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "Coach cannot be reassigned after confirmed registrations because the Member schedule-change workflow is unavailable");
+                        "Coach cannot be reassigned while confirmed registrations or active payment reservations exist because the Member schedule-change workflow is unavailable");
             }
-            LocalDateTime now = LocalDateTime.now(clock);
             List<group5.example.sportCenter.entity.ClassSession> relevantSessions = classSessionRepository
                     .findByCourseClassId(courseClass.getId()).stream()
                     .filter(session -> !"CANCELLED".equalsIgnoreCase(session.getStatus()))

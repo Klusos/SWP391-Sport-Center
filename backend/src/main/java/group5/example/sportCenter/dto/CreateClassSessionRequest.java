@@ -15,6 +15,7 @@ public class CreateClassSessionRequest {
     @NotNull(message = "Class ID is required")
     private Integer classId;
 
+    @NotNull(message = "Facility ID is required for a new ClassSession")
     private Integer facilityId;
 
     @NotNull(message = "Start time is required")
