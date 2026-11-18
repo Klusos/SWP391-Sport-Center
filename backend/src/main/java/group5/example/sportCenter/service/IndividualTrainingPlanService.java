@@ -82,7 +82,7 @@ public class IndividualTrainingPlanService {
         User actor = access.actor(jwt);
         CourseClass courseClass = classes.findByIdForScheduleUpdate(classId)
                 .orElseThrow(() -> new ResourceNotFoundException("CourseClass not found with id: " + classId));
-        authorizeCoachOrAdmin(actor, courseClass);
+        authorizeCoachWrite(actor, courseClass);
 
         registrations.findByMemberIdAndCourseClassIdAndStatusForUpdate(
                         memberId, classId, CourseRegistrationStatus.CONFIRMED)
@@ -121,7 +121,7 @@ public class IndividualTrainingPlanService {
     public List<IndividualTrainingPlanResponse> forClass(Integer classId, Jwt jwt) {
         User actor = access.actor(jwt);
         CourseClass courseClass = findClass(classId);
-        authorizeCoachOrAdmin(actor, courseClass);
+        authorizeCoachOrAdminRead(actor, courseClass);
         return plans.findByCourseClassIdOrderByIdAsc(classId).stream().map(this::response).toList();
     }
 
@@ -155,7 +155,7 @@ public class IndividualTrainingPlanService {
         CourseClass courseClass = classes.findByIdForScheduleUpdate(plan.getCourseClass().getId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "CourseClass not found with id: " + plan.getCourseClass().getId()));
-        authorizeCoachOrAdmin(actor, courseClass);
+        authorizeCoachWrite(actor, courseClass);
         User member = users.findByIdForBookingUpdate(plan.getMember().getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Member not found with id: " + plan.getMember().getId()));
         requireCurrentPlanEntitlement(member.getId());
@@ -250,14 +250,25 @@ public class IndividualTrainingPlanService {
             }
             return;
         }
-        authorizeCoachOrAdmin(actor, plan.getCourseClass());
+        authorizeCoachOrAdminRead(actor, plan.getCourseClass());
     }
 
-    private void authorizeCoachOrAdmin(User actor, CourseClass courseClass) {
+    private void authorizeCoachOrAdminRead(User actor, CourseClass courseClass) {
         if ("ADMIN".equalsIgnoreCase(actor.getRole())) return;
+        authorizeAssignedCoach(actor, courseClass);
+    }
+
+    private void authorizeCoachWrite(User actor, CourseClass courseClass) {
+        authorizeAssignedCoach(actor, courseClass);
+    }
+
+    private void authorizeAssignedCoach(User actor, CourseClass courseClass) {
+        if (!"COACH".equalsIgnoreCase(actor.getRole())) {
+            throw error(HttpStatus.FORBIDDEN, "Only the assigned Coach can manage this individual training plan");
+        }
         var coach = access.coach(actor);
         if (!coach.getId().equals(courseClass.getCoach().getId())) {
-            throw error(HttpStatus.FORBIDDEN, "Only the assigned Coach or ADMIN can manage this individual training plan");
+            throw error(HttpStatus.FORBIDDEN, "Only the assigned Coach can manage this individual training plan");
         }
     }
 

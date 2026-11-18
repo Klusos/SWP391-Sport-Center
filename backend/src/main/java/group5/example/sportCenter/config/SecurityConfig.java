@@ -121,7 +121,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/attendance/*/history").authenticated()
                 .requestMatchers("/api/attendance", "/api/attendance/**").denyAll()
 
-                // Flow 4 training: the service further limits writes to the assigned Coach or ADMIN.
+                // Flow 4 training: Coach-specific writes are limited to the assigned Coach.
                 .requestMatchers(HttpMethod.GET, "/api/training/me").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/training/classes/*/plan")
                     .hasAnyRole("ADMIN", "RECEPTIONIST", "COACH", "MEMBER")
@@ -130,11 +130,11 @@ public class SecurityConfig {
                     .hasAnyRole("ADMIN", "RECEPTIONIST", "COACH")
                 .requestMatchers(HttpMethod.PUT, "/api/training/classes/*/plan", "/api/training/exercises/*",
                         "/api/training/sessions/*/results/*")
-                    .hasAnyRole("ADMIN", "COACH")
+                    .hasRole("COACH")
                 .requestMatchers(HttpMethod.POST, "/api/training/classes/*/plan/exercises",
                         "/api/training/sessions/*/complete", "/api/training/classes/*/members/*/evaluations")
-                    .hasAnyRole("ADMIN", "COACH")
-                .requestMatchers(HttpMethod.DELETE, "/api/training/exercises/*").hasAnyRole("ADMIN", "COACH")
+                    .hasRole("COACH")
+                .requestMatchers(HttpMethod.DELETE, "/api/training/exercises/*").hasRole("COACH")
                 .requestMatchers(HttpMethod.GET, "/api/training/me/individual-plans")
                     .hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/training/classes/*/individual-plans")
@@ -143,9 +143,9 @@ public class SecurityConfig {
                         "/api/training/individual-plans/*/revisions")
                     .hasAnyRole("ADMIN", "COACH", "MEMBER")
                 .requestMatchers(HttpMethod.POST, "/api/training/classes/*/members/*/individual-plan")
-                    .hasAnyRole("ADMIN", "COACH")
+                    .hasRole("COACH")
                 .requestMatchers(HttpMethod.PUT, "/api/training/individual-plans/*")
-                    .hasAnyRole("ADMIN", "COACH")
+                    .hasRole("COACH")
                 .requestMatchers("/api/training", "/api/training/**").denyAll()
 
                 .requestMatchers(HttpMethod.GET, "/api/pt-bookings/eligible-coaches", "/api/pt-bookings/me").hasRole("MEMBER")

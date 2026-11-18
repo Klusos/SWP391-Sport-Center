@@ -391,10 +391,12 @@ public class TrainingService {
     // ---- Authorization ----------------------------------------------------------------------
 
     private void authorizeClassWrite(User actor, CourseClass courseClass) {
-        if ("ADMIN".equalsIgnoreCase(actor.getRole())) return;
+        if (!"COACH".equalsIgnoreCase(actor.getRole())) {
+            throw error(HttpStatus.FORBIDDEN, "Only the assigned Coach can manage training for this class");
+        }
         var coach = access.coach(actor);
         if (!coach.getId().equals(courseClass.getCoach().getId())) {
-            throw error(HttpStatus.FORBIDDEN, "Only the assigned Coach or ADMIN can manage training for this class");
+            throw error(HttpStatus.FORBIDDEN, "Only the assigned Coach can manage training for this class");
         }
     }
 

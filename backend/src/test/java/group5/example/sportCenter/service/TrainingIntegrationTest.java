@@ -1,6 +1,7 @@
 package group5.example.sportCenter.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -25,11 +26,17 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.security.web.FilterChainProxy;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
+import org.springframework.web.server.ResponseStatusException;
 
+import group5.example.sportCenter.dto.ProgressEvaluationRequest;
+import group5.example.sportCenter.dto.RecordTrainingResultRequest;
+import group5.example.sportCenter.dto.TrainingExerciseRequest;
+import group5.example.sportCenter.dto.UpsertTrainingPlanRequest;
 import group5.example.sportCenter.entity.Attendance;
 import group5.example.sportCenter.entity.AttendanceStatus;
 import group5.example.sportCenter.entity.ClassSession;
@@ -77,6 +84,7 @@ class TrainingIntegrationTest {
     @Autowired WebApplicationContext context;
     @Autowired FilterChainProxy security;
     @Autowired JwtService jwtService;
+    @Autowired TrainingService trainingService;
     @Autowired UserRepository users;
     @Autowired CoachRepository coaches;
     @Autowired SportRepository sports;
@@ -248,7 +256,7 @@ class TrainingIntegrationTest {
 
     @Test
     void progressEvaluationsAppendHistoryAndMemberSeesOwnTrainingOverview() throws Exception {
-        mvc.perform(put("/api/training/classes/" + coachClass.getId() + "/plan").header("Authorization", bearer(admin))
+        mvc.perform(put("/api/training/classes/" + coachClass.getId() + "/plan").header("Authorization", bearer(coachUser))
                 .contentType("application/json").content("{\"goal\":\"Rally 20 shots\"}"))
                 .andExpect(status().isOk());
         markAttendance(endedSession, member, AttendanceStatus.PRESENT);
@@ -361,31 +369,87 @@ class TrainingIntegrationTest {
     }
 
     @Test
-    void adminManagesAnyClassAndPlanUpdatesKeepTheSamePlan() throws Exception {
+    void adminReadsTrainingButCannotWriteThroughHttpOrDirectServiceCalls() throws Exception {
         String planUrl = "/api/training/classes/" + coachClass.getId() + "/plan";
+        String planResponse = mvc.perform(put(planUrl).header("Authorization", bearer(coachUser))
+                        .contentType("application/json").content("{\"goal\":\"Coach goal\"}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        Integer planId = Integer.valueOf(planResponse.replaceAll(".*\"id\":(\\d+).*", "$1"));
+        String exerciseResponse = mvc.perform(post(planUrl + "/exercises").header("Authorization", bearer(coachUser))
+                        .contentType("application/json").content("{\"name\":\"Footwork\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        Integer exerciseId = Integer.valueOf(exerciseResponse.replaceAll(".*\"id\":(\\d+).*", "$1"));
+        markAttendance(endedSession, member, AttendanceStatus.PRESENT);
+
         mvc.perform(get("/api/training/classes").header("Authorization", bearer(admin)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.classId == " + coachClass.getId() + ")]").exists());
+        mvc.perform(get(planUrl).header("Authorization", bearer(admin))).andExpect(status().isOk());
+        mvc.perform(get("/api/training/classes/" + coachClass.getId() + "/sessions")
+                .header("Authorization", bearer(admin))).andExpect(status().isOk());
+        mvc.perform(get("/api/training/classes/" + coachClass.getId() + "/progress")
+                .header("Authorization", bearer(admin))).andExpect(status().isOk());
+        mvc.perform(get("/api/training/sessions/" + endedSession.getId() + "/results")
+                .header("Authorization", bearer(admin))).andExpect(status().isOk());
 
-        String created = mvc.perform(put(planUrl).header("Authorization", bearer(admin)).contentType("application/json")
-                .content("{\"goal\":\"Admin draft\"}"))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
-        Integer planId = Integer.valueOf(created.replaceAll(".*\"id\":(\\d+).*", "$1"));
+        mvc.perform(put(planUrl).header("Authorization", bearer(admin)).contentType("application/json")
+                .content("{\"goal\":\"Admin draft\"}")).andExpect(status().isForbidden());
+        mvc.perform(post(planUrl + "/exercises").header("Authorization", bearer(admin)).contentType("application/json")
+                .content("{\"name\":\"Admin exercise\"}")).andExpect(status().isForbidden());
+        mvc.perform(put("/api/training/exercises/" + exerciseId).header("Authorization", bearer(admin))
+                .contentType("application/json").content("{\"name\":\"Admin edit\"}")).andExpect(status().isForbidden());
+        mvc.perform(delete("/api/training/exercises/" + exerciseId).header("Authorization", bearer(admin)))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/training/sessions/" + endedSession.getId() + "/complete")
+                .header("Authorization", bearer(admin))).andExpect(status().isForbidden());
+        mvc.perform(put("/api/training/sessions/" + endedSession.getId() + "/results/" + member.getId())
+                .header("Authorization", bearer(admin)).contentType("application/json")
+                .content("{\"score\":8}")).andExpect(status().isForbidden());
+        mvc.perform(post("/api/training/classes/" + coachClass.getId() + "/members/" + member.getId() + "/evaluations")
+                .header("Authorization", bearer(admin)).contentType("application/json")
+                .content("{\"rating\":4,\"comment\":\"Admin evaluation\"}"))
+                .andExpect(status().isForbidden());
+
         mvc.perform(put(planUrl).header("Authorization", bearer(coachUser)).contentType("application/json")
-                .content("{\"goal\":\"Coach goal\",\"description\":\"Revised\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(planId))
-                .andExpect(jsonPath("$.goal").value("Coach goal"));
+                .content("{\"goal\":\"Coach revision\",\"description\":\"Revised\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(planId))
+                .andExpect(jsonPath("$.goal").value("Coach revision"));
         assertEquals(1, plans.count());
-
+        assertEquals(1, exercises.count());
+        assertEquals("Footwork", exercises.findByPlanIdOrderBySortOrderAscIdAsc(planId).get(0).getName());
+        assertEquals("SCHEDULED", sessions.findById(endedSession.getId()).orElseThrow().getStatus());
+        assertEquals(0, results.count());
+        assertEquals(0, evaluations.count());
         mvc.perform(post(planUrl + "/exercises").header("Authorization", bearer(coachUser))
-                .contentType("application/json").content("{\"name\":\"Bad order\",\"sortOrder\":-1}"))
+                .contentType("application/json").content("{\"name\":\"Invalid order\",\"sortOrder\":-1}"))
                 .andExpect(status().isBadRequest());
         mvc.perform(post(planUrl + "/exercises").header("Authorization", bearer(coachUser))
                 .contentType("application/json").content("{\"name\":\"Too many sets\",\"sets\":101}"))
                 .andExpect(status().isBadRequest());
-        assertEquals(0, exercises.count());
+        assertEquals(1, exercises.count());
+
+        Jwt adminJwt = jwt(admin);
+        assertServiceWriteDenied(() -> trainingService.upsertPlan(coachClass.getId(),
+                new UpsertTrainingPlanRequest("Direct Admin edit", null), adminJwt));
+        assertServiceWriteDenied(() -> trainingService.addExercise(coachClass.getId(),
+                new TrainingExerciseRequest("Direct Admin exercise", null, null, null, null, null), adminJwt));
+        assertServiceWriteDenied(() -> trainingService.updateExercise(exerciseId,
+                new TrainingExerciseRequest("Direct Admin edit", null, null, null, null, null), adminJwt));
+        assertServiceWriteDenied(() -> trainingService.deleteExercise(exerciseId, adminJwt));
+        assertServiceWriteDenied(() -> trainingService.completeSession(endedSession.getId(), adminJwt));
+        assertServiceWriteDenied(() -> trainingService.recordResult(endedSession.getId(), member.getId(),
+                new RecordTrainingResultRequest(8, null), adminJwt));
+        assertServiceWriteDenied(() -> trainingService.evaluate(coachClass.getId(), member.getId(),
+                new ProgressEvaluationRequest(4, "Direct Admin evaluation"), adminJwt));
+        assertEquals("Coach revision", plans.findByCourseClassId(coachClass.getId()).orElseThrow().getGoal());
+        assertEquals(1, exercises.count());
+        assertEquals(0, results.count());
+        assertEquals(0, evaluations.count());
+    }
+
+    private void assertServiceWriteDenied(org.junit.jupiter.api.function.Executable write) {
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, write);
+        assertEquals(403, exception.getStatusCode().value());
     }
 
     @Test
@@ -501,5 +565,9 @@ class TrainingIntegrationTest {
 
     private String bearer(User user) {
         return "Bearer " + jwtService.generateToken(user);
+    }
+
+    private Jwt jwt(User user) {
+        return jwtService.validateToken(jwtService.generateToken(user));
     }
 }

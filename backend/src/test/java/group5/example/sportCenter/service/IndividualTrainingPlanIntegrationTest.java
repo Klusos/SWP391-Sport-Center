@@ -237,6 +237,11 @@ class IndividualTrainingPlanIntegrationTest {
         assertEquals(0, revisions.count());
     }
 
+    private void assertForbidden(org.junit.jupiter.api.function.Executable operation) {
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, operation);
+        assertEquals(403, exception.getStatusCode().value());
+    }
+
     @Test
     void coachCreatesRevisionHistoryAndMemberReadsOnlyOwnPlan() throws Exception {
         String createUrl = createUrl(member);
@@ -267,6 +272,12 @@ class IndividualTrainingPlanIntegrationTest {
         mvc.perform(get("/api/training/individual-plans/" + planId).header("Authorization", bearer(admin)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(planId));
         mvc.perform(get("/api/training/classes/" + courseClass.getId() + "/individual-plans")
+                        .header("Authorization", bearer(admin)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(planId));
+        mvc.perform(post(createUrl(member)).header("Authorization", bearer(admin))
+                        .contentType("application/json").content(body("Admin create", "Week", "Exercise")))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/training/classes/" + courseClass.getId() + "/individual-plans")
                         .header("Authorization", bearer(otherCoachUser)))
                 .andExpect(status().isForbidden());
         mvc.perform(get("/api/training/individual-plans/" + planId).header("Authorization", bearer(otherMember)))
@@ -277,6 +288,13 @@ class IndividualTrainingPlanIntegrationTest {
         mvc.perform(put("/api/training/individual-plans/" + planId).header("Authorization", bearer(member))
                         .contentType("application/json").content(body("Member edit", "Week", "Exercise")))
                 .andExpect(status().isForbidden());
+        mvc.perform(put("/api/training/individual-plans/" + planId).header("Authorization", bearer(admin))
+                        .contentType("application/json").content(body("Admin revision", "Week", "Exercise")))
+                .andExpect(status().isForbidden());
+        assertForbidden(() -> service.create(courseClass.getId(), member.getId(),
+                request("Direct Admin create", "Week", "Exercise"), jwt(admin)));
+        assertForbidden(() -> service.revise(planId,
+                request("Direct Admin revision", "Week", "Exercise"), jwt(admin)));
         assertEquals(2, revisions.count());
     }
 
@@ -396,7 +414,7 @@ class IndividualTrainingPlanIntegrationTest {
 
     @Test
     void duplicatePlanIsRejectedAndClassWidePlanRemainsSeparate() throws Exception {
-        mvc.perform(post(createUrl(member)).header("Authorization", bearer(admin))
+        mvc.perform(post(createUrl(member)).header("Authorization", bearer(coachUser))
                         .contentType("application/json").content(body("Goal", "Week", "Exercise")))
                 .andExpect(status().isCreated());
         mvc.perform(post(createUrl(member)).header("Authorization", bearer(coachUser))
