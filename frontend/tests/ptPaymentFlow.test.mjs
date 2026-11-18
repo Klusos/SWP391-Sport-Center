@@ -81,18 +81,42 @@ test("App and Sidebar preserve staff queue routes with one combined Receptionist
   const sidebar = await readFile(new URL("components/Sidebar.jsx", root), "utf8");
   const page = await readFile(new URL("pages/ReceptionistPtPayments.jsx", root), "utf8");
   assert.match(app, /<Route element={<StaffRoute auth={auth} \/>}>[\s\S]*?<Route path="\/receptionist\/pt-payments"/);
-  const adminOversight = sidebar.match(/id: "oversight-exceptions",[\s\S]*?pages:\s*\[([\s\S]*?)\n    \],/)?.[1];
+  const adminOversight = sidebar.match(/id: "operational-support",[\s\S]*?pages:\s*\[([\s\S]*?)\n    \],/)?.[1];
   const receptionistNavigation = sidebar.match(/const receptionistLinks\s*=\s*\[([\s\S]*?)\n  \];/)?.[1];
-  assert.ok(adminOversight, "Admin oversight navigation group should exist");
-  assert.match(adminOversight, /\["pt-payments",\s*"[^"]+"\]/, "Admin oversight should include PT Payments");
+  assert.ok(adminOversight, "Admin operational support navigation group should exist");
+  assert.equal((adminOversight.match(/\["course-payments"/g) || []).length, 1, "Admin has one unified payment entry");
+  assert.match(adminOversight, /\["course-payments",\s*"Thanh to\\u00e1n kh\\u00f3a h\\u1ecdc & PT"\]/, "Admin uses the established combined payment label");
+  assert.doesNotMatch(adminOversight, /\["pt-payments"/, "PT Payments has no separate Admin Sidebar entry");
   assert.ok(receptionistNavigation, "Receptionist navigation should exist");
   assert.equal((receptionistNavigation.match(/\["course-payments"/g) || []).length, 1, "Receptionist has one combined payment entry");
   assert.match(receptionistNavigation, /\["course-payments",\s*"[^"]*PT[^"]*"\]/, "Combined entry names both payment queues");
   assert.doesNotMatch(receptionistNavigation, /\["pt-payments",/, "PT queue remains reachable in-page, not as a second sidebar item");
   assert.match(page, /activePage=\{role === "RECEPTIONIST" \? "course-payments" : "pt-payments"\}/);
+  assert.match(sidebar, /const navigationActivePage = activePage === "pt-payments" \? "course-payments" : activePage;/, "Admin PT route maps to the unified active Sidebar entry");
   assert.equal(app.match(/"pt-payments":\s*"([^"]+)"/)?.[1], "/receptionist/pt-payments");
   assert.match(page, /canViewPtPayments\(role\)/);
   assert.match(page, /<Navigate to="\/" replace \/>/);
+});
+
+test("PT Payments gives Admin shared page context while preserving the Receptionist counter header and clock", async () => {
+  const [page, sharedCss, app] = await Promise.all([
+    readFile(new URL("../src/pages/ReceptionistPtPayments.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/pages/ReceptionistCoursePayments.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/App.jsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(page, /isAdmin && <AdminTopBar pageLabel="THANH TOÁN PT" displayName=\{currentUserName\} avatarName=\{currentUserName\} \/>/);
+  assert.equal((page.match(/<AdminTopBar\b/g) || []).length, 1);
+  assert.match(page, /isAdmin && <div className="cp-topbar cp-topbar--admin">[\s\S]*?cp-topbar-right[\s\S]*?cp-clock-pill[\s\S]*?liveClockLabel/);
+  assert.match(page, /!isAdmin && <div className="cp-clock-pill cp-header-clock"[\s\S]*?liveClockLabel/);
+  assert.doesNotMatch(page, /cp-breadcrumb/);
+  assert.match(page, /timeZone: "Asia\/Ho_Chi_Minh"[\s\S]*?\(GMT\+7\)/);
+  assert.match(page, /setInterval\(\(\) => setNow\(Date\.now\(\)\), 1000\)/);
+  assert.match(page, /canViewPtPayments\(role\)/);
+  assert.doesNotMatch(page, /NotificationBell/);
+  assert.match(sharedCss, /\.pt-payment-queue--admin \.cp-topbar--admin/);
+  assert.match(sharedCss, /\.pt-payment-queue--admin \.cp-body--admin/);
+  assert.match(sharedCss, /\.cp-header-clock\s*\{[\s\S]*?white-space: nowrap/);
+  assert.match(app, /path="\/receptionist\/pt-payments" element=\{<ReceptionistPtPayments \{\.\.\.staff\} userId=\{auth\?\.userId\} \/>\}/);
 });
 
 test("cash confirmation requires explicit consent and duplicate/uncertain results are not retried", async () => {
@@ -111,7 +135,7 @@ test("component handles 409 and refuses automatic duplicate payment attempts", a
   const source = await readFile(new URL("../src/pages/PtBooking.jsx", import.meta.url), "utf8");
   assert.match(source, /requestError\.status === 409/);
   assert.match(source, /if \(pendingPtPayment\(payments, booking\.id\)\)/);
-  assert.match(source, /do not create another payment/);
+  assert.match(source, /Không tạo thanh toán khác/);
   assert.match(source, /ptOnlineUrlIsTrusted\(payment\.paymentUrl\)/);
   assert.match(source, /focusBookingId\.current = result\.id/);
   assert.match(source, /focusPtPaymentPanel\(targetId\)/);

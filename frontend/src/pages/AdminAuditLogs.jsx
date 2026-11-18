@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Sidebar from "../components/Sidebar";
+import AdminTopBar from "../components/AdminTopBar";
 import { getAdminAuditLogsApi } from "../api";
 import "./AdminAuditLogs.css";
 
@@ -30,7 +31,7 @@ function displayValue(value) {
   return value === null || value === undefined || value === "" ? "—" : value;
 }
 
-export default function AdminAuditLogs({ token, role, onLogout, onNavigate }) {
+export default function AdminAuditLogs({ token, role, currentUserName, onLogout, onNavigate }) {
   const [draft, setDraft] = useState(emptyFilters);
   const [filters, setFilters] = useState(emptyFilters);
   const [pageNumber, setPageNumber] = useState(0);
@@ -135,9 +136,10 @@ export default function AdminAuditLogs({ token, role, onLogout, onNavigate }) {
     <div className="layout">
       <Sidebar role={role} activePage="audit-logs" onLogout={onLogout} onNavigate={onNavigate} />
       <main className="main admin-audit-main">
+        <AdminTopBar pageLabel={"NH\u1eacT K\u00dd"} displayName={currentUserName} avatarName={currentUserName} />
+        <div className="admin-audit-content">
         <header className="admin-audit-header">
           <div>
-            <p className="admin-audit-eyebrow">SPORTCENTER / ADMIN</p>
             <h1>Audit Logs</h1>
             <p className="subtitle">Nhật ký các thao tác quản trị và nghiệp vụ đã được ghi nhận.</p>
           </div>
@@ -189,6 +191,7 @@ export default function AdminAuditLogs({ token, role, onLogout, onNavigate }) {
             <button type="button" onClick={() => { setLoading(true); setError(""); setPageNumber((value) => value + 1); }} disabled={!hasNext || loading}>Sau</button>
           </nav>}
         </section>
+        </div>
       </main>
     </div>
   );

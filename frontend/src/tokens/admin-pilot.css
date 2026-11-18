@@ -1,0 +1,9 @@
+/* Phase 3D pilot: exact aliases scoped to authenticated portal layouts only. */
+.layout {
+  --sc-space-2: var(--space-2, 8px);
+  --sc-space-3: var(--space-3, 12px);
+  --sc-space-4: var(--space-4, 16px);
+  --sc-color-action: var(--blue, #1769d2);
+  --sc-color-text-primary: var(--navy, #0b2745);
+  --sc-color-text-secondary: var(--text-sub, #5b6e82);
+}

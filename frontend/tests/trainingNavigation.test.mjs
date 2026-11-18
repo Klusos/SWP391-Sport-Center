@@ -19,11 +19,17 @@ test("training routes are registered under the matching role guard", async () =>
   }
 });
 
-test("each role can navigate to its training page", async () => {
+test("Admin, Coach, and Member can navigate to their authorized training pages", async () => {
   const [app, sidebar, layout] = await Promise.all([read("App.jsx"), read("components/Sidebar.jsx"), read("components/Layout.jsx")]);
   for (const [key, path] of [["admin-training", "/admin/training"], ["member-training", "/member/training"], ["coach-training", "/coach/training"]]) {
     assert.ok(sidebar.includes('["' + key + '"'), key + " is in the sidebar");
     assert.ok(app.includes('"' + key + '": "' + path + '"'), key + " navigates to " + path);
     assert.ok(layout.includes('"' + path + '": "' + key + '"'), path + " highlights " + key);
   }
+  const adminGroups = sidebar.match(/const adminGroups\s*=\s*\[([\s\S]*?)\n\];/)?.[1];
+  assert.ok(adminGroups, "Admin grouped navigation remains defined");
+  const operational = adminGroups.match(/id: "operational-support",[\s\S]*?pages:\s*\[([\s\S]*?)\n    \],/)?.[1];
+  assert.ok(operational);
+  assert.match(operational, /\["attendance"[\s\S]*?\["admin-training", "Giám sát huấn luyện"\]/, "oversight link follows attendance");
+  assert.equal((adminGroups.match(/\["admin-training"/g) || []).length, 1, "Admin has one Training navigation entry");
 });

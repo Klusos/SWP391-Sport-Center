@@ -169,7 +169,11 @@ test("Member-specific hero styling is scoped and public Course Detail remains on
     read("../src/public-site/pages/CourseDetail.css"),
   ]);
   assert.match(detail, /if \(memberRoute\) return <div className="layout">/);
-  assert.match(detail, /<PageHero title=\{course\?\.name[\s\S]*?course-public-detail/);
+  assert.match(detail, /return <section className="course-public-detail-section"><div className="container-xl course-public-detail">\{detailContent\}<\/div><\/section>/);
+  assert.doesNotMatch(detail, /PageHero/);
+  assert.match(detail, /!memberRoute && <h1>\{course\.name\}<\/h1>/);
+  assert.match(detail, /!memberRoute && <div className="course-public-actions">[\s\S]*?isMember \? <button[\s\S]*?: <Link to="\/#public-consultation"/);
+  assert.match(detail, /!isMember && !auth && <button[\s\S]*?onClick=\{goToLogin\}>Đăng nhập để đăng ký/);
   assert.ok(css.includes(".member-course-detail .member-course-page-header"));
   assert.ok(css.includes(".course-public-detail .course-detail-card"));
   assert.ok(css.includes(".member-course-detail .member-course-detail-badges"));
@@ -190,7 +194,7 @@ test("Member Course Detail uses the same fluid max-width strategy without wideni
   assert.match(css, /\.member-course-detail \.member-course-consultation-card \{ display: grid; width: 100%; max-width: none/);
   assert.match(css, /\.member-course-detail \.member-class-list \{ width: min\(1240px, 100%\)/);
   assert.match(css, /\.member-course-overview > p,[\s\S]*?max-width: 920px/);
-  assert.match(css, /\.course-public-detail \{\s*max-width: 1120px;/);
-  assert.match(detail, /return <><PageHero title=\{course\?\.name[\s\S]*?course-public-detail/);
+  assert.match(css, /\.course-public-detail \{ width: 100%; max-width: 900px; margin-right: auto; margin-left: auto; \}/);
+  assert.match(detail, /course-public-detail-section[\s\S]*?course-public-detail/);
   assert.match(legacyCss, /\.member-course-detail \{ width: 100%; max-width: 1280px; \}/);
 });

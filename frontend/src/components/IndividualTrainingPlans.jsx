@@ -42,8 +42,10 @@ function messageFor(error, fallback) {
   return error?.message || fallback;
 }
 
-export default function IndividualTrainingPlans({ token, mode, classId }) {
+export default function IndividualTrainingPlans({ token, mode, classId, canManageTraining = false }) {
   const isCoach = mode === "coach";
+  const isAdminReadOnly = mode === "admin-readonly";
+  const isClassView = isCoach || isAdminReadOnly;
   const [plans, setPlans] = useState([]);
   const [members, setMembers] = useState([]);
   const [eligibilityLoaded, setEligibilityLoaded] = useState(false);
@@ -65,11 +67,11 @@ export default function IndividualTrainingPlans({ token, mode, classId }) {
 
   const selectedClassKey = classId == null || String(classId).trim() === "" ? null : String(classId);
   const visiblePlans = useMemo(() => {
-    if (isCoach || selectedClassKey === null) return plans;
+    if (isClassView || selectedClassKey === null) return plans;
     return plans.filter((plan) => String(plan.classId) === selectedClassKey);
-  }, [plans, isCoach, selectedClassKey]);
+  }, [plans, isClassView, selectedClassKey]);
   const visibleSelected = selected && (
-    isCoach || selectedClassKey === null || (
+    isClassView || selectedClassKey === null || (
       String(selected.classId) === selectedClassKey &&
       visiblePlans.some((plan) => String(plan.id) === String(selected.id))
     )
@@ -98,6 +100,11 @@ export default function IndividualTrainingPlans({ token, mode, classId }) {
           setMembers(Array.isArray(progressResult.value) ? progressResult.value : []);
           setEligibilityLoaded(Array.isArray(progressResult.value));
         }
+      } else if (isAdminReadOnly) {
+        const classPlans = await getClassIndividualTrainingPlansApi(token, classId);
+        if (!loadRequests.isCurrent(requestId)) return;
+        setPlans(Array.isArray(classPlans) ? classPlans : []);
+        setMembers([]);
       } else {
         const ownPlans = await getMyIndividualTrainingPlansApi(token);
         if (!loadRequests.isCurrent(requestId)) return;
@@ -114,7 +121,7 @@ export default function IndividualTrainingPlans({ token, mode, classId }) {
     } finally {
       if (loadRequests.isCurrent(requestId)) setLoading(false);
     }
-  }, [token, isCoach, classId, loadRequests]);
+  }, [token, isCoach, isAdminReadOnly, classId, loadRequests]);
 
   useEffect(() => {
     let active = true;
@@ -130,7 +137,7 @@ export default function IndividualTrainingPlans({ token, mode, classId }) {
   const planByMember = useMemo(() => new Map(plans.map((plan) => [plan.memberId, plan])), [plans]);
 
   async function openPlan(plan) {
-    if (!isCoach && selectedClassKey !== null && String(plan.classId) !== selectedClassKey) return;
+    if (isClassView && selectedClassKey !== null && String(plan.classId) !== selectedClassKey) return;
     const requestId = detailRequests.start();
     historyRequests.invalidate();
     setSelected(null);
@@ -143,7 +150,7 @@ export default function IndividualTrainingPlans({ token, mode, classId }) {
     try {
       const detail = await getIndividualTrainingPlanApi(token, plan.id);
       if (!detailRequests.isCurrent(requestId)) return;
-      if (!isCoach && selectedClassKey !== null && String(detail?.classId) !== selectedClassKey) {
+      if (isClassView && selectedClassKey !== null && String(detail?.classId) !== selectedClassKey) {
         setError("Giáo án này không thuộc lớp đang chọn.");
         return;
       }
@@ -180,6 +187,7 @@ export default function IndividualTrainingPlans({ token, mode, classId }) {
   }
 
   async function submit(memberId, form, planId = null) {
+    if (!canManageTraining) return;
     if (busy) return;
     setBusy(true);
     setError("");
@@ -214,8 +222,8 @@ export default function IndividualTrainingPlans({ token, mode, classId }) {
   return <section className="individual-plans" aria-labelledby={`individual-plan-heading-${mode}`}>
     <div className="individual-plans-heading">
       <div>
-        <h2 id={`individual-plan-heading-${mode}`}>{!isCoach && selectedClassKey !== null ? "Danh sách giáo án" : "Giáo án cá nhân"}</h2>
-        <p className="training-muted">{!isCoach && selectedClassKey !== null
+        <h2 id={`individual-plan-heading-${mode}`}>{isClassView ? "Danh sách giáo án cá nhân" : "Giáo án cá nhân"}</h2>
+        <p className="training-muted">{isClassView
           ? "Chỉ hiển thị giáo án cá nhân thuộc lớp bạn đang xem."
           : "Kế hoạch riêng theo từng học viên; các phiên bản cũ được lưu trong lịch sử."}</p>
       </div>
@@ -227,6 +235,11 @@ export default function IndividualTrainingPlans({ token, mode, classId }) {
     </div>}
     {notice && <div className="banner success" role="status">{notice}</div>}
     {loading ? <p role="status">Đang tải giáo án cá nhân…</p>
+      : isAdminReadOnly ? visiblePlans.length === 0 ? <p className="dash-empty">Lớp đang xem chưa có giáo án cá nhân.</p>
+        : <div className="individual-plan-list">{visiblePlans.map((plan) => <article className="individual-plan-row" key={plan.id}>
+          <div><strong>{plan.memberName}</strong><small>{plan.className} · Phiên bản {plan.currentRevision?.revisionNumber ?? "—"}</small></div>
+          <button type="button" className="secondary" onClick={() => void openPlan(plan)}>Xem giáo án</button>
+        </article>)}</div>
       : isCoach ? <>
         {members.length === 0 ? plans.length > 0 ? <div className="individual-plan-list">{plans.map((plan) => <article className="individual-plan-row" key={plan.id}>
           <div><strong>{plan.memberName}</strong><small>{plan.className} · Phiên bản {plan.currentRevision?.revisionNumber ?? "—"}</small></div>
@@ -264,14 +277,14 @@ export default function IndividualTrainingPlans({ token, mode, classId }) {
       <div className="individual-plans-heading">
         <div><h3>{visibleSelected.className} · {visibleSelected.memberName}</h3>
           <p className="training-muted">Phiên bản {visibleSelected.currentRevision?.revisionNumber ?? "—"} · cập nhật {formatDate(visibleSelected.updatedAt)}</p></div>
-        {isCoach && <button type="button" onClick={() => setEditing(true)}>Chỉnh sửa</button>}
+        {canManageTraining && <button type="button" onClick={() => setEditing(true)}>Chỉnh sửa</button>}
       </div>
-      {editing && isCoach ? <PlanEditor key={`edit-${visibleSelected.id}-${visibleSelected.currentRevision?.id}`} initial={visibleSelected.currentRevision}
+      {editing && canManageTraining ? <PlanEditor key={`edit-${visibleSelected.id}-${visibleSelected.currentRevision?.id}`} initial={visibleSelected.currentRevision}
         busy={busy} onCancel={() => setEditing(false)} onSubmit={(form) => submit(visibleSelected.memberId, form, visibleSelected.id)} />
         : <PlanRevision revision={visibleSelected.currentRevision} />}
       <div className="training-actions">
         <button type="button" className="secondary" onClick={() => void showHistory(visibleSelected.id)}>Lịch sử phiên bản</button>
-        {isCoach && <button type="button" className="secondary" onClick={() => { clearHistory(); setSelected(null); }}>Đóng chi tiết</button>}
+        {canManageTraining && <button type="button" className="secondary" onClick={() => { clearHistory(); setSelected(null); }}>Đóng chi tiết</button>}
       </div>
       {historyPlanId === visibleSelected.id && history && <div className="individual-plan-history"><h4>Lịch sử chỉnh sửa</h4>
         {history.length === 0 ? <p className="training-muted">Chưa có lịch sử phiên bản.</p> : history.map((revision) => <details key={revision.id}>

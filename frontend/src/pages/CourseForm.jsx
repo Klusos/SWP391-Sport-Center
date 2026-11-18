@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
+import AdminTopBar from "../components/AdminTopBar";
 import { getCourseApi, getSportsApi, saveCourseApi } from "../api";
 import { buildCoursePayload } from "../courseManagementModel";
 import "./Portal.css";
@@ -10,7 +11,7 @@ import "./CourseManagement.css";
 const rows = (data) => Array.isArray(data) ? data : data?.content || [];
 const empty = { sportId: "", name: "", level: "", targetAgeMin: "", targetAgeMax: "", agePolicy: "RECOMMENDED", description: "", learningOutcome: "", status: "ACTIVE" };
 
-export default function CourseForm({ token, role, onLogout, onNavigate }) {
+export default function CourseForm({ token, role, currentUserName, onLogout, onNavigate }) {
   const { courseId } = useParams();
   const editing = Boolean(courseId);
   const navigate = useNavigate();
@@ -59,9 +60,11 @@ export default function CourseForm({ token, role, onLogout, onNavigate }) {
   return (
     <div className="layout">
       <Sidebar role={role} activePage="courses" onLogout={onLogout} onNavigate={onNavigate} />
-      <main className="main">
+      <main className="main course-form-main">
+        <AdminTopBar pageLabel="QUẢN LÝ KHÓA HỌC" displayName={currentUserName} avatarName={currentUserName} />
+        <div className="course-form-content">
         <button type="button" className="adm-back" onClick={() => navigate(editing ? "/staff/courses/" + courseId : "/staff/courses")}>← Quay lại</button>
-        <p className="eyebrow">QUẢN TRỊ ĐÀO TẠO</p><h1>{editing ? "Chỉnh sửa khóa học" : "Tạo khóa học"}</h1>
+        <h1>{editing ? "Chỉnh sửa khóa học" : "Tạo khóa học"}</h1>
         <p className="subtitle">Chọn rõ Sport trước khi lưu để tránh gán khóa học nhầm bộ môn.</p>
         {error && <div className="banner error" role="alert">{error}</div>}
         {loading ? <p role="status">Đang tải biểu mẫu…</p> : (
@@ -93,6 +96,7 @@ export default function CourseForm({ token, role, onLogout, onNavigate }) {
             </div>
           </form>
         )}
+        </div>
       </main>
     </div>
   );

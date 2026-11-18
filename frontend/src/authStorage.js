@@ -59,6 +59,12 @@ export async function withAuthTransitionLock(operation, target = globalThis.navi
   throw new Error("Trình duyệt không hỗ trợ đồng bộ đăng nhập an toàn giữa các tab.");
 }
 
+export function getSafeLogoutReturnTo(value) {
+  return typeof value === "string" && value.startsWith("/") && !value.startsWith("//")
+    ? value
+    : null;
+}
+
 export function clearLegacyTabAuth(storage = globalThis.sessionStorage) {
   try {
     storage?.removeItem(LEGACY_SESSION_AUTH_KEY);

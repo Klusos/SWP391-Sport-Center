@@ -6,6 +6,7 @@ import {
   clearLegacyTabAuth,
   clearSharedAuth,
   clearSharedAuthIfToken,
+  getSafeLogoutReturnTo,
   readSharedAuth,
   subscribeToSharedAuth,
   withAuthTransitionLock,
@@ -176,6 +177,36 @@ test("login and logout revoke with a serialized transition before publishing or 
   assert.doesNotMatch(logout, /clearSharedAuth\(\)/);
 });
 
+test("logout accepts only a same-origin return path, never a click event", () => {
+  assert.equal(getSafeLogoutReturnTo("/khoa-hoc/12"), "/khoa-hoc/12");
+  assert.equal(getSafeLogoutReturnTo("//external.example/path"), null);
+  assert.equal(getSafeLogoutReturnTo(new Event("click")), null);
+});
+
+test("successful logout navigates with only serializable path state and retains failure handling", async () => {
+  const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
+  const logout = app.slice(app.indexOf("async function handleLogout"), app.indexOf("const staff ="));
+  assert.match(logout, /await logoutApi\(token\)/);
+  assert.match(logout, /clearSharedAuthIfToken\(token\)/);
+  assert.match(logout, /getSafeLogoutReturnTo\(returnTo\)/);
+  assert.match(logout, /state: safeReturnTo \? \{ from: safeReturnTo \} : undefined/);
+  assert.match(logout, /console\.error\("\[SportCenter logout diagnostic\]"/);
+  assert.match(logout, /stage = "navigate-to-login"/);
+  assert.match(logout, /\[SportCenter logout diagnostic\]/);
+  assert.match(logout, /import\.meta\.env\.DEV/);
+  assert.match(logout, /stage === "acquire-transition-lock"/);
+  assert.match(logout, /error\.status !== 401/);
+  assert.match(logout, /setLogoutError\("Không thể đồng bộ đăng xuất giữa các tab/);
+});
+
+test("revocation failure preserves shared identity and genuine Web Lock failures remain visible", async () => {
+  const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
+  const logout = app.slice(app.indexOf("async function handleLogout"), app.indexOf("const staff ="));
+  assert.match(logout, /if \(error\.status !== 401\)[\s\S]*?return false/);
+  assert.ok(logout.indexOf("return false") < logout.indexOf("clearSharedAuthIfToken(token)"));
+  await assert.rejects(withAuthTransitionLock(async () => {}, {}), /does not support|không hỗ trợ/i);
+});
+
 test("login form delegates credentials to App so account switching can be serialized", async () => {
   const login = await readFile(new URL("../src/pages/Login.jsx", import.meta.url), "utf8");
   assert.match(login, /await onLogin\(email, password\)/);
@@ -189,6 +220,25 @@ test("App logout uses exact backend endpoint and non-sensitive failure feedback"
   assert.match(api, /allowAuthGenerationChange: true, notifyUnauthorized: false/);
   assert.match(app, /Không thể xác nhận đăng xuất với máy chủ/);
   assert.match(app, /Phiên hiện tại vẫn được giữ/);
+});
+
+test("logout diagnostics redact credentials and identify the execution stage", async () => {
+  const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
+  assert.match(app, /Bearer\\s\+\[\^\\s"'`\]\+/);
+  assert.match(app, /REDACTED_JWT/);
+  assert.match(app, /REDACTED_EMAIL/);
+  assert.match(app, /stage,[\s\S]*name: redactLogoutDiagnostic\(error\.name\)[\s\S]*stack: redactLogoutDiagnostic\(error\.stack\)/);
+  assert.doesNotMatch(app.slice(app.indexOf("async function handleLogout"), app.indexOf("const staff =")), /console\.error\(caught|console\.error\(error/);
+});
+
+test("login link and global logout alert have scoped accessible presentation", async () => {
+  const css = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+  const login = await readFile(new URL("../src/pages/Login.jsx", import.meta.url), "utf8");
+  assert.match(css, /\.login-card a\s*\{[^}]*color: var\(--blue\)/);
+  assert.match(css, /\.login-card a:focus-visible/);
+  assert.match(css, /\.global-auth-error\s*\{[^}]*position: fixed/);
+  assert.match(login, /<h1>Đăng nhập<\/h1>/);
+  assert.match(login, /<label htmlFor="loginPassword">Mật khẩu<\/label>/);
 });
 
 test("cross-tab synchronization does not write back and create an event loop", async () => {

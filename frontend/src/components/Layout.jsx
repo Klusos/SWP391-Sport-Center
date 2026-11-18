@@ -21,7 +21,6 @@ const pageByPath = {
   "/admin/classes": "classes",
   "/admin/reports": "reports",
   "/member/courses": "member-courses",
-  "/member/classes": "member-classes",
   "/member/membership": "member-membership",
   "/member/schedule": "member-schedule",
   "/member/levels-assessments": "member-levels",

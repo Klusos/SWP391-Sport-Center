@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
+import AdminTopBar from "../components/AdminTopBar";
 import ReceptionistRefundQueue from "../components/ReceptionistRefundQueue.jsx";
 import { getMemberPaymentsApi, getPendingPtPaymentsApi, processCounterPaymentApi } from "../api";
 import { canViewPtPayments, createPtCounterQueue, ptPaymentExpired, ptPaymentMoney } from "../ptPaymentFlow";
@@ -33,7 +34,8 @@ function getInitials(name) {
 const AVATAR_TONES = ["tone-indigo", "tone-blue", "tone-emerald", "tone-orange"];
 const EMPTY_ROWS = [];
 
-export default function ReceptionistPtPayments({ token, role, userId, onNavigate, onLogout }) {
+export default function ReceptionistPtPayments({ token, role, userId, currentUserName, onNavigate, onLogout }) {
+  const isAdmin = role === "ADMIN";
   const [queue, setQueue] = useState({ loading: true, data: null, page: 0, error: "" });
   const [busy, setBusy] = useState(false), [outcome, setOutcome] = useState(null), [uncertain, setUncertain] = useState([]), [now, setNow] = useState(Date.now);
   const [searchQuery, setSearchQuery] = useState("");
@@ -121,16 +123,10 @@ export default function ReceptionistPtPayments({ token, role, userId, onNavigate
   return (
     <div className="layout">
       <Sidebar role={role} activePage={role === "RECEPTIONIST" ? "course-payments" : "pt-payments"} onNavigate={onNavigate} onLogout={onLogout} />
-      <main className="main pt-payment-queue">
-        {/* Top Utility Bar */}
-        <div className="cp-topbar">
-          <div className="cp-breadcrumb">
-            <span>SPORTCENTER</span>
-            <span className="cp-sep">/</span>
-            <span>QUẦY LỄ TÂN</span>
-            <span className="cp-sep">/</span>
-            <span className="cp-active-crumb">THU TIỀN PT TẠI QUẦY</span>
-          </div>
+      <main className={`main pt-payment-queue${isAdmin ? " pt-payment-queue--admin" : ""}`}>
+        {isAdmin && <AdminTopBar pageLabel="THANH TOÁN PT" displayName={currentUserName} avatarName={currentUserName} />}
+        {/* Keep the accepted Admin clock row; Receptionist uses the page header below. */}
+        {isAdmin && <div className="cp-topbar cp-topbar--admin">
           <div className="cp-topbar-right">
             <div className="cp-clock-pill">
               <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -139,9 +135,9 @@ export default function ReceptionistPtPayments({ token, role, userId, onNavigate
               <span>{liveClockLabel}</span>
             </div>
           </div>
-        </div>
+        </div>}
 
-        <div className="cp-body">
+        <div className={`cp-body${isAdmin ? " cp-body--admin" : ""}`}>
           {/* Header Section */}
           <header className="cp-hero-header">
             <div className="cp-hero-titles">
@@ -154,6 +150,12 @@ export default function ReceptionistPtPayments({ token, role, userId, onNavigate
               </p>
             </div>
             <div className="cp-header-actions">
+              {!isAdmin && <div className="cp-clock-pill cp-header-clock" aria-label="Giờ Việt Nam">
+                <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                </svg>
+                <span>{liveClockLabel}</span>
+              </div>}
               <button
                 type="button"
                 className="cp-btn-refresh"

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
+import AdminTopBar from "../components/AdminTopBar";
 import { getCoursesApi, getSportsApi } from "../api";
 import { filterCourses } from "../courseManagementModel";
 import "./Portal.css";
@@ -9,7 +10,7 @@ import "./CourseManagement.css";
 
 const rows = (data) => Array.isArray(data) ? data : data?.content || [];
 
-export default function CourseList({ token, role, onLogout, onNavigate }) {
+export default function CourseList({ token, role, currentUserName, onLogout, onNavigate }) {
   const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
   const [sports, setSports] = useState([]);
@@ -42,9 +43,11 @@ export default function CourseList({ token, role, onLogout, onNavigate }) {
   return (
     <div className="layout">
       <Sidebar role={role} activePage="courses" onLogout={onLogout} onNavigate={onNavigate} />
-      <main className="main">
+      <main className="main course-list-main">
+        <AdminTopBar pageLabel="QUẢN LÝ KHÓA HỌC" displayName={currentUserName} avatarName={currentUserName} breadcrumbItems={[{ label: "Khóa học", current: true }]} />
+        <div className="course-list-content">
         <header className="course-list-heading">
-          <div><p className="eyebrow">QUẢN TRỊ ĐÀO TẠO</p><h1>Quản lý khóa học</h1><p className="subtitle">Danh sách khóa học theo tất cả bộ môn.</p></div>
+          <div><h1>Quản lý khóa học</h1><p className="subtitle">Danh sách khóa học theo tất cả bộ môn.</p></div>
           <button type="button" className="adm-primary course-create-button" onClick={() => navigate("/staff/courses/new")}>＋ Tạo khóa học</button>
         </header>
         {error && <div className="banner error" role="alert">{error} <button type="button" onClick={refresh}>Thử lại</button></div>}
@@ -57,7 +60,7 @@ export default function CourseList({ token, role, onLogout, onNavigate }) {
           {loading ? <p role="status">Đang tải khóa học…</p> : filtered.length === 0 ? <p className="dash-empty">Không tìm thấy khóa học phù hợp.</p> : (
             <div className="queue-table-wrap">
               <table className="queue-table">
-                <thead><tr><th>Khóa học</th><th>Sport</th><th>Trình độ</th><th>Độ tuổi</th><th>Trạng thái</th><th /></tr></thead>
+                <thead><tr><th>Khóa học</th><th>Sport</th><th>Trình độ</th><th>Độ tuổi</th><th>Trạng thái</th><th aria-label="Thao tác" /></tr></thead>
                 <tbody>{filtered.map((course) => <tr key={course.id}>
                   <td><strong>{course.name}</strong></td><td>{course.sportName || "—"}</td><td>{course.level || "—"}</td>
                   <td>{course.targetAgeMin ?? "—"} – {course.targetAgeMax ?? "—"}</td><td><span className={"status-pill status-" + String(course.status || "").toLowerCase()}>{course.status || "—"}</span></td>
@@ -67,6 +70,7 @@ export default function CourseList({ token, role, onLogout, onNavigate }) {
             </div>
           )}
         </section>
+        </div>
       </main>
     </div>
   );

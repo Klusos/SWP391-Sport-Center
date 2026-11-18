@@ -1,10 +1,15 @@
 export const navLinks = [
   { to: '/', label: 'Trang chủ' },
   { to: '/bo-mon', label: 'Bộ môn' },
-  { to: '/huan-luyen-vien', label: 'Huấn luyện viên' },
   { to: '/co-so-vat-chat', label: 'Cơ sở vật chất' },
-  { to: '/tuyen-sinh', label: 'Tuyển sinh' },
 ]
+
+export function isPublicNavLinkActive(destination, pathname) {
+  if (destination === '/bo-mon') {
+    return pathname === '/bo-mon' || pathname.startsWith('/bo-mon/') || pathname.startsWith('/khoa-hoc/')
+  }
+  return pathname === destination
+}
 
 export const disciplines = [
   { code: 'GYM', title: 'Sức mạnh & hình thể', color: '#146edb' },

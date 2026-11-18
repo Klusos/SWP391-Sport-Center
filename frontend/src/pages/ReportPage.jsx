@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { getAdminRevenueReportApi } from "../api";
+import AdminTopBar from "../components/AdminTopBar";
 import RevenueBars from "../components/RevenueBars";
 import { defaultReportRevenueRange, formatVnd, isValidRevenueRange, REVENUE_DATE_PRESETS, revenueDatePresetRange, REVENUE_PURPOSES } from "../revenueReport";
 import "./ReportPage.css";
 
 const purposeTotals = (report) => report?.revenueByPurpose || {};
 
-export default function ReportPage({ token }) {
+export default function ReportPage({ token, currentUserName }) {
   const [initialRange] = useState(() => defaultReportRevenueRange());
   const [range, setRange] = useState(initialRange);
   const [groupBy, setGroupBy] = useState("MONTH");
@@ -23,6 +24,10 @@ export default function ReportPage({ token }) {
     ? currentResult?.error || ""
     : "Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại bằng tài khoản ADMIN.";
   const visibleLoading = Boolean(token) && !currentResult;
+  useEffect(() => {
+    document.body.classList.add("report-print-route");
+    return () => document.body.classList.remove("report-print-route");
+  }, []);
 
   useEffect(() => {
     if (!token) return undefined;
@@ -69,21 +74,53 @@ export default function ReportPage({ token }) {
   }
 
   return (
-    <div className="revenue-report-page">
+    <div className="rc-main report-admin-shell">
+      <AdminTopBar
+        pageLabel={"B\u00c1O C\u00c1O"}
+        displayName={currentUserName || "Qu\u1ea3n tr\u1ecb vi\u00ean"}
+        avatarName={currentUserName}
+        roleLabel={"Qu\u1ea3n tr\u1ecb vi\u00ean"}
+        className="report-admin-topbar"
+      />
+      <div className="revenue-report-page">
+      {report && !visibleLoading && !visibleError ? (
+        <header className="report-print-header">
+          <strong>SPORTCENTER</strong>
+          <h1>Báo cáo doanh thu</h1>
+          <p>Thời gian báo cáo: {report.from} – {report.to}</p>
+        </header>
+      ) : (
+        <p className="report-print-fallback">
+          {visibleLoading ? "Báo cáo đang được tải." : visibleError || "Không có dữ liệu báo cáo để in."}
+        </p>
+      )}
       <div className="page-intro">
         <div>
           <h1>Báo cáo doanh thu</h1>
           <p>Doanh thu được tính từ giao dịch SUCCESS theo thời điểm xác nhận thanh toán.</p>
         </div>
-        <div className="revenue-page-actions">
-          <button className="btn-light" type="button" onClick={refreshApplied} disabled={visibleLoading}>
-            {visibleLoading ? "Đang tải…" : "Làm mới"}
-          </button>
-          <button className="btn-light" type="button" onClick={() => window.print()}>In báo cáo</button>
-        </div>
       </div>
 
       <form className="panel revenue-filters" onSubmit={applyFilters}>
+        <div className="revenue-filter-panel-header">
+          <span className="revenue-filter-panel-title">Bộ lọc báo cáo</span>
+          <div className="revenue-page-actions revenue-filter-actions">
+            <button className="btn-light" type="button" onClick={refreshApplied} disabled={visibleLoading} aria-label="Làm mới" title="Làm mới">
+              <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true">
+                <path fillRule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2z" />
+                <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466" />
+              </svg>
+            </button>
+            <button className="btn-light" type="button" onClick={() => window.print()} aria-label="In báo cáo" title="In báo cáo">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M6 9V3h12v6" />
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                <path d="M6 14h12v7H6z" />
+                <path d="M18 12h.01" />
+              </svg>
+            </button>
+          </div>
+        </div>
         <fieldset className="revenue-presets" aria-label="Khoảng ngày nhanh">
           <legend>Chọn nhanh</legend>
           {REVENUE_DATE_PRESETS.map(([preset, label]) => (
@@ -98,20 +135,24 @@ export default function ReportPage({ token }) {
             </button>
           ))}
         </fieldset>
-        <label> Từ ngày
-          <input type="date" value={range.from} onChange={(event) => { setRange((current) => ({ ...current, from: event.target.value })); setActivePreset(""); }} required />
-        </label>
-        <label> Đến ngày
-          <input type="date" value={range.to} onChange={(event) => { setRange((current) => ({ ...current, to: event.target.value })); setActivePreset(""); }} required />
-        </label>
-        <label> Nhóm theo
-          <select value={groupBy} onChange={(event) => setGroupBy(event.target.value)}>
-            <option value="DAY">Ngày</option>
-            <option value="MONTH">Tháng</option>
-            <option value="YEAR">Năm</option>
-          </select>
-        </label>
-        <button className="btn-primary" type="submit" disabled={visibleLoading}>Cập nhật</button>
+        <div className="revenue-filter-controls">
+          <label> Từ ngày
+            <input type="date" value={range.from} onChange={(event) => { setRange((current) => ({ ...current, from: event.target.value })); setActivePreset(""); }} required />
+          </label>
+          <label> Đến ngày
+            <input type="date" value={range.to} onChange={(event) => { setRange((current) => ({ ...current, to: event.target.value })); setActivePreset(""); }} required />
+          </label>
+          <label> Nhóm theo
+            <select value={groupBy} onChange={(event) => setGroupBy(event.target.value)}>
+              <option value="DAY">Ngày</option>
+              <option value="MONTH">Tháng</option>
+              <option value="YEAR">Năm</option>
+            </select>
+          </label>
+        </div>
+        <div className="revenue-filter-submit">
+          <button className="btn-primary" type="submit" disabled={visibleLoading}>Cập nhật</button>
+        </div>
         {filterError && <p className="revenue-error" role="alert">{filterError}</p>}
       </form>
 
@@ -137,6 +178,7 @@ export default function ReportPage({ token }) {
               </article>
             ))}
           </section>
+          <p className="report-print-note">Doanh thu ghi nhận từ các giao dịch thanh toán đã xác nhận thành công (SUCCESS).</p>
 
           <section className="panel revenue-chart-panel">
             <div className="panel-head">
@@ -158,6 +200,7 @@ export default function ReportPage({ token }) {
           <p className="revenue-footnote">PENDING, CANCELLED và REFUND_REQUIRED không được tính là doanh thu. REFUND_REQUIRED cần được xử lý riêng; báo cáo này không khẳng định khoản tiền đã được hoàn.</p>
         </>
       ) : null}
+      </div>
     </div>
   );
 }

@@ -12,7 +12,7 @@ const EMPTY_FORM = {
   note: "",
 };
 
-export default function ConsultForm() {
+export default function ConsultForm({ showFieldPlaceholders = true } = {}) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [sports, setSports] = useState([]);
   const [loadingSports, setLoadingSports] = useState(true);
@@ -68,17 +68,32 @@ export default function ConsultForm() {
 
   return (
     <form className="consult-form" onSubmit={handleSubmit}>
-      <h3>TƯ VẤN GHI DANH</h3>
-      <input className="form-control" name="name" type="text" placeholder="Họ và tên" aria-label="Họ và tên" maxLength={100} value={form.name} onChange={handleChange} required />
-      <input className="form-control" name="phone" type="tel" placeholder="Số điện thoại" aria-label="Số điện thoại" maxLength={20} value={form.phone} onChange={handleChange} required />
-      <input className="form-control" name="email" type="email" placeholder="Email" aria-label="Email" maxLength={150} value={form.email} onChange={handleChange} required onInvalid={(event) => { event.preventDefault(); setError(CONSULTATION_EMAIL_ERROR); setSent(false); }} />
+      <h3>Đăng ký nhận tư vấn</h3>
+      <p className="consult-form-intro">Cho chúng tôi biết một chút về nhu cầu tập luyện của bạn.</p>
+      <label className="consult-field"><span>Họ và tên</span>
+        <input className="form-control" name="name" type="text" placeholder={showFieldPlaceholders ? "Họ và tên" : undefined} aria-label="Họ và tên" maxLength={100} value={form.name} onChange={handleChange} required />
+      </label>
+      <label className="consult-field"><span>Số điện thoại</span>
+        <input className="form-control" name="phone" type="tel" placeholder={showFieldPlaceholders ? "Số điện thoại" : undefined} aria-label="Số điện thoại" maxLength={20} value={form.phone} onChange={handleChange} required />
+      </label>
+      <label className="consult-field"><span>Email</span>
+        <input className="form-control" name="email" type="email" placeholder={showFieldPlaceholders ? "Email" : undefined} aria-label="Email" maxLength={150} value={form.email} onChange={handleChange} required onInvalid={(event) => { event.preventDefault(); setError(CONSULTATION_EMAIL_ERROR); setSent(false); }} />
+      </label>
+      <label className="consult-field"><span>Môn học</span>
       <select className="form-control" name="sportId" aria-label="Môn học" value={form.sportId} onChange={handleChange} required disabled={loadingSports || sports.length === 0}>
         <option value="">{loadingSports ? "Đang tải môn học…" : "Chọn môn học"}</option>
         {sports.map((sport) => <option key={sport.id} value={sport.id}>{sport.name}</option>)}
       </select>
-      <input className="form-control" name="age" type="number" min="1" max="120" placeholder="Tuổi (không bắt buộc)" aria-label="Tuổi (không bắt buộc)" value={form.age} onChange={handleChange} />
-      <textarea className="form-control" name="experience" placeholder="Kinh nghiệm (không bắt buộc)" aria-label="Kinh nghiệm (không bắt buộc)" value={form.experience} onChange={handleChange} rows="2" />
-      <textarea className="form-control" name="note" placeholder="Ghi chú (không bắt buộc)" aria-label="Ghi chú (không bắt buộc)" value={form.note} onChange={handleChange} rows="2" />
+      </label>
+      <label className="consult-field"><span>Tuổi (không bắt buộc)</span>
+        <input className="form-control" name="age" type="number" min="1" max="120" placeholder={showFieldPlaceholders ? "Tuổi (không bắt buộc)" : undefined} aria-label="Tuổi (không bắt buộc)" value={form.age} onChange={handleChange} />
+      </label>
+      <label className="consult-field"><span>Kinh nghiệm (không bắt buộc)</span>
+        <textarea className="form-control" name="experience" placeholder={showFieldPlaceholders ? "Kinh nghiệm (không bắt buộc)" : undefined} aria-label="Kinh nghiệm (không bắt buộc)" value={form.experience} onChange={handleChange} rows="2" />
+      </label>
+      <label className="consult-field"><span>Ghi chú (không bắt buộc)</span>
+        <textarea className="form-control" name="note" placeholder={showFieldPlaceholders ? "Ghi chú (không bắt buộc)" : undefined} aria-label="Ghi chú (không bắt buộc)" value={form.note} onChange={handleChange} rows="2" />
+      </label>
       <button type="submit" className="btn btn-brand-dark" disabled={submitting || loadingSports || sports.length === 0}>
         {submitting ? "ĐANG GỬI…" : "ĐĂNG KÝ TƯ VẤN"}
       </button>

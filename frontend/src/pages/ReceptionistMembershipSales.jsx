@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Sidebar from "../components/Sidebar";
+import AdminTopBar from "../components/AdminTopBar";
 import {
   cancelMembershipApi,
   createPaymentApi,
@@ -24,7 +25,8 @@ const money = (value) => value == null ? "Chưa có giá" : Number(value).toLoca
 const purposeLabel = (payment) => payment?.purpose === "UPGRADE" ? "Nâng cấp lên "
   : isAutoRenewalPayment(payment) ? "Gia hạn tự động · " : "";
 
-export default function ReceptionistMembershipSales({ token, role, onLogout, onNavigate }) {
+export default function ReceptionistMembershipSales({ token, role, currentUserName, onLogout, onNavigate }) {
+  const isAdmin = role === "ADMIN";
   const [members, setMembers] = useState([]);
   const [plans, setPlans] = useState([]);
   const [memberId, setMemberId] = useState("");
@@ -258,9 +260,11 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
 
   return <div className="layout">
     <Sidebar role={role} activePage={role === "ADMIN" ? "admin-membership-sales" : "membership-sales"} onNavigate={onNavigate} onLogout={onLogout} />
-    <main className="main membership-sales-page">
+    <main className={`main membership-sales-page${isAdmin ? " membership-sales-page--admin" : ""}`}>
+      {isAdmin && <AdminTopBar pageLabel="QUẢN LÝ GÓI THÀNH VIÊN" displayName={currentUserName} avatarName={currentUserName} />}
+      <div className={isAdmin ? "membership-sales-content" : "membership-sales-receptionist-content"}>
       <header className="membership-sales-header">
-        <div><p className="pt-eyebrow">SPORTCENTER / RECEPTIONIST</p><h1>Hỗ trợ mua gói hội viên</h1>
+        <div><h1>Hỗ trợ mua gói hội viên</h1>
           <p>Tạo thanh toán tại quầy cho thành viên. Gói chỉ được kích hoạt hoặc gia hạn sau khi xác nhận thanh toán thành công.</p></div>
         <button type="button" onClick={() => { void load(); void loadQueue(); void loadReviewQueues(); setHistoryVersion((value) => value + 1); }} disabled={loading || saving || queueLoading}>Làm mới</button>
       </header>
@@ -377,6 +381,7 @@ export default function ReceptionistMembershipSales({ token, role, onLogout, onN
         </section>}
         </aside>
       </div>}
+      </div>
     </main>
   </div>;
 }

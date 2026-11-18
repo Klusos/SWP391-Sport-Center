@@ -2,9 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
-  buildCoursePayload, filterCourses, filterClassSessions, filterCourseClasses,
-  filterCourseOfferings, offeringTimeStatus, paginateItems, qualifiedClassCoaches, vietnamBusinessDate,
+  buildCoursePayload, classSessionVietnamDate, filterCourses, filterClassSessions, filterCourseClasses,
+  filterCourseOfferings, formatClassSessionDate, formatClassSessionTime, offeringTimeStatus, paginateItems,
+  qualifiedClassCoaches, vietnamBusinessDate,
 } from "../src/courseManagementModel.js";
+import { validateClassSessionSchedule } from "../src/classSessionValidation.js";
 const managementPages = await readFile(new URL("../src/pages/CourseManagementPages.jsx", import.meta.url), "utf8");
 const apiSource = await readFile(new URL("../src/api.js", import.meta.url), "utf8");
 
@@ -80,7 +82,7 @@ test("Course list has only the management action while Course Management keeps e
   const management = await readFile(new URL("../src/pages/CourseManagementPages.jsx", import.meta.url), "utf8");
   assert.match(list, /onClick=\{\(\) => navigate\("\/staff\/courses\/" \+ course\.id\)\}>Quản lý/);
   assert.doesNotMatch(list, /\/edit.*>Sửa|>Sửa<\/button>/);
-  assert.match(management, /onClick=\{\(\) => open\(item\)\}>Sửa/);
+  assert.match(management, /className="cm-icon-button" aria-label=\{`Sửa \$\{title\}:/);
   assert.match(management, /navigate\("\/staff\/courses\/" \+ course\.id \+ "\/edit"\)/);
 });
 
@@ -128,6 +130,60 @@ test("class and session filters remain bounded by status and chronological order
   ], { status: "COMPLETED" }).map((row) => row.id), [2]);
 });
 
+test("class session list filters by status and inclusive Vietnam-local date range, then sorts both ways", () => {
+  const sessions = [
+    { id: 3, status: "SCHEDULED", startTime: "2027-01-03T09:00:00" },
+    { id: 1, status: "CANCELLED", startTime: "2027-01-01T10:00:00" },
+    { id: 2, status: "COMPLETED", startTime: "2027-01-02T08:00:00" },
+  ];
+  assert.deepEqual(filterClassSessions(sessions).map((session) => session.id), [1, 2, 3]);
+  assert.deepEqual(filterClassSessions(sessions, { status: "CANCELLED" }).map((session) => session.id), [1]);
+  assert.deepEqual(filterClassSessions(sessions, { startDate: "2027-01-02", endDate: "2027-01-03" }).map((session) => session.id), [2, 3]);
+  assert.deepEqual(filterClassSessions(sessions, { startDate: "2027-01-02", endDate: "2027-01-03", sort: "DESC" }).map((session) => session.id), [3, 2]);
+  assert.deepEqual(paginateItems(filterClassSessions(sessions, { startDate: "2027-01-02" }), 0, 1).items.map((session) => session.id), [2]);
+});
+
+test("class session timestamps display as Vietnamese date and 24-hour time without UTC day shifts", () => {
+  const timestamp = "2026-01-01T18:00:00Z";
+  assert.equal(classSessionVietnamDate(timestamp), "2026-01-02");
+  assert.equal(formatClassSessionDate(timestamp), "02/01/2026");
+  assert.equal(formatClassSessionTime(timestamp), "01:00");
+  assert.equal(formatClassSessionDate("not-a-date"), "—");
+  assert.equal(formatClassSessionTime("not-a-date"), "—");
+});
+
+test("manual Class Session form requires a facility and retains schedule validation", () => {
+  const offering = { startDate: "2027-01-01", endDate: "2027-01-31", sessionDuration: 60 };
+  const schedule = { startTime: "2027-01-04T10:00", endTime: "2027-01-04T11:00" };
+  assert.match(validateClassSessionSchedule(schedule, offering), /chọn cơ sở/i);
+  assert.match(validateClassSessionSchedule({ ...schedule, facilityId: null }, offering), /chọn cơ sở/i);
+  assert.equal(validateClassSessionSchedule({ ...schedule, facilityId: "12" }, offering), null);
+});
+
+test("Admin Class Session list keeps filters, Vietnamese statuses, format, and pagination after filtering", async () => {
+  const pages = await readFile(new URL("../src/pages/CourseManagementPages.jsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../src/pages/CourseManagement.css", import.meta.url), "utf8");
+  assert.match(pages, /<option value="">Tất cả<\/option><option value="SCHEDULED">Đã lên lịch<\/option><option value="COMPLETED">Đã hoàn thành<\/option><option value="CANCELLED">Đã hủy<\/option>/);
+  assert.match(pages, /type="date" value=\{sessionStartDateFilter\}/);
+  assert.match(pages, /type="date" value=\{sessionEndDateFilter\}/);
+  assert.match(pages, /value="ASC">Thời gian tăng dần/);
+  assert.match(pages, /value="DESC">Thời gian giảm dần/);
+  assert.match(pages, /filterClassSessions\(sessions, \{[\s\S]*startDate: sessionStartDateFilter[\s\S]*sort: sessionSort/);
+  assert.match(pages, /pageResetKey=\{sessionFilterRevision\}/);
+  assert.match(pages, /const page = pagination\.key === pageResetKey \? pagination\.page : 0/);
+  assert.match(pages, /setSessionFilterRevision\(\(value\) => value \+ 1\)/);
+  assert.match(pages, /formatClassSessionDate\(session\.startTime\)/);
+  assert.match(pages, /formatClassSessionTime\(session\.startTime\)/);
+  assert.match(pages, /sessionStatusPill\(session\.status\)/);
+  assert.match(pages, /hint=\{allSessions\.length \? "Không có buổi học nào khớp bộ lọc\." : "Chưa có buổi học\."\}/);
+  assert.match(pages, /label: "Huấn luyện viên"[\s\S]*key: "facilityName", label: "Cơ sở vật chất"/);
+  assert.match(pages, /key: "facilityId", label: "Cơ sở vật chất", type: "select", num: true, required: true, options: suitableFacilities\.filter\(\(facility\) => String\(facility\.status \|\| ""\)\.toUpperCase\(\) === "ACTIVE"\)/);
+  assert.match(pages, /availability\.canComplete[\s\S]*availability\.canCancel/);
+  assert.match(css, /\.course-management-pages \.course-session-list \.queue-table \{ min-width: 900px; \}/);
+  assert.match(css, /\.course-management-pages \.queue-table-wrap \{ overflow-x: auto;/);
+  assert.match(css, /@media \(max-width: 1100px\)[\s\S]*course-session-filters \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+});
+
 test("pagination retains access to all historical offerings without an unbounded table", () => {
   const data = Array.from({ length: 27 }, (_, index) => ({ id: index + 1 }));
   assert.equal(paginateItems(data, 0, 10).items.length, 10);
@@ -154,6 +210,10 @@ test("course hierarchy routes and detail pages preserve deep navigation and mana
   assert.match(pages, /navigate\("\/staff\/courses\/" \+ course\.id \+ "\/edit"\)/);
   assert.match(pages, /onView=\{\(item\) => navigate\(offeringPathFor\(item\.id\)\)\}/);
   assert.match(pages, /onView=\{\(item\) => navigate\(classPathFor\(item\.id\)\)\}/);
+  assert.match(pages, /const parentPath = pageKind === "class" \? offeringPath : pageKind === "offering" \? coursePath : basePath/);
+  assert.match(pages, /const parentLabel = pageKind === "class" \? "Quay lại đợt học" : pageKind === "offering" \? "Quay lại khóa học" : "Danh sách khóa học"/);
+  assert.match(pages, /onClick=\{\(\) => navigate\(parentPath\)\}><CourseIcon name="back" \/> \{parentLabel\}/);
+  assert.doesNotMatch(pages, /navigate\(-1\)/);
   assert.match(pages, /SCHEDULED/);
   assert.match(pages, /COMPLETED/);
   assert.match(pages, /CANCELLED/);
@@ -165,14 +225,17 @@ test("Course and Offering detail polish keeps accessible editing and distinct st
   const css = await readFile(new URL("../src/pages/CourseManagement.css", import.meta.url), "utf8");
   assert.doesNotMatch(pages, /QUẢN TRỊ ĐÀO TẠO · KHÓA HỌC/);
   assert.doesNotMatch(pages, /CHI TIẾT ĐỢT HỌC/);
-  assert.match(pages, /course-info-card[\s\S]*aria-label="Sửa thông tin khóa học"[\s\S]*bi bi-pencil[\s\S]*<span>Sửa<\/span>/);
+  assert.match(pages, /course-info-card[\s\S]*aria-label="Sửa thông tin khóa học"[\s\S]*<CourseIcon name="edit" \/>[\s\S]*<span>Sửa<\/span>/);
   assert.equal((pages.match(/aria-label="Sửa thông tin khóa học"/g) || []).length, 1);
+  assert.match(pages, /panelClassName="course-offering-info" editLabel="" editAccessibleName="Sửa thông tin" showPencil/);
+  assert.match(pages, /className=\{showPencil \? "cm-icon-button" : undefined\} aria-label=\{editAccessibleName \|\| editLabel\} title=\{editAccessibleName \|\| editLabel\} onClick=\{open\} disabled=\{!entity\}>\{showPencil && <CourseIcon name="edit" \/>\}\{editLabel && <span>\{editLabel\}<\/span>\}/);
+  assert.match(pages, /<CourseIcon name="edit" \/>\}\{editLabel && <span>\{editLabel\}<\/span>\}<\/button>/);
   assert.match(pages, /course-title-group"><h1>\{offering\.name\}<\/h1><span className=\{`course-time-status time-/);
   assert.match(pages, /statusPill\(item\.status\)/);
   assert.match(pages, /TIME_STATUS_LABEL\[timeStatus\]/);
-  assert.match(css, /\.time-upcoming[^\n]*background: #fff3cf;[^\n]*color: #684500/);
-  assert.match(css, /\.time-ongoing[^\n]*background: #e8f6ed;[^\n]*color: #145c30/);
-  assert.match(css, /\.time-past[^\n]*background: #f1f2f4;[^\n]*color: #4b5563/);
+  assert.match(css, /\.course-management-pages \.time-upcoming[^\n]*background: #fff5d9;[^\n]*color: #684500/);
+  assert.match(css, /\.course-management-pages \.time-ongoing[^\n]*background: #e8f6ed;[^\n]*color: #145c30/);
+  assert.match(css, /\.course-management-pages \.time-past[^\n]*background: #f1f2f4;[^\n]*color: #4b5563/);
   assert.match(css, /\.course-management-pages \.status-pill\.status-open/);
   assert.match(css, /\.course-management-pages \.status-pill\.status-closed/);
   assert.match(css, /\.course-title-group \{[^}]*flex-wrap: wrap/);
@@ -186,7 +249,8 @@ test("Class detail puts its status beside the title and reuses accessible class 
   assert.match(pages, /course-title-group"><h1>\{courseClass\.name\}<\/h1>\{courseClassStatusPill\(courseClass\.status\)\}/);
   assert.equal((pages.match(/courseClassStatusPill\(courseClass\.status\)/g) || []).length, 2);
   assert.match(pages, /render: \(item\) => courseClassStatusPill\(item\.status\)/);
-  assert.match(pages, /editAccessibleName="Sửa thông tin lớp" showPencil/);
+  assert.match(pages, /panelClassName="course-class-info" editLabel="" editAccessibleName="Sửa thông tin" showPencil/);
+  assert.doesNotMatch(pages, /panelClassName="course-class-info"[^\n]*editLabel="Sửa"/);
   assert.match(css, /\.course-management-pages \.course-class-status\.status-active[^\n]*background: #e8f6ed;[^\n]*color: #145c30/);
   assert.match(css, /\.course-management-pages \.course-class-status\.status-inactive/);
   assert.match(css, /\.course-title-group \{[^}]*flex-wrap: wrap/);
@@ -194,12 +258,110 @@ test("Class detail puts its status beside the title and reuses accessible class 
   assert.match(pages, /availability\.canComplete/);
   assert.match(pages, /availability\.canCancel/);
 });
+
+test("Course hierarchy row actions use named icon controls and retain text for consequential actions", async () => {
+  const pages = await readFile(new URL("../src/pages/CourseManagementPages.jsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../src/pages/CourseManagement.css", import.meta.url), "utf8");
+  assert.match(pages, /className="cm-icon-button" aria-label=\{`Xem \$\{title\}:/);
+  assert.match(pages, /className="cm-icon-button" aria-label=\{`Sửa \$\{title\}:/);
+  assert.match(pages, /aria-label=\{`Làm mới \$\{title\}`\}/);
+  assert.match(pages, /Hoàn thành/);
+  assert.match(pages, /Hủy buổi/);
+  assert.match(css, /\.course-management-pages \.cm-icon-button[\s\S]*width: 40px/);
+  assert.match(css, /\.course-management-pages button:focus-visible[\s\S]*box-shadow: var\(--cm-focus\)/);
+  assert.match(css, /prefers-reduced-motion: reduce/);
+});
+
+test("Course hierarchy action icons render visible inline SVG and preserve accessible action semantics", async () => {
+  const pages = await readFile(new URL("../src/pages/CourseManagementPages.jsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../src/pages/CourseManagement.css", import.meta.url), "utf8");
+  assert.match(pages, /function CourseIcon\(\{ name \}\)[\s\S]*?<svg className="course-management-icon"[^>]*stroke="currentColor"[^>]*aria-hidden="true"/);
+  for (const icon of ["back", "refresh", "add", "view", "edit", "previous", "next"]) {
+    assert.match(pages, new RegExp(`<CourseIcon name="${icon}" \/>`));
+  }
+  assert.doesNotMatch(pages, /<i className="bi bi-/);
+  assert.match(pages, /aria-label=\{`Xem \$\{title\}: \$\{item\.name/);
+  assert.match(pages, /aria-label=\{`Sửa \$\{title\}: \$\{item\.name/);
+  assert.match(pages, /aria-label=\{`Làm mới \$\{title\}`\}/);
+  assert.match(pages, /disabled=\{disabled\} onClick=\{\(\) => open\(null\)\}/);
+  assert.match(pages, /disabled=\{pageData\.page === 0\}/);
+  assert.match(pages, /disabled=\{pageData\.page \+ 1 >= pageData\.pageCount\}/);
+  assert.match(css, /\.course-management-pages \.course-management-icon\s*\{[^}]*width: 16px;[^}]*height: 16px;[^}]*color: currentColor/);
+});
+
+test("Course hierarchy pagination stays aligned at desktop widths with a narrow-screen fallback", async () => {
+  const css = await readFile(new URL("../src/pages/CourseManagement.css", import.meta.url), "utf8");
+  const pages = await readFile(new URL("../src/pages/CourseManagementPages.jsx", import.meta.url), "utf8");
+  assert.match(css, /\.course-management-pages \.course-management-pagination\s*\{[^}]*display: grid;[^}]*grid-template-columns: minmax\(0, 1fr\) auto/);
+  assert.match(css, /\.course-management-pages \.course-management-pagination > span\s*\{[^}]*white-space: nowrap/);
+  assert.match(css, /\.course-management-pages \.course-management-pagination > div\s*\{[^}]*flex-wrap: nowrap/);
+  assert.match(css, /\.course-management-pages \.course-management-pagination button\s*\{[^}]*min-height: 40px;[^}]*white-space: nowrap/);
+  assert.match(css, /@media \(max-width: 520px\)[\s\S]*?\.course-management-pages \.course-management-pagination\s*\{[^}]*grid-template-columns: 1fr/);
+  assert.match(pages, /disabled=\{pageData\.page === 0\}/);
+  assert.match(pages, /disabled=\{pageData\.page \+ 1 >= pageData\.pageCount\}/);
+});
+
+test("Course hierarchy tables align actions and show a labeled outline refresh control", async () => {
+  const pages = await readFile(new URL("../src/pages/CourseManagementPages.jsx", import.meta.url), "utf8");
+  const courseList = await readFile(new URL("../src/pages/CourseList.jsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../src/pages/CourseManagement.css", import.meta.url), "utf8");
+  assert.match(pages, /className="cm-refresh-button"[^>]*aria-label=\{`Làm mới \$\{title\}`}[^>]*onClick=\{onRefresh\}><CourseIcon name="refresh" \/><span>Làm mới<\/span>/);
+  assert.match(pages, /className="adm-primary" disabled=\{disabled\} onClick=\{\(\) => open\(null\)\}/);
+  assert.match(pages, /<th aria-label="Thao tác"><\/th>/);
+  assert.match(courseList, /<th aria-label="Thao tác" \/>/);
+  assert.doesNotMatch(pages, /<th>Thao tác<\/th>/);
+  assert.match(css, /\.course-management-pages \.cm-refresh-button\s*\{[^}]*border: 1px solid var\(--cm-border\)[^}]*background: #fff/);
+  assert.match(css, /\.course-management-pages \.queue-table td:last-child\s*\{[^}]*text-align: right;[^}]*white-space: nowrap/);
+  assert.match(css, /\.course-management-pages \.queue-table td:last-child \.adm-actions\s*\{[^}]*justify-content: flex-end;[^}]*flex-wrap: nowrap/);
+  assert.match(css, /\.course-list-main \.queue-table td:last-child \.adm-actions\s*\{[^}]*justify-content: flex-end;[^}]*flex-wrap: nowrap/);
+  assert.match(css, /\.course-management-pages \.queue-table-wrap\s*\{[^}]*overflow-x: auto/);
+});
+
+test("Course hierarchy toolbar keeps Refresh and Add buttons on one aligned row", async () => {
+  const pages = await readFile(new URL("../src/pages/CourseManagementPages.jsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../src/pages/CourseManagement.css", import.meta.url), "utf8");
+  assert.match(pages, /className="adm-head cm-list-toolbar"[\s\S]*className="adm-actions cm-toolbar-actions"/);
+  assert.match(pages, /className="cm-refresh-button"[^>]*onClick=\{onRefresh\}/);
+  assert.match(pages, /className="adm-primary" disabled=\{disabled\} onClick=\{\(\) => open\(null\)\}/);
+  assert.match(css, /\.course-management-pages \.cm-list-toolbar\s*\{[^}]*flex-wrap: wrap/);
+  assert.match(css, /\.course-management-pages \.cm-toolbar-actions\s*\{[^}]*flex: 0 0 auto;[^}]*flex-wrap: nowrap;[^}]*justify-content: flex-end;[^}]*gap: 8px/);
+  assert.match(css, /\.course-management-pages \.cm-toolbar-actions > button\s*\{[^}]*display: inline-flex;[^}]*flex-direction: row;[^}]*align-items: center;[^}]*justify-content: center;[^}]*flex-wrap: nowrap;[^}]*gap: 8px;[^}]*height: 40px;[^}]*white-space: nowrap/);
+  assert.match(css, /\.course-management-pages \.cm-toolbar-actions \.course-management-icon\s*\{[^}]*width: 16px;[^}]*height: 16px;[^}]*flex: 0 0 16px/);
+});
+
 test("Auto Schedule requires an explicit facility before Preview or Generate", async () => {
   const panel = await readFile(new URL("../src/pages/ClassSessionGenerationPanel.jsx", import.meta.url), "utf8");
-  assert.match(panel, /if \(!facilityId\) throw new Error/);
-  assert.match(panel, /aria-required="true"/);
+  const management = await readFile(new URL("../src/pages/CourseManagementPages.jsx", import.meta.url), "utf8");
+  assert.match(panel, /if \(!facilityId\) throw new Error\("Vui lòng chọn cơ sở trước khi xem trước hoặc tạo lịch\."\)/);
+  assert.match(panel, /<label>Cơ sở<select value=\{facilityId\} aria-required="true"/);
+  assert.match(panel, /<option value="">Chọn cơ sở<\/option>/);
+  assert.doesNotMatch(panel, /Chưa chọn cơ sở|Cơ sở \(không bắt buộc\)/);
   assert.match(panel, /facilityId: Number\(facilityId\)/);
+  assert.match(panel, /request = payload\(\)/);
   assert.match(panel, /previewClassSessionGenerationApi\(token, request\)/);
   assert.match(panel, /confirmClassSessionGenerationApi\(token, request\)/);
-  assert.doesNotMatch(panel, /Cơ sở \(không bắt buộc\)|Chưa chọn cơ sở/);
+  assert.match(panel, /setFacilityId\(event\.target\.value\)/);
+  assert.match(panel, /const activeFacilities = rows\(facilities\)\.filter\(\(facility\) => String\(facility\?\.status\)\.toUpperCase\(\) === "ACTIVE"\)/);
+  assert.match(management, /const suitableFacilities = facilities\.filter\(\(facility\) => \(facility\.sports \|\| \(facility\.sportId \? \[\{ id: facility\.sportId \}\] : \[\]\)\)[\s\S]*?Number\(sport\.id\) === Number\(course\?\.sportId\)\)/);
+});
+
+test("Public design tokens and broad typography/focus rules are scoped to the public shell", async () => {
+  const css = await readFile(new URL("../src/public-site/styles.css", import.meta.url), "utf8");
+  assert.match(css, /^\.public-site \{[\s\S]*--blue:/);
+  assert.doesNotMatch(css, /^:root\s*\{/m);
+  assert.match(css, /\.public-site h1, \.public-site h2/);
+  assert.match(css, /\.public-site :focus-visible/);
+  assert.match(css, /\.public-site \.btn \{/);
+});
+
+test("Course list and form retain their established styles outside the redesigned detail route", async () => {
+  const css = await readFile(new URL("../src/pages/CourseManagement.css", import.meta.url), "utf8");
+  const list = await readFile(new URL("../src/pages/CourseList.jsx", import.meta.url), "utf8");
+  const form = await readFile(new URL("../src/pages/CourseForm.jsx", import.meta.url), "utf8");
+  assert.match(list, /className="course-list-heading"/);
+  assert.match(css, /\.main \.course-list-heading\s*\{/);
+  assert.match(css, /\.main \.course-filters\s*\{/);
+  assert.match(form, /className="adm-form course-form adm-block"/);
+  assert.match(css, /\.main \.course-form input/);
+  assert.match(css, /\.main > \.adm-back/);
 });

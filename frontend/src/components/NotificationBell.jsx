@@ -128,7 +128,10 @@ export default function NotificationBell({ token, role }) {
   return (
     <div className="notification-widget">
       <button ref={bellButtonRef} type="button" className="notification-bell" aria-label={`Thông báo, ${unreadCount} chưa đọc`} aria-expanded={open} aria-controls="notification-panel" onClick={togglePanel}>
-        <i className="bi bi-bell" aria-hidden="true" />
+        <svg className="notification-bell-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z" />
+          <path d="M10 21h4" />
+        </svg>
         {unreadCount > 0 && <span className="notification-count" aria-live="polite">{unreadCount > 99 ? "99+" : unreadCount}</span>}
       </button>
       {open && (

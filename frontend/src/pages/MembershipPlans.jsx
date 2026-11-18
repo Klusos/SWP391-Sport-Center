@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import Sidebar from "../components/Sidebar";
+import AdminTopBar from "../components/AdminTopBar";
 import "./MembershipPlans.css";
 import {
   createMembershipPlanApi,
@@ -54,7 +55,7 @@ function PlanActions({ plan, statusSaving, onEdit, onChangeStatus }) {
   </div>;
 }
 
-export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
+export default function MembershipPlans({ token, role, currentUserName, onLogout, onNavigate }) {
   const admin = role === "ADMIN";
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -176,6 +177,8 @@ export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
     <div className="layout membership-layout">
       <Sidebar role={role} activePage="membership-plans" onNavigate={onNavigate} onLogout={onLogout} />
       <main className="main membership-main">
+        {admin && <AdminTopBar pageLabel="GÓI HỘI VIÊN" displayName={currentUserName} avatarName={currentUserName} />}
+        <div className="membership-content">
         <h1>Gói hội viên</h1>
         <p className="subtitle">{admin
           ? "Tạo, chỉnh sửa, kích hoạt và tắt các gói hội viên."
@@ -293,6 +296,7 @@ export default function MembershipPlans({ token, role, onLogout, onNavigate }) {
                 </tbody>
               </table>
             </div>}
+        </div>
       </main>
     </div>
   );

@@ -51,5 +51,5 @@ test("Member Course Detail presents blocked and advisory states while keeping pu
   assert.match(detail, /courseAgePolicyLabel\(course\)/);
   assert.match(detail, /getCurrentUserApi\(auth\.accessToken\)/);
   assert.match(detail, /profileLoaded && !profile\?\.dateOfBirth/);
-  assert.match(detail, /!memberRoute && <p><strong>\{courseAgePolicyLabel\(course\)\}/);
+  assert.match(detail, /!memberRoute && <dl className="course-public-facts">[\s\S]*?\(course\.targetAgeMin != null \|\| course\.targetAgeMax != null\) && <div>[\s\S]*?<dt>\{courseAgePolicyLabel\(course\)\}<\/dt>/);
 });

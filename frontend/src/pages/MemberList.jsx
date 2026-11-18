@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Sidebar from "../components/Sidebar";
+import AdminTopBar from "../components/AdminTopBar";
 import "./MemberList.css";
 import {
   createMemberProfileApi,
@@ -47,7 +48,7 @@ function ProfileIcon({ type }) {
   return <svg className="member-profile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[type]}</svg>;
 }
 
-export default function MemberList({ token, role, onLogout, onNavigate }) {
+export default function MemberList({ token, role, currentUserName, onLogout, onNavigate }) {
   const [members, setMembers] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [query, setQuery] = useState("");
@@ -201,8 +202,10 @@ export default function MemberList({ token, role, onLogout, onNavigate }) {
   return (
     <div className="layout">
       <Sidebar role={role} activePage="members" onNavigate={onNavigate} onLogout={onLogout} />
-      <main className="main member-list-main">
-        <header className="member-list-heading"><div><p className="member-list-eyebrow">SPORTCENTER / THÀNH VIÊN</p><h1>Danh sách thành viên</h1>
+      <main className={`main member-list-main${isAdmin ? " is-admin" : ""}`}>
+        {isAdmin && <AdminTopBar pageLabel="DANH SÁCH THÀNH VIÊN" displayName={currentUserName} avatarName={currentUserName} />}
+        <div className={isAdmin ? "member-list-content" : undefined}>
+        <header className="member-list-heading"><div><h1>Danh sách thành viên</h1>
           <p className="subtitle">{loading ? "Đang tải danh sách…" : `${filtered.length} thành viên phù hợp`}</p></div>
           {isAdmin && <button className="member-list-create" type="button" onClick={() => onNavigate("register")}>Đăng ký MEMBER</button>}
         </header>
@@ -263,8 +266,12 @@ export default function MemberList({ token, role, onLogout, onNavigate }) {
             <div className="member-detail-actions">
               {isAdmin && <button type="button" onClick={() => setEditing((value) => !value)}>{editing ? "\u0110\u00f3ng ch\u1ec9nh s\u1eeda" : "Ch\u1ec9nh s\u1eeda"}</button>}
               {isAdmin && selected.user.status === "ACTIVE" && <button type="button" onClick={deactivate} disabled={deactivating}>{deactivating ? "\u0110ang x\u1eed l\u00fd\u2026" : "V\u00f4 hi\u1ec7u h\u00f3a"}</button>}
-              <button className="member-detail-close" type="button" aria-label="\u0110\u00f3ng chi ti\u1ebft th\u00e0nh vi\u00ean" onClick={() => setSelected(null)}>{"\u00d7"}</button>
             </div>
+            <button className="member-detail-close" type="button" title="Đóng thông tin thành viên" aria-label="Đóng thông tin thành viên" onClick={() => setSelected(null)}>
+              <svg className="member-detail-close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="m6 6 12 12M18 6 6 18" />
+              </svg>
+            </button>
           </div>
 
           {!editing ? <div className="member-detail-grid member-detail-sections">
@@ -311,6 +318,7 @@ export default function MemberList({ token, role, onLogout, onNavigate }) {
         </section>}
           </aside>
         </div>}
+        </div>
       </main>
     </div>
   );

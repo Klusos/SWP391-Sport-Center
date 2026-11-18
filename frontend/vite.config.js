@@ -1,7 +1,7 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
-function publicCssIsolation() {
+export function publicCssIsolation() {
   return {
     postcssPlugin: 'sportcenter-public-css-isolation',
     Rule(rule) {
@@ -19,6 +19,9 @@ function publicCssIsolation() {
 
       rule.selectors = rule.selectors.map((selector) => {
         const trimmed = selector.trim()
+        // Some shared components declare every intended root explicitly in public-site/styles.css.
+        const explicitScope = ['.public-site', '.lp', '.layout', '.member-course-detail']
+        if (explicitScope.some((scope) => trimmed === scope || [' ', '>', '+', '~', '.', ':', '['].some((prefix) => trimmed.startsWith(`${scope}${prefix}`)))) return trimmed
         if (trimmed === ':root' || /^(html|body)(?=$|[.#:[\s>+~])/.test(trimmed)) {
           return `.public-site${trimmed.replace(/^:root|^(?:html|body)/, '')}`
         }

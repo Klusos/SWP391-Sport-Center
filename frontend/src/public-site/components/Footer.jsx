@@ -1,40 +1,54 @@
-import { Link } from 'react-router-dom'
-import ConsultForm from './ConsultForm.jsx'
+import { Link } from "react-router-dom";
+import { ArrowUpRight, Mail, MapPin, Phone } from "../../landing/icons.jsx";
+import SportCenterMark from "./SportCenterMark.jsx";
 
-export default function Footer() {
+export default function Footer({ auth, dashboardPath = "/staff/dashboard" }) {
+  const year = new Date().getFullYear();
   return (
-    <footer className="site-footer">
-      <div className="footer-left">
-        <h4 className="brand-light">SPORT CENTER</h4>
-        <div className="socials">
-          <a href="#" aria-label="Facebook"><i className="bi bi-facebook" /></a>
-          <a href="#" aria-label="Instagram"><i className="bi bi-instagram" /></a>
-          <a href="#" aria-label="YouTube"><i className="bi bi-youtube" /></a>
+    <footer className="site-footer public-site-footer">
+      <div className="container-xl public-footer-inner">
+        <div className="public-footer-top">
+          <div className="public-footer-brand">
+            <Link to="/" className="public-brand" aria-label="SportCenter — Trang chủ">
+              <SportCenterMark size={36} />
+              <span>Sport<b>Center</b></span>
+            </Link>
+            <p>Không gian dành cho vận động và rèn luyện, cùng hệ thống quản lý hiện đại phía sau.</p>
+          </div>
+
+          <nav className="public-footer-column" aria-label="Khám phá">
+            <h2>Khám phá</h2>
+            <Link to="/bo-mon">Bộ môn</Link>
+            <Link to="/#huan-luyen-vien">Huấn luyện viên</Link>
+            <Link to="/co-so-vat-chat">Cơ sở vật chất</Link>
+            <Link to="/#tuyen-sinh">Hội viên</Link>
+          </nav>
+
+          <nav className="public-footer-column" aria-label="Tài khoản">
+            <h2>Tài khoản</h2>
+            <Link to={auth ? dashboardPath : "/login"}>{auth ? "Khu vực của bạn" : "Đăng nhập"}</Link>
+            <Link to="/#public-consultation">Tư vấn</Link>
+          </nav>
+
+          <div className="public-footer-column public-footer-contact">
+            <h2>Liên hệ</h2>
+            <a href="tel:19006868"><Phone size={15} aria-hidden="true" /> <span>1900 6868</span></a>
+            <a href="mailto:sportcenter@gmail.com"><Mail size={15} aria-hidden="true" /> <span>sportcenter@gmail.com</span></a>
+            <span><MapPin size={15} aria-hidden="true" /> <span>Thành phố Hồ Chí Minh</span></span>
+          </div>
         </div>
-        <div className="row g-4 mt-1">
-          <div className="col-12 col-md-4">
-            <h6>THÔNG TIN LIÊN HỆ</h6>
-            <p><i className="bi bi-telephone" /> 1900 6868</p>
-            <p><i className="bi bi-envelope" /> sportcenter@gmail.com</p>
-            <p><i className="bi bi-geo-alt" /> Thành phố Hồ Chí Minh</p>
-          </div>
-          <div className="col-6 col-md-4">
-            <h6>KHÁM PHÁ</h6>
-            <p><Link to="/bo-mon">Bộ môn</Link></p>
-            <p><Link to="/huan-luyen-vien">Huấn luyện viên</Link></p>
-          </div>
-          <div className="col-6 col-md-4">
-            <h6>HỖ TRỢ</h6>
-            <p><Link to="/tuyen-sinh">Đăng ký</Link></p>
-            <p><a href="#">Chính sách</a></p>
-            <p><a href="#">Liên hệ</a></p>
-          </div>
+
+        <div className="public-footer-bottom">
+          <span>© {year} Sport Center. Bảo lưu mọi quyền.</span>
+          <button
+            type="button"
+            className="public-footer-top-link"
+            onClick={() => window.scrollTo({ top: 0, behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" })}
+          >
+            Lên đầu trang <ArrowUpRight size={14} aria-hidden="true" />
+          </button>
         </div>
-        <p className="copyright">© 2026 Sport Center. All rights reserved.</p>
-      </div>
-      <div className="footer-right">
-        <ConsultForm />
       </div>
     </footer>
-  )
+  );
 }

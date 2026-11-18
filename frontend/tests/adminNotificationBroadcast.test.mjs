@@ -30,3 +30,33 @@ test("Admin broadcast keeps pending locks, accessible feedback, and guarded rout
   assert.match(css, /@media \(max-width: 600px\)/);
   assert.match(css, /prefers-reduced-motion: reduce/);
 });
+
+test("Admin broadcast uses the shared top bar without taking notification ownership", async () => {
+  const component = await readFile(new URL("../src/pages/AdminNotificationBroadcast.jsx", import.meta.url), "utf8");
+  const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
+  const topBar = await readFile(new URL("../src/components/AdminTopBar.jsx", import.meta.url), "utf8");
+
+  assert.match(component, /import AdminTopBar from "\.\.\/components\/AdminTopBar"/);
+  assert.match(component, /<AdminTopBar[\s\S]*?pageLabel="THÔNG BÁO"[\s\S]*?displayName=\{currentUserName\}[\s\S]*?avatarName=\{currentUserName\}/);
+  assert.match(component, /<AdminTopBar[\s\S]*?<div className="nb-page">[\s\S]*?<h1>Gửi thông báo toàn trung tâm<\/h1>/);
+  assert.doesNotMatch(component, /NOTIFICATION CENTER|nb-eyebrow|NotificationBell/);
+  assert.match(topBar, /className="admin-topbar-account"/);
+  assert.match(app, /currentUserName: auth\?\.name/);
+  assert.match(app, /path="\/admin\/notifications\/broadcast"\s+element=\{<AdminNotificationBroadcast \{\.\.\.staff\} \/>\}/);
+  assert.equal([...app.matchAll(/<NotificationBell\b/g)].length, 1);
+  assert.match(app, /<NotificationBell\s+key=\{notificationIdentityKey\(auth\)\}/);
+});
+
+test("Broadcast keeps its existing audience description and labeled message fields", async () => {
+  const component = await readFile(new URL("../src/pages/AdminNotificationBroadcast.jsx", import.meta.url), "utf8");
+
+  assert.match(component, /<strong>Đối tượng nhận thông báo<\/strong>/);
+  for (const role of ["ADMIN", "RECEPTIONIST", "COACH", "MEMBER"]) {
+    assert.match(component, new RegExp(`<span>${role}<\\/span>`));
+  }
+  assert.match(component, /<label htmlFor="broadcast-title">[\s\S]*?Tiêu đề/);
+  assert.match(component, /<input[\s\S]*?id="broadcast-title"[\s\S]*?maxLength=\{TITLE_LIMIT\}/);
+  assert.match(component, /<label htmlFor="broadcast-message">[\s\S]*?Nội dung thông báo/);
+  assert.match(component, /<textarea[\s\S]*?id="broadcast-message"[\s\S]*?maxLength=\{MESSAGE_LIMIT\}/);
+  assert.match(component, /onSubmit=\{submit\}/);
+});

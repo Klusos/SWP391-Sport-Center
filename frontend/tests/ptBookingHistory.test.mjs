@@ -30,7 +30,7 @@ test("existing COUNTER or ONLINE pending payments are surfaced without allowing 
   assert.equal(pendingPtPayment(payments, 3).method, "ONLINE");
   assert.match(ptCancellationWarning(pendingPtPayment(payments, 3)), /does not revoke an existing VNPay checkout URL/);
   const page = await readFile(new URL("../src/pages/PtBooking.jsx", import.meta.url), "utf8");
-  assert.match(page, /pending\s*\?\s*<p role="status">Đã có thanh toán \{pending\.method\} đang chờ/);
+  assert.match(page, /pending\s*\?\s*<p role="status">Đã có thanh toán \{PAYMENT_METHOD_LABELS\[pending\.method\] \|\| pending\.method\} đang chờ\. Không tạo thanh toán khác/);
   assert.match(page, /allowCreate && <div className="pt-payment-choice"/);
   assert.match(page, /Chờ xác nhận tại quầy/);
   assert.match(page, /Đang chờ VNPay xác nhận/);
@@ -90,7 +90,7 @@ test("the page uses the full list response, separate action/history sections, an
   ]);
   assert.match(api, /export function getMyPtBookingsApi\(token\)[\s\S]*?request\("\/api\/pt-bookings\/me"/);
   assert.match(page, /Cần xử lý/);
-  assert.match(page, /Lịch sử Booking/);
+  assert.match(page, /Lịch sử đặt lịch/);
   assert.match(page, /historyPageData\.items\.map/);
   assert.match(page, /onSuccess=\{\(\) => setPaymentModalBooking\(null\)\}/);
   assert.match(modal, /if \(closeAfterContinue === true\) onSuccess\?\.\(\)/);

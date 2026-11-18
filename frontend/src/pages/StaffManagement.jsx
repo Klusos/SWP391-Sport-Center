@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Sidebar from "../components/Sidebar";
+import AdminTopBar from "../components/AdminTopBar";
 import Img from "../public-site/components/Img";
 import "./StaffManagement.css";
 import {
@@ -20,12 +22,13 @@ import {
 const EMPTY_FORM = { name: "", email: "", phone: "", gender: "", dateOfBirth: "", password: "", bio: "" };
 const EMPTY_SPECIALIZATION = { sportId: "", experienceYears: 0, certification: "" };
 
-export default function StaffManagement({ token, role, onLogout, onNavigate }) {
+export default function StaffManagement({ token, role, currentUserName, onLogout, onNavigate }) {
   const [staff, setStaff] = useState([]);
   const [sports, setSports] = useState([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [createError, setCreateError] = useState("");
   const [notice, setNotice] = useState("");
   const [selected, setSelected] = useState(null);
   const [specializations, setSpecializations] = useState([]);
@@ -45,6 +48,85 @@ export default function StaffManagement({ token, role, onLogout, onNavigate }) {
   const [imageSaving, setImageSaving] = useState(false);
   const [bioSaving, setBioSaving] = useState(false);
   const admin = role === "ADMIN";
+  const createTitleId = useId();
+  const createDialogRef = useRef(null);
+  const createNameRef = useRef(null);
+  const createTriggerRef = useRef(null);
+  const closeCreateRef = useRef(null);
+  const savingRef = useRef(saving);
+
+  function closeCreateModal() {
+    if (savingRef.current) return;
+    setCreating(false);
+    setCreateError("");
+    setForm(EMPTY_FORM);
+    setCreateImage(null);
+    setCreateImagePreview("");
+    setCreateSpecializations([{ ...EMPTY_SPECIALIZATION }]);
+  }
+
+  function openCreateModal() {
+    setSelected(null);
+    setForm(EMPTY_FORM);
+    setCreateImage(null);
+    setCreateImagePreview("");
+    setCreateSpecializations([{ ...EMPTY_SPECIALIZATION }]);
+    setCreateError("");
+    setCreating(true);
+  }
+
+  useEffect(() => {
+    savingRef.current = saving;
+    closeCreateRef.current = closeCreateModal;
+  });
+
+  useEffect(() => {
+    if (!creating) return undefined;
+    const previousFocus = document.activeElement;
+    const trigger = createTriggerRef.current;
+    const previousOverflow = document.body.style.overflow;
+    const appRoot = document.getElementById("root");
+    const previousInert = appRoot?.inert;
+    document.body.style.overflow = "hidden";
+    if (appRoot) appRoot.inert = true;
+    createNameRef.current?.focus();
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape" && !savingRef.current) {
+        event.preventDefault();
+        closeCreateRef.current?.();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const focusable = [...(createDialogRef.current?.querySelectorAll(
+        "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex='-1'])",
+      ) || [])];
+      if (!focusable.length) {
+        event.preventDefault();
+        createDialogRef.current?.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !createDialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !createDialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      if (appRoot) appRoot.inert = previousInert;
+      if (previousFocus?.isConnected) previousFocus.focus();
+      else trigger?.focus();
+    };
+  }, [creating]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -258,8 +340,9 @@ export default function StaffManagement({ token, role, onLogout, onNavigate }) {
   async function createStaff(event) {
     event.preventDefault();
     if (saving) return;
+    savingRef.current = true;
     setSaving(true);
-    setError("");
+    setCreateError("");
     setNotice("");
     try {
       let imageUploadError = "";
@@ -300,8 +383,9 @@ export default function StaffManagement({ token, role, onLogout, onNavigate }) {
       await load();
       setNotice(imageUploadError || `Đã tạo tài khoản ${createRole}. Mật khẩu chỉ được nhập khi tạo và không thể xem lại.`);
     } catch (requestError) {
-      setError(requestError.status === 409 ? "Email đã được sử dụng." : requestError.message || "Không thể tạo tài khoản nhân sự.");
+      setCreateError(requestError.status === 409 ? "Email đã được sử dụng." : requestError.message || "Không thể tạo tài khoản nhân sự.");
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
@@ -313,9 +397,12 @@ export default function StaffManagement({ token, role, onLogout, onNavigate }) {
   }
 
   return (
+    <>
     <div className="layout">
       <Sidebar role={role} activePage="staff" onNavigate={onNavigate} onLogout={onLogout} />
-      <main className="main"><div className="staff-page staff-management-page">
+      <main className="main admin-staff-main">
+        <AdminTopBar pageLabel={"NH\u00c2N S\u1ef0"} displayName={currentUserName} avatarName={currentUserName} />
+        <div className="admin-staff-content"><div className="staff-page staff-management-page">
         <h1>Quản lý nhân sự</h1>
         <p className="subtitle">Quản lý tài khoản COACH, RECEPTIONIST và chuyên môn Coach.</p>
         {notice && <div className="banner success" role="status">{notice}</div>}
@@ -327,45 +414,9 @@ export default function StaffManagement({ token, role, onLogout, onNavigate }) {
           </div>
 
           <button type="button" className="staff-toolbar-refresh" onClick={load} disabled={loading}>{loading ? "Đang tải…" : "Làm mới"}</button>
-          <button type="button" className="btn-primary staff-toolbar-create" onClick={() => { setCreating((value) => !value); setSelected(null); setForm(EMPTY_FORM); setCreateImage(null); setCreateImagePreview(""); }}>{creating ? "Đóng form" : "+ Tạo nhân sự"}</button>
+          <button ref={createTriggerRef} type="button" className="btn-primary staff-toolbar-create" aria-haspopup="dialog" aria-expanded={creating} onClick={openCreateModal}>+ Tạo nhân sự</button>
 
         </div>
-
-        {creating && <form className="form-card staff-create-form" onSubmit={createStaff}>
-          <h2>Tạo tài khoản nhân sự</h2>
-          <div className="field field-narrow">
-            <label htmlFor="staffType">Loại tài khoản</label>
-            <select id="staffType" value={createRole} onChange={(event) => setCreateRole(event.target.value)}>
-              <option value="RECEPTIONIST">RECEPTIONIST</option><option value="COACH">COACH</option>
-            </select>
-          </div>
-          <div className="grid-2">
-            <label>Họ tên<input required maxLength={100} value={form.name} onChange={(event) => updateForm("name", event.target.value)} /></label>
-            <label>Email<input required type="email" maxLength={150} value={form.email} onChange={(event) => updateForm("email", event.target.value)} /></label>
-            <label>Điện thoại<input maxLength={20} value={form.phone} onChange={(event) => updateForm("phone", event.target.value)} /></label>
-            <label>Giới tính (tối đa 1 ký tự)<input maxLength={1} value={form.gender} onChange={(event) => updateForm("gender", event.target.value)} /></label>
-            <label>Mật khẩu khởi tạo<input required type="password" minLength={8} autoComplete="new-password" value={form.password} onChange={(event) => updateForm("password", event.target.value)} /></label>
-          </div>
-          {createRole === "COACH" && <fieldset>
-            <legend>Chuyên môn bắt buộc</legend>
-            <label>Tiểu sử công khai (không bắt buộc, tối đa 1000 ký tự)<textarea maxLength={1000} rows={4} value={form.bio} onChange={(event) => updateForm("bio", event.target.value)} /></label>
-            <div className="coach-image-editor">
-              <Img src={createImagePreview} alt="Xem trước ảnh Coach" label={form.name || "Chưa có ảnh"} className="coach-image-preview" />
-              <label htmlFor="newCoachImage">Ảnh Coach (JPEG, PNG hoặc WebP; tối đa 5 MB)</label>
-              <input id="newCoachImage" type="file" accept="image/jpeg,image/png,image/webp" disabled={saving} onChange={(event) => chooseCoachImage(event, setCreateImage, setCreateImagePreview)} />
-            </div>
-            {createSpecializations.map((row, index) => <div className="grid-2" key={index}>
-              <label>Môn thể thao<select required value={row.sportId} onChange={(event) => setCreateSpecializations((rows) => rows.map((item, i) => i === index ? { ...item, sportId: event.target.value } : item))}>
-                <option value="">Chọn môn</option>{sports.filter((sport) => sport.status === "ACTIVE").map((sport) => <option key={sport.id} value={sport.id}>{sport.name}</option>)}
-              </select></label>
-              <label>Số năm kinh nghiệm<input required type="number" min="0" value={row.experienceYears} onChange={(event) => setCreateSpecializations((rows) => rows.map((item, i) => i === index ? { ...item, experienceYears: event.target.value } : item))} /></label>
-              <label>Chứng chỉ (không bắt buộc)<input maxLength={255} value={row.certification} onChange={(event) => setCreateSpecializations((rows) => rows.map((item, i) => i === index ? { ...item, certification: event.target.value } : item))} /></label>
-              {createSpecializations.length > 1 && <button type="button" onClick={() => setCreateSpecializations((rows) => rows.filter((_, i) => i !== index))}>Bỏ chuyên môn này</button>}
-            </div>)}
-            <button type="button" onClick={() => setCreateSpecializations((rows) => [...rows, { ...EMPTY_SPECIALIZATION }])}>Thêm môn chuyên môn</button>
-          </fieldset>}
-          <div className="form-actions"><button type="submit" disabled={saving}>{saving ? "Đang tạo…" : "Tạo tài khoản"}</button><button type="button" onClick={() => { setCreating(false); setCreateImage(null); setCreateImagePreview(""); }}>Hủy</button></div>
-        </form>}
 
         {loading ? <div className="queue-state" role="status">Đang tải danh sách nhân sự…</div>
           : filtered.length === 0 ? <div className="queue-state">Chưa có nhân sự phù hợp.</div>
@@ -425,8 +476,68 @@ export default function StaffManagement({ token, role, onLogout, onNavigate }) {
             <p>Không có API xóa chuyên môn; bản ghi hiện có được giữ lại.</p>
           </form>}
         </section>}
-        </div>
+        </div></div>
       </main>
     </div>
+    {creating && createPortal(<div className="staff-create-backdrop">
+      <section
+        ref={createDialogRef}
+        className="staff-create-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={createTitleId}
+        aria-describedby={createError ? "staff-create-error" : undefined}
+        aria-busy={saving}
+        tabIndex={-1}
+      >
+        <header className="staff-create-dialog-header">
+          <h2 id={createTitleId}>T&#7841;o t&#224;i kho&#7843;n nh&#226;n s&#7921;</h2>
+          <button className="staff-create-close" type="button" aria-label="&#272;&#243;ng h&#7897;p tho&#7841;i" onClick={closeCreateModal} disabled={saving}>
+            <span aria-hidden="true">&#215;</span>
+          </button>
+        </header>
+        <form id="staff-create-form" className="staff-create-form" onSubmit={createStaff}>
+          <div className="staff-page staff-create-modal-body">
+            {createError && <p id="staff-create-error" className="staff-create-error" role="alert">{createError}</p>}
+            <div className="field field-narrow">
+              <label htmlFor="staffType">Lo&#7841;i t&#224;i kho&#7843;n</label>
+              <select id="staffType" value={createRole} onChange={(event) => setCreateRole(event.target.value)}>
+                <option value="RECEPTIONIST">RECEPTIONIST</option><option value="COACH">COACH</option>
+              </select>
+            </div>
+            <div className="grid-2">
+              <label>H&#7885; t&#234;n<input ref={createNameRef} required maxLength={100} value={form.name} onChange={(event) => updateForm("name", event.target.value)} /></label>
+              <label>Email<input required type="email" maxLength={150} value={form.email} onChange={(event) => updateForm("email", event.target.value)} /></label>
+              <label>&#272;i&#7879;n tho&#7841;i<input maxLength={20} value={form.phone} onChange={(event) => updateForm("phone", event.target.value)} /></label>
+              <label>Gi&#7899;i t&#237;nh (t&#7889;i &#273;a 1 k&#253; t&#7921;)<input maxLength={1} value={form.gender} onChange={(event) => updateForm("gender", event.target.value)} /></label>
+              <label>M&#7853;t kh&#7849;u kh&#7903;i t&#7841;o<input required type="password" minLength={8} autoComplete="new-password" value={form.password} onChange={(event) => updateForm("password", event.target.value)} /></label>
+            </div>
+            {createRole === "COACH" && <fieldset>
+              <legend>Chuy&#234;n m&#244;n b&#7855;t bu&#7897;c</legend>
+              <label>Ti&#7875;u s&#7917; c&#244;ng khai (kh&#244;ng b&#7855;t bu&#7897;c, t&#7889;i &#273;a 1000 k&#253; t&#7921;)<textarea maxLength={1000} rows={4} value={form.bio} onChange={(event) => updateForm("bio", event.target.value)} /></label>
+              <div className="coach-image-editor">
+                <Img src={createImagePreview} alt="Xem tr&#432;&#7899;c &#7843;nh Coach" label={form.name || "Ch&#432;a c&#243; &#7843;nh"} className="coach-image-preview" />
+                <label htmlFor="newCoachImage">&#7842;nh Coach (JPEG, PNG ho&#7863;c WebP; t&#7889;i &#273;a 5 MB)</label>
+                <input id="newCoachImage" type="file" accept="image/jpeg,image/png,image/webp" disabled={saving} onChange={(event) => chooseCoachImage(event, setCreateImage, setCreateImagePreview)} />
+              </div>
+              {createSpecializations.map((row, index) => <div className="grid-2" key={index}>
+                <label>M&#244;n th&#7875; thao<select required value={row.sportId} onChange={(event) => setCreateSpecializations((rows) => rows.map((item, i) => i === index ? { ...item, sportId: event.target.value } : item))}>
+                  <option value="">Ch&#7885;n m&#244;n</option>{sports.filter((sport) => sport.status === "ACTIVE").map((sport) => <option key={sport.id} value={sport.id}>{sport.name}</option>)}
+                </select></label>
+                <label>S&#7889; n&#259;m kinh nghi&#7879;m<input required type="number" min="0" value={row.experienceYears} onChange={(event) => setCreateSpecializations((rows) => rows.map((item, i) => i === index ? { ...item, experienceYears: event.target.value } : item))} /></label>
+                <label>Ch&#7913;ng ch&#7881; (kh&#244;ng b&#7855;t bu&#7897;c)<input maxLength={255} value={row.certification} onChange={(event) => setCreateSpecializations((rows) => rows.map((item, i) => i === index ? { ...item, certification: event.target.value } : item))} /></label>
+                {createSpecializations.length > 1 && <button type="button" onClick={() => setCreateSpecializations((rows) => rows.filter((_, i) => i !== index))}>B&#7887; chuy&#234;n m&#244;n n&#224;y</button>}
+              </div>)}
+              <button type="button" onClick={() => setCreateSpecializations((rows) => [...rows, { ...EMPTY_SPECIALIZATION }])}>Th&#234;m m&#244;n chuy&#234;n m&#244;n</button>
+            </fieldset>}
+          </div>
+          <footer className="staff-create-dialog-actions">
+            <button type="button" className="staff-create-cancel" onClick={closeCreateModal} disabled={saving}>H&#7911;y</button>
+            <button type="submit" className="staff-create-submit" disabled={saving}>{saving ? "\u0110ang t\u1ea1o\u2026" : "T\u1ea1o t\u00e0i kho\u1ea3n"}</button>
+          </footer>
+        </form>
+      </section>
+    </div>, document.body)}
+    </>
   );
 }

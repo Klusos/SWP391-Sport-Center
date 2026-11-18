@@ -1494,6 +1494,23 @@
 .membership-benefit-group .membership-neutral-note {
   margin: 0;
 }
+.member-membership-page > .member-membership-header {
+  padding-right: 58px;
+}
+.member-membership-page .membership-current-entry,
+.member-membership-page .membership-plan-card {
+  transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+.member-membership-page .membership-plan-card:hover {
+  border-color: #b9d1e6;
+  box-shadow: 0 9px 22px rgba(20, 48, 82, .08);
+  transform: translateY(-2px);
+}
+.member-membership-page .membership-refresh:focus-visible,
+.member-membership-page .membership-plan-card button:focus-visible {
+  outline: 3px solid rgba(30, 96, 213, .35);
+  outline-offset: 3px;
+}
 @media (max-width: 900px) {
   .membership-overview-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -1506,6 +1523,7 @@
 @media (max-width: 650px) {
   .member-membership-page > .member-membership-header {
     align-items: flex-start;
+    padding-right: 54px;
   }
   .member-membership-page .membership-refresh {
     flex: 0 0 auto;
@@ -1529,4 +1547,9 @@
   .membership-payment-actions > button {
     flex: 1 1 auto;
   }
+}
+@media (prefers-reduced-motion: reduce) {
+  .member-membership-page .membership-current-entry,
+  .member-membership-page .membership-plan-card { transition: none; }
+  .member-membership-page .membership-plan-card:hover { transform: none; }
 }

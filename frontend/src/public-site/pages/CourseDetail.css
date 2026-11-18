@@ -1,61 +1,52 @@
-.course-public-detail {
-  max-width: 1120px;
-}
+.course-public-detail-section { padding: clamp(20px, 3vw, 32px) 0 clamp(36px, 5vw, 52px); background: linear-gradient(180deg, #f5f9fd 0, #fff 280px); }
+.course-public-detail { width: 100%; max-width: 900px; margin-right: auto; margin-left: auto; }
 
 .course-public-detail .course-detail-back {
-  margin-bottom: 18px;
+  margin: 0 0 12px;
 }
+
+.course-public-detail .course-detail-back a { display: inline-flex; min-height: 40px; align-items: center; padding: 0 12px; border: 1px solid #dce7f1; border-radius: 999px; background: #fff; color: #245b89; font-weight: 700; text-decoration: none; }
+.course-public-detail .course-detail-back a:focus-visible { outline: 3px solid rgb(23 110 217 / 28%); outline-offset: 2px; }
 
 .course-public-detail .course-detail-card {
-  position: relative;
-  overflow: hidden;
-  padding: clamp(22px, 4vw, 42px);
+  padding: clamp(20px, 3vw, 28px);
   border: 1px solid #dce8f5;
-  border-radius: 22px;
-  background: linear-gradient(135deg, #fff 0%, #f4f9ff 100%);
-  box-shadow: 0 16px 38px rgba(17, 49, 87, .09);
-}
-
-.course-public-detail .course-detail-card::before {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 5px;
-  background: linear-gradient(90deg, #1767d2, #19a8d5);
-  content: "";
-}
-
-.course-public-detail .course-detail-card .label-blue {
-  display: inline-flex;
-  margin: 0 0 12px;
-  padding: 6px 11px;
-  border-radius: 999px;
-  background: #e7f2ff;
-  color: #145aa9;
-  font-size: .76rem;
-  font-weight: 750;
-  letter-spacing: .045em;
-  text-transform: uppercase;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 3px 14px rgba(17, 49, 87, .045);
 }
 
 .course-public-detail .course-detail-card h1 {
   max-width: 850px;
   color: #102a4c;
-  font-size: clamp(1.9rem, 4vw, 3rem);
+  margin: 0 0 6px;
+  font-size: clamp(1.8rem, 3.5vw, 2.55rem);
   font-weight: 850;
   letter-spacing: -.04em;
   line-height: 1.12;
+  overflow-wrap: anywhere;
 }
+
+.course-public-detail .course-public-sport { margin: 0 0 14px; color: #1767b5; font-size: 14px; font-weight: 700; }
+.course-public-detail .course-public-description { max-width: 800px; margin: 0; color: #52657e; font-size: 15px; line-height: 1.7; }
+.course-public-detail .course-public-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 8px 24px; margin: 18px 0 0; }
+.course-public-detail .course-public-facts > div { display: grid; align-content: start; gap: 4px; min-width: 0; padding: 11px 0 0; border-top: 1px solid #dce7f1; }
+.course-public-detail .course-public-facts dt { color: #60758a; font-size: 12px; font-weight: 700; }
+.course-public-detail .course-public-facts dd { margin: 0; color: #173e64; font-size: 14px; font-weight: 750; overflow-wrap: anywhere; }
+.course-public-detail .course-public-outcome { margin-top: 18px; padding-top: 16px; border-top: 1px solid #e1eaf2; }
+.course-public-detail .course-public-outcome h2 { margin: 0 0 7px; color: #123b63; font-size: 18px; font-weight: 800; }
+.course-public-detail .course-public-outcome p { margin: 0; color: #52657e; line-height: 1.7; }
+
+.course-public-detail .course-public-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 20px; }
+.course-public-detail .course-public-actions .btn { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; margin: 0; padding: 9px 16px; text-decoration: none; }
+.course-public-detail .course-public-action-secondary { border-color: #cbd8e5; background: #fff; color: #214d76; }
+.course-public-detail .course-public-action-secondary:hover { border-color: #9db8d1; background: #f5f9fd; color: #173e64; }
+.course-public-detail .course-public-actions .btn:focus-visible { outline: 3px solid rgb(23 110 217 / 32%); outline-offset: 3px; }
 
 .course-public-detail .course-detail-card > p,
 .course-public-detail .course-detail-card > div > p {
   color: #52657e;
   line-height: 1.7;
-}
-
-.course-public-detail .course-detail-card .btn {
-  margin-top: 10px;
 }
 
 .course-public-detail .course-registration-panel {
@@ -92,7 +83,11 @@
 }
 
 @media (max-width: 650px) {
+  .course-public-detail-section { min-height: 0; padding: 18px 0 40px; }
   .course-public-detail .course-detail-card { border-radius: 16px; }
+  .course-public-detail .course-public-facts { grid-template-columns: minmax(0, 1fr); margin-top: 14px; }
+  .course-public-detail .course-public-actions { align-items: stretch; flex-direction: column; }
+  .course-public-detail .course-public-actions .btn { width: 100%; box-sizing: border-box; }
   .course-public-detail .course-registration-panel { border-radius: 14px; }
 }
 

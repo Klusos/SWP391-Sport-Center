@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Sidebar from "../components/Sidebar";
+import AdminTopBar from "../components/AdminTopBar";
 import { supportTicketDateTime } from "../supportTicketPresentation";
 import {
   assignSupportTicketToMeApi, createSupportTicketApi, getMySupportTicketsApi,
@@ -24,8 +25,9 @@ const localizedError = (error, fallback) => ({
   409: "Yêu cầu đã thay đổi hoặc trạng thái không còn cho phép thao tác. Vui lòng tải lại.",
 }[error?.status] || fallback);
 
-export default function SupportTickets({ token, role, onLogout, onNavigate }) {
+export default function SupportTickets({ token, role, currentUserName, onLogout, onNavigate }) {
   const member = role === "MEMBER";
+  const isAdmin = role === "ADMIN";
   const [filters, setFilters] = useState({ status: "", category: "", search: "" });
   const [appliedFilters, setAppliedFilters] = useState(filters);
   const [page, setPage] = useState(0);
@@ -122,7 +124,9 @@ export default function SupportTickets({ token, role, onLogout, onNavigate }) {
   return (
     <div className="layout support-layout">
       <Sidebar role={role} activePage="support-tickets" onLogout={onLogout} onNavigate={onNavigate} />
-      <main className="main support-main">
+      <main className={`main support-main${isAdmin ? " support-admin-main" : ""}`}>
+        {isAdmin && <AdminTopBar pageLabel="YÊU CẦU HỖ TRỢ" displayName={currentUserName} avatarName={currentUserName} />}
+        <div className={isAdmin ? "support-admin-content" : "support-nonadmin-content"}>
         <header className="support-heading">
           <div><p className="subtitle">{member ? "Trao đổi với đội ngũ SportCenter" : "Tiếp nhận và theo dõi yêu cầu của hội viên"}</p>
             <h1>{member ? "Hỗ trợ của tôi" : "Quản lý yêu cầu hỗ trợ"}</h1></div>
@@ -204,6 +208,7 @@ export default function SupportTickets({ token, role, onLogout, onNavigate }) {
               {detail.status === "CLOSED" && <p className="support-muted">Yêu cầu đã đóng và chỉ có thể xem.</p>}
             </>}
           </section>
+        </div>
         </div>
       </main>
     </div>

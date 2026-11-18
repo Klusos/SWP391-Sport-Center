@@ -1,5 +1,14 @@
 /* ===== Common & Legacy Training Styles (preserved for Coach & Admin) ===== */
 .training-page { min-width: 0; }
+.training-page--admin { padding: 0; }
+.training-admin-content { min-width: 0; padding: 38px clamp(24px, 4vw, 64px) 52px; }
+.training-coach-content { display: contents; }
+@media (max-width: 980px) {
+  .training-admin-content { padding: 30px 26px 42px; }
+}
+@media (max-width: 700px) {
+  .training-admin-content { padding: 25px 16px 36px; }
+}
 .training-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
 .training-header h1 { margin: 0 0 4px; }
 .training-class-picker { display: flex; flex-direction: column; gap: 4px; font-size: 13px; min-width: 260px; }

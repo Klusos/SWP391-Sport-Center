@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import {
   assignSupportTicketToMeApi, createSupportTicketApi, getMySupportTicketsApi,
   getStaffSupportTicketsApi, getSupportTicketApi, replySupportTicketApi,
@@ -50,4 +51,24 @@ test("timezone-less ticket timestamps are interpreted as Vietnam local time", ()
     supportTicketDateTime("2026-10-20T10:00:00"),
     supportTicketDateTime("2026-10-20T03:00:00Z"),
   );
+});
+
+test("Support Tickets adds an Admin-only Top Bar without changing other role presentation or actions", async () => {
+  const [page, css, app] = await Promise.all([
+    readFile(new URL("../src/pages/SupportTickets.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/pages/SupportTickets.css", import.meta.url), "utf8"),
+    readFile(new URL("../src/App.jsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(page, /import AdminTopBar from "\.\.\/components\/AdminTopBar"/);
+  assert.match(page, /isAdmin && <AdminTopBar pageLabel="YÊU CẦU HỖ TRỢ" displayName=\{currentUserName\} avatarName=\{currentUserName\} \/>/);
+  assert.match(page, /support-nonadmin-content/);
+  assert.doesNotMatch(page, /NotificationBell/);
+  assert.match(page, /updateSupportTicketStatusApi\(token, selectedId, next\)/);
+  assert.match(page, /replySupportTicketApi\(token, selectedId, reply\.trim\(\)\)/);
+  assert.match(page, /assignSupportTicketToMeApi\(token, selectedId\)/);
+  assert.match(page, /createSupportTicketApi\(token/);
+  assert.match(css, /support-admin-main \{ padding: 0; \}/);
+  assert.match(css, /support-nonadmin-content \{ display: contents; \}/);
+  assert.match(app, /path="\/staff\/support-tickets" element=\{<SupportTickets \{\.\.\.staff\} \/>\}/);
+  assert.match(app, /<Route element=\{<StaffRoute auth=\{auth\} \/>\}>[\s\S]*?path="\/staff\/support-tickets"/);
 });

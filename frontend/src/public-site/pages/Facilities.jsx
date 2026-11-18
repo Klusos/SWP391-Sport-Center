@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import Img from '../components/Img.jsx'
+import PublicConsultationCta from '../components/PublicConsultationCta.jsx'
 import { timeline, coreValues, facilities } from '../data/content.js'
 
 export default function Facilities() {
@@ -62,7 +63,7 @@ export default function Facilities() {
         </div>
       </section>
 
-      <section className="section">
+      <section className="section public-page-content-with-cta">
         <div className="container-xl">
           <h2 className="h-xl mb-5">Mỗi khu vực, một trải nghiệm</h2>
           <div className="d-flex flex-column gap-4">
@@ -74,13 +75,14 @@ export default function Facilities() {
                 <div className="facility-info">
                   <h3>{f.title}</h3>
                   <p>{f.text}</p>
-                  <Link to="/tuyen-sinh" className="link-arrow">Khám phá <i className="bi bi-arrow-right" /></Link>
+                  <Link to="/#tuyen-sinh" className="link-arrow">Tìm hiểu hội viên <i className="bi bi-arrow-right" /></Link>
                 </div>
               </article>
             ))}
           </div>
         </div>
       </section>
+      <PublicConsultationCta eyebrow="Tìm hiểu ghi danh" title="Khám phá lựa chọn phù hợp tại Sport Center" description="Xem thông tin ghi danh và gửi yêu cầu tư vấn khi bạn sẵn sàng." />
     </>
   )
 }

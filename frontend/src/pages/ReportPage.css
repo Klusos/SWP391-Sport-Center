@@ -1,28 +1,473 @@
-.app-shell .revenue-report-page{display:grid;gap:18px}
-.app-shell .revenue-report-page .page-intro{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
-.app-shell .revenue-page-actions{display:flex;gap:8px;flex:none}
-.app-shell .revenue-report-page .page-intro h1{margin:0 0 6px}
-.app-shell .revenue-report-page .page-intro p,.app-shell .revenue-chart-panel .panel-head p{margin:0;color:#71849c;font-size:13px}
-.app-shell .revenue-filters{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
-.app-shell .revenue-presets{display:flex;align-items:center;gap:7px;flex-wrap:wrap;min-width:0;padding:0;margin:0;border:0}
-.app-shell .revenue-presets legend{float:none;width:auto;padding:0;margin:0 4px 0 0;color:#425a73;font-size:12px;font-weight:600}
-.app-shell .revenue-preset{min-height:36px;padding:6px 11px;border:1px solid #d2deeb;border-radius:8px;background:#fff;color:#31516f;font:inherit;font-size:12px;font-weight:600;cursor:pointer}
-.app-shell .revenue-preset:hover{border-color:#7aa9e0;background:#f5f9ff}
-.app-shell .revenue-preset.is-active{border-color:#1769d2;background:#eaf3ff;color:#0d55ad;box-shadow:inset 0 0 0 1px #1769d2}
-.app-shell .revenue-preset:focus-visible{outline:3px solid #8dbaff;outline-offset:2px}
-.app-shell .revenue-filters label{display:grid;gap:6px;color:#425a73;font-size:12px;font-weight:600}
-.app-shell .revenue-filters input,.app-shell .revenue-filters select{height:40px;min-width:160px;border:1px solid #dce5f0;border-radius:8px;padding:0 10px;background:#fff;color:#173450}
-.app-shell .revenue-filters .revenue-error{flex-basis:100%;margin:0}
-.app-shell .revenue-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
-.app-shell .revenue-summary-grid .panel{display:grid;gap:10px;margin:0}
-.app-shell .revenue-total-card{grid-column:span 1;background:linear-gradient(135deg,#0d5ce5,#398bff);color:#fff}
-.app-shell .revenue-summary-grid span{font-size:12px;color:inherit;opacity:.8}
-.app-shell .revenue-summary-grid strong{font-size:clamp(18px,2vw,25px);color:inherit;overflow-wrap:anywhere}
-.app-shell .revenue-summary-grid small{font-size:11px;opacity:.8}
-.app-shell .revenue-chart-panel{min-width:0}
-.app-shell .revenue-chart-panel h2{margin:0 0 5px;font-size:18px}
-.app-shell .revenue-state{padding:24px;text-align:center;color:#657b92}
-.app-shell .revenue-error{color:#a22d34}
-.app-shell .revenue-footnote,.app-shell .revenue-empty-note{margin:0;color:#657b92;font-size:12px;line-height:1.6}
-@media(max-width:850px){.app-shell .revenue-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:560px){.app-shell .revenue-report-page .page-intro{display:grid}.app-shell .revenue-page-actions{width:100%}.app-shell .revenue-page-actions button{flex:1}.app-shell .revenue-filters{align-items:stretch}.app-shell .revenue-presets{align-items:stretch;width:100%}.app-shell .revenue-presets legend{width:100%;margin-bottom:2px}.app-shell .revenue-preset{flex:1}.app-shell .revenue-filters label,.app-shell .revenue-filters input,.app-shell .revenue-filters select{width:100%}.app-shell .revenue-summary-grid{grid-template-columns:1fr}}
+.main:has(.report-admin-shell) {
+  padding: 0;
+}
+
+.app-shell .report-admin-shell {
+  min-height: 100vh;
+}
+
+.app-shell .report-admin-topbar {
+  padding-right: 88px;
+}
+
+.app-shell .report-print-header,
+.app-shell .report-print-note,
+.app-shell .report-print-fallback {
+  display: none;
+}
+
+.app-shell .revenue-report-page {
+  display: grid;
+  gap: 18px;
+  padding: 32px clamp(24px, 4vw, 64px) 52px;
+}
+
+.app-shell .revenue-report-page .page-intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  min-width: 0;
+  margin: 0;
+}
+
+.app-shell .revenue-report-page .page-intro h1 {
+  margin: 0 0 6px;
+  color: var(--navy);
+  font-size: clamp(24px, 2vw, 27px);
+  font-weight: 750;
+  letter-spacing: -.025em;
+  line-height: 1.25;
+}
+
+.app-shell .revenue-report-page .page-intro p,
+.app-shell .revenue-chart-panel .panel-head p {
+  max-width: 780px;
+  margin: 0;
+  color: var(--text-sub);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.app-shell .revenue-page-actions {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+
+.app-shell .revenue-page-actions button {
+  min-height: 38px;
+  padding: 8px 13px;
+}
+
+.app-shell .revenue-filter-panel-header {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.app-shell .revenue-filter-panel-title {
+  padding-top: 2px;
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.app-shell .revenue-filters {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.app-shell .revenue-filter-controls {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.app-shell .revenue-filter-actions {
+  align-self: flex-start;
+  margin-left: auto;
+}
+
+.app-shell .revenue-filter-actions button {
+  display: inline-flex;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  flex: 0 0 40px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+}
+
+.app-shell .revenue-filter-actions button:focus-visible {
+  outline: 3px solid rgba(23, 105, 210, .28);
+  outline-offset: 2px;
+}
+
+.app-shell .revenue-filter-actions svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  overflow: visible;
+  color: currentColor;
+}
+
+.app-shell .revenue-filter-submit {
+  display: flex;
+  width: 100%;
+  justify-content: flex-end;
+}
+
+.app-shell .revenue-filter-submit button {
+  width: 100%;
+}
+
+.app-shell .revenue-presets {
+  display: flex;
+  flex: 1 0 100%;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.app-shell .revenue-presets legend {
+  float: none;
+  width: auto;
+  margin: 0 4px 0 0;
+  padding: 0;
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.app-shell .revenue-preset {
+  min-height: 36px;
+  padding: 6px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-sub);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.app-shell .revenue-preset:hover {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+  color: var(--navy);
+}
+
+.app-shell .revenue-preset.is-active {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+  color: var(--blue-dark);
+  box-shadow: inset 0 0 0 1px var(--blue);
+}
+
+.app-shell .revenue-preset:focus-visible,
+.app-shell .revenue-filters input:focus-visible,
+.app-shell .revenue-filters select:focus-visible {
+  outline: 3px solid rgba(23, 105, 210, .28);
+  outline-offset: 2px;
+}
+
+.app-shell .revenue-filters label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.app-shell .revenue-filters input,
+.app-shell .revenue-filters select {
+  min-width: 160px;
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-main);
+  font: inherit;
+  font-size: 13px;
+}
+
+.app-shell .revenue-filters .revenue-error {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.app-shell .revenue-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.app-shell .revenue-summary-grid .panel {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.app-shell .revenue-total-card {
+  grid-column: span 1;
+  background: var(--surface);
+  color: var(--text-main);
+}
+
+.app-shell .revenue-summary-grid span {
+  color: var(--text-sub);
+  font-size: 12px;
+}
+
+.app-shell .revenue-summary-grid strong {
+  color: var(--navy);
+  font-size: clamp(18px, 2vw, 25px);
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.app-shell .revenue-summary-grid small {
+  color: var(--text-sub);
+  font-size: 11px;
+}
+
+.app-shell .revenue-chart-panel {
+  min-width: 0;
+}
+
+.app-shell .revenue-chart-panel h2 {
+  margin: 0 0 5px;
+  color: var(--navy);
+  font-size: 18px;
+}
+
+.app-shell .revenue-state {
+  padding: 24px;
+  color: var(--text-sub);
+  text-align: center;
+}
+
+.app-shell .revenue-error {
+  color: #a22d34;
+}
+
+.app-shell .revenue-footnote,
+.app-shell .revenue-empty-note {
+  margin: 0;
+  color: var(--text-sub);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 850px) {
+  .app-shell .revenue-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .app-shell .revenue-report-page .page-intro {
+    display: grid;
+  }
+
+  .app-shell .revenue-page-actions {
+    width: 100%;
+  }
+
+  .app-shell .revenue-page-actions button {
+    flex: 1;
+  }
+
+  .app-shell .revenue-filter-panel-header {
+    flex-wrap: wrap;
+  }
+
+  .app-shell .revenue-filter-actions {
+    width: auto;
+    flex: 0 0 auto;
+  }
+
+  .app-shell .revenue-filter-actions button {
+    flex: 0 0 40px;
+  }
+
+  .app-shell .revenue-filters {
+    align-items: stretch;
+  }
+
+  .app-shell .revenue-presets {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .app-shell .revenue-presets legend {
+    width: 100%;
+    margin-bottom: 2px;
+  }
+
+  .app-shell .revenue-preset {
+    flex: 1;
+  }
+
+  .app-shell .revenue-filters label,
+  .app-shell .revenue-filters input,
+  .app-shell .revenue-filters select {
+    width: 100%;
+  }
+
+  .app-shell .revenue-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  @page admin-report {
+    size: A4 portrait;
+    margin: 14mm;
+  }
+
+  .report-print-route .layout:has(.report-admin-shell) {
+    display: block;
+    min-height: 0;
+    background: #fff;
+  }
+
+  .report-print-route .layout:has(.report-admin-shell) .sidebar,
+  .report-print-route .notification-widget {
+    display: none !important;
+  }
+
+  .report-print-route .layout:has(.report-admin-shell) > .main {
+    min-width: 0;
+    padding: 0 !important;
+    background: #fff;
+  }
+
+  .report-print-route .app-shell {
+    min-height: 0;
+    background: #fff;
+  }
+
+  .app-shell .report-admin-shell {
+    min-height: 0;
+    background: #fff;
+    color: #111827;
+    page: admin-report;
+  }
+
+  .app-shell .report-admin-topbar {
+    display: none;
+  }
+
+  .app-shell .revenue-report-page {
+    gap: 12px;
+    padding: 0;
+    color: #111827;
+  }
+
+  .app-shell .report-print-header,
+  .app-shell .report-print-fallback,
+  .app-shell .report-print-note {
+    display: block;
+    color: #111827;
+  }
+
+  .app-shell .report-print-header {
+    margin-bottom: 4px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #9ca3af;
+  }
+
+  .app-shell .report-print-header > strong {
+    color: #0b2745;
+    font-size: 11pt;
+    letter-spacing: .08em;
+  }
+
+  .app-shell .report-print-header h1 {
+    margin: 7px 0 4px;
+    color: #111827;
+    font-size: 20pt;
+  }
+
+  .app-shell .report-print-header p,
+  .app-shell .report-print-note,
+  .app-shell .report-print-fallback {
+    margin: 0;
+    color: #374151;
+    font-size: 10pt;
+    line-height: 1.45;
+  }
+
+  .app-shell .report-print-note {
+    display: block;
+    padding: 10px 0 0;
+  }
+
+  .app-shell .revenue-report-page .page-intro,
+  .app-shell .revenue-page-actions,
+  .app-shell .revenue-filters,
+  .app-shell .revenue-chart-panel {
+    display: none !important;
+  }
+
+  .app-shell .revenue-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .app-shell .revenue-summary-grid .panel {
+    break-inside: avoid;
+    border: 1px solid #9ca3af;
+    border-radius: 3px;
+    background: #fff !important;
+    box-shadow: none;
+    color: #111827 !important;
+    padding: 10px;
+  }
+
+  .app-shell .revenue-summary-grid span,
+  .app-shell .revenue-summary-grid strong,
+  .app-shell .revenue-summary-grid small {
+    color: #111827 !important;
+    opacity: 1;
+  }
+
+  .app-shell .revenue-summary-grid strong {
+    font-size: 15pt;
+  }
+
+  .app-shell .revenue-footnote {
+    margin-top: 8px;
+    color: #374151;
+    font-size: 9pt;
+  }
+
+  .app-shell .report-print-header,
+  .app-shell .revenue-summary-grid .panel,
+  .app-shell .report-print-note,
+  .app-shell .revenue-footnote {
+    break-inside: avoid;
+  }
+}

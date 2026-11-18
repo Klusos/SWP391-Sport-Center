@@ -1,0 +1,71 @@
+@import url("https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap");
+
+/* Shared Public palette. Selectors are confined to the two public shells. */
+.lp,
+.public-site {
+  --sc-public-font-family: "Be Vietnam Pro", "Plus Jakarta Sans", Inter, system-ui, sans-serif;
+  --sc-public-page: #ffffff;
+  --sc-public-surface: #ffffff;
+  --sc-public-surface-muted: #f4f6fa;
+  --sc-public-text: #0b2746;
+  --sc-public-text-secondary: #4a5363;
+  --sc-public-text-muted: #788191;
+  --sc-public-border: rgba(10, 14, 22, .08);
+  --sc-public-border-strong: rgba(10, 14, 22, .15);
+  --sc-public-primary: #1769d2;
+  --sc-public-primary-hover: #1158b6;
+  --sc-public-cyan: #0bb5d8;
+  --sc-public-cyan-light: #65d3e8;
+  --sc-public-cyan-soft: #e6f6fc;
+  --sc-public-brand-navy: #0b2746;
+  --sc-public-nav: #ffffff;
+  --sc-public-footer: #0a0c10;
+  --sc-public-footer-text: #f3f5f9;
+  --sc-public-footer-muted: #aeb6c3;
+  --sc-public-footer-subtle: #929baa;
+  --sc-public-card-shadow: 0 8px 24px rgba(12, 24, 48, .07);
+  --sc-public-radius-card: 16px;
+  --sc-public-radius-control: 10px;
+  --sc-public-transition: 180ms ease;
+  color-scheme: light;
+}
+
+.lp[data-theme="dark"],
+.public-site[data-theme="dark"] {
+  --sc-public-page: #090b0f;
+  --sc-public-surface: #171c25;
+  --sc-public-surface-muted: #111318;
+  --sc-public-text: #f3f5f9;
+  --sc-public-text-secondary: #b8c0cc;
+  --sc-public-text-muted: #a3abba;
+  --sc-public-border: rgba(255, 255, 255, .08);
+  --sc-public-border-strong: rgba(255, 255, 255, .15);
+  --sc-public-primary: #4a9bf0;
+  --sc-public-primary-hover: #6caff5;
+  --sc-public-cyan: #55cbe8;
+  --sc-public-cyan-light: #77d8ee;
+  --sc-public-cyan-soft: #1b2a38;
+  --sc-public-brand-navy: #102540;
+  --sc-public-nav: #111318;
+  --sc-public-footer: #111318;
+  --sc-public-footer-text: #f3f5f9;
+  --sc-public-footer-muted: #b8c0cc;
+  --sc-public-footer-subtle: #a3abba;
+  --sc-public-card-shadow: 0 12px 30px rgba(0, 0, 0, .24);
+  color-scheme: dark;
+}
+
+.public-site {
+  background: var(--sc-public-page);
+  color: var(--sc-public-text);
+  font-family: var(--sc-public-font-family);
+  transition: background-color var(--sc-public-transition), color var(--sc-public-transition);
+}
+
+.sc-public-logo { --sc-public-logo-ink: #0a0c10; display: inline-flex; flex: 0 0 auto; }
+.public-site[data-theme="dark"] .sc-public-logo,
+.public-site .site-footer .sc-public-logo { --sc-public-logo-ink: #ffffff; }
+
+@media (prefers-reduced-motion: reduce) {
+  .public-site { transition: none; }
+}

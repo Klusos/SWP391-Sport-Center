@@ -36,13 +36,20 @@
   outline-offset: 2px;
 }
 
-.notification-bell i {
-  line-height: 1;
-  display: inline-block;
+.notification-bell-icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
   transition: transform 0.2s ease;
 }
 
-.notification-bell:hover i {
+.notification-bell:hover .notification-bell-icon {
   transform: scale(1.08);
 }
 
@@ -127,6 +134,13 @@
 .notification-panel-header > button:hover {
   background: #eaf2fb;
   color: #173e65;
+}
+.notification-panel-header > button:focus-visible,
+.notification-read-all:focus-visible,
+.notification-item:focus-visible,
+.notification-pagination button:focus-visible {
+  outline: 3px solid rgba(23, 105, 210, .32);
+  outline-offset: -2px;
 }
 
 .notification-read-all {
@@ -267,7 +281,6 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
-
 @media (max-width: 600px) {
   .notification-widget {
     top: 10px;
@@ -279,7 +292,7 @@
     font-size: 16px;
   }
   .notification-panel {
-    right: -2px;
+    right: 0;
     width: min(390px, calc(100vw - 20px));
     max-height: calc(100vh - 68px);
     border-radius: 14px;

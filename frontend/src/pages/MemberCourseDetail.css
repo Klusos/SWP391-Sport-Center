@@ -28,6 +28,48 @@
 .member-registration-confirm { margin-top: 16px; padding: 18px; border: 1px solid #bfd3e8; border-radius: var(--radius-sm); background: #f5f9fd; }
 .member-registration-confirm h3 { margin-top: 0; }
 .member-registration-confirm p { margin: 8px 0; }
+.member-registration-schedule { margin: 12px 0; padding: 12px; border: 1px solid #dce7f1; border-radius: 10px; background: #fff; }
+.member-registration-schedule-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; margin-bottom: 8px; }
+.member-registration-schedule-heading h4 { margin: 0; color: #173e64; font-size: 14px; font-weight: 750; }
+.member-registration-schedule-heading > span { color: #60758a; font-size: 12px; font-weight: 700; }
+.member-registration-schedule-table-wrap { width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+.member-registration-schedule-table { width: 100%; min-width: 390px; border-collapse: collapse; color: #344b62; font-size: 13px; }
+.member-registration-schedule-table th, .member-registration-schedule-table td { padding: 8px 10px; border-bottom: 1px solid #e7eef5; text-align: left; white-space: nowrap; }
+.member-registration-schedule-table th { background: #f4f8fc; color: #526b84; font-size: 11px; font-weight: 750; }
+.member-registration-schedule-table tbody tr:last-child td { border-bottom: 0; }
+.member-registration-schedule-table td:first-child { color: #245b89; font-weight: 750; }
+.member-registration-schedule-empty { margin: 0 !important; color: #718198; font-size: 13px; }
+.member-registration-weekly-summary,
+.member-registration-week-groups { display: grid; gap: 8px; }
+.member-registration-weekly-summary h5,
+.member-registration-week-groups h5,
+.member-registration-exception-weeks h5 { margin: 0; color: #294b6c; font-size: 13px; font-weight: 800; }
+.member-registration-weekday-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.member-registration-weekday-badges span { padding: 4px 9px; border: 1px solid #d4e5f5; border-radius: 999px; background: #edf5fc; color: #245b89; font-size: 12px; font-weight: 750; }
+.member-registration-common-time { margin: 0 !important; color: #173e64; font-size: 15px; font-weight: 800; }
+.member-registration-pattern-slots,
+.member-registration-week-groups ul,
+.member-registration-exception-weeks ul { display: grid; gap: 4px; margin: 0; padding: 0; color: #526b84; font-size: 12px; list-style: none; }
+.member-registration-date-range { margin: 0 !important; color: #60758a; font-size: 12px; }
+.member-registration-week-groups > section,
+.member-registration-exception-weeks > section,
+.member-registration-full-schedule > section { display: grid; gap: 6px; padding: 9px 0; border-top: 1px solid #e7eef5; }
+.member-registration-week-groups h6,
+.member-registration-exception-weeks h6,
+.member-registration-full-schedule h5 { margin: 0; color: #294b6c; font-size: 12px; font-weight: 750; }
+.member-registration-exception-weeks { display: grid; gap: 6px; margin-top: 10px; padding: 10px; border: 1px solid #eedcae; border-radius: 9px; background: #fffaf0; }
+.member-registration-exception-weeks > section { border-color: #f0e6cf; }
+.member-registration-exception-weeks p { margin: 0 !important; color: #735c2c; font-size: 12px; }
+.member-registration-schedule-toggle { min-height: 36px; padding: 7px 11px; border: 1px solid #cbdbea; border-radius: 8px; background: #fff; color: #245b89; font: inherit; font-size: 12px; font-weight: 750; cursor: pointer; }
+.member-registration-schedule-toggle:hover { border-color: #9db8d1; background: #f5f9fd; }
+.member-registration-schedule-toggle:focus-visible { outline: 3px solid rgb(23 110 217 / 28%); outline-offset: 2px; }
+.member-registration-full-schedule { margin-top: 8px; }
+.member-registration-full-schedule[hidden] { display: none; }
+.member-registration-full-schedule > section > p { margin: 0 !important; color: #718198; font-size: 12px; }
+@media (max-width: 650px) {
+  .member-registration-schedule { padding: 10px; }
+  .member-registration-schedule-table { min-width: 360px; }
+}
 .member-muted { color: var(--text-sub); font-size: 13px; line-height: 1.55; }
 .member-course-detail .course-registration-success a { display: inline-block; margin-top: 10px; }
 .member-course-history { margin-top: 28px; }

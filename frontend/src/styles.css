@@ -69,7 +69,25 @@ body {
 
 .login-card h1 {
   font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
   margin: 0 0 4px;
+}
+
+.login-card a {
+  color: var(--blue);
+  text-decoration: none;
+}
+
+.login-card a:hover {
+  color: var(--blue-dark);
+  text-decoration: underline;
+}
+
+.login-card a:focus-visible {
+  border-radius: 3px;
+  outline: 3px solid rgba(23, 105, 210, 0.35);
+  outline-offset: 3px;
 }
 
 .login-card p {
@@ -137,6 +155,24 @@ body {
   font-size: 12px;
   margin-top: 10px;
   min-height: 16px;
+}
+
+.global-auth-error {
+  position: fixed;
+  z-index: 1100;
+  top: 16px;
+  left: 50%;
+  width: min(560px, calc(100vw - 32px));
+  margin: 0;
+  padding: 12px 16px;
+  transform: translateX(-50%);
+  border: 1px solid #f3c2bd;
+  border-left: 4px solid #d92d20;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(20, 43, 69, 0.16);
+  color: #8f241b;
+  font-size: 14px;
 }
 
 /* ---------- APP SHELL ---------- */
@@ -514,16 +550,46 @@ body {
   min-height: 100vh;
 }
 
+/* Shared authenticated Portal header for non-Admin roles. Admin pages retain
+   their accepted page-owned Top Bar placement. */
+.layout:has(> .portal-topbar) {
+  display: grid;
+  grid-template-columns: 256px minmax(0, 1fr);
+  grid-template-rows: 64px minmax(0, 1fr);
+}
+.layout:has(> .portal-topbar--member) { grid-template-columns: 272px minmax(0, 1fr); }
+.layout:has(> .portal-topbar) > .portal-topbar { grid-column: 2; grid-row: 1; min-width: 0; }
+.layout:has(> .portal-topbar) > .sidebar { grid-column: 1; grid-row: 1 / span 2; width: 100%; height: 100vh; min-height: 0; }
+.layout:has(> .portal-topbar) > .main { grid-column: 2; grid-row: 2; min-width: 0; }
+.layout:has(> .portal-topbar) > .main > .rc-topbar { display: none; }
+.layout:has(> .portal-topbar--receptionist) .consultation-eyebrow,
+.layout:has(> .portal-topbar--receptionist) .member-list-eyebrow,
+.layout:has(> .portal-topbar--receptionist) .membership-sales-header .pt-eyebrow,
+.layout:has(> .portal-topbar--receptionist) .receptionist-registration-header > div > p:first-child,
+.layout:has(> .portal-topbar--receptionist) .cp-breadcrumb,
+.layout:has(> .portal-topbar--receptionist) .rc-eyebrow,
+.layout:has(> .portal-topbar--coach) .pt-header > div > .pt-eyebrow,
+.layout:has(> .portal-topbar--coach) .coach-attendance-header .pt-eyebrow,
+.layout:has(> .portal-topbar--coach) .coach-assessment-header .eyebrow,
+.layout:has(> .portal-topbar--coach) .rc-eyebrow,
+.layout:has(> .portal-topbar--member) .member-attendance-header > .eyebrow,
+.layout:has(> .portal-topbar--member) .member-courses-hero-copy > .member-courses-eyebrow,
+.layout:has(> .portal-topbar--member) .pt-main .pt-header-content > .pt-eyebrow,
+.layout:has(> .portal-topbar--member) .member-course-page-header > .eyebrow,
+.layout:has(> .portal-topbar--member) .mla-topbar-left > .mla-eyebrow-pill {
+  display: none;
+}
+
 .layout .sidebar {
   position: sticky;
   top: 0;
   width: 256px;
   height: 100vh;
-  min-height: 620px;
+  min-height: 0;
   padding: 28px 0 20px;
   background: linear-gradient(180deg, var(--navy) 0%, var(--navy-deep) 100%);
   box-shadow: var(--shadow-menu);
-  overflow-y: auto;
+  overflow: hidden;
   z-index: 10;
 }
 
@@ -544,7 +610,11 @@ body {
 
 .layout .sidebar nav {
   display: grid;
+  align-content: start;
   gap: 4px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .layout .sidebar .nav-item {
@@ -585,6 +655,27 @@ body {
   box-shadow: 0 5px 14px rgba(23, 105, 210, .32);
 }
 
+.layout .sidebar nav[aria-label="ADMIN navigation"] .admin-nav-item {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.layout .sidebar nav[aria-label="ADMIN navigation"] .admin-nav-icon {
+  width: 16px;
+  flex: 0 0 16px;
+  margin-top: 1px;
+  font-size: 15px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.layout .sidebar nav[aria-label="ADMIN navigation"] .admin-nav-label {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
 .layout .sidebar .admin-nav-group {
   min-width: 0;
   margin: 2px 8px 4px;
@@ -621,9 +712,13 @@ body {
 }
 
 .layout .sidebar .admin-nav-chevron {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  place-items: center;
   color: #a9c7e5;
-  font-size: 18px;
-  font-weight: 500;
+  font-size: 12px;
   line-height: 1;
 }
 
@@ -644,8 +739,29 @@ body {
   font-size: 13px;
 }
 
+.layout .sidebar nav[aria-label="ADMIN navigation"] > .nav-button {
+  min-height: 40px;
+  padding: 8px 16px;
+  border-left: 3px solid transparent;
+  color: var(--text-sidebar-sub);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: .08em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.layout .sidebar nav[aria-label="ADMIN navigation"] > .nav-button.active,
+.layout .sidebar nav[aria-label="ADMIN navigation"] > .nav-button.active:hover {
+  border-left-color: #4b9bf0;
+  background: rgba(255, 255, 255, .08);
+  color: #fff;
+}
+
 .layout .sidebar .nav-footer {
   padding: 0 12px;
+  flex: 0 0 auto;
 }
 
 .layout .sidebar .nav-footer .nav-item {
@@ -657,6 +773,7 @@ body {
   width: 100%;
   color: #e4effa;
 }
+
 
 .main {
   min-width: 0;
@@ -920,12 +1037,18 @@ legend {
 
 @media (max-width: 980px) {
   .layout .sidebar { width: 224px; }
+  .layout:has(> .portal-topbar) { grid-template-columns: 224px minmax(0, 1fr); }
+  .layout:has(> .portal-topbar--member) { grid-template-columns: 272px minmax(0, 1fr); }
   .main { padding: 30px 26px 42px; }
   .member-edit-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 700px) {
   .layout { display: block; }
+  .layout:has(> .portal-topbar) { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 64px minmax(0, 1fr); }
+  .layout:has(> .portal-topbar) > .sidebar { grid-column: 1; grid-row: 1; width: 100%; height: auto; min-height: 0; position: relative; }
+  .layout:has(> .portal-topbar) > .portal-topbar { grid-column: 1; grid-row: 2; }
+  .layout:has(> .portal-topbar) > .main { grid-column: 1; grid-row: 3; }
   .layout .sidebar {
     position: relative;
     width: 100%;
@@ -934,6 +1057,7 @@ legend {
     padding: 16px 12px;
     overflow: visible;
   }
+  .layout .sidebar nav { flex: 0 0 auto; min-height: auto; overflow: visible; }
   .layout .sidebar .brand { margin: 0 8px 14px; padding: 0 8px; }
   .layout .sidebar nav { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
   .layout .sidebar .nav-item,

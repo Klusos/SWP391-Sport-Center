@@ -1,28 +1,53 @@
 import { useState } from "react";
+import { useLocation } from "react-router-dom";
+import AdminTopBar from "./AdminTopBar.jsx";
+import { usePortalIdentity } from "./PortalIdentityContext.jsx";
+import { getPortalPageLabel, PORTAL_ROLE_PRESENTATION } from "./portalTopBarConfig.js";
 
-function Item({ page, activePage, onNavigate, children }) {
+function Item({ page, activePage, onNavigate, children, icon }) {
   return (
     <button
-      className={`nav-item clickable nav-button ${activePage === page ? "active" : ""}`}
+      className={`nav-item clickable nav-button ${icon ? "admin-nav-item " : ""}${activePage === page ? "active" : ""}`}
       aria-current={activePage === page ? "page" : undefined}
       type="button"
       onClick={() => onNavigate(page)}
     >
-      {children}
+      {icon && <i className={`bi ${icon} admin-nav-icon`} aria-hidden="true" />}
+      {icon ? <span className="admin-nav-label">{children}</span> : children}
     </button>
   );
 }
+const adminNavigationIcons = {
+  consultations: "bi-chat-dots",
+  "support-tickets": "bi-life-preserver",
+  "course-registration": "bi-journal-plus",
+  "admin-membership-sales": "bi-bag-check",
+  "course-payments": "bi-credit-card",
+  attendance: "bi-calendar-check",
+  "admin-training": "bi-clipboard2-pulse",
+  sports: "bi-trophy",
+  courses: "bi-journal-bookmark",
+  facilities: "bi-building",
+  "membership-plans": "bi-card-list",
+  members: "bi-people",
+  staff: "bi-person-badge",
+  reports: "bi-bar-chart-line",
+  "audit-logs": "bi-journal-text",
+  "notification-broadcast": "bi-megaphone-fill",
+};
 
 const adminGroups = [
   {
-    id: "oversight-exceptions",
-    title: "GIÁM SÁT & NGOẠI LỆ",
+    id: "operational-support",
+    title: "HỖ TRỢ VẬN HÀNH",
     pages: [
+      ["consultations", "Yêu cầu tư vấn"],
+      ["support-tickets", "Yêu cầu hỗ trợ"],
+      ["course-registration", "Đăng ký khóa học tại quầy"],
       ["admin-membership-sales", "Quản lý gói thành viên"],
-      ["course-payments", "Thanh toán khóa học"],
-      ["pt-payments", "Thanh toán PT"],
+      ["course-payments", "Thanh to\u00e1n kh\u00f3a h\u1ecdc & PT"],
       ["attendance", "Điểm danh lớp học"],
-      ["admin-training", "Quản lý tập luyện"],
+      ["admin-training", "Giám sát huấn luyện"],
     ],
   },
   {
@@ -37,11 +62,10 @@ const adminGroups = [
   },
   {
     id: "administration",
-    title: "Quản trị hệ thống",
+    title: "Quản trị hệ thống & báo cáo",
     pages: [
       ["members", "Thành viên"],
       ["staff", "Quản lý nhân sự"],
-      ["register", "Đăng ký thành viên"],
       ["reports", "Báo cáo và thống kê"],
       ["audit-logs", "Audit Logs"],
       ["notification-broadcast", "Gửi thông báo"],
@@ -54,12 +78,13 @@ const adminPageByGroup = new Map(
 );
 
 function AdminNavigation({ activePage, onNavigate }) {
-  const activeAdminGroup = adminPageByGroup.get(activePage);
+  const navigationActivePage = activePage === "pt-payments" ? "course-payments" : activePage;
+  const activeAdminGroup = adminPageByGroup.get(navigationActivePage);
   const [expandedAdminGroup, setExpandedAdminGroup] = useState(activeAdminGroup);
 
   return (
     <>
-      <Item page="dashboard" activePage={activePage} onNavigate={onNavigate}>
+      <Item page="dashboard" activePage={navigationActivePage} onNavigate={onNavigate}>
         Tổng quan
       </Item>
       {adminGroups.map((group) => {
@@ -74,7 +99,7 @@ function AdminNavigation({ activePage, onNavigate }) {
               onClick={() => setExpandedAdminGroup(expanded ? null : group.id)}
             >
               <span>{group.title}</span>
-              <span className="admin-nav-chevron" aria-hidden="true">{expanded ? "−" : "+"}</span>
+              <i className={`bi ${expanded ? "bi-chevron-down" : "bi-chevron-right"} admin-nav-chevron`} aria-hidden="true" />
             </button>
             <div
               className="admin-nav-group-items"
@@ -82,7 +107,7 @@ function AdminNavigation({ activePage, onNavigate }) {
               hidden={!expanded}
             >
               {group.pages.map(([page, text]) => (
-                <Item key={page} page={page} activePage={activePage} onNavigate={onNavigate}>
+                <Item key={page} page={page} activePage={navigationActivePage} onNavigate={onNavigate} icon={adminNavigationIcons[page]}>
                   {text}
                 </Item>
               ))}
@@ -95,6 +120,9 @@ function AdminNavigation({ activePage, onNavigate }) {
 }
 
 export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
+  const { pathname } = useLocation();
+  const { currentUserName } = usePortalIdentity();
+  const portalRole = PORTAL_ROLE_PRESENTATION[role];
   const memberLinks = [
     ["dashboard", "Tổng quan"],
     ["member-courses", "Khóa học"],
@@ -131,18 +159,14 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
     ["course-payments", "Thanh toán khóa học"],
     ["pt-payments", "Thanh toán PT"],
     ["course-registration", "Đăng ký khóa học tại quầy"],
-    ["support-tickets", "Yêu cầu hỗ trợ"],
     ["attendance", "Điểm danh lớp học"],
     ["staff", "Quản lý nhân sự"],
     ["sports", "Quản lý bộ môn"],
     ["courses", "Quản lý khóa học"],
     ["facilities", "Quản lý cơ sở vật chất"],
     ["notification-broadcast", "Gửi thông báo"],
-    ["admin-training", "Quản lý tập luyện"],
     ["admin-membership-sales", "Quản lý gói thành viên"],
     ["audit-logs", "Audit Logs"],
-    ["register", "Đăng ký thành viên"],
-    ["consultations", "Yêu cầu tư vấn"],
   ];
   const links = role === "MEMBER"
     ? memberLinks
@@ -160,6 +184,15 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
         : "Thành viên";
 
   return (
+    <>
+    {portalRole && <AdminTopBar
+      pageLabel={getPortalPageLabel(pathname)}
+      displayName={currentUserName}
+      avatarName={currentUserName}
+      roleLabel={portalRole.account}
+      breadcrumbRoleLabel={portalRole.breadcrumb}
+      className={`portal-topbar portal-topbar--${role.toLowerCase()}`}
+    />}
     <aside className="sidebar">
       <div className="brand"><strong>SPORTS CENTER</strong><span>{label}</span></div>
       <nav aria-label={`${role} navigation`}>
@@ -178,10 +211,11 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
         )}
       </nav>
       <div className="nav-footer">
-        <button className="nav-item clickable logout-button" type="button" onClick={onLogout}>
+        <button className="nav-item clickable logout-button" type="button" onClick={() => onLogout?.()}>
           Đăng xuất
         </button>
       </div>
     </aside>
+    </>
   );
 }

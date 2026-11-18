@@ -2,53 +2,63 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import PageHero from '../components/PageHero.jsx'
 import Img from '../components/Img.jsx'
-import { getPublicCoursesBySportApi, getPublicSportsApi } from '../../api.js'
+import { getPublicCoursesBySportApi, getPublicSportsApi, resolveImageUrl } from '../../api.js'
+import { courseAgePolicyLabel } from '../../courseAgeEligibility.js'
 import { formatSportIndex } from './disciplinePresentation.js'
+import { getCourseStateForSport, requestCoursesForSport } from './disciplineCourseRequest.js'
+import PublicConsultationCta from '../components/PublicConsultationCta.jsx'
 import './Disciplines.css'
 export default function Disciplines() {
   const { sportId } = useParams()
   const [sports, setSports] = useState([])
-  const [courses, setCourses] = useState([])
+  const [courseState, setCourseState] = useState({ sportId: null, status: 'idle', courses: [], error: '' })
   const [sportLoading, setSportLoading] = useState(true)
-  const [courseLoading, setCourseLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [sportError, setSportError] = useState('')
   useEffect(() => {
     let active = true
     getPublicSportsApi().then((rows) => { if (active) setSports(Array.isArray(rows) ? rows : []) })
-      .catch((err) => { if (active) setError(err.message || 'Không tải được danh sách bộ môn.') })
+      .catch((err) => { if (active) setSportError(err.message || 'Không tải được danh sách bộ môn.') })
       .finally(() => { if (active) setSportLoading(false) })
     return () => { active = false }
   }, [])
   useEffect(() => {
     if (!sportId) return undefined
-    let active = true
-    Promise.resolve().then(() => { if (active) setCourseLoading(true); return getPublicCoursesBySportApi(sportId) }).then((rows) => { if (active) setCourses(Array.isArray(rows) ? rows : []) })
-      .catch((err) => { if (active) setError(err.message || 'Không tải được khóa học.') })
-      .finally(() => { if (active) setCourseLoading(false) })
-    return () => { active = false }
+    return requestCoursesForSport(sportId, getPublicCoursesBySportApi, setCourseState)
   }, [sportId])
   const selectedSport = sports.find((sport) => String(sport.id) === sportId)
-  return <div className="disciplines-page">
-    <PageHero title={sportId ? (selectedSport?.name || 'KHÓA HỌC') : 'BỘ MÔN'}
+  const routeCourseState = getCourseStateForSport(sportId, courseState)
+  return <div className={`disciplines-page${sportId ? ' sport-detail-page' : ''}`}>
+    <PageHero title={sportId ? (selectedSport?.name || 'Bộ môn') : 'BỘ MÔN'}
       subtitle={sportId ? 'Các khóa học hiện có thuộc bộ môn đã chọn.' : 'Chọn môn thể thao để xem các khóa học đang mở.'}
-      image="/images/disciplines-hero.png" />
-    <section className="section disciplines-section"><div className="container-xl disciplines-content">
-      {sportId && <p className="disciplines-back"><Link to="/bo-mon" className="link-arrow">← Tất cả bộ môn</Link></p>}
-      <div className="disciplines-heading"><div><span className="disciplines-eyebrow">SPORTS CENTER</span>
-        <h2>{sportId ? `Khám phá khóa học${selectedSport?.name ? ` · ${selectedSport.name}` : ''}` : 'Khám phá các bộ môn'}</h2>
+      image={sportId ? resolveImageUrl(selectedSport?.imageUrl) || '/images/disciplines-hero.png' : '/images/disciplines-hero.png'}
+      showBrand={!sportId} />
+    <section className="section disciplines-section public-page-content-with-cta"><div className="container-xl disciplines-content">
+      {sportId && <p className="disciplines-back"><Link to="/bo-mon" className="link-arrow">
+        <span className="disciplines-back-icon" aria-hidden="true">←</span><span>Tất cả bộ môn</span>
+      </Link></p>}
+      <div className={`disciplines-heading${sportId ? ' disciplines-heading-detail' : ''}`}><div>{!sportId && <span className="disciplines-eyebrow">SPORTS CENTER</span>}
+        <h2>{sportId ? 'Khóa học hiện có' : 'Khám phá các bộ môn'}</h2>
         <p>{sportId ? 'Chọn chương trình phù hợp với trình độ và mục tiêu luyện tập của bạn.' : 'Chọn một bộ môn để xem các chương trình và khóa học hiện có.'}</p></div>
-        {!sportId && !sportLoading && !error && <span className="disciplines-count">{sports.length}<small>bộ môn</small></span>}
-        {sportId && !courseLoading && courses.length > 0 && <span className="disciplines-count">{courses.length}<small>khóa học</small></span>}
+        {!sportId && !sportLoading && !sportError && <span className="disciplines-count">{sports.length}<small>bộ môn</small></span>}
+        {sportId && routeCourseState.status === 'success' && <span className="disciplines-count">{routeCourseState.courses.length}<small>khóa học</small></span>}
       </div>
-      {error && <p className="banner error disciplines-error" role="alert">{error}</p>}
-      {sportId ? (courseLoading ? <p className="disciplines-state" role="status">Đang tải khóa học…</p> : courses.length === 0
-        ? <p className="disciplines-state disciplines-empty">Chưa có khóa học đang hoạt động cho bộ môn này.</p>
-        : <div className="row g-4 disciplines-grid">{courses.map((course) => <div className="col-md-6 col-lg-4 disciplines-grid-item" key={course.id}>
-          <article className="sport-card h-100 disciplines-course-card"><div><span className="sport-badge">{course.level || 'COURSE'}</span>
-            <h3>{course.name}</h3><p className="muted small">{course.description || course.learningOutcome || 'Thông tin chi tiết khóa học.'}</p>
-            <Link to={'/khoa-hoc/' + course.id} className="link-arrow">Xem chi tiết <i className="bi bi-arrow-right" /></Link>
-          </div></article></div>)}</div>)
-        : sportLoading ? <p className="disciplines-state" role="status">Đang tải bộ môn…</p> : sports.length === 0
+      {sportId ? (routeCourseState.status === 'loading' ? <p className="disciplines-state" role="status">Đang tải khóa học…</p>
+        : routeCourseState.status === 'error' ? <p className="banner error disciplines-error" role="alert">{routeCourseState.error}</p>
+          : routeCourseState.status === 'empty' ? <p className="disciplines-state disciplines-empty">Chưa có khóa học đang hoạt động cho bộ môn này.</p>
+            : <div className="disciplines-grid disciplines-course-grid" data-count={routeCourseState.courses.length}>{routeCourseState.courses.map((course) => <article className="disciplines-course-card" key={course.id}>
+          <div className="disciplines-course-card-content">
+            <h3>{course.name}</h3>
+            {course.level && <p className="disciplines-course-meta">Trình độ: {course.level}</p>}
+            {course.description
+              ? <p>{course.description}</p>
+              : course.learningOutcome && <p><span className="disciplines-course-outcome-label">Kết quả mong đợi:</span> {course.learningOutcome}</p>}
+            {(course.targetAgeMin != null || course.targetAgeMax != null) && <p className="disciplines-course-meta">
+              {courseAgePolicyLabel(course)}: {course.targetAgeMin ?? 'Không giới hạn'} – {course.targetAgeMax ?? 'Không giới hạn'} tuổi
+            </p>}
+          </div>
+          <Link to={`/khoa-hoc/${course.id}`} className="disciplines-course-action">Xem chi tiết <span aria-hidden="true">→</span></Link>
+        </article>)}</div>)
+        : sportLoading ? <p className="disciplines-state" role="status">Đang tải bộ môn…</p> : sportError ? <p className="banner error disciplines-error" role="alert">{sportError}</p> : sports.length === 0
           ? <p className="disciplines-state disciplines-empty">Hiện chưa có bộ môn nào đang hoạt động.</p>
           : <div className="disciplines-grid">{sports.map((sport, index) => <Link
             key={sport.id}
@@ -69,5 +79,6 @@ export default function Disciplines() {
             </div>
           </Link>)}</div>}
     </div></section>
+    <PublicConsultationCta eyebrow="Tư vấn ghi danh" title="Bạn đã tìm được bộ môn phù hợp?" description="Xem các lựa chọn ghi danh và gửi yêu cầu tư vấn tại Sport Center." />
   </div>
 }

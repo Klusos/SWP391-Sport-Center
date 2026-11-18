@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
+import AdminTopBar from "../components/AdminTopBar";
 import { getPendingCoursePaymentsApi, getMemberPaymentsApi, processCounterPaymentApi } from "../api";
 import { canViewCoursePayments, coursePaymentExpired, coursePaymentMoney, coursePaymentTime, createCoursePaymentQueue } from "../coursePaymentQueue";
 import ReceptionistRefundQueue from "../components/ReceptionistRefundQueue.jsx";
@@ -28,7 +29,8 @@ function getInitials(name) {
 const AVATAR_TONES = ["tone-blue", "tone-orange", "tone-emerald", "tone-indigo"];
 const EMPTY_ROWS = [];
 
-export default function ReceptionistCoursePayments({ token, role, userId, onNavigate, onLogout }) {
+export default function ReceptionistCoursePayments({ token, role, userId, currentUserName, onNavigate, onLogout }) {
+  const isAdmin = role === "ADMIN";
   const [queue, setQueue] = useState({ loading: true, data: null, page: 0, error: "" });
   const [searchParams] = useSearchParams();
   const paymentTarget = useMemo(() => searchParams.has("paymentId")
@@ -164,16 +166,10 @@ export default function ReceptionistCoursePayments({ token, role, userId, onNavi
   return (
     <div className="layout">
       <Sidebar role={role} activePage="course-payments" onNavigate={onNavigate} onLogout={onLogout} />
-      <main className="main course-payment-queue">
-        {/* Top Utility Bar */}
-        <div className="cp-topbar">
-          <div className="cp-breadcrumb">
-            <span>SPORTCENTER</span>
-            <span className="cp-sep">/</span>
-            <span>QUẦY LỄ TÂN</span>
-            <span className="cp-sep">/</span>
-            <span className="cp-active-crumb">THU TIỀN TẠI QUẦY</span>
-          </div>
+      <main className={`main course-payment-queue${isAdmin ? " course-payment-queue--admin" : ""}`}>
+        {isAdmin && <AdminTopBar pageLabel="THANH TOÁN KHÓA HỌC" displayName={currentUserName} avatarName={currentUserName} />}
+        {/* Keep the accepted Admin clock row; Receptionist uses the page header below. */}
+        {isAdmin && <div className="cp-topbar cp-topbar--admin">
           <div className="cp-topbar-right">
             <div className="cp-clock-pill">
               <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -182,10 +178,9 @@ export default function ReceptionistCoursePayments({ token, role, userId, onNavi
               <span>{liveClockLabel}</span>
             </div>
           </div>
+        </div>}
 
-        </div>
-
-        <div className="cp-body">
+        <div className={`cp-body${isAdmin ? " cp-body--admin" : ""}`}>
           {/* Header Section */}
           <header className="cp-hero-header">
             <div className="cp-hero-titles">
@@ -198,6 +193,12 @@ export default function ReceptionistCoursePayments({ token, role, userId, onNavi
               </p>
             </div>
             <div className="cp-header-actions">
+              {!isAdmin && <div className="cp-clock-pill cp-header-clock" aria-label="Giờ Việt Nam">
+                <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                </svg>
+                <span>{liveClockLabel}</span>
+              </div>}
               <button
                 type="button"
                 className="cp-btn-refresh"

@@ -98,4 +98,7 @@ test("Membership page uses scoped responsive light-theme styles", () => {
   assert.match(css, /\.member-membership-page button:focus-visible/);
   assert.match(css, /\.membership-overview-grid\s*\{[\s\S]*?grid-template-columns: minmax\(0, 1\.25fr\) minmax\(280px, \.85fr\)/);
   assert.match(css, /\.membership-current-entry-heading/);
+  assert.match(css, /\.member-membership-page > \.member-membership-header\s*\{[^}]*padding-right: 58px/);
+  assert.match(css, /prefers-reduced-motion: reduce/);
+  assert.match(css, /\.membership-plan-card:hover/);
 });

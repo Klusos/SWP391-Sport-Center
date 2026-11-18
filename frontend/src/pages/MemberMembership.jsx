@@ -61,7 +61,6 @@ export default function MemberMembership({
   onLogout,
   onNavigate,
 }) {
-  const [currentUser, setCurrentUser] = useState(null);
   const [plans, setPlans] = useState(null);
   const [memberships, setMemberships] = useState(null);
   const [payments, setPayments] = useState(null);
@@ -95,7 +94,6 @@ export default function MemberMembership({
         getCurrentUserApi(token),
         getPublicMembershipPlansApi(),
       ]);
-      setCurrentUser(user);
       const [ownMemberships, ownPayments, upgradeOptions, ownRequests] =
         await Promise.all([
           getMembershipsByMemberApi(token, user.id),

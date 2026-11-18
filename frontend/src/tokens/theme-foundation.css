@@ -1,0 +1,71 @@
+/*
+ * Application theme tokens. New and migrated surfaces should consume these
+ * semantic variables instead of selecting colors by role or route. Existing
+ * portal pages remain on their current Light styles until converted.
+ */
+:root,
+:root[data-theme="light"] {
+  --sc-theme-page: #f3f7fc;
+  --sc-theme-surface: #ffffff;
+  --sc-theme-surface-elevated: #ffffff;
+  --sc-theme-sidebar: #0b2745;
+  --sc-theme-text: #172b43;
+  --sc-theme-text-secondary: #5b6e82;
+  --sc-theme-text-muted: #718096;
+  --sc-theme-text-inverse: #ffffff;
+  --sc-theme-border: #d8e2ee;
+  --sc-theme-border-subtle: #e8eef5;
+  --sc-theme-shadow: 0 8px 24px rgba(21, 50, 82, 0.07);
+  --sc-theme-focus: 0 0 0 3px rgba(23, 105, 210, 0.22);
+  --sc-theme-action: #1769d2;
+  --sc-theme-action-hover: #1258b2;
+  --sc-theme-action-secondary: #eaf3ff;
+  --sc-theme-action-secondary-hover: #dcecff;
+  --sc-theme-disabled: #e8edf3;
+  --sc-theme-input: #ffffff;
+  --sc-theme-input-border: #d8e2ee;
+  --sc-theme-input-text: #172b43;
+  --sc-theme-placeholder: #718096;
+  --sc-theme-success: #176b43;
+  --sc-theme-warning: #805b00;
+  --sc-theme-error: #a52b2b;
+  --sc-theme-info: #1769d2;
+  --sc-theme-table-header: #f3f7fc;
+  --sc-theme-table-row-hover: #f6f9fd;
+  --sc-theme-modal: #ffffff;
+  --sc-theme-overlay: rgb(7 27 50 / 48%);
+  --sc-theme-tooltip: #071b32;
+}
+
+:root[data-theme="dark"] {
+  --sc-theme-page: #111720;
+  --sc-theme-surface: #192331;
+  --sc-theme-surface-elevated: #202c3b;
+  --sc-theme-sidebar: #071b32;
+  --sc-theme-text: #edf3fa;
+  --sc-theme-text-secondary: #c0ccda;
+  --sc-theme-text-muted: #9aaabd;
+  --sc-theme-text-inverse: #ffffff;
+  --sc-theme-border: #344357;
+  --sc-theme-border-subtle: #293749;
+  --sc-theme-shadow: 0 10px 28px rgb(0 0 0 / 28%);
+  --sc-theme-focus: 0 0 0 3px rgb(89 161 242 / 38%);
+  --sc-theme-action: #4b9bf0;
+  --sc-theme-action-hover: #70b1f5;
+  --sc-theme-action-secondary: #21354b;
+  --sc-theme-action-secondary-hover: #2a415b;
+  --sc-theme-disabled: #2b3746;
+  --sc-theme-input: #151e2a;
+  --sc-theme-input-border: #405168;
+  --sc-theme-input-text: #edf3fa;
+  --sc-theme-placeholder: #9aaabd;
+  --sc-theme-success: #54c890;
+  --sc-theme-warning: #f0c65d;
+  --sc-theme-error: #ff8e86;
+  --sc-theme-info: #75b8ff;
+  --sc-theme-table-header: #202c3b;
+  --sc-theme-table-row-hover: #202e40;
+  --sc-theme-modal: #192331;
+  --sc-theme-overlay: rgb(0 0 0 / 64%);
+  --sc-theme-tooltip: #07111d;
+}

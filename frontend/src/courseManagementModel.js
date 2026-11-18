@@ -77,11 +77,68 @@ export function filterCourseClasses(classes, { search = "", status = "" } = {}) 
     .sort((left, right) => String(left.name || "").localeCompare(String(right.name || ""), "vi-VN"));
 }
 
-export function filterClassSessions(sessions, { status = "" } = {}) {
+export function classSessionVietnamDate(value) {
+  if (typeof value !== "string" || !value) return "";
+  const localMatch = /^(\d{4}-\d{2}-\d{2})T\d{2}:\d{2}/.exec(value);
+  if (localMatch && !/(?:Z|[+-]\d{2}:?\d{2})$/i.test(value)) {
+    const [, year, month, day] = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localMatch[1]) || [];
+    const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+    if (date.getUTCFullYear() !== Number(year) || date.getUTCMonth() !== Number(month) - 1
+      || date.getUTCDate() !== Number(day)) return "";
+    return localMatch[1];
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(({ type, value: part }) => [type, part]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+export function formatClassSessionDate(value) {
+  const date = classSessionVietnamDate(value);
+  if (!date) return "—";
+  const [, year, month, day] = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date) || [];
+  return year ? `${day}/${month}/${year}` : "—";
+}
+
+export function formatClassSessionTime(value) {
+  if (typeof value !== "string" || !value) return "—";
+  if (!classSessionVietnamDate(value)) return "—";
+  const localMatch = /T(\d{2}):(\d{2})/.exec(value);
+  if (localMatch && !/(?:Z|[+-]\d{2}:?\d{2})$/i.test(value)) {
+    const hour = Number(localMatch[1]);
+    const minute = Number(localMatch[2]);
+    return hour <= 23 && minute <= 59 ? `${localMatch[1]}:${localMatch[2]}` : "—";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).format(date);
+}
+
+function classSessionTimestamp(value) {
+  if (typeof value !== "string" || !value) return Number.POSITIVE_INFINITY;
+  const localMatch = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?)$/.exec(value);
+  const timestamp = localMatch
+    ? Date.parse(`${localMatch[1].replace(/\.(\d{3})\d+$/, ".$1")}+07:00`)
+    : Date.parse(value);
+  return Number.isNaN(timestamp) ? Number.POSITIVE_INFINITY : timestamp;
+}
+
+export function filterClassSessions(sessions, { status = "", startDate = "", endDate = "", sort = "ASC" } = {}) {
+  const direction = String(sort).toUpperCase() === "DESC" ? -1 : 1;
   return (Array.isArray(sessions) ? sessions : [])
     .filter((session) => !status || String(session.status || "").toUpperCase() === status.toUpperCase())
-    .sort((left, right) => String(left.startTime || "").localeCompare(String(right.startTime || ""))
-      || Number(left.id || 0) - Number(right.id || 0));
+    .filter((session) => {
+      const date = classSessionVietnamDate(session.startTime);
+      if ((startDate || endDate) && !date) return false;
+      return (!startDate || date >= startDate) && (!endDate || date <= endDate);
+    })
+    .sort((left, right) => direction * (classSessionTimestamp(left.startTime) - classSessionTimestamp(right.startTime))
+      || direction * (Number(left.id || 0) - Number(right.id || 0)));
 }
 
 export function paginateItems(items, page = 0, pageSize = 10) {

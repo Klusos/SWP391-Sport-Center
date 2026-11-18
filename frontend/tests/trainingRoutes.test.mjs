@@ -13,5 +13,13 @@ test("Training routes use the existing role guards and role-specific navigation"
     assert.ok(app.includes(routeMarker), route + " exists");
     assert.ok(app.indexOf(guardMarker) < app.indexOf(routeMarker), route + " is below " + guard);
   }
-  for (const key of ["member-training", "coach-training", "admin-training"]) assert.ok(sidebar.includes(key));
+  assert.ok(sidebar.includes("member-training"));
+  assert.ok(sidebar.includes("coach-training"));
+  const adminGroups = sidebar.match(/const adminGroups\s*=\s*\[([\s\S]*?)\n\];/)?.[1];
+  assert.ok(adminGroups);
+  assert.match(adminGroups, /\["admin-training", "Giám sát huấn luyện"\]/);
+  assert.equal((adminGroups.match(/\["admin-training"/g) || []).length, 1);
+  assert.match(app, /path="\/admin\/training" element=\{<CoachTraining \{\.\.\.staff\} \/>\}/);
+  const layout = await read("components/Layout.jsx");
+  assert.match(layout, /"\/admin\/training": "admin-training"/);
 });

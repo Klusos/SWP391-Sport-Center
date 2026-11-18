@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
+import AdminTopBar from "../components/AdminTopBar";
 import {
   createPaymentApi, createStaffCourseRegistrationApi, getAllCourseRegistrationsApi,
   getClassesByOfferingApi, getCourseOfferingsByCourseApi, getCoursesBySportApi,
@@ -15,7 +16,8 @@ const list = (data) => Array.isArray(data) ? data : data?.content ?? [];
 const money = (value) => value == null ? "—" : `${Number(value).toLocaleString("vi-VN")} ₫`;
 const isStaff = (role) => ["ADMIN", "RECEPTIONIST"].includes(String(role || "").toUpperCase());
 
-export default function ReceptionistCourseRegistration({ token, role, onLogout, onNavigate }) {
+export default function ReceptionistCourseRegistration({ token, role, currentUserName, onLogout, onNavigate }) {
+  const isAdmin = String(role || "").toUpperCase() === "ADMIN";
   const navigate = useNavigate();
   const [members, setMembers] = useState([]), [sports, setSports] = useState([]);
   const [courses, setCourses] = useState([]), [offerings, setOfferings] = useState([]), [classes, setClasses] = useState([]);
@@ -163,16 +165,18 @@ export default function ReceptionistCourseRegistration({ token, role, onLogout, 
   if (!isStaff(role)) return <Navigate to="/" replace />;
 
   return <div className="layout"><Sidebar role={role} activePage="course-registration" onNavigate={onNavigate} onLogout={onLogout} />
-    <main className="main receptionist-registration">
-      <header className="receptionist-registration-header"><div><p>SPORTCENTER / TIẾP NHẬN HỘI VIÊN</p><h1>Đăng ký khóa học tại quầy</h1><p className="subtitle">Tạo giữ chỗ cho thành viên; chỉ xác nhận lớp khi máy chủ ghi nhận thanh toán thành công.</p></div>
+    <main className={`main receptionist-registration${isAdmin ? " receptionist-registration--admin" : ""}`}>
+      {isAdmin && <AdminTopBar pageLabel="ĐĂNG KÝ KHÓA HỌC" displayName={currentUserName} avatarName={currentUserName} />}
+      <div className={`receptionist-registration-content${isAdmin ? " receptionist-registration-content--admin" : ""}`}>
+      <header className="receptionist-registration-header"><div><h1>Đăng ký khóa học tại quầy</h1><p className="subtitle">Tạo giữ chỗ cho thành viên; chỉ xác nhận lớp khi máy chủ ghi nhận thanh toán thành công.</p></div>
         <button type="button" disabled={loading || busy} onClick={() => { setLoading(true); setError(""); refreshAll().catch((e) => setError(e.message || "Không làm mới được dữ liệu.")).finally(() => setLoading(false)); if (memberId) void refreshMember(memberId); }}>Làm mới</button></header>
       {error && <p className="banner error" role="alert">{error}</p>}{notice && <p className="banner info" role="status">{notice}</p>}
       {loading ? <p role="status">Đang tải dữ liệu…</p> : <>
-      <section className="dash-card receptionist-step"><h2>1. Tìm thành viên</h2><label htmlFor="receptionist-member-search">Tên, email hoặc mã thành viên</label><input id="receptionist-member-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm hội viên đang hoạt động" />
+      <section className="dash-card receptionist-step">{isAdmin ? <h2>1. Tìm thành viên</h2> : <div className="receptionist-step-heading"><span className="receptionist-step-number">01</span><span className="receptionist-step-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="8" r="3" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0" /><circle cx="17" cy="16" r="3" /><path d="m19.2 18.2 2.3 2.3" /></svg></span><div><h2>Tìm thành viên</h2><p>Tìm theo tên, email hoặc mã thành viên để bắt đầu đăng ký.</p></div></div>}<label htmlFor="receptionist-member-search">Tên, email hoặc mã thành viên</label><input id="receptionist-member-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm hội viên đang hoạt động" />
           <label htmlFor="receptionist-member">Chọn thành viên</label><select id="receptionist-member" value={memberId} disabled={busy} onChange={(event) => { memberRequest.current++; setMemberId(event.target.value); setMemberLoading(false); setMemberRegistrations([]); setPayments([]); setMemberships([]); setLevels([]); setUncertainRegistrationId(null); setNotice(""); }}><option value="">Chọn thành viên…</option>{visibleMembers.map((member) => <option key={member.id} value={member.id}>{member.name} · #{member.id} · {member.email}</option>)}</select>
           {selectedMember && <p className="receptionist-selected">Đang phục vụ: <strong>{selectedMember.name}</strong> · #{selectedMember.id} · {selectedMember.email}</p>}
         </section>
-        <section className="dash-card receptionist-step"><h2>2. Chọn Sport → Course → Offering → Class</h2><div className="receptionist-course-selects">
+        <section className="dash-card receptionist-step">{isAdmin ? <h2>2. Chọn Sport → Course → Offering → Class</h2> : <div className="receptionist-step-heading"><span className="receptionist-step-number">02</span><span className="receptionist-step-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 5.5A2.5 2.5 0 0 1 5.5 3H21v17H5.5A2.5 2.5 0 0 1 3 17.5z" /><path d="M3 5.5v12A2.5 2.5 0 0 1 5.5 15H21M8 7h9M8 10h7" /></svg></span><div><h2>Chọn khóa học và lớp</h2><p>Bộ môn → Khóa học → Đợt mở lớp → Lớp</p></div></div>}<div className="receptionist-course-selects">
           <label>Sport<select value={sportId} onChange={(event) => { setSportId(event.target.value); setCourseId(""); setOfferingId(""); setClassId(""); }}><option value="">Chọn Sport…</option>{sports.map((sport) => <option key={sport.id} value={sport.id}>{sport.name}</option>)}</select></label>
           <label>Course<select value={courseId} disabled={!sportId} onChange={(event) => { setCourseId(event.target.value); setOfferingId(""); setClassId(""); }}><option value="">Chọn Course…</option>{courses.map((course) => <option key={course.id} value={course.id}>{course.name}</option>)}</select></label>
           <label>Offering<select value={offeringId} disabled={!courseId} onChange={(event) => { setOfferingId(event.target.value); setClassId(""); }}><option value="">Chọn Offering…</option>{offerings.map((offering) => <option key={offering.id} value={offering.id}>{offering.name} · {money(offering.price)}</option>)}</select></label>
@@ -189,7 +193,7 @@ export default function ReceptionistCourseRegistration({ token, role, onLogout, 
           </div>}
         </section>
 
-        <section className="dash-card receptionist-step"><h2>3. Đăng ký đang chờ của thành viên</h2>
+        <section className="dash-card receptionist-step">{isAdmin ? <h2>3. Đăng ký đang chờ của thành viên</h2> : <div className="receptionist-step-heading"><span className="receptionist-step-number">03</span><span className="receptionist-step-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4.5h6v3H9zM8.5 13l2.2 2.2 4.8-5" /></svg></span><div><h2>Đăng ký đang chờ của thành viên</h2><p>Kiểm tra trạng thái giữ chỗ và tiếp tục thanh toán khi cần.</p></div></div>}
           {!selectedMember ? <p>Chọn thành viên để xem các giữ chỗ còn chờ và tiếp tục thanh toán.</p> : memberLoading ? <p role="status">Đang tải đăng ký và thanh toán…</p>
             : matchingPending.length === 0 ? <p className="dash-empty">Thành viên không có đăng ký PENDING_PAYMENT nào.</p>
               : <div className="receptionist-pending-list">{matchingPending.map((registration) => {
@@ -207,10 +211,11 @@ export default function ReceptionistCourseRegistration({ token, role, onLogout, 
                       : <button type="button" disabled={busy || expired} onClick={() => uncertainRegistrationId === registration.id ? void refreshMember(selectedMember.id) : void createOrReusePayment(registration)}>{expired ? "Giữ chỗ có thể đã hết hạn" : uncertainRegistrationId === registration.id ? "Làm mới để kiểm tra thanh toán" : "Tạo / tiếp tục yêu cầu COUNTER"}</button>}
                 </article>;
               })}</div>}
-          <p className="subtitle">Giữ chỗ chưa thanh toán tự hết hạn theo hạn hiển thị. Nếu đã nhận tiền sau hạn, chỉ ghi nhận khi tiền thực sự được nhận; máy chủ có thể trả REFUND_REQUIRED và không khôi phục chỗ.</p>
+          <aside className="receptionist-pending-guidance" aria-label="Lưu ý về giữ chỗ và thanh toán"><i className="bi bi-info-circle" aria-hidden="true" /><p>Giữ chỗ chờ thanh toán có thể hết hạn theo thời hạn hiển thị. Nếu nhận thanh toán sau khi hết hạn, chỉ xác nhận khi đã thực sự nhận tiền; giao dịch có thể chuyển thành REFUND_REQUIRED. Giữ chỗ đã hết hạn không được tự động khôi phục.</p></aside>
           {payments.some((payment) => payment.purpose === "COURSE_REGISTRATION" && payment.status === "REFUND_REQUIRED") && <div className="receptionist-refund-alert" role="alert"><strong>Cần đối soát thanh toán</strong><ul>{payments.filter((payment) => payment.purpose === "COURSE_REGISTRATION" && payment.status === "REFUND_REQUIRED").map((payment) => <li key={payment.id}>Thanh toán #{payment.id} · {money(payment.amount)} · đăng ký #{payment.referenceId}. Liên hệ người phụ trách để xử lý hoàn tiền.</li>)}</ul></div>}
         </section>
       </>}
+      </div>
     </main>
   </div>;
 }

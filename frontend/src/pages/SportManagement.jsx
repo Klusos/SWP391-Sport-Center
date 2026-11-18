@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Sidebar from "../components/Sidebar";
+import AdminTopBar from "../components/AdminTopBar";
+import AdminSectionHeader from "../components/AdminSectionHeader";
 import Img from "../public-site/components/Img";
 import { createSportApi, getSportsApi, updateSportApi, uploadSportImageApi } from "../api";
+import "./SportManagement.css";
 
 const EMPTY_FORM = { name: "", description: "", status: "ACTIVE" };
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -14,7 +17,7 @@ function validateImage(file) {
   return "";
 }
 
-export default function SportManagement({ token, role, onLogout, onNavigate }) {
+export default function SportManagement({ token, role, currentUserName, onLogout, onNavigate }) {
   const [sports, setSports] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -187,17 +190,16 @@ export default function SportManagement({ token, role, onLogout, onNavigate }) {
 
   return <div className="layout">
     <Sidebar role={role} activePage="sports" onNavigate={onNavigate} onLogout={onLogout} />
-    <main className="main">
-      <header className="page-header">
-        <p className="eyebrow">QUẢN TRỊ NỘI DUNG</p>
-        <h1>Quản lý bộ môn</h1>
-        <p className="subtitle">Tạo, cập nhật trạng thái và hình ảnh bộ môn. Bộ môn ACTIVE được hiển thị trên trang công khai.</p>
-      </header>
-
-      <div className="sport-admin-toolbar">
-        <p className="muted">{sports.length} bộ môn</p>
-        <button type="button" className="btn-primary" onClick={beginCreate} disabled={saving || uploading}>Thêm bộ môn</button>
-      </div>
+    <main className="main sport-management-main">
+      <AdminTopBar pageLabel="BỘ MÔN" displayName={currentUserName} avatarName={currentUserName} />
+      <div className="sport-management-content">
+      <AdminSectionHeader
+        title="Quản lý bộ môn"
+        description="Tạo, cập nhật trạng thái và hình ảnh bộ môn. Bộ môn ACTIVE được hiển thị trên trang công khai."
+        icon={<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M3.5 9h4l2-3 3 1 1 4 4 1 2.5-2M8 18l2-2 4 1 2-3" /></svg>}
+        summary={<span className="admin-section-chip"><strong>{sports.length}</strong> bộ môn</span>}
+        actions={selectedSport && <button type="button" className="btn-secondary sport-admin-cancel" onClick={beginCreate} disabled={saving || uploading}>Hủy chỉnh sửa</button>}
+      />
 
       {error && <p className="banner error" role="alert">{error}</p>}
       {notice && <p className="banner success" role="status">{notice}</p>}
@@ -207,18 +209,28 @@ export default function SportManagement({ token, role, onLogout, onNavigate }) {
           {loading ? <div className="queue-state" role="status">Đang tải danh sách…</div>
             : sports.length === 0 ? <div className="queue-state">Chưa có bộ môn nào. Bạn có thể tạo bộ môn mới.</div>
               : <div className="sport-admin-table-wrap"><table className="sport-admin-table">
-                <thead><tr><th>Ảnh</th><th>ID</th><th>Tên bộ môn</th><th>Trạng thái</th><th /></tr></thead>
+                <thead><tr><th>Ảnh</th><th>ID</th><th>Tên bộ môn</th><th>Trạng thái</th><th scope="col" aria-label="Thao tác" /></tr></thead>
                 <tbody>{sports.map((sport) => <tr key={sport.id} className={selectedId === sport.id ? "selected" : ""}>
                   <td><Img src={sport.imageUrl} alt={sport.name} label={sport.name} className="sport-admin-thumb" /></td>
                   <td>{sport.id}</td><td>{sport.name}</td><td><span className={`sport-status ${sport.status === "ACTIVE" ? "active" : "inactive"}`}>{sport.status}</span></td>
-                  <td><button type="button" className="btn-secondary" onClick={() => selectSport(sport)}>Chỉnh sửa</button></td>
+                  <td><button type="button" className="btn-secondary sport-admin-edit" onClick={() => selectSport(sport)} aria-label={`Chỉnh sửa ${sport.name}`} title={`Chỉnh sửa ${sport.name}`}>
+                    <svg className="sport-admin-edit-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" />
+                    </svg>
+                  </button></td>
                 </tr>)}</tbody>
               </table></div>}
         </section>
 
         <section className="sport-admin-editor" aria-labelledby="sport-editor-title">
           <h2 id="sport-editor-title">{selectedSport ? `Chỉnh sửa bộ môn #${selectedSport.id}` : "Bộ môn mới"}</h2>
-          <Img src={previewUrl || selectedSport?.imageUrl} alt={form.name || "Ảnh bộ môn"} label={form.name || "Chưa có ảnh"} className="sport-admin-preview" />
+          <Img
+            src={previewUrl || selectedSport?.imageUrl}
+            alt={previewUrl || selectedSport?.imageUrl ? form.name || "Ảnh bộ môn" : "Chưa có ảnh xem trước"}
+            label={previewUrl || selectedSport?.imageUrl ? form.name || "Ảnh bộ môn" : "Chưa có ảnh xem trước"}
+            className="sport-admin-preview"
+          />
           <form onSubmit={saveSport}>
             <label htmlFor="sport-name">Tên bộ môn</label>
             <input id="sport-name" value={form.name} maxLength={100} required onChange={(event) => setForm({ ...form, name: event.target.value })} disabled={saving || uploading} />
@@ -239,6 +251,7 @@ export default function SportManagement({ token, role, onLogout, onNavigate }) {
             </div>
           </form>
         </section>
+      </div>
       </div>
     </main>
   </div>;

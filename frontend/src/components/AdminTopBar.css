@@ -1,0 +1,123 @@
+.admin-topbar {
+  position: sticky;
+  z-index: 10;
+  top: 0;
+  display: flex;
+  box-sizing: border-box;
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 88px 0 32px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.admin-topbar-breadcrumb {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+}
+
+.admin-topbar-breadcrumb-segment {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-topbar-breadcrumb-item {
+  display: inline-block;
+  max-width: clamp(80px, 22vw, 240px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
+.admin-topbar-breadcrumb a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.admin-topbar-breadcrumb a:hover {
+  color: #1e60d5;
+  text-decoration: underline;
+}
+
+.admin-topbar-breadcrumb a:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid #1769d2;
+  outline-offset: 3px;
+}
+
+.admin-topbar-breadcrumb i {
+  color: #cbd5e1;
+  font-style: normal;
+}
+
+.admin-topbar-breadcrumb b {
+  color: #1e60d5;
+}
+
+.admin-topbar-account {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-topbar-avatar {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  place-items: center;
+  border: 1px solid #0048af26;
+  border-radius: 50%;
+  background: #dae2ff;
+  color: #0048af;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-topbar-account > div {
+  display: grid;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.admin-topbar-account b {
+  overflow: hidden;
+  color: #0b192c;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-topbar-account small {
+  color: #64748b;
+  font-size: 11px;
+}
+
+@media (max-width: 640px) {
+  .admin-topbar {
+    padding: 0 68px 0 16px;
+  }
+
+  .admin-topbar-account > div {
+    display: none;
+  }
+
+  .admin-topbar--dashboard .admin-topbar-breadcrumb {
+    gap: 4px;
+    font-size: 9px;
+  }
+}

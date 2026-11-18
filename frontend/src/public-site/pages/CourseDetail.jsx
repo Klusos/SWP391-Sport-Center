@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import PageHero from "../components/PageHero.jsx";
 import Sidebar from "../../components/Sidebar.jsx";
 import CourseConsultationModal from "../../components/CourseConsultationModal.jsx";
 import { formatClassScheduleSummary, toggleExpandedClass } from "../../memberCoursePresentation.js";
@@ -8,6 +7,15 @@ import { activeOfferingRegistration, courseRegistrationStatusLabel } from "../..
 import { ageOnVietnamBusinessDate, courseAgePolicyLabel, evaluateCourseAgeEligibility } from "../../courseAgeEligibility.js";
 import { memberOfferingLists, offeringVisibility } from "../../memberCourseOfferingVisibility.js";
 import { CONSULTATION_EMAIL_ERROR, normalizeConsultationEmail } from "../../consultationEmail.js";
+import {
+  buildRegistrationScheduleSummary,
+  formatScheduleActualSlot,
+  formatScheduleDateRange,
+  formatScheduleMissingSlot,
+  formatScheduleTimeRange,
+  formatScheduleWeekRange,
+} from "../../registrationSchedulePresentation.js";
+import { formatPublicCourseAgeRange } from "./publicCourseDetailPresentation.js";
 import "../../pages/MemberCourseDetail.css";
 import "./CourseDetail.css";
 import {
@@ -279,16 +287,25 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
       : error ? <div className="banner error" role="alert">{error}</div>
         : course && <>
           <article className={`course-detail-card${memberRoute ? " member-course-overview" : ""}`}>
-            {!memberRoute && <p className="label-blue">{course.sportName || "Bộ môn"}</p>}
             {!memberRoute && <h1>{course.name}</h1>}
-            {!memberRoute && course.level && <p><strong>Trình độ yêu cầu:</strong> {course.level}</p>}
-            {!memberRoute && course.description && <p>{course.description}</p>}
+            {!memberRoute && <p className="course-public-sport">{course.sportName || "Bộ môn"}</p>}
+            {!memberRoute && course.description && <p className="course-public-description">{course.description}</p>}
+            {!memberRoute && <dl className="course-public-facts">
+              {course.level && <div><dt>Trình độ</dt><dd>{course.level}</dd></div>}
+              {(course.targetAgeMin != null || course.targetAgeMax != null) && <div>
+                <dt>{courseAgePolicyLabel(course)}</dt>
+                <dd>{formatPublicCourseAgeRange(course)}</dd>
+              </div>}
+            </dl>}
             {memberRoute && <h2 className="member-course-overview-title">Thông tin khóa học</h2>}
             {memberRoute && course.description && <p>{course.description}</p>}
-            {course.learningOutcome && <div><h2>Kết quả mong đợi</h2><p>{course.learningOutcome}</p></div>}
-            {!memberRoute && <p><strong>{courseAgePolicyLabel(course)}:</strong> {course.targetAgeMin ?? "Không giới hạn"} – {course.targetAgeMax ?? "Không giới hạn"}</p>}
-            {!memberRoute && (isMember ? <button type="button" className="btn btn-cyan" onClick={openConsultation}>Yêu cầu tư vấn</button>
-              : <Link to="/tuyen-sinh" className="btn btn-cyan">Đăng ký tư vấn</Link>)}
+            {memberRoute && course.learningOutcome && <div><h2>Kết quả mong đợi</h2><p>{course.learningOutcome}</p></div>}
+            {!memberRoute && course.learningOutcome && <section className="course-public-outcome"><h2>Kết quả mong đợi</h2><p>{course.learningOutcome}</p></section>}
+            {!memberRoute && <div className="course-public-actions">
+              {isMember ? <button type="button" className="btn btn-cyan" onClick={openConsultation}>Yêu cầu tư vấn</button>
+                : <Link to="/#public-consultation" className="btn btn-cyan course-public-action-primary">Đăng ký tư vấn</Link>}
+              {!isMember && !auth && <button type="button" className="btn btn-outline-secondary course-public-action-secondary" onClick={goToLogin}>Đăng nhập để đăng ký</button>}
+            </div>}
           </article>
 
           {memberRoute && <section className="member-course-consultation-card" aria-labelledby="member-course-consultation-title">
@@ -361,7 +378,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
               </div>}
               {classesLoading ? <p role="status">Đang tải các lớp…</p>
                 : !classesError && classes.length === 0 ? <p className="queue-state">Đợt học này chưa có lớp.</p>
-                  : !classesError && <div className="member-class-list">
+            : !classesError && <div className="member-class-list">
                     {classes.map((item) => {
                       const schedule = classSchedules[item.id] || [];
                       const readyClassIds = Array.isArray(selectedOffering?.registrationReadyClassIds)
@@ -417,9 +434,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
                 <p><strong>{course.name}</strong> · {course.sportName}</p>
                 <p>Đợt: {selectedOffering.name} ({selectedOffering.startDate} – {selectedOffering.endDate})</p>
                 <p>Lớp: {selectedClass.name} · Coach {selectedClass.coachName || `#${selectedClass.coachId}`}</p>
-                <p>Lịch: {(classSchedules[selectedClass.id] || []).length
-                  ? classSchedules[selectedClass.id].map((session) => `${formatLocalDateTime(session.startTime)}–${formatLocalDateTime(session.endTime)}`).join("; ")
-                  : "Chưa có lịch cụ thể được công bố."}</p>
+                <RegistrationSchedule key={selectedClass.id} classId={selectedClass.id} sessions={classSchedules[selectedClass.id] || []} />
                 <p>Học phí tham khảo: {formatPrice(selectedOffering.price)}</p>
                 <p className="member-muted">Đăng ký sẽ tạm giữ một chỗ ở trạng thái PENDING_PAYMENT. Hạn thanh toán do máy chủ trả về; thao tác này không xác nhận thanh toán.</p>
                 <div className="course-consult-actions">
@@ -465,10 +480,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
                 <button type="button" className="btn btn-outline-secondary" onClick={() => setConsultationOpen(false)} disabled={consultationSubmitting}>Đóng</button>
               </div>
             </form>}
-          </section> : auth ? <p className="course-registration-panel">Đăng ký khóa học chỉ dành cho tài khoản Member.</p>
-            : <div className="course-registration-panel"><p>Đăng nhập bằng tài khoản Member để xem lớp và đăng ký khóa học.</p>
-              <button type="button" className="btn btn-cyan" onClick={goToLogin}>Đăng nhập để đăng ký</button>
-            </div>}
+          </section> : auth ? <p className="course-registration-panel">Đăng ký khóa học chỉ dành cho tài khoản Member.</p> : null}
           {memberRoute && consultationOpen && <CourseConsultationModal
             course={course}
             values={consultation}
@@ -500,9 +512,89 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
     </div></main>
   </div>;
 
-  return <><PageHero title={course?.name || "CHI TIẾT KHÓA HỌC"} subtitle={course?.sportName || "Thông tin chương trình học"} />
-    <section className="section"><div className="container-xl course-public-detail">{detailContent}</div></section>
-  </>;
+  return <section className="course-public-detail-section"><div className="container-xl course-public-detail">{detailContent}</div></section>;
+}
+
+function RegistrationSchedule({ classId, sessions }) {
+  const [expanded, setExpanded] = useState(false);
+  const summary = useMemo(() => buildRegistrationScheduleSummary(sessions), [sessions]);
+  const detailsId = `member-registration-full-schedule-${classId}`;
+  const recurringTimeRanges = summary.pattern
+    ? [...new Set(summary.pattern.slots.map(formatScheduleTimeRange))]
+    : [];
+
+  return <section className="member-registration-schedule" aria-labelledby={`member-registration-schedule-title-${classId}`}>
+    <div className="member-registration-schedule-heading">
+      <h4 id={`member-registration-schedule-title-${classId}`}>Lịch học dự kiến</h4>
+      <span>{summary.totalSessions} buổi{summary.weekCount ? ` · ${summary.weekCount} tuần` : ""}</span>
+    </div>
+
+    {summary.pattern ? <div className="member-registration-weekly-summary">
+      <h5>Lịch học hằng tuần</h5>
+      <div className="member-registration-weekday-badges">
+        {summary.pattern.weekdays.map((weekday) => <span key={weekday.index}>{weekday.label}</span>)}
+      </div>
+      {recurringTimeRanges.length === 1
+        ? <p className="member-registration-common-time">{recurringTimeRanges[0]}</p>
+        : <ul className="member-registration-pattern-slots">{summary.pattern.slotLabels.map((slot) => <li key={slot}>{slot}</li>)}</ul>}
+      <p className="member-registration-date-range">Từ {formatScheduleDateRange(summary.startDate, summary.endDate)}</p>
+    </div> : <div className="member-registration-week-groups">
+      <h5>Lịch theo tuần</h5>
+      {summary.weeks.filter((week) => week.sessions.length > 0).map((week) => <section key={week.weekStart}>
+        <h6>Tuần {week.number} ({formatScheduleWeekRange(week.startDate, week.endDate)})</h6>
+        <ul>{week.actualSlots.map((slot) => <li key={slot.key}>{formatScheduleActualSlot(slot)}</li>)}</ul>
+      </section>)}
+      {!summary.weeks.some((week) => week.sessions.length > 0) && <p className="member-registration-schedule-empty">Chưa có lịch cụ thể được công bố.</p>}
+    </div>}
+
+    {summary.pattern && summary.weeks.filter((week) => week.exceptional).length > 0 && <div className="member-registration-exception-weeks">
+      <h5>Các tuần có lịch khác thường</h5>
+      {summary.weeks.filter((week) => week.exceptional).map((week) => <section key={week.weekStart}>
+        <h6>Tuần {week.number} ({formatScheduleWeekRange(week.startDate, week.endDate)}) — Lịch khác thường</h6>
+        {week.actualSlots.length > 0
+          ? <ul>{week.actualSlots.map((slot) => <li key={slot.key}>{formatScheduleActualSlot(slot)}</li>)}</ul>
+          : <p>Không có buổi nào trong lịch đã công bố tuần này.</p>}
+        {week.missingSlots.map((slot) => <p key={slot.key}>{formatScheduleMissingSlot(slot)}</p>)}
+      </section>)}
+    </div>}
+
+    {summary.undatedSessions.length > 0 && <p className="member-registration-schedule-empty" role="note">
+      {summary.undatedSessions.length} buổi chưa có ngày bắt đầu hợp lệ; xem chi tiết để kiểm tra dữ liệu lịch.
+    </p>}
+
+    <button type="button" className="member-registration-schedule-toggle" aria-expanded={expanded} aria-controls={detailsId}
+      onClick={() => setExpanded((value) => !value)}>
+      {expanded ? "Thu gọn lịch" : `Xem chi tiết ${summary.totalSessions} buổi`}
+    </button>
+
+    <div id={detailsId} className="member-registration-full-schedule" hidden={!expanded}>
+      {summary.weeks.map((week) => <section key={week.weekStart}>
+        <h5>Tuần {week.number} ({formatScheduleWeekRange(week.startDate, week.endDate)})</h5>
+        {week.sessions.length > 0 ? <div className="member-registration-schedule-table-wrap">
+          <table className="member-registration-schedule-table">
+            <thead><tr><th scope="col">Buổi</th><th scope="col">Ngày</th><th scope="col">Thời gian</th></tr></thead>
+            <tbody>{week.sessions.map((item) => <tr key={item.session?.id ?? item.sourceIndex}>
+              <td>{String(item.number).padStart(2, "0")}</td>
+              <td><time dateTime={item.session?.startTime}>{item.dateLabel}</time></td>
+              <td><time dateTime={item.session?.startTime}>{item.startLabel}</time> – <time dateTime={item.session?.endTime}>{item.endLabel}</time></td>
+            </tr>)}</tbody>
+          </table>
+        </div> : <p>Không có buổi nào trong lịch đã công bố tuần này.</p>}
+      </section>)}
+      {summary.undatedSessions.length > 0 && <section>
+        <h5>Buổi chưa xác định tuần</h5>
+        <div className="member-registration-schedule-table-wrap">
+          <table className="member-registration-schedule-table">
+            <thead><tr><th scope="col">Buổi</th><th scope="col">Ngày</th><th scope="col">Thời gian</th></tr></thead>
+            <tbody>{summary.undatedSessions.map((item) => <tr key={item.session?.id ?? item.sourceIndex}>
+              <td>{String(item.number).padStart(2, "0")}</td><td>—</td>
+              <td>{item.startLabel} – {item.endLabel}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+      </section>}
+    </div>
+  </section>;
 }
 
 function formatLocalDateTime(value) {

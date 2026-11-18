@@ -184,3 +184,17 @@
 .membership-sales-page .membership-sales-refund-context > strong { color:#183957; }
 .membership-sales-page .membership-sales-refund-context > span { color:#526a86; line-height:1.45; }
 .membership-sales-page .membership-sales-refund-context > small { color:#71859b; overflow-wrap:anywhere; }
+
+@media (max-width: 1200px) {
+  .membership-sales-page:not(.membership-sales-page--admin) .membership-sales-plan-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+
+@media (max-width: 600px) {
+  .membership-sales-page:not(.membership-sales-page--admin) .membership-sales-plan-grid { grid-template-columns:minmax(0,1fr); }
+}
+
+.membership-sales-receptionist-content { display: contents; }
+.membership-sales-page.membership-sales-page--admin { box-sizing: border-box; width: 100%; max-width: none; min-width: 0; margin: 0; padding: 0; }
+.membership-sales-page--admin .membership-sales-content { box-sizing: border-box; width: 100%; max-width: 1560px; min-width: 0; margin: 0 auto; padding: clamp(18px, 2.6vw, 34px) clamp(16px, 2.8vw, 40px) 52px; }
+.membership-sales-receptionist-content > .membership-sales-card,
+.membership-sales-page--admin .membership-sales-content > .membership-sales-card { margin: 0 0 14px; }

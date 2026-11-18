@@ -29,8 +29,22 @@ test("Member List retains staff APIs, current search/paging, selected detail, an
   assert.match(source, /member-detail-grid/);
   assert.match(source, /isAdmin && selected\.user\.status === "ACTIVE"/);
   assert.match(source, /selected\?\.user\.id === member\.id/);
+  assert.match(source, /className="member-detail-close"[^>]*aria-label="Đóng thông tin thành viên"[^>]*onClick=\{\(\) => setSelected\(null\)\}/);
+  assert.match(source, /className="member-detail-close-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"/);
+  assert.doesNotMatch(source, /bi-x-lg/);
+  assert.match(source, /member-detail-actions[\s\S]*?V\\u00f4 hi\\u1ec7u h\\u00f3a[\s\S]*?<\/div>[\s\S]*?member-detail-close/);
   assert.match(css, /member-list-workspace\.has-selection/);
+  assert.match(css, /\.member-list-main \.member-detail-heading \{ position:relative; padding-right:48px; \}/);
+  assert.match(css, /\.member-list-main \.member-detail-heading \.member-detail-close\s*\{[^}]*position:absolute;[^}]*top:0;[^}]*right:0/);
+  assert.match(css, /\.member-list-main \.member-detail-heading \.member-detail-close\s*\{[^}]*border:1px solid transparent;[^}]*background:transparent;[^}]*color:#173e65/);
+  assert.match(css, /\.member-list-main \.member-detail-heading \.member-detail-close:hover \{[^}]*background:#f2f7fc/);
+  assert.match(css, /\.member-list-main \.member-detail-heading \.member-detail-close:focus-visible/);
+  assert.match(css, /\.member-list-main \.member-detail-close-icon\s*\{[^}]*stroke:currentColor/);
   assert.match(css, /overflow-wrap:anywhere/);
+  assert.match(css, /\.member-list-main:not\(\.is-admin\) \{ width:100%; max-width:none; margin-inline:0; \}/);
+  assert.match(css, /\.member-list-main:not\(\.is-admin\) \.member-table \{ width:100%; table-layout:fixed; \}/);
+  assert.match(css, /\.member-list-main:not\(\.is-admin\) \.member-contact-cell \{ max-width:none; overflow-wrap:anywhere; white-space:normal; \}/);
+  assert.match(css, /\.member-list-main \.queue-table-wrap \{ overflow:auto;/);
 });
 
 test("Receptionist plan cards share the existing selection and payment creation path", async () => {

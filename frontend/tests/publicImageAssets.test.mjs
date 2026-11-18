@@ -42,15 +42,20 @@ test('all referenced local public image files exist', async () => {
   }
 })
 
-test('Public routes and API-backed public catalogs remain registered', async () => {
+test('Landing owns the root route, retired pages redirect, and remaining Public routes stay registered', async () => {
   const app = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8')
-  const home = await readFile(new URL('../src/public-site/pages/Home.jsx', import.meta.url), 'utf8')
-  assert.match(app, /<Route path="\/" element={<Home \/>} \/>/)
+  const landing = await readFile(new URL('../src/landing/LandingPage.jsx', import.meta.url), 'utf8')
+  assert.match(app, /<Route path="\/" element=\{landingRoute\} \/>/)
+  assert.match(app, /path="\/landing-preview"[\s\S]*?<Navigate to=\{\{ pathname: "\/", search: location\.search, hash: location\.hash \}\} replace \/>/)
+  assert.doesNotMatch(app, /import Home from "\.\/public-site\/pages\/Home"/)
   assert.match(app, /<Route path="\/bo-mon" element={<Disciplines \/>} \/>/)
   assert.match(app, /<Route path="\/bo-mon\/:sportId" element={<Disciplines \/>} \/>/)
-  assert.match(app, /<Route path="\/huan-luyen-vien" element={<Coaches \/>} \/>/)
+  assert.match(app, /path="\/huan-luyen-vien" element=\{<LandingSectionRedirect sectionId="huan-luyen-vien" \/>\}/)
   assert.match(app, /<Route path="\/co-so-vat-chat" element={<Facilities \/>} \/>/)
-  assert.match(app, /<Route path="\/tuyen-sinh" element={<Admission auth={auth} \/>} \/>/)
-  assert.match(home, /getPublicCoachesApi\(\)/)
-  assert.match(home, /getPublicSportsApi\(\)/)
+  assert.match(app, /path="\/tuyen-sinh" element=\{<LandingSectionRedirect sectionId="tuyen-sinh" \/>\}/)
+  assert.match(app, /path="\/membership-plans"[\s\S]*?LandingSectionRedirect sectionId="tuyen-sinh"/)
+  assert.doesNotMatch(app, /pages\/(?:Admission|Coaches)/)
+  assert.match(landing, /getPublicCoachesApi\(\)/)
+  assert.match(landing, /getPublicSportsApi\(\)/)
+  assert.match(landing, /<Img src="\/images\/trungtam\.jpg"/)
 })

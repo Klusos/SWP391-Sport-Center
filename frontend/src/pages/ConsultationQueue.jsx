@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
+import AdminTopBar from "../components/AdminTopBar";
 import "./ConsultationQueue.css";
 import {
   completeConsultationRequestApi,
@@ -30,7 +31,8 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-export default function ConsultationQueue({ token, role, onLogout, onNavigate }) {
+export default function ConsultationQueue({ token, role, currentUserName, onLogout, onNavigate }) {
+  const isAdmin = role === "ADMIN";
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedStatus = STATUSES.includes(searchParams.get("status")) ? searchParams.get("status") : "";
   const status = requestedStatus;
@@ -374,9 +376,11 @@ export default function ConsultationQueue({ token, role, onLogout, onNavigate })
   return (
     <div className="layout">
       <Sidebar role={role} activePage="consultations" onNavigate={onNavigate} onLogout={onLogout} />
-      <main className="main consultation-queue-page">
+      <main className={`main consultation-queue-page${isAdmin ? " consultation-queue-page--admin" : " consultation-queue-page--receptionist"}`}>
+        {isAdmin && <AdminTopBar pageLabel="YÊU CẦU TƯ VẤN" displayName={currentUserName} avatarName={currentUserName} />}
+        <div className={isAdmin ? "consultation-admin-content" : "consultation-receptionist-content"}>
         <header className="consultation-page-header">
-          <div><p className="consultation-eyebrow">SPORTCENTER / RECEPTIONIST</p><h1>{"Y\u00eau c\u1ea7u t\u01b0 v\u1ea5n"}</h1><p className="subtitle">{"Ti\u1ebfp nh\u1eadn v\u00e0 theo d\u00f5i c\u00e1c y\u00eau c\u1ea7u t\u01b0 v\u1ea5n c\u1ee7a kh\u00e1ch h\u00e0ng."}</p></div>
+          <div><h1>{"Y\u00eau c\u1ea7u t\u01b0 v\u1ea5n"}</h1><p className="subtitle">{"Ti\u1ebfp nh\u1eadn v\u00e0 theo d\u00f5i c\u00e1c y\u00eau c\u1ea7u t\u01b0 v\u1ea5n c\u1ee7a kh\u00e1ch h\u00e0ng."}</p></div>
           <div className="consultation-summary" aria-live="polite"><strong>{result ? result.totalElements : "\u2014"}</strong><span>{status ? STATUS_LABELS[status] : "Y\u00eau c\u1ea7u theo b\u1ed9 l\u1ecdc"}</span></div>
         </header>
         {!allowedRole && <div className="banner error" role="alert">Only Receptionist and Admin accounts can access this queue.</div>}
@@ -584,6 +588,7 @@ export default function ConsultationQueue({ token, role, onLogout, onNavigate })
         )}
             {!detail && !detailLoading && !detailError && <div className="consultation-detail-empty">{"Ch\u1ecdn m\u1ed9t y\u00eau c\u1ea7u \u0111\u1ec3 xem th\u00f4ng tin v\u00e0 c\u00e1c thao t\u00e1c \u0111\u01b0\u1ee3c ph\u00e9p."}</div>}
           </aside>
+        </div>
         </div>
       </main>
     </div>

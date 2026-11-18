@@ -1,4 +1,5 @@
-.facility-toolbar-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.facility-management-main { min-width: 0; padding: 0; }
+.facility-management-content { box-sizing: border-box; min-width: 0; padding: 32px 48px; }
 .facility-admin-grid { grid-template-columns: minmax(0, 1.7fr) minmax(280px, .8fr); }
 .facility-admin-table { min-width: 780px; }
 .facility-admin-table th, .facility-admin-table td { white-space: normal; }
@@ -9,4 +10,4 @@
 .facility-sport-options label { display: flex; align-items: center; gap: 8px; min-height: 36px; }
 .facility-sport-options input[type="checkbox"] { width: 18px; height: 18px; margin: 0; accent-color: #0877b9; }
 @media (max-width: 900px) { .facility-admin-grid { grid-template-columns: 1fr; } }
-@media (max-width: 520px) { .facility-toolbar-actions { width: 100%; } .facility-toolbar-actions button { flex: 1; } }
+@media (max-width: 760px) { .facility-management-content { padding: 24px 18px; } }

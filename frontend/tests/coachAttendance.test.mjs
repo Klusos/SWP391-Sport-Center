@@ -102,3 +102,22 @@ test("class filter controls responsive session selection and cancelled session s
   assert.match(css, /@media \(max-width: 760px\)/);
   assert.match(css, /:focus-visible/);
 });
+
+test("Coach Attendance exposes scoped summaries, search, bulk marking, and per-member partial failures", async () => {
+  const [source, css] = await Promise.all([
+    readFile(sourceUrl, "utf8"),
+    readFile(new URL("../src/pages/CoachAttendance.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(source, /members\.reduce\(/);
+  assert.match(source, /visibleMembers/);
+  assert.match(source, /function markAllPresent\(\)/);
+  assert.match(source, /function saveAll\(\)/);
+  assert.match(source, /for \(const member of batch\)/);
+  assert.match(source, /setRowErrors\(\(current\) => \(\{ \.\.\.current, \[rowKey\]: errorMessage/);
+  assert.match(source, /if \(correctionCount > 0 && !window\.confirm/);
+  assert.match(source, /savingAll \? "Đang lưu/);
+  assert.match(source, /coach-attendance-grid.*is-session-list-only/);
+  assert.match(source, /coach-attendance-stats/);
+  assert.match(css, /grid-template-columns: minmax\(270px, 330px\) minmax\(0, 1fr\)/);
+  assert.match(css, /@media \(max-width: 1000px\)/);
+});

@@ -1,3 +1,204 @@
 .receptionist-registration{max-width:1280px}.receptionist-registration-header{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:20px}.receptionist-registration-header h1{margin:0 0 8px;color:#123b63}.receptionist-registration-header>button,.receptionist-class-summary>button,.receptionist-pending-list button{border:0;border-radius:8px;padding:10px 14px;background:#0878bd;color:white;font-weight:700;cursor:pointer}.receptionist-registration button:disabled{opacity:.55;cursor:not-allowed}.receptionist-step{margin-bottom:18px}.receptionist-step h2{margin-top:0;color:#123b63}.receptionist-step>label,.receptionist-course-selects label{display:grid;gap:6px;font-weight:650}.receptionist-step input,.receptionist-step select{width:100%;min-height:42px;padding:9px 11px;border:1px solid #bfccd7;border-radius:7px;background:#fff}.receptionist-selected{margin:12px 0 0;padding:10px;border-radius:8px;background:#eef6fb}.receptionist-course-selects{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.receptionist-class-summary{margin-top:18px;padding:16px;border:1px solid #dbe5ec;border-radius:10px;background:#f8fbfd}.receptionist-class-summary h3{margin:0 0 10px}.receptionist-class-summary p{margin:7px 0}.receptionist-eligibility-ok{color:#176b3a}.receptionist-eligibility-error{color:#8a2222}.receptionist-pending-list{display:grid;gap:12px}.receptionist-pending-list article{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:15px;border:1px solid #dbe5ec;border-radius:10px}.receptionist-pending-list article.is-expired{border-color:#d59a42;background:#fffaf1}.receptionist-pending-list article>div{display:grid;gap:5px}.receptionist-pending-list article>div span{font-size:.92rem}.receptionist-pending-list article>p{margin:0}.receptionist-pending-list button{flex:0 0 auto}.receptionist-registration .banner{padding:12px 15px;border-radius:8px}@media(max-width:900px){.receptionist-course-selects{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:620px){.receptionist-registration-header{display:block}.receptionist-registration-header>button{margin-top:12px}.receptionist-course-selects{grid-template-columns:1fr}.receptionist-pending-list article{align-items:flex-start;flex-direction:column}.receptionist-pending-list button{width:100%}}
 .receptionist-refund-alert{margin-top:14px;padding:12px 15px;border:1px solid #c43f3f;border-radius:8px;background:#fff1f1;color:#802020}.receptionist-refund-alert ul{margin:7px 0 0;padding-left:20px}
 .receptionist-eligibility-warning{padding:10px 12px;border:1px solid #efd17d;border-radius:8px;background:#fff8e5;color:#745500}
+
+/* Admin gets a flush shared Top Bar; keep page padding on the content below it. */
+.layout > main.main.receptionist-registration.receptionist-registration--admin { max-width: none; padding: 0; }
+.receptionist-registration-content--admin { box-sizing: border-box; width: 100%; max-width: 1376px; margin: 0 auto; padding: 32px 48px 52px; }
+@media (max-width: 900px) {
+  .receptionist-registration-content--admin { padding: 30px 26px 42px; }
+}
+@media (max-width: 620px) {
+  .receptionist-registration-content--admin { padding: 25px 16px 36px; }
+}
+
+/* Keep Receptionist registration controls aligned with the Portal Light controls. */
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-step input,
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-step select {
+  min-height: 44px;
+  padding: 9px 12px;
+  border-color: #c9d6e4;
+  border-radius: var(--radius-sm);
+}
+
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-registration-header > button,
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-class-summary > button,
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-pending-list button {
+  min-height: 40px;
+  border: 1px solid var(--blue);
+  border-radius: var(--radius-sm);
+  background: var(--blue);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-registration-header > button:hover:not(:disabled),
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-class-summary > button:hover:not(:disabled),
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-pending-list button:hover:not(:disabled) {
+  border-color: var(--blue-dark);
+  background: var(--blue-dark);
+  color: #fff;
+}
+
+/* Receptionist registration workflow presentation; Admin keeps its accepted markup. */
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-step {
+  box-sizing: border-box;
+  padding: 22px 24px;
+  border: 1px solid #dce6f0;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 4px 18px rgb(15 42 74 / 5%);
+}
+
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-step-heading {
+  display: grid;
+  grid-template-columns: 34px 40px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  border: 1px solid #dfebf6;
+  border-radius: 11px;
+  background: #f3f8fd;
+}
+
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-step-number {
+  padding-top: 5px;
+  color: #7b8da3;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-step-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid #d8e8f7;
+  border-radius: 11px;
+  background: #eff6fc;
+  color: #1769b0;
+  font-size: 17px;
+}
+
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-step-icon svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  color: inherit;
+}
+
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-step-heading h2 {
+  margin: 1px 0 4px;
+  color: #123b63;
+  font-size: 17px;
+  font-weight: 750;
+}
+
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-step-heading p {
+  margin: 0;
+  color: #667b91;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-step > label,
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-course-selects label {
+  color: #344b62;
+  font-size: 13px;
+}
+
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-step > label {
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-step > .receptionist-step-heading + label {
+  margin-top: 0;
+}
+
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-course-selects {
+  gap: 16px;
+}
+
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-course-selects label {
+  min-width: 0;
+  gap: 8px;
+}
+
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-course-selects select {
+  min-width: 0;
+}
+
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-pending-guidance {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 13px 15px;
+  border: 1px solid #cfe1f1;
+  border-radius: 10px;
+  background: #f2f8fd;
+  color: #35536f;
+}
+
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-pending-guidance > i {
+  flex: 0 0 auto;
+  padding-top: 2px;
+  color: #1769b0;
+  font-size: 16px;
+}
+
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-pending-guidance p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-selected,
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-class-summary {
+  border-color: #d8e7f4;
+  background: #f5f9fd;
+}
+
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-pending-list article {
+  border-color: #dce6f0;
+  border-radius: 11px;
+  background: #fbfdff;
+}
+
+.receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-pending-list article.is-expired {
+  border-color: #d59a42;
+  background: #fffaf1;
+}
+
+@media (max-width: 1100px) {
+  .receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-course-selects {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-step {
+    padding: 18px 16px;
+  }
+
+  .receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-step-heading {
+    grid-template-columns: 28px 36px minmax(0, 1fr);
+    gap: 9px;
+    padding: 12px;
+  }
+
+  .receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-step-icon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .receptionist-registration-content:not(.receptionist-registration-content--admin) .receptionist-course-selects {
+    grid-template-columns: 1fr;
+  }
+}

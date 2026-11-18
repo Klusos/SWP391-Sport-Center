@@ -12,26 +12,53 @@
   background-position: center 42%;
 }
 
+/* Override the shared image hero's 5:2 aspect ratio and 380px minimum. */
+.public-site .sport-detail-page .page-hero.has-image {
+  min-height: 300px;
+  max-height: none;
+  aspect-ratio: auto;
+  padding: 30px 0 36px;
+  background-position: center 45%;
+}
+
+.sport-detail-page .page-hero h1 { max-width: 900px; margin: 0 0 10px; font-size: clamp(2rem, 4.5vw, 3.35rem); line-height: 1.12; text-wrap: balance; }
+.sport-detail-page .page-hero .hero-sub { max-width: 560px; margin-bottom: 0; }
+
 .disciplines-section {
   padding-top: clamp(38px, 5vw, 66px);
   padding-bottom: clamp(52px, 7vw, 86px);
   background: linear-gradient(180deg, #f7faff 0%, #fff 260px);
 }
 
+.sport-detail-page .disciplines-section { padding-top: clamp(24px, 3vw, 36px); }
+.sport-detail-page .disciplines-back { margin-bottom: 14px; }
+.sport-detail-page .disciplines-heading { margin-bottom: 22px; }
+
 .disciplines-content { max-width: 1210px; }
 
 .disciplines-back { margin: 0 0 18px; }
 
-.disciplines-back .link-arrow {
+.sport-detail-page .disciplines-back .link-arrow {
   display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
+  gap: 8px;
+  width: max-content;
+  min-width: max-content;
+  max-width: none;
   min-height: 40px;
   padding: 0 14px;
   border: 1px solid var(--discipline-line);
   border-radius: 999px;
   background: #fff;
+  white-space: nowrap;
+  line-height: 1.2;
+  margin-bottom: 0;
   text-decoration: none;
 }
+
+.disciplines-back-icon { display: grid; width: 16px; height: 16px; flex: 0 0 16px; place-items: center; font-size: 16px; line-height: 1; }
 
 .disciplines-heading {
   display: flex;
@@ -133,26 +160,38 @@
 .disciplines-sport-card-body h3 { margin: 5px 0 18px; color: var(--discipline-ink); font-size: 21px; font-weight: 800; overflow-wrap: anywhere; }
 .disciplines-sport-card-action { display: flex; align-items: center; justify-content: space-between; padding-top: 14px; border-top: 1px solid #edf1f6; color: #738397; font-size: 12px; font-weight: 650; }
 .disciplines-sport-arrow { display: grid; width: 31px; height: 31px; place-items: center; border-radius: 50%; background: #eef5fe; color: #1774df; font-size: 16px; transition: background-color 180ms ease, color 180ms ease; }
-.disciplines-course-card h3 { margin: 0; color: var(--discipline-ink); font-size: 19px; font-weight: 800; }
-
-.disciplines-course-card { display: flex; flex-direction: column; gap: 16px; padding: 22px; }
-.disciplines-course-top { display: flex; align-items: center; justify-content: space-between; }
-.disciplines-course-top .sport-badge { width: auto; min-width: 62px; height: 28px; border-radius: 999px; font-size: 10px; }
-.disciplines-course-top small { color: #9aabbb; font-size: 12px; font-weight: 800; }
-.disciplines-course-card .muted { flex: 1; margin: 0; color: var(--discipline-muted); line-height: 1.65; }
-.disciplines-course-card .link-arrow { display: inline-flex; align-items: center; gap: 8px; margin: 0; text-decoration: none; }
-.disciplines-course-card .link-arrow i { transition: transform 160ms ease; }
-.disciplines-course-card:hover .link-arrow i { transform: translateX(3px); }
+.disciplines-course-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 24px;
+}
+.disciplines-course-card { display: flex; min-width: 0; min-height: 190px; flex-direction: column; justify-content: space-between; gap: 20px; padding: clamp(19px, 2.5vw, 25px); }
+.disciplines-course-grid .disciplines-course-card { flex: 1 1 320px; width: 100%; max-width: 380px; }
+.disciplines-course-card-content { display: grid; align-content: start; gap: 10px; }
+.disciplines-course-card h3 { margin: 0; color: var(--discipline-ink); font-size: 19px; font-weight: 800; line-height: 1.35; overflow-wrap: anywhere; }
+.disciplines-course-card p { margin: 0; color: var(--discipline-muted); line-height: 1.65; }
+.disciplines-course-card .disciplines-course-meta { color: #526b82; font-size: 13px; font-weight: 650; }
+.disciplines-course-outcome-label { color: var(--discipline-ink); font-weight: 700; }
+.disciplines-course-action { display: inline-flex; width: fit-content; min-height: 42px; align-items: center; justify-content: center; gap: 10px; padding: 8px 13px; border: 1px solid #c9def2; border-radius: 9px; background: #f5faff; color: #145fae; font-size: 13px; font-weight: 750; text-decoration: none; transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease; }
+.disciplines-course-action:hover { border-color: #176ed9; background: #176ed9; color: #fff; }
+.disciplines-course-action:focus-visible { outline: 3px solid #78b5fb; outline-offset: 3px; }
 
 @keyframes disciplines-spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 900px) {
   .disciplines-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .public-site .sport-detail-page .page-hero.has-image { min-height: 270px; padding: 26px 0 32px; }
 }
 
 @media (max-width: 600px) {
   .disciplines-page .page-hero { min-height: 210px; background-position: 62% center; }
+  .public-site .sport-detail-page .page-hero.has-image { min-height: 220px; padding: 24px 0 28px; background-position: 62% center; }
+  .sport-detail-page .page-hero h1 { font-size: clamp(1.9rem, 8vw, 2.5rem); }
   .disciplines-grid { grid-template-columns: 1fr; gap: 14px; }
+  .disciplines-course-grid { gap: 14px; }
+  .disciplines-course-grid .disciplines-course-card { flex-basis: 100%; max-width: 100%; }
+  .disciplines-course-action { width: 100%; box-sizing: border-box; }
   .disciplines-heading { align-items: flex-start; flex-direction: column; }
   .disciplines-count { font-size: 15px; }
 }
@@ -164,5 +203,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .disciplines-spinner { animation-duration: 1.6s; }
-  .disciplines-sport-card, .disciplines-course-card, .disciplines-sport-image, .disciplines-sport-arrow { transition: none; }
+  .disciplines-sport-card, .disciplines-course-card, .disciplines-sport-image, .disciplines-sport-arrow, .disciplines-course-action { transition: none; }
 }

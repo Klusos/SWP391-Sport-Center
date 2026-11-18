@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
+import AdminTopBar from "../components/AdminTopBar";
 import ClassSessionGenerationPanel from "./ClassSessionGenerationPanel";
 import {
   getClassApi, getClassesApi, getCoachesApi, getCoachSportsApi, getCourseApi, getFacilitiesApi, getOfferingApi,
@@ -8,8 +9,8 @@ import {
   setSessionStatusApi,
 } from "../api";
 import {
-  filterClassSessions, filterCourseClasses, filterCourseOfferings, offeringTimeStatus, qualifiedClassCoaches,
-  paginateItems, vietnamBusinessDate,
+  filterClassSessions, filterCourseClasses, filterCourseOfferings, formatClassSessionDate,
+  formatClassSessionTime, offeringTimeStatus, qualifiedClassCoaches, paginateItems, vietnamBusinessDate,
 } from "../courseManagementModel";
 import { addMinutesToDateTimeLocal, getSessionActionAvailability, validateClassSessionSchedule, validateCourseOffering } from "../classSessionValidation";
 import { isOfferingCommercialEditLocked } from "../courseOfferingPolicy.js";
@@ -20,12 +21,27 @@ import "./CourseManagement.css";
 const rows = (value) => Array.isArray(value) ? value : value?.content ?? [];
 const toDateTimeInput = (value) => value ? String(value).slice(0, 16) : "";
 const toDateTimePayload = (value) => !value ? null : value.length === 16 ? `${value}:00` : value;
-const displayTime = (value) => value ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh" }).format(new Date(value)) : "—";
 const statusPill = (value) => <span className={`status-pill status-${String(value || "").toLowerCase()}`}>{value || "—"}</span>;
 const courseClassStatusPill = (value) => <span className={`status-pill course-class-status status-${String(value || "").toLowerCase()}`}>{value || "—"}</span>;
+const SESSION_STATUS_LABELS = { SCHEDULED: "Đã lên lịch", COMPLETED: "Đã hoàn thành", CANCELLED: "Đã hủy" };
+const sessionStatusPill = (value) => <span className={`status-pill session-status status-${String(value || "").toLowerCase()}`}>{SESSION_STATUS_LABELS[String(value || "").toUpperCase()] || "—"}</span>;
 const TIME_STATUS_LABEL = { UPCOMING: "Sắp diễn ra", ONGOING: "Đang diễn ra", PAST: "Đã kết thúc" };
 
 const statusField = (values, label = "Trạng thái") => ({ key: "status", label, type: "select", required: true, editOnly: true, options: values.map((value) => [value, value]) });
+
+const COURSE_ICON_PATHS = {
+  back: <path d="M19 12H5m7 7-7-7 7-7" />,
+  refresh: <><path d="M20 7v5h-5" /><path d="M20 12a8 8 0 1 0 1.2 4" /></>,
+  add: <path d="M12 5v14m-7-7h14" />,
+  view: <><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></>,
+  edit: <><path d="m15 5 4 4" /><path d="M4 20l4.5-1 10.8-10.8a2.1 2.1 0 0 0-3-3L5.5 16 4 20Z" /></>,
+  previous: <path d="m15 18-6-6 6-6" />,
+  next: <path d="m9 18 6-6-6-6" />,
+};
+
+function CourseIcon({ name }) {
+  return <svg className="course-management-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">{COURSE_ICON_PATHS[name]}</svg>;
+}
 
 function fieldsToPayload(fields, form, isNew) {
   const payload = {};
@@ -63,7 +79,7 @@ function EntityCrud({ title, entity, details, fields, onSave, validate, formHint
     finally { setBusy(false); }
   }
   return <section className={`adm-block course-entity-panel ${panelClassName}`}>
-    <div className="adm-head"><h2>{title}</h2><button type="button" aria-label={editAccessibleName || editLabel} title={editAccessibleName || editLabel} onClick={open} disabled={!entity}>{showPencil && <i className="bi bi-pencil" aria-hidden="true" />}<span>{editLabel}</span></button></div>
+    <div className="adm-head"><h2>{title}</h2><button type="button" className={showPencil ? "cm-icon-button" : undefined} aria-label={editAccessibleName || editLabel} title={editAccessibleName || editLabel} onClick={open} disabled={!entity}>{showPencil && <CourseIcon name="edit" />}{editLabel && <span>{editLabel}</span>}</button></div>
     <dl className="course-entity-facts">{details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value ?? "—"}</dd></div>)}</dl>
     {editing && <form className="adm-form" onSubmit={submit} noValidate={Boolean(validate)}>
       <div className="grid-2">{fields.filter((field) => entity || !field.editOnly).map((field) => <Field key={field.key} field={{ ...field, disabled: field.disabled || (field.commercial && isOfferingCommercialEditLocked(entity)) }} value={form[field.key]} onChange={(value) => setForm((current) => onFieldChange ? onFieldChange(field.key, value, { ...current, [field.key]: value }) : ({ ...current, [field.key]: value }))} />)}</div>
@@ -85,12 +101,14 @@ function Field({ field, value, onChange }) {
   </div>;
 }
 
-function Crud({ title, items, fields, columns, onSave, onView, onRefresh, rowActions, disabled, hint, validate, onFieldChange, formHint, canEdit }) {
+function Crud({ title, items, fields, columns, onSave, onView, onRefresh, rowActions, disabled, hint, validate, onFieldChange, formHint, canEdit, pageResetKey, className = "" }) {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({});
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [page, setPage] = useState(0);
+  const [pagination, setPagination] = useState({ key: pageResetKey, page: 0 });
+  const page = pagination.key === pageResetKey ? pagination.page : 0;
+  const setPage = (nextPage) => setPagination({ key: pageResetKey, page: nextPage });
   const pageData = paginateItems(items, page, 10);
   function open(item) {
     const next = {};
@@ -111,18 +129,18 @@ function Crud({ title, items, fields, columns, onSave, onView, onRefresh, rowAct
     catch (requestError) { setError(requestError.message || "Không thể lưu dữ liệu."); }
     finally { setBusy(false); }
   }
-  return <section className="adm-block">
-    <div className="adm-head"><div><h2>{title}</h2><span className="course-list-total">{items.length} mục</span></div><div className="adm-actions">{onRefresh && <button type="button" onClick={onRefresh}>Làm mới</button>}<button type="button" className="adm-primary" disabled={disabled} onClick={() => open(null)}>Thêm mới</button></div></div>
+  return <section className={`adm-block ${className}`.trim()}>
+    <div className="adm-head cm-list-toolbar"><div><h2>{title}</h2><span className="course-list-total">{items.length} mục</span></div><div className="adm-actions cm-toolbar-actions">{onRefresh && <button type="button" className="cm-refresh-button" aria-label={`Làm mới ${title}`} title="Làm mới" onClick={onRefresh}><CourseIcon name="refresh" /><span>Làm mới</span></button>}<button type="button" className="adm-primary" disabled={disabled} onClick={() => open(null)}><CourseIcon name="add" /> Thêm mới</button></div></div>
     {disabled ? <p className="dash-empty">{hint}</p> : items.length === 0 ? <p className="dash-empty">{hint || "Chưa có dữ liệu."}</p> : <>
-      <div className="queue-table-wrap"><table className="queue-table"><thead><tr>{columns.map((column) => <th key={column.label}>{column.label}</th>)}<th>Thao tác</th></tr></thead>
+      <div className="queue-table-wrap"><table className="queue-table"><thead><tr>{columns.map((column) => <th key={column.label}>{column.label}</th>)}<th aria-label="Thao tác"></th></tr></thead>
         <tbody>{pageData.items.map((item) => <tr key={item.id}>{columns.map((column) => <td key={column.label}>{column.render ? column.render(item) : item[column.key] ?? "—"}</td>)}<td><div className="adm-actions">
-          {onView && <button type="button" onClick={() => onView(item)}>Xem</button>}
-          {canEdit?.(item) !== false && <button type="button" onClick={() => open(item)}>Sửa</button>}
+          {onView && <button type="button" className="cm-icon-button" aria-label={`Xem ${title}: ${item.name || `#${item.id}`}`} title="Xem chi tiết" onClick={() => onView(item)}><CourseIcon name="view" /></button>}
+          {canEdit?.(item) !== false && <button type="button" className="cm-icon-button" aria-label={`Sửa ${title}: ${item.name || `#${item.id}`}`} title="Sửa" onClick={() => open(item)}><CourseIcon name="edit" /></button>}
           {rowActions?.(item)}
         </div></td></tr>)}</tbody>
       </table></div>
       <nav className="course-management-pagination" aria-label={`Trang ${title}`}><span>Hiển thị {pageData.items.length} / {pageData.total} · Trang {pageData.page + 1}/{pageData.pageCount}</span><div>
-        <button type="button" disabled={pageData.page === 0} onClick={() => setPage(pageData.page - 1)}>Trang trước</button><button type="button" disabled={pageData.page + 1 >= pageData.pageCount} onClick={() => setPage(pageData.page + 1)}>Trang sau</button>
+        <button type="button" disabled={pageData.page === 0} aria-label="Trang trước" onClick={() => setPage(pageData.page - 1)}><CourseIcon name="previous" /> Trang trước</button><button type="button" disabled={pageData.page + 1 >= pageData.pageCount} aria-label="Trang sau" onClick={() => setPage(pageData.page + 1)}>Trang sau <CourseIcon name="next" /></button>
       </div></nav>
     </>}
     {editing && <form className="adm-form" onSubmit={submit} noValidate={Boolean(validate)}><div className="grid-2">{fields.filter((field) => !(editing === "new" && field.editOnly)).map((field) => <Field key={field.key} field={{ ...field, disabled: field.disabled || (field.commercial && editing !== "new" && isOfferingCommercialEditLocked(editing)) }} value={form[field.key]} onChange={(value) => setForm((current) => onFieldChange ? onFieldChange(field.key, value, { ...current, [field.key]: value }, editing) : ({ ...current, [field.key]: value }))} />)}</div>
@@ -132,13 +150,7 @@ function Crud({ title, items, fields, columns, onSave, onView, onRefresh, rowAct
   </section>;
 }
 
-function Breadcrumbs({ course, offering, courseClass, coursePath, offeringPath }) {
-  return <nav className="course-management-breadcrumbs" aria-label="Đường dẫn">
-    <Link to={coursePath}>Danh sách khóa học</Link><span aria-hidden="true">›</span>{course && <><Link to={`${coursePath}/${course.id}`}>{course.name}</Link>{offering && <span aria-hidden="true">›</span>}</>}{offering && <Link to={offeringPath}>{offering.name}</Link>}{courseClass && <><span aria-hidden="true">›</span><span aria-current="page">{courseClass.name}</span></>}
-  </nav>;
-}
-
-export default function CourseManagementPages({ token, role, onLogout, onNavigate }) {
+export default function CourseManagementPages({ token, role, currentUserName, onLogout, onNavigate }) {
   const { courseId, offeringId, classId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
@@ -147,6 +159,8 @@ export default function CourseManagementPages({ token, role, onLogout, onNavigat
   const offeringPath = `${coursePath}/offerings/${offeringId}`;
   const classPath = `${offeringPath}/classes/${classId}`;
   const pageKind = classId ? "class" : offeringId ? "offering" : "course";
+  const parentPath = pageKind === "class" ? offeringPath : pageKind === "offering" ? coursePath : basePath;
+  const parentLabel = pageKind === "class" ? "Quay lại đợt học" : pageKind === "offering" ? "Quay lại khóa học" : "Danh sách khóa học";
   const [course, setCourse] = useState(null);
   const [offering, setOffering] = useState(null);
   const [courseClass, setCourseClass] = useState(null);
@@ -169,6 +183,10 @@ export default function CourseManagementPages({ token, role, onLogout, onNavigat
   const [classSearch, setClassSearch] = useState("");
   const [classStatusFilter, setClassStatusFilter] = useState("");
   const [sessionStatusFilter, setSessionStatusFilter] = useState("");
+  const [sessionStartDateFilter, setSessionStartDateFilter] = useState("");
+  const [sessionEndDateFilter, setSessionEndDateFilter] = useState("");
+  const [sessionSort, setSessionSort] = useState("ASC");
+  const [sessionFilterRevision, setSessionFilterRevision] = useState(0);
 
   useEffect(() => {
     const timer = window.setInterval(() => setClock(new Date()), 60_000);
@@ -232,7 +250,30 @@ export default function CourseManagementPages({ token, role, onLogout, onNavigat
     search: offeringSearch, timeStatus: timeFilter, status: offeringStatusFilter, sort: offeringSort, businessDate: today,
   }), [offerings, offeringSearch, timeFilter, offeringStatusFilter, offeringSort, today]);
   const filteredClasses = useMemo(() => filterCourseClasses(classes, { search: classSearch, status: classStatusFilter }), [classes, classSearch, classStatusFilter]);
-  const filteredSessions = useMemo(() => filterClassSessions(sessions, { status: sessionStatusFilter }), [sessions, sessionStatusFilter]);
+  const filteredSessions = useMemo(() => filterClassSessions(sessions, {
+    status: sessionStatusFilter, startDate: sessionStartDateFilter, endDate: sessionEndDateFilter, sort: sessionSort,
+  }), [sessions, sessionStatusFilter, sessionStartDateFilter, sessionEndDateFilter, sessionSort]);
+
+  const isCurrentCourse = String(course?.id ?? "") === String(courseId ?? "");
+  const isCurrentOffering = String(offering?.id ?? "") === String(offeringId ?? "")
+    && String(offering?.courseId ?? "") === String(courseId ?? "");
+  const isCurrentClass = String(courseClass?.id ?? "") === String(classId ?? "")
+    && String(courseClass?.courseOfferingId ?? "") === String(offeringId ?? "");
+  const hasCourseName = isCurrentCourse && typeof course?.name === "string" && Boolean(course.name.trim());
+  const hasOfferingName = isCurrentOffering && typeof offering?.name === "string" && Boolean(offering.name.trim());
+  const hasClassName = isCurrentClass && typeof courseClass?.name === "string" && Boolean(courseClass.name.trim());
+  const breadcrumbItems = hasCourseName
+    && (pageKind === "course" || hasOfferingName)
+    && (pageKind !== "class" || hasClassName)
+    ? [
+      { label: "Khóa học", to: basePath },
+      { label: course.name.trim(), ...(pageKind === "course" ? { current: true } : { to: coursePath }) },
+      ...(pageKind === "offering" || pageKind === "class"
+        ? [{ label: offering.name.trim(), ...(pageKind === "offering" ? { current: true } : { to: offeringPath }) }]
+        : []),
+      ...(pageKind === "class" ? [{ label: courseClass.name.trim(), current: true }] : []),
+    ]
+    : undefined;
 
   const offeringPathFor = (id) => `${coursePath}/offerings/${id}`;
   const classPathFor = (id) => `${offeringPath}/classes/${id}`;
@@ -267,7 +308,7 @@ export default function CourseManagementPages({ token, role, onLogout, onNavigat
   const sessionFields = [
     { key: "startTime", label: "Bắt đầu", type: "datetime-local", required: true, min: offering ? `${offering.startDate}T00:00` : undefined, max: offering ? `${offering.endDate}T23:59` : undefined },
     { key: "endTime", label: "Kết thúc", type: "datetime-local", required: true, min: offering ? `${offering.startDate}T00:00` : undefined, max: offering ? `${offering.endDate}T23:59` : undefined },
-    { key: "facilityId", label: "Cơ sở vật chất", type: "select", num: true, options: suitableFacilities.map((facility) => [facility.id, facility.name]) },
+    { key: "facilityId", label: "Cơ sở vật chất", type: "select", num: true, required: true, options: suitableFacilities.filter((facility) => String(facility.status || "").toUpperCase() === "ACTIVE").map((facility) => [facility.id, facility.name]) },
   ];
 
   if (!token) return <Navigate to="/login" replace />;
@@ -276,24 +317,31 @@ export default function CourseManagementPages({ token, role, onLogout, onNavigat
   return <div className="layout">
     <Sidebar role={role} activePage="courses" onLogout={onLogout} onNavigate={onNavigate} />
     <main className="main course-management-pages">
-      <button type="button" className="adm-back" onClick={() => navigate("/staff/courses")}>← Danh sách khóa học</button>
+      <AdminTopBar
+        pageLabel="QUẢN LÝ KHÓA HỌC"
+        displayName={currentUserName}
+        avatarName={currentUserName}
+        breadcrumbItems={breadcrumbItems}
+      />
+      <div className="course-management-content">
+      <button type="button" className="adm-back" onClick={() => navigate(parentPath)}><CourseIcon name="back" /> {parentLabel}</button>
       {loading && <p className="course-management-state" role="status">Đang tải dữ liệu khóa học…</p>}
       {error && <div className="banner error" role="alert">{error} <button type="button" onClick={refresh}>Thử lại</button></div>}
       {notice && <div className="banner success" role="status">{notice}</div>}
       {!loading && !error && course && <>
-        <Breadcrumbs course={course} offering={pageKind === "course" ? null : offering} courseClass={pageKind === "class" ? courseClass : null} coursePath="/staff/courses" offeringPath={offeringPath} />
         {pageKind === "course" && <CourseDetailPage {...{ course, offerings: filteredOfferings, today, offeringSearch, setOfferingSearch, timeFilter, setTimeFilter, offeringStatusFilter, setOfferingStatusFilter, offeringSort, setOfferingSort, offeringFields, refresh, saveSuccess, token, navigate, offeringPathFor }} />}
         {pageKind === "offering" && offering && <OfferingDetailPage {...{ course, offering, classes: filteredClasses, classSearch, setClassSearch, classStatusFilter, setClassStatusFilter, classFields, coachQualificationHint, refresh, saveSuccess, token, navigate, classPathFor }} />}
-        {pageKind === "class" && offering && courseClass && <ClassDetailPage {...{ course, offering, courseClass, sessions: filteredSessions, allSessions: sessions, sessionStatusFilter, setSessionStatusFilter, sessionFields, suitableFacilities, coaches, coachSports, coachQualificationHint, refresh, saveSuccess, token, coursePath, offeringPath, classPath, onActionError: setError }} />}
+        {pageKind === "class" && offering && courseClass && <ClassDetailPage {...{ course, offering, courseClass, sessions: filteredSessions, allSessions: sessions, sessionStatusFilter, setSessionStatusFilter, sessionStartDateFilter, setSessionStartDateFilter, sessionEndDateFilter, setSessionEndDateFilter, sessionSort, setSessionSort, sessionFilterRevision, setSessionFilterRevision, sessionFields, suitableFacilities, coaches, coachSports, coachQualificationHint, refresh, saveSuccess, token, coursePath, offeringPath, classPath, onActionError: setError }} />}
       </>}
+      </div>
     </main>
   </div>;
 }
 
 function CourseDetailPage({ course, offerings, today, offeringSearch, setOfferingSearch, timeFilter, setTimeFilter, offeringStatusFilter, setOfferingStatusFilter, offeringSort, setOfferingSort, offeringFields, refresh, saveSuccess, token, navigate, offeringPathFor }) {
   return <>
-    <header className="course-detail-heading"><h1>{course.name}</h1></header>
-    <section className="adm-block course-entity-panel course-info-card"><div className="adm-head"><h2>Thông tin khóa học</h2><button type="button" aria-label="Sửa thông tin khóa học" title="Sửa thông tin khóa học" onClick={() => navigate("/staff/courses/" + course.id + "/edit")}><i className="bi bi-pencil" aria-hidden="true" /><span>Sửa</span></button></div><dl className="course-entity-facts">
+    <header className="course-detail-heading"><div><h1>{course.name}</h1><p>Quản lý thông tin khóa học, các đợt học và lớp trực thuộc.</p></div></header>
+    <section className="adm-block course-entity-panel course-info-card"><div className="adm-head"><h2>Thông tin khóa học</h2><button type="button" aria-label="Sửa thông tin khóa học" title="Sửa thông tin khóa học" onClick={() => navigate("/staff/courses/" + course.id + "/edit")}><CourseIcon name="edit" /><span>Sửa</span></button></div><dl className="course-entity-facts">
       <Fact label="Sport" value={course.sportName} /><Fact label="Trình độ" value={course.level} /><Fact label="Độ tuổi" value={`${course.targetAgeMin ?? "—"} – ${course.targetAgeMax ?? "—"}`} /><Fact label="Chính sách độ tuổi" value={course.agePolicy || "—"} /><Fact label="Trạng thái" value={statusPill(course.status)} />
       {course.description && <Fact label="Mô tả" value={course.description} />}{course.learningOutcome && <Fact label="Kết quả đầu ra" value={course.learningOutcome} />}
     </dl></section>
@@ -324,8 +372,8 @@ function OfferingDetailPage({ course, offering, classes, classSearch, setClassSe
   const businessDate = vietnamBusinessDate();
   const timeStatus = offeringTimeStatus(offering, businessDate);
   return <>
-    <header className="course-detail-heading"><div className="course-title-group"><h1>{offering.name}</h1><span className={`course-time-status time-${String(timeStatus || "unknown").toLowerCase()}`}>{TIME_STATUS_LABEL[timeStatus] || "Chưa xác định"}</span></div></header>
-    <EntityCrud title="Thông tin đợt học" entity={offering} fields={offeringFieldsForEntity(fields, offering)} formHint="OPEN chỉ cho phép đăng ký khi đang trong thời gian đăng ký và có lớp đủ điều kiện. Điều khoản thương mại chỉ sửa được trước thời điểm mở đăng ký dự kiến. Trạng thái và tên mô tả vẫn có thể cập nhật nếu hợp lệ." details={[
+    <header className="course-detail-heading"><div><div className="course-title-group"><h1>{offering.name}</h1><span className={`course-time-status time-${String(timeStatus || "unknown").toLowerCase()}`}>{TIME_STATUS_LABEL[timeStatus] || "Chưa xác định"}</span></div><p>Đợt học thuộc khóa {course.name}; quản lý điều kiện và lịch các lớp bên dưới.</p></div></header>
+    <EntityCrud title="Thông tin đợt học" entity={offering} fields={offeringFieldsForEntity(fields, offering)} formHint="OPEN chỉ cho phép đăng ký khi đang trong thời gian đăng ký và có lớp đủ điều kiện. Điều khoản thương mại chỉ sửa được trước thời điểm mở đăng ký dự kiến. Trạng thái và tên mô tả vẫn có thể cập nhật nếu hợp lệ." panelClassName="course-offering-info" editLabel="" editAccessibleName="Sửa thông tin" showPencil details={[
       ["Khóa học", course.name], ["Học phí", `${Number(offering.price || 0).toLocaleString("vi-VN")} ₫`], ["Ngày bắt đầu", offering.startDate], ["Ngày kết thúc", offering.endDate],
       ["Hạn đăng ký", offering.registrationDeadline || "—"], ["Hạn hủy", offering.cancellationDeadline || "—"], ["Số buổi dự kiến", offering.plannedSessions], ["Thời lượng mỗi buổi", offering.sessionDuration ? `${offering.sessionDuration} phút` : "—"],
       ["Trạng thái đợt học", statusPill(offering.status)], ["Thời gian", TIME_STATUS_LABEL[timeStatus] || "Chưa xác định"],
@@ -341,7 +389,7 @@ function OfferingDetailPage({ course, offering, classes, classSearch, setClassSe
   </>;
 }
 
-function ClassDetailPage({ course, offering, courseClass, sessions, allSessions, sessionStatusFilter, setSessionStatusFilter, sessionFields, suitableFacilities, coaches, coachSports, coachQualificationHint, refresh, saveSuccess, token, coursePath, offeringPath, classPath, onActionError }) {
+function ClassDetailPage({ course, offering, courseClass, sessions, allSessions, sessionStatusFilter, setSessionStatusFilter, sessionStartDateFilter, setSessionStartDateFilter, sessionEndDateFilter, setSessionEndDateFilter, sessionSort, setSessionSort, sessionFilterRevision, setSessionFilterRevision, sessionFields, suitableFacilities, coaches, coachSports, coachQualificationHint, refresh, saveSuccess, token, coursePath, offeringPath, classPath, onActionError }) {
   const [actionClock, setActionClock] = useState(() => new Date());
   useEffect(() => { const timer = window.setInterval(() => setActionClock(new Date()), 30_000); return () => window.clearInterval(timer); }, []);
   const classFields = [
@@ -357,14 +405,21 @@ function ClassDetailPage({ course, offering, courseClass, sessions, allSessions,
     ? "HLV hiện được phân công không còn ACTIVE hoặc chưa được xác minh đủ chuyên môn. Phân công hiện tại được giữ nguyên; máy chủ sẽ kiểm tra mọi thay đổi."
     : ""].filter(Boolean).join(" ");
   return <>
-    <header className="course-detail-heading"><div className="course-title-group"><h1>{courseClass.name}</h1>{courseClassStatusPill(courseClass.status)}</div></header>
-    <EntityCrud title="Thông tin lớp" entity={courseClass} fields={classFields} formHint={classCoachHint} panelClassName="course-class-info" editLabel="Sửa" editAccessibleName="Sửa thông tin lớp" showPencil details={[
+    <header className="course-detail-heading"><div><div className="course-title-group"><h1>{courseClass.name}</h1>{courseClassStatusPill(courseClass.status)}</div><p>{course.name} · {offering.name} · Lịch học và buổi học</p></div></header>
+    <EntityCrud title="Thông tin lớp" entity={courseClass} fields={classFields} formHint={classCoachHint} panelClassName="course-class-info" editLabel="" editAccessibleName="Sửa thông tin" showPencil details={[
       ["Khóa học", course.name], ["Đợt học", offering.name], ["Huấn luyện viên", courseClass.coachName || "—"], ["Sức chứa", courseClass.capacity], ["Trạng thái", courseClassStatusPill(courseClass.status)],
     ]} onSave={async (body) => { await saveClassApi(token, courseClass.id, body); saveSuccess("Đã cập nhật lớp."); }} />
-    <section className="adm-block"><div className="adm-head"><div><h2>Buổi học</h2><span className="course-list-total">{sessions.length} buổi · sắp xếp thời gian tăng dần</span></div></div>
-      <div className="course-hierarchy-filters course-two-filters"><label>Trạng thái buổi<select value={sessionStatusFilter} onChange={(event) => setSessionStatusFilter(event.target.value)}><option value="">Tất cả</option><option value="SCHEDULED">SCHEDULED</option><option value="COMPLETED">COMPLETED</option><option value="CANCELLED">CANCELLED</option></select></label></div>
-      <Crud title="Danh sách buổi học" items={sessions} fields={sessionFields} onRefresh={refresh}
-        columns={[{ label: "Bắt đầu", render: (session) => displayTime(session.startTime) }, { label: "Kết thúc", render: (session) => displayTime(session.endTime) }, { label: "Huấn luyện viên", render: () => courseClass.coachName || "—" }, { key: "facilityName", label: "Cơ sở vật chất" }, { label: "Trạng thái", render: (session) => statusPill(session.status) }]}
+    <section className="adm-block course-session-section"><div className="adm-head"><div><h2>Buổi học</h2><span className="course-list-total">{allSessions.length} buổi · sắp xếp thời gian tăng dần</span></div></div>
+      <div className="course-session-filters" aria-label="Bộ lọc buổi học">
+        <label>Trạng thái<select value={sessionStatusFilter} onChange={(event) => { setSessionStatusFilter(event.target.value); setSessionFilterRevision((value) => value + 1); }}><option value="">Tất cả</option><option value="SCHEDULED">Đã lên lịch</option><option value="COMPLETED">Đã hoàn thành</option><option value="CANCELLED">Đã hủy</option></select></label>
+        <label>Từ ngày<input type="date" value={sessionStartDateFilter} onChange={(event) => { setSessionStartDateFilter(event.target.value); setSessionFilterRevision((value) => value + 1); }} /></label>
+        <label>Đến ngày<input type="date" value={sessionEndDateFilter} onChange={(event) => { setSessionEndDateFilter(event.target.value); setSessionFilterRevision((value) => value + 1); }} /></label>
+        <label>Sắp xếp<select value={sessionSort} onChange={(event) => { setSessionSort(event.target.value); setSessionFilterRevision((value) => value + 1); }}><option value="ASC">Thời gian tăng dần</option><option value="DESC">Thời gian giảm dần</option></select></label>
+      </div>
+      <Crud className="course-session-list" title="Danh sách buổi học" items={sessions} fields={sessionFields} onRefresh={refresh}
+        pageResetKey={sessionFilterRevision}
+        hint={allSessions.length ? "Không có buổi học nào khớp bộ lọc." : "Chưa có buổi học."}
+        columns={[{ label: "Ngày", render: (session) => formatClassSessionDate(session.startTime) }, { label: "Thời gian", render: (session) => `${formatClassSessionTime(session.startTime)}–${formatClassSessionTime(session.endTime)}` }, { label: "Huấn luyện viên", render: () => courseClass.coachName || "—" }, { key: "facilityName", label: "Cơ sở vật chất" }, { label: "Trạng thái", render: (session) => sessionStatusPill(session.status) }]}
         canEdit={(session) => String(session.status).toUpperCase() === "SCHEDULED"}
         rowActions={(session) => {
           if (String(session.status).toUpperCase() !== "SCHEDULED") return null;

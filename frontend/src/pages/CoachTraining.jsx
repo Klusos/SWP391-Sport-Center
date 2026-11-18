@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Sidebar from "../components/Sidebar";
+import AdminTopBar from "../components/AdminTopBar";
 import IndividualTrainingPlans from "../components/IndividualTrainingPlans";
 import { acquireAction } from "../courseCheckout";
+import { canManageTrainingForRole } from "../trainingCapabilities";
 import {
   addTrainingExerciseApi,
   completeTrainingSessionApi,
@@ -30,7 +32,9 @@ const errorText = (error, fallback) => error?.status === 403
   ? "Bạn không có quyền thao tác trên lớp này."
   : error?.message || fallback;
 
-export default function CoachTraining({ token, role, onLogout, onNavigate }) {
+export default function CoachTraining({ token, role, currentUserName, onLogout, onNavigate }) {
+  const canManageTraining = canManageTrainingForRole(role);
+  const isAdmin = role === "ADMIN";
   const [classes, setClasses] = useState([]);
   const [classId, setClassId] = useState("");
   const [tab, setTab] = useState("plan");
@@ -63,11 +67,13 @@ export default function CoachTraining({ token, role, onLogout, onNavigate }) {
 
   return <div className="layout">
     <Sidebar role={role} activePage={role === "ADMIN" ? "admin-training" : "coach-training"} onLogout={onLogout} onNavigate={onNavigate} />
-    <main className="main training-page">
+    <main className={`main training-page${isAdmin ? " training-page--admin" : ""}`}>
+      {isAdmin && <AdminTopBar pageLabel="GIÁM SÁT HUẤN LUYỆN" displayName={currentUserName} avatarName={currentUserName} />}
+      <div className={isAdmin ? "training-admin-content" : "training-coach-content"}>
       <header className="training-header">
         <div>
           <h1>Giáo án &amp; kết quả</h1>
-          <p className="subtitle">Lập giáo án, mục tiêu và bài tập cho lớp được giao; hoàn thành buổi học, ghi kết quả và đánh giá tiến độ.</p>
+          <p className="subtitle">{canManageTraining ? "Lập giáo án, mục tiêu và bài tập cho lớp được giao; hoàn thành buổi học, ghi kết quả và đánh giá tiến độ." : "Chế độ chỉ xem: theo dõi giáo án, buổi học, kết quả và tiến độ của lớp."}</p>
         </div>
         <label className="training-class-picker">Lớp
           <select value={classId} onChange={(event) => { setClassId(event.target.value); setNotice(""); setError(""); }} disabled={loading || !classes.length}>
@@ -92,16 +98,17 @@ export default function CoachTraining({ token, role, onLogout, onNavigate }) {
           {[["plan", "1. Giáo án & bài tập"], ["sessions", "2. Buổi học & kết quả"], ["progress", "3. Đánh giá tiến độ"], ["individual", "4. Giáo án cá nhân"]].map(([key, label]) =>
             <button key={key} type="button" role="tab" aria-selected={tab === key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>{label}</button>)}
         </nav>
-        {tab === "plan" && <PlanTab key={classId} token={token} classId={classId} onSaved={loadClasses} flash={flash} fail={fail} />}
-        {tab === "sessions" && <SessionsTab key={classId} token={token} classId={classId} onChanged={loadClasses} flash={flash} fail={fail} />}
-        {tab === "progress" && <ProgressTab key={classId} token={token} classId={classId} flash={flash} fail={fail} />}
-        {tab === "individual" && <IndividualTrainingPlans key={classId} mode="coach" token={token} classId={classId} />}
+        {tab === "plan" && <PlanTab key={classId} token={token} classId={classId} canManageTraining={canManageTraining} onSaved={loadClasses} flash={flash} fail={fail} />}
+        {tab === "sessions" && <SessionsTab key={classId} token={token} classId={classId} canManageTraining={canManageTraining} onChanged={loadClasses} flash={flash} fail={fail} />}
+        {tab === "progress" && <ProgressTab key={classId} token={token} classId={classId} canManageTraining={canManageTraining} flash={flash} fail={fail} />}
+        {tab === "individual" && <IndividualTrainingPlans key={classId} mode={canManageTraining ? "coach" : "admin-readonly"} canManageTraining={canManageTraining} token={token} classId={classId} />}
       </>}
+      </div>
     </main>
   </div>;
 }
 
-function PlanTab({ token, classId, onSaved, flash, fail }) {
+function PlanTab({ token, classId, canManageTraining, onSaved, flash, fail }) {
   const [plan, setPlan] = useState(null);
   const [form, setForm] = useState({ goal: "", description: "" });
   const [exercise, setExercise] = useState(EMPTY_EXERCISE);
@@ -132,6 +139,7 @@ function PlanTab({ token, classId, onSaved, flash, fail }) {
 
   async function savePlan(event) {
     event.preventDefault();
+    if (!canManageTraining) return;
     if (!acquireAction(actionLock)) return;
     setBusy(true);
     try {
@@ -145,6 +153,7 @@ function PlanTab({ token, classId, onSaved, flash, fail }) {
 
   async function saveExercise(event) {
     event.preventDefault();
+    if (!canManageTraining) return;
     if (!acquireAction(actionLock)) return;
     setBusy(true);
     const payload = {
@@ -167,6 +176,7 @@ function PlanTab({ token, classId, onSaved, flash, fail }) {
   }
 
   async function removeExercise(item) {
+    if (!canManageTraining) return;
     if (!window.confirm(`Xóa bài tập “${item.name}”?`)) return;
     if (!acquireAction(actionLock)) return;
     setBusy(true);
@@ -190,7 +200,7 @@ function PlanTab({ token, classId, onSaved, flash, fail }) {
   return <div className="training-grid">
     <section className="dash-card">
       <h2>Giáo án &amp; mục tiêu</h2>
-      <form className="training-form" onSubmit={savePlan}>
+      {canManageTraining ? <form className="training-form" onSubmit={savePlan}>
         <label>Mục tiêu tập luyện *
           <input required maxLength={500} value={form.goal} onChange={(event) => setForm({ ...form, goal: event.target.value })}
             placeholder="Ví dụ: Đánh cầu qua lại liên tục 20 lần" />
@@ -201,7 +211,11 @@ function PlanTab({ token, classId, onSaved, flash, fail }) {
         </label>
         <button type="submit" disabled={busy}>{plan ? "Cập nhật giáo án" : "Tạo giáo án"}</button>
         {plan && <small className="training-muted">Cập nhật lần cuối {formatDateTime(plan.updatedAt)} bởi {plan.updatedByName || `#${plan.updatedById}`}</small>}
-      </form>
+      </form> : plan ? <div className="training-form">
+        <p><strong>Mục tiêu:</strong> {plan.goal}</p>
+        {plan.description && <p>{plan.description}</p>}
+        <small className="training-muted">Cập nhật lần cuối {formatDateTime(plan.updatedAt)} bởi {plan.updatedByName || `#${plan.updatedById}`}</small>
+      </div> : <p className="dash-empty">Lớp chưa có giáo án.</p>}
     </section>
 
     <section className="dash-card">
@@ -214,12 +228,12 @@ function PlanTab({ token, classId, onSaved, flash, fail }) {
               <small>{[item.sets && `${item.sets} hiệp`, item.reps && `${item.reps} lần`, item.durationMinutes && `${item.durationMinutes} phút`].filter(Boolean).join(" · ") || "—"}</small>
               {item.notes && <small>{item.notes}</small>}
             </div>
-            <span>
+            {canManageTraining && <span>
               <button type="button" className="training-link-button" disabled={busy} onClick={() => edit(item)}>Sửa</button>
               <button type="button" className="training-link-button danger" disabled={busy} onClick={() => void removeExercise(item)}>Xóa</button>
-            </span>
+            </span>}
           </li>)}</ol>}
-        <form className="training-form training-exercise-form" onSubmit={saveExercise}>
+        {canManageTraining && <form className="training-form training-exercise-form" onSubmit={saveExercise}>
           <h3>{editingId ? "Sửa bài tập" : "Thêm bài tập"}</h3>
           <label>Tên bài tập *<input required maxLength={150} value={exercise.name} onChange={(event) => setExercise({ ...exercise, name: event.target.value })} /></label>
           <div className="training-inline">
@@ -232,13 +246,13 @@ function PlanTab({ token, classId, onSaved, flash, fail }) {
             <button type="submit" disabled={busy}>{editingId ? "Lưu bài tập" : "Thêm bài tập"}</button>
             {editingId && <button type="button" className="secondary" onClick={() => { setEditingId(null); setExercise(EMPTY_EXERCISE); }}>Hủy sửa</button>}
           </span>
-        </form>
+        </form>}
       </>}
     </section>
   </div>;
 }
 
-function SessionsTab({ token, classId, onChanged, flash, fail }) {
+function SessionsTab({ token, classId, canManageTraining, onChanged, flash, fail }) {
   const [sessions, setSessions] = useState(null);
   const [sheet, setSheet] = useState(null);
   const [drafts, setDrafts] = useState({});
@@ -266,6 +280,7 @@ function SessionsTab({ token, classId, onChanged, flash, fail }) {
   }
 
   async function complete(session) {
+    if (!canManageTraining) return;
     if (!window.confirm("Xác nhận buổi học đã được tiến hành xong?")) return;
     if (!acquireAction(actionLock)) return;
     setBusy(true);
@@ -279,6 +294,7 @@ function SessionsTab({ token, classId, onChanged, flash, fail }) {
   }
 
   async function saveResult(row) {
+    if (!canManageTraining) return;
     const draft = drafts[row.memberId] || {};
     if (!acquireAction(actionLock)) return;
     setBusy(true);
@@ -302,9 +318,9 @@ function SessionsTab({ token, classId, onChanged, flash, fail }) {
             <small>{SESSION_STATUS[session.status] || session.status} · {session.presentCount} có mặt · {session.resultCount} kết quả</small>
           </div>
           <span className="training-actions">
-            {session.canComplete && <button type="button" disabled={busy} onClick={() => void complete(session)}>Hoàn thành</button>}
-            <button type="button" className="secondary" disabled={!session.canRecordResults} onClick={() => void openSheet(session.sessionId)}>
-              {session.canRecordResults ? "Ghi kết quả" : "Chưa diễn ra"}
+            {canManageTraining && session.canComplete && <button type="button" disabled={busy} onClick={() => void complete(session)}>Hoàn thành</button>}
+            <button type="button" className="secondary" disabled={canManageTraining && !session.canRecordResults} onClick={() => void openSheet(session.sessionId)}>
+              {canManageTraining ? (session.canRecordResults ? "Ghi kết quả" : "Chưa diễn ra") : "Xem kết quả"}
             </button>
           </span>
         </li>)}</ul>}
@@ -312,24 +328,25 @@ function SessionsTab({ token, classId, onChanged, flash, fail }) {
 
     <section className="dash-card">
       <h2>Kết quả buổi học</h2>
-      {!sheet ? <p className="dash-empty">Chọn một buổi đã diễn ra để ghi kết quả.</p> : <>
+        {!sheet ? <p className="dash-empty">Chọn một buổi học để xem kết quả.</p> : <>
         <p className="training-muted">{formatDateTime(sheet.startTime)} – {formatDateTime(sheet.endTime)} · {SESSION_STATUS[sheet.status] || sheet.status}</p>
         {sheet.members.length === 0 ? <p className="dash-empty">Lớp chưa có học viên đã xác nhận.</p>
           : <table className="training-table">
-            <thead><tr><th>Học viên</th><th>Điểm danh</th><th>Điểm (1–10)</th><th>Nhận xét</th><th /></tr></thead>
+            <thead><tr><th>Học viên</th><th>Điểm danh</th><th>Điểm (1–10)</th><th>Nhận xét</th>{canManageTraining && <th />}</tr></thead>
             <tbody>{sheet.members.map((row) => {
               const present = row.attendanceStatus === "PRESENT";
               const draft = drafts[row.memberId] || { score: "", notes: "" };
               return <tr key={row.memberId}>
                 <td>{row.memberName}</td>
                 <td><span className={`training-badge ${row.attendanceStatus.toLowerCase()}`}>{ATTENDANCE[row.attendanceStatus] || row.attendanceStatus}</span></td>
-                <td><input type="number" min={1} max={10} disabled={!present || busy} value={draft.score}
-                  onChange={(event) => setDrafts({ ...drafts, [row.memberId]: { ...draft, score: event.target.value } })} /></td>
-                <td><input maxLength={1000} disabled={!present || busy} value={draft.notes}
-                  onChange={(event) => setDrafts({ ...drafts, [row.memberId]: { ...draft, notes: event.target.value } })} /></td>
-                <td>{present
+                <td>{canManageTraining ? <input type="number" min={1} max={10} disabled={!present || busy} value={draft.score}
+                  onChange={(event) => setDrafts({ ...drafts, [row.memberId]: { ...draft, score: event.target.value } })} /> : row.score ?? "—"}</td>
+                <td>{canManageTraining ? <input maxLength={1000} disabled={!present || busy} value={draft.notes}
+                  onChange={(event) => setDrafts({ ...drafts, [row.memberId]: { ...draft, notes: event.target.value } })} /> : row.notes || "—"}</td>
+                {canManageTraining && <td>{present
                   ? <button type="button" disabled={busy || !draft.score} onClick={() => void saveResult(row)}>{row.resultId ? "Cập nhật" : "Lưu"}</button>
                   : <small className="training-muted">Cần có mặt</small>}</td>
+                }
               </tr>;
             })}</tbody>
           </table>}
@@ -338,7 +355,7 @@ function SessionsTab({ token, classId, onChanged, flash, fail }) {
   </div>;
 }
 
-function ProgressTab({ token, classId, flash, fail }) {
+function ProgressTab({ token, classId, canManageTraining, flash, fail }) {
   const [rows, setRows] = useState(null);
   const [drafts, setDrafts] = useState({});
   const [busy, setBusy] = useState(false);
@@ -357,6 +374,7 @@ function ProgressTab({ token, classId, flash, fail }) {
   }, [token, classId]);
 
   async function evaluate(row) {
+    if (!canManageTraining) return;
     const draft = drafts[row.memberId] || {};
     if (!acquireAction(actionLock)) return;
     setBusy(true);
@@ -381,7 +399,7 @@ function ProgressTab({ token, classId, flash, fail }) {
       {row.evaluationHistory.length > 1 && <details><summary>Lịch sử đánh giá ({row.evaluationHistory.length})</summary>
         <ul>{row.evaluationHistory.map((item) => <li key={item.id}><Stars value={item.rating} /> {item.comment} — {formatDateTime(item.evaluatedAt)}</li>)}</ul>
       </details>}
-      <form className="training-inline" onSubmit={(event) => { event.preventDefault(); void evaluate(row); }}>
+      {canManageTraining && <form className="training-inline" onSubmit={(event) => { event.preventDefault(); void evaluate(row); }}>
         <label>Mức tiến độ
           <select required value={draft.rating} onChange={(event) => setDrafts({ ...drafts, [row.memberId]: { ...draft, rating: event.target.value } })}>
             <option value="">Chọn</option>
@@ -393,7 +411,7 @@ function ProgressTab({ token, classId, flash, fail }) {
           <input required maxLength={1000} value={draft.comment} onChange={(event) => setDrafts({ ...drafts, [row.memberId]: { ...draft, comment: event.target.value } })} />
         </label>
         <button type="submit" disabled={busy}>Ghi đánh giá</button>
-      </form>
+      </form>}
     </section>;
   })}</div>;
 }

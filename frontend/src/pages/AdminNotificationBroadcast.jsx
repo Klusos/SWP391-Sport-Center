@@ -1,5 +1,6 @@
 ﻿
 import { useState } from "react";
+import AdminTopBar from "../components/AdminTopBar";
 import Sidebar from "../components/Sidebar";
 import { broadcastNotificationsApi } from "../api";
 import "./AdminNotificationBroadcast.css";
@@ -10,6 +11,7 @@ const MESSAGE_LIMIT = 5000;
 export default function AdminNotificationBroadcast({
   token,
   role,
+  currentUserName,
   onLogout,
   onNavigate,
 }) {
@@ -72,15 +74,15 @@ export default function AdminNotificationBroadcast({
       />
 
       <main className="main notification-broadcast-main">
+        <AdminTopBar
+          pageLabel="THÔNG BÁO"
+          displayName={currentUserName}
+          avatarName={currentUserName}
+        />
         <div className="nb-page">
           {/* Page header */}
           <header className="nb-header">
             <div className="nb-header-content">
-              <div className="nb-eyebrow">
-                <span className="nb-eyebrow-dot" />
-                NOTIFICATION CENTER
-              </div>
-
               <h1>Gửi thông báo toàn trung tâm</h1>
 
               <p className="nb-subtitle">
@@ -89,10 +91,6 @@ export default function AdminNotificationBroadcast({
               </p>
             </div>
 
-            <div className="nb-header-icon" aria-hidden="true">
-              <i className="bi bi-bell-fill" />
-              <span />
-            </div>
           </header>
 
           {/* Main form card */}
@@ -186,8 +184,6 @@ export default function AdminNotificationBroadcast({
                 </div>
 
                 <div className="nb-input-wrap">
-                  <i className="bi bi-type" aria-hidden="true" />
-
                   <input
                     id="broadcast-title"
                     type="text"

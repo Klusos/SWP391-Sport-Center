@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Sidebar from "../components/Sidebar";
+import AdminTopBar from "../components/AdminTopBar";
+import AdminSectionHeader from "../components/AdminSectionHeader";
 import { createFacilityApi, getFacilitiesApi, getSportsApi, updateFacilityApi } from "../api";
 import "./FacilityManagement.css";
 
 const EMPTY_FORM = { sportIds: [], name: "", type: "", status: "ACTIVE" };
 
-export default function FacilityManagement({ token, role, onLogout, onNavigate }) {
+export default function FacilityManagement({ token, role, currentUserName, onLogout, onNavigate }) {
   const [facilities, setFacilities] = useState([]);
   const [sports, setSports] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -109,20 +111,24 @@ export default function FacilityManagement({ token, role, onLogout, onNavigate }
 
   return <div className="layout">
     <Sidebar role={role} activePage="facilities" onNavigate={onNavigate} onLogout={onLogout} />
-    <main className="main">
-      <header className="page-header">
-        <p className="eyebrow">{"QU\u1ea2N TR\u1eca N\u1ed8I DUNG"}</p>
-        <h1>{"Qu\u1ea3n l\u00fd c\u01a1 s\u1edf v\u1eadt ch\u1ea5t"}</h1>
-        <p className="subtitle">{"T\u1ea1o c\u01a1 s\u1edf, ch\u1ecdn b\u1ed9 m\u00f4n v\u00e0 c\u1eadp nh\u1eadt tr\u1ea1ng th\u00e1i cho ho\u1ea1t \u0111\u1ed9ng n\u1ed9i b\u1ed9."}</p>
-      </header>
-
-      <div className="sport-admin-toolbar">
-        <p className="muted">{facilities.length} {"c\u01a1 s\u1edf"} · {sports.length} {"b\u1ed9 m\u00f4n \u0111ang ho\u1ea1t \u0111\u1ed9ng"}</p>
-        <div className="facility-toolbar-actions">
-          <button type="button" className="btn-secondary" onClick={() => void load(selectedId)} disabled={loading || saving}>{"T\u1ea3i l\u1ea1i"}</button>
-          <button type="button" className="btn-primary" onClick={beginCreate} disabled={saving}>{"Th\u00eam c\u01a1 s\u1edf"}</button>
-        </div>
-      </div>
+    <main className="main facility-management-main">
+      <AdminTopBar pageLabel="CƠ SỞ VẬT CHẤT" displayName={currentUserName} avatarName={currentUserName} />
+      <div className="facility-management-content">
+      <AdminSectionHeader
+        title="Quản lý cơ sở vật chất"
+        description="Tạo cơ sở, chọn bộ môn và cập nhật trạng thái cho hoạt động nội bộ."
+        icon={<svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V5l7-2v18M12 8h7v13M8 7h1m-1 4h1m-1 4h1m8-4h1m-1 4h1" /></svg>}
+        summary={<>
+          <span className="admin-section-chip"><strong>{facilities.length}</strong> cơ sở</span>
+          <span className="admin-section-chip"><strong>{sports.length}</strong> bộ môn đang hoạt động</span>
+        </>}
+        actions={<>
+          <button type="button" className="btn-secondary admin-section-icon-action" onClick={() => void load(selectedId)} disabled={loading || saving} aria-label="Tải lại danh sách cơ sở" title="Tải lại danh sách cơ sở">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 7v5h-5M4 17v-5h5" /><path d="M5.6 9a7 7 0 0 1 11.6-2L20 12M4 12l2.8 5a7 7 0 0 0 11.6-2" /></svg>
+          </button>
+          {selectedFacility && <button type="button" className="btn-secondary facility-cancel-edit" onClick={beginCreate} disabled={saving}>Hủy chỉnh sửa</button>}
+        </>}
+      />
 
       {error && <p className="banner error" role="alert">{error}</p>}
       {notice && <p className="banner success" role="status">{notice}</p>}
@@ -171,6 +177,7 @@ export default function FacilityManagement({ token, role, onLogout, onNavigate }
             </div>
           </form>
         </section>
+      </div>
       </div>
     </main>
   </div>;

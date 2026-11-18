@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   Navigate,
   Outlet,
@@ -10,10 +10,14 @@ import {
 } from "react-router-dom";
 
 import NotificationBell from "./components/NotificationBell";
+import { PortalIdentityProvider } from "./components/PortalIdentityContext.jsx";
+import { notificationIdentityKey } from "./notificationIdentity.js";
+import { shouldShowNotificationBell } from "./notificationVisibility.js";
 import { loginApi, logoutApi, setActiveAuthToken, setUnauthorizedHandler } from "./api";
 import {
   clearLegacyTabAuth,
   clearSharedAuthIfToken,
+  getSafeLogoutReturnTo,
   readSharedAuth,
   subscribeToSharedAuth,
   withAuthTransitionLock,
@@ -56,18 +60,18 @@ import Layout from "./components/Layout";
 
 // Các trang bổ sung
 import ReportPage from "./pages/ReportPage";
-import MemberPage from "./pages/MemberPage";
 
 // Public website
 import PublicLayout from "./public-site/PublicLayout";
-import Admission from "./public-site/pages/Admission";
-import Coaches from "./public-site/pages/Coaches";
+import { ThemeProvider } from "./public-site/PublicThemeContext.jsx";
 import Disciplines from "./public-site/pages/Disciplines";
 import Facilities from "./public-site/pages/Facilities";
-import Home from "./public-site/pages/Home";
 import CourseDetail from "./public-site/pages/CourseDetail";
 
+import "./public-site/publicTheme.css";
 import "./public-site/styles.css";
+
+const LandingPage = lazy(() => import("./landing/LandingPage.jsx"));
 
 function AdminCourseRouteRedirect({ depth }) {
   const { courseId, offeringId, classId } = useParams();
@@ -75,6 +79,11 @@ function AdminCourseRouteRedirect({ depth }) {
   if (depth >= 2) destination += `/offerings/${offeringId}`;
   if (depth >= 3) destination += `/classes/${classId}`;
   return <Navigate to={destination} replace />;
+}
+
+function LandingSectionRedirect({ sectionId }) {
+  const location = useLocation();
+  return <Navigate to={{ pathname: "/", search: location.search, hash: `#${sectionId}` }} replace />;
 }
 
 const STAFF_ROLES = ["ADMIN", "RECEPTIONIST"];
@@ -90,6 +99,13 @@ const home = (role) => {
   if (role === "COACH") return "/coach/dashboard";
   return "/staff/dashboard";
 };
+
+function redactLogoutDiagnostic(value) {
+  return String(value || "")
+    .replace(/\bBearer\s+[^\s"'`]+/gi, "Bearer [REDACTED]")
+    .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[REDACTED_JWT]")
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[REDACTED_EMAIL]");
+}
 
 function StaffRoute({ auth }) {
   const location = useLocation();
@@ -300,12 +316,15 @@ export default function App() {
 
   async function handleLogout(returnTo) {
     setLogoutError("");
+    let stage = "acquire-transition-lock";
     try {
       return await withAuthTransitionLock(async () => {
+        stage = "read-shared-auth";
         const previousAuth = readSharedAuth() ?? authRef.current;
         const token = previousAuth?.accessToken;
         if (token) {
           try {
+            stage = "revoke-token";
             await logoutApi(token);
           } catch (error) {
             if (error.status !== 401) {
@@ -314,27 +333,47 @@ export default function App() {
             }
             // A 401 means this credential is already unusable, not that revocation succeeded.
           }
+          stage = "clear-shared-auth";
           clearSharedAuthIfToken(token);
         }
 
+        stage = "read-latest-auth";
         const latestAuth = readSharedAuth();
         if (latestAuth) {
+          stage = "restore-newer-shared-auth";
           authRef.current = latestAuth;
           setActiveAuthToken(latestAuth.accessToken);
           setAuth(latestAuth);
           return false;
         }
+        stage = "clear-local-auth-state";
         authRef.current = null;
         setActiveAuthToken(null);
         setAuth(null);
+        stage = "prepare-login-navigation";
+        const safeReturnTo = getSafeLogoutReturnTo(returnTo);
+        stage = "navigate-to-login";
         navigate("/login", {
           replace: true,
-          state: returnTo ? { from: returnTo } : undefined,
+          state: safeReturnTo ? { from: safeReturnTo } : undefined,
         });
         return true;
       });
-    } catch {
-      setLogoutError("Không thể đồng bộ đăng xuất giữa các tab. Vui lòng thử lại.");
+    } catch (caught) {
+      if (import.meta.env.DEV) {
+        const error = caught instanceof Error ? caught : new Error(String(caught));
+        console.error("[SportCenter logout diagnostic]", {
+          stage,
+          name: redactLogoutDiagnostic(error.name),
+          message: redactLogoutDiagnostic(error.message),
+          stack: redactLogoutDiagnostic(error.stack),
+        });
+      }
+      if (stage === "acquire-transition-lock") {
+        setLogoutError("Không thể đồng bộ đăng xuất giữa các tab. Vui lòng thử lại.");
+      } else {
+        setLogoutError("Có lỗi khi hoàn tất đăng xuất. Vui lòng kiểm tra trạng thái đăng nhập trước khi thử lại.");
+      }
       return false;
     }
   }
@@ -342,6 +381,7 @@ export default function App() {
   const staff = {
     token: auth?.accessToken,
     role: auth?.role,
+    currentUserName: auth?.name,
     onLogout: handleLogout,
     onNavigate: (page) =>
       navigate(
@@ -375,6 +415,7 @@ export default function App() {
   const coach = {
     token: auth?.accessToken,
     role: auth?.role,
+    currentUserName: auth?.name,
     onLogout: handleLogout,
     onNavigate: (page) =>
       navigate(
@@ -406,18 +447,31 @@ export default function App() {
           "member-attendance": "/member/attendance",
           "member-pt-booking": "/member/pt-booking",
           "support-tickets": "/member/support-tickets",
-          "member-classes": "/member/classes",
         }[page] || "/member/dashboard"
       ),
   };
 
+  const landingRoute = (
+    <Suspense fallback={<p className="landing-preview-loading" role="status">Đang mở trang chủ…</p>}>
+      <LandingPage auth={auth} dashboardPath={home(auth?.role)} />
+    </Suspense>
+  );
+
   return (
+    <ThemeProvider>
+    <PortalIdentityProvider currentUserName={auth?.name}>
     <>
       {logoutError && <div className="error-text global-auth-error" role="alert">{logoutError}</div>}
       <Routes key={auth?.accessToken || "anonymous"}>
+        {/* The approved Landing is the canonical public Home. */}
+        <Route path="/" element={landingRoute} />
+        <Route
+          path="/landing-preview"
+          element={<Navigate to={{ pathname: "/", search: location.search, hash: location.hash }} replace />}
+        />
+
         {/* Website công khai */}
-        <Route element={<PublicLayout />}>
-          <Route path="/" element={<Home />} />
+        <Route element={<PublicLayout auth={auth} dashboardPath={home(auth?.role)} />}>
           <Route path="/bo-mon" element={<Disciplines />} />
           <Route path="/bo-mon/:sportId" element={<Disciplines />} />
 
@@ -435,13 +489,13 @@ export default function App() {
             }
           />
 
-          <Route path="/huan-luyen-vien" element={<Coaches />} />
+          <Route path="/huan-luyen-vien" element={<LandingSectionRedirect sectionId="huan-luyen-vien" />} />
           <Route path="/co-so-vat-chat" element={<Facilities />} />
-          <Route path="/tuyen-sinh" element={<Admission auth={auth} />} />
+          <Route path="/tuyen-sinh" element={<LandingSectionRedirect sectionId="tuyen-sinh" />} />
 
           <Route
             path="/membership-plans"
-            element={<Navigate to="/tuyen-sinh" replace />}
+            element={<LandingSectionRedirect sectionId="tuyen-sinh" />}
           />
         </Route>
 
@@ -606,6 +660,7 @@ export default function App() {
 
         {/* Khu vực hội viên */}
         <Route element={<MemberRoute auth={auth} />}>
+          <Route path="/member/classes" element={<Navigate to="/member/schedule" replace />} />
           <Route
             path="/member"
             element={<Navigate to="/member/dashboard" replace />}
@@ -653,20 +708,6 @@ export default function App() {
           />
           <Route path="/member/course-checkout/:registrationId" element={<CourseCheckout auth={auth} {...member} />} />
           <Route path="/member/support-tickets" element={<SupportTickets {...member} />} />
-
-          {/* Trang mới của hội viên — bọc trong Layout */}
-          <Route element={<Layout {...member} />}>
-            <Route
-              path="/member/classes"
-              element={
-                <MemberPage
-                  kind="member-classes"
-                title="Demo — Lớp học"
-                subtitle="Giao diện mẫu với dữ liệu minh họa; lịch thật xem tại mục Lịch trình."
-                />
-              }
-            />
-          </Route>
 
           <Route
             path="/member/membership"
@@ -730,12 +771,15 @@ export default function App() {
         />
       </Routes>
 
-      {auth?.accessToken && (
+      {shouldShowNotificationBell(location.pathname, auth) && (
         <NotificationBell
+          key={notificationIdentityKey(auth)}
           token={auth.accessToken}
           role={auth.role}
         />
       )}
     </>
+    </PortalIdentityProvider>
+    </ThemeProvider>
   );
 }
