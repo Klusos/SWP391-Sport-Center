@@ -15,7 +15,7 @@
 .member-training-page *,
 .member-training-page *::before,
 .member-training-page *::after { box-sizing: border-box; }
-.member-training-shell { width: min(1180px, calc(100% - 48px)); margin: 0 auto; padding: 42px 0 74px; }
+.member-training-shell { width: 100%; max-width: none; margin: 0; padding: 28px clamp(20px, 3vw, 36px) 56px; }
 .member-training-header { display: flex; align-items: end; justify-content: space-between; gap: 24px; padding-bottom: 25px; border-bottom: 1px solid var(--mt-border); }
 .member-training-header h1 { margin: 0; color: var(--mt-navy); font-size: clamp(31px, 3.6vw, 43px); letter-spacing: -1.1px; }
 .member-training-header p { max-width: 720px; margin: 9px 0 0; color: var(--mt-muted); line-height: 1.7; font-size: 13px; }
@@ -31,7 +31,7 @@
 .member-training-section-heading h2 { margin: 0; color: var(--mt-navy); font-size: 22px; line-height: 1.25; letter-spacing: -.4px; }
 .member-training-section-heading p { margin: 6px 0 0; color: var(--mt-muted); font-size: 12px; line-height: 1.6; }
 .member-training-count { flex: 0 0 auto; padding: 8px 11px; border-radius: 999px; background: #edf5ff; color: var(--mt-blue); font-size: 11px; font-weight: 800; }
-.member-training-class-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; }
+.member-training-class-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 360px)); justify-content: start; gap: 13px; }
 .member-training-class-option { display: flex; flex-direction: column; align-items: start; gap: 6px; min-height: 154px; padding: 15px 16px; text-align: left; border: 1px solid #dfe8f2; border-radius: 14px; background: #fff; cursor: pointer; font-family: inherit; transition: background .17s, border-color .17s, box-shadow .17s, transform .17s; }
 .member-training-class-option { color: inherit; text-decoration: none; }
 .member-training-class-option:hover { transform: translateY(-2px); border-color: #afcae6; box-shadow: 0 10px 26px rgba(23, 75, 118, .075); }
@@ -88,7 +88,7 @@
 .member-training-exercises li p { margin: 6px 0 0; color: #72859a; font-size: 10px; }
 .member-training-personal-section { padding: 23px; border: 1px solid var(--mt-border); border-radius: 17px; background: #fff; box-shadow: 0 8px 24px rgba(21, 56, 88, .045); }
 .member-training-personal-section > .member-training-section-heading { padding-bottom: 15px; margin-bottom: 16px; border-bottom: 1px solid #edf1f5; }
-.training-detail-shell { width: min(1180px, calc(100% - 48px)); min-width: 0; margin-inline: auto; padding: 32px 0 64px; }
+.training-detail-shell { width: 100%; max-width: none; min-width: 0; margin: 0; padding: 28px clamp(20px, 3vw, 36px) 56px; }
 .training-back-button { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; margin-bottom: 16px; padding: 0 12px; border: 1px solid #d5e1ed; border-radius: 9px; background: #fff; color: #365878; font-size: 12px; font-weight: 700; text-decoration: none; transition: background .16s, border-color .16s, color .16s; }
 .training-back-button:hover { border-color: #a9c9e9; background: #eef6ff; color: #176ed9; }
 .training-back-button:focus-visible { outline: 3px solid #a2c6ec; outline-offset: 3px; }
@@ -110,8 +110,9 @@
   .member-training-detail-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 760px) {
-  .member-training-shell { width: min(100% - 28px, 1180px); padding-top: 28px; }
-  .training-detail-shell { width: min(100% - 28px, 1180px); padding-top: 24px; }
+  .member-training-class-list { grid-template-columns: minmax(0, 1fr); }
+  .member-training-shell { padding: 24px clamp(14px, 3vw, 24px) 48px; }
+  .training-detail-shell { padding: 24px clamp(14px, 3vw, 24px) 48px; }
   .member-training-header { align-items: start; flex-direction: column; }
   .member-training-detail-header { align-items: flex-start; }
   .training-back-button { margin-bottom: 12px; }
@@ -120,7 +121,7 @@
   .member-training-exercises { grid-template-columns: 1fr; }
 }
 @media (max-width: 540px) {
-  .member-training-class-list, .member-training-stat-grid { grid-template-columns: 1fr; }
+  .member-training-class-list, .member-training-stat-grid { grid-template-columns: minmax(0, 1fr); }
   .member-training-section-heading { align-items: start; flex-direction: column; }
   .member-training-refresh { width: 100%; }
 }

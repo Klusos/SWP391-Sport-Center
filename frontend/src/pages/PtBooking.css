@@ -1041,7 +1041,12 @@
 }
 
 /* Wave 2 refinements remain scoped to the Member PT booking page. */
-.pt-booking-layout .pt-page { max-width: 1240px; }
+.pt-booking-layout .pt-main { padding: 0; }
+.pt-booking-layout .pt-page {
+  max-width: none;
+  margin: 0;
+  padding: 28px clamp(20px, 3vw, 36px) 56px;
+}
 .pt-booking-layout .pt-header {
   align-items: center;
   margin-bottom: 22px;

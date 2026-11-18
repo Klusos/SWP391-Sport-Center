@@ -104,7 +104,7 @@ test("booking and payment refresh is placed under Pending Actions and keeps its 
   const history = page.match(/<section className="pt-card pt-history-card"[\s\S]*?<\/section>/)?.[0];
   assert.ok(pending);
   assert.ok(history);
-  assert.match(history, /Booking đã xác nhận, đã hủy hoặc hết hạn được lưu tại đây\./);
+  assert.match(history, /Lịch đặt đã xác nhận, đã hủy hoặc hết hạn được lưu tại đây\./);
   assert.match(pending, /pt-actionable-refresh[\s\S]*?refreshAuthoritative\(\)/);
   assert.match(pending, /disabled=\{paymentBusyId !== null\}/);
   assert.match(pending, /aria-label=/);
@@ -115,10 +115,10 @@ test("booking and payment refresh is placed under Pending Actions and keeps its 
 test("member booking history exposes eligible cancellation with confirmation, refresh, and explicit refund-pending messaging", async () => {
   const page = await (await import("node:fs/promises")).readFile(new URL("../src/pages/PtBooking.jsx", import.meta.url), "utf8");
   assert.match(page, /cancelPtBookingApi\(token, booking\.id\)/);
-  assert.match(page, /!actionable && canMemberCancel\(booking, now\).*?Cancel booking/s);
+  assert.match(page, /!actionable && canMemberCancel\(booking, now\).*?Hủy lịch đặt/s);
   assert.match(page, /window\.confirm\(prompt\)/);
   assert.match(page, /await refreshAuthoritative\(\)/);
-  assert.match(page, /awaiting staff refund confirmation/);
+  assert.match(page, /đang chờ nhân viên xác nhận hoàn tiền/);
   assert.match(page, /ptErrorMessage\(requestError/);
   assert.match(page, /paymentBusyId !== null \|\| !canMemberCancel\(booking/);
 });

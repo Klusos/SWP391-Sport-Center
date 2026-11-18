@@ -25,92 +25,42 @@
   border: 0;
 }
 
-/* ---------- TOP UTILITY BAR ---------- */
-.mla-topbar {
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  min-height: 64px;
-  padding: 12px clamp(20px, 3vw, 36px);
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid #e3ebf5;
+.mla-content-header {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.mla-topbar-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  font-size: 13px;
-}
-
-.mla-eyebrow-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 5px 12px;
-  border-radius: 999px;
-  background: #dce9ff;
-  color: #16407a;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.mla-crumb-sep {
-  color: #cbd5e1;
-  font-weight: 500;
-}
-
-.main .mla-crumb-link {
-  border: 0;
-  background: transparent;
-  padding: 2px 4px;
-  min-height: 0;
-  color: #64748b;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  border-radius: 6px;
-}
-
-.main .mla-crumb-link:hover {
-  color: #1769d2;
-  background: transparent;
-}
-
-.main .mla-crumb-link.is-current {
-  color: #475569;
-  cursor: default;
-}
-
-.mla-crumb-active {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 700;
-  color: #153e67;
-}
-
-.mla-crumb-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #1769d2;
-}
-
-.mla-topbar-right {
-  display: flex;
-  align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  padding-right: 56px; /* Chừa khoảng trống để không bị nút chuông thông báo (fixed góc trên bên phải) che khuất */
+  width: 100%;
+  min-width: 0;
+}
+
+.mla-content-header-copy {
+  min-width: 0;
+}
+
+.mla-content-header-copy h1 {
+  margin: 0;
+  color: #153e67;
+  font-size: clamp(26px, 2.5vw, 32px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.mla-content-header-copy p {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.mla-content-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .mla-search-box {
@@ -202,8 +152,8 @@
 /* ---------- MAIN CONTAINER ---------- */
 .mla-container {
   width: 100%;
-  max-width: 1320px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
   padding: 28px clamp(20px, 3vw, 36px) 56px;
   display: flex;
   flex-direction: column;
@@ -264,107 +214,6 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
-}
-
-.member-levels-page .page-header.mla-step1-header {
-  margin-bottom: 0;
-  padding-bottom: 18px;
-  border-bottom: 1px solid rgba(227, 235, 245, 0.85);
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 20px;
-  flex-wrap: wrap;
-}
-
-.mla-step-tag-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.member-levels-page .page-header .eyebrow.mla-step-badge {
-  margin: 0;
-  padding: 4px 10px;
-  border-radius: 6px;
-  background: #dce9ff;
-  color: #16407a;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-}
-
-.mla-step-sublabel {
-  font-size: 12px;
-  font-weight: 600;
-  color: #94a3b8;
-}
-
-.member-levels-page .page-header.mla-step1-header h1 {
-  margin: 0;
-  color: #153e67;
-  font-size: clamp(26px, 2.5vw, 32px);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-}
-
-.member-levels-page .page-header.mla-step1-header .subtitle {
-  margin: 6px 0 0;
-  color: #64748b;
-  font-size: 14px;
-  line-height: 1.6;
-  max-width: 680px;
-}
-
-.mla-stepper-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 15px;
-  border-radius: 14px;
-  background: #ffffff;
-  border: 1px solid #e3ebf5;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
-}
-
-.mla-stepper-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12px;
-  font-weight: 700;
-  color: #153e67;
-}
-
-.mla-stepper-item.is-muted {
-  opacity: 0.45;
-  font-weight: 600;
-  color: #475569;
-}
-
-.mla-stepper-num {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 800;
-  background: #e2e8f0;
-  color: #475569;
-}
-
-.mla-stepper-item.is-active .mla-stepper-num {
-  background: #1769d2;
-  color: #ffffff;
-}
-
-.mla-stepper-arrow {
-  width: 15px;
-  height: 15px;
-  color: #cbd5e1;
 }
 
 /* ---------- 3 KPI SUMMARY CARDS ---------- */
@@ -1930,6 +1779,19 @@
 }
 
 @media (max-width: 720px) {
+  .mla-content-header {
+    align-items: stretch;
+  }
+
+  .mla-content-tools {
+    justify-content: flex-start;
+  }
+
+  .mla-content-tools .mla-search-box {
+    flex: 1 1 220px;
+    width: min(280px, 100%);
+  }
+
   .mla-sports-grid {
     grid-template-columns: 1fr;
   }

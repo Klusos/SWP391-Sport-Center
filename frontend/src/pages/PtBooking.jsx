@@ -10,11 +10,14 @@ import "./PtBooking.css";
 const rows = (value) => Array.isArray(value) ? value : value?.content ?? [];
 const money = (value) => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(value ?? 0);
 const currentTimestamp = () => Date.now();
+const PT_STATUS_LABELS = { PENDING_PAYMENT: "Chờ thanh toán", CONFIRMED: "Đã xác nhận", CANCELLED: "Đã hủy", EXPIRED: "Đã hết hạn" };
+const PAYMENT_STATUS_LABELS = { PENDING: "Đang chờ", SUCCESS: "Thành công", CANCELLED: "Đã hủy", FAILED: "Thất bại", REFUND_REQUIRED: "Chờ xử lý hoàn tiền", REFUNDED: "Đã hoàn tiền" };
+const PAYMENT_METHOD_LABELS = { ONLINE: "Trực tuyến", COUNTER: "Tại quầy" };
 function vietnamTime(value, date = false) {
-  if (!value) return "Time unavailable";
+  if (!value) return "Chưa có thời gian";
   const local = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(value);
   const time = new Date(local ? value + "+07:00" : value);
-  if (Number.isNaN(time.getTime())) return "Time unavailable";
+  if (Number.isNaN(time.getTime())) return "Chưa có thời gian";
   return new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", ...(date ? { dateStyle: "medium", timeStyle: "short" } : { timeStyle: "short" }) }).format(time);
 }
 
@@ -54,15 +57,15 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
 
   function openPaymentModal(booking) {
     if (paymentReconciliationRequired) {
-      setPaymentError("Refresh booking and payment status before starting another payment.");
+      setPaymentError("Hãy làm mới trạng thái lịch đặt và thanh toán trước khi bắt đầu giao dịch mới.");
       return;
     }
     if (paymentBusyId !== null || booking.status !== "PENDING_PAYMENT" || ptPaymentExpired(booking, currentTimestamp())) {
-      setPaymentError("This PT booking payment hold has expired. Refresh booking status before continuing.");
+      setPaymentError("Thời hạn thanh toán cho lịch PT này đã hết. Hãy làm mới trạng thái lịch đặt trước khi tiếp tục.");
       return;
     }
     if (pendingPtPayment(payments, booking.id)) {
-      setPaymentError("A pending payment already exists for this booking. Cancel it or wait for settlement before switching methods.");
+      setPaymentError("Lịch đặt này đã có giao dịch đang chờ. Hãy hủy giao dịch hoặc chờ xử lý xong trước khi đổi phương thức.");
       void refreshAuthoritative().catch(() => {});
       return;
     }
@@ -79,10 +82,10 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
   async function startPayment(booking, method) {
     if (paymentBusyId !== null || paymentReconciliationRequired || !acquirePtPaymentAction(paymentAction)) return false;
     if (booking.status !== "PENDING_PAYMENT" || ptPaymentExpired(booking, currentTimestamp())) {
-      setPaymentError("This PT booking payment hold has expired. Refresh booking status before continuing."); paymentAction.current = false; return false;
+      setPaymentError("Thời hạn thanh toán cho lịch PT này đã hết. Hãy làm mới trạng thái lịch đặt trước khi tiếp tục."); paymentAction.current = false; return false;
     }
     if (pendingPtPayment(payments, booking.id)) {
-      setPaymentError("A pending payment already exists for this booking. Cancel it or wait for settlement before switching methods.");
+      setPaymentError("Lịch đặt này đã có giao dịch đang chờ. Hãy hủy giao dịch hoặc chờ xử lý xong trước khi đổi phương thức.");
       try { await refreshAuthoritative(); } catch { /* Keep the current payment state visible. */ }
       paymentAction.current = false;
       return false;
@@ -95,25 +98,25 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
       try { refreshedPayments = await refreshAuthoritative(); }
       catch {
         setPaymentReconciliationRequired(true);
-        setPaymentError("Payment was created, but booking/payment history could not refresh. Refresh status before any further payment action.");
+        setPaymentError("Đã tạo giao dịch nhưng chưa thể làm mới lịch đặt và lịch sử thanh toán. Hãy cập nhật trạng thái trước khi thao tác tiếp.");
       }
       if (!refreshedPayments?.some((item) => Number(item.id) === Number(payment.id))) {
         setPayments((previous) => [payment, ...previous.filter((item) => item.id !== payment.id)]);
         setPaymentReconciliationRequired(true);
-        setPaymentError("Payment was created but is not visible in refreshed history yet. Refresh status before any further payment action.");
+        setPaymentError("Giao dịch đã tạo chưa xuất hiện trong lịch sử vừa tải. Hãy cập nhật trạng thái trước khi thao tác tiếp.");
       }
       if (method === "ONLINE" && (!payment?.paymentUrl || !ptOnlineUrlIsTrusted(payment.paymentUrl))) {
-        setPaymentError("Online payment was created, but its URL is missing or not a trusted VNPay Sandbox URL. The payment remains visible; do not create another payment."); return true;
+        setPaymentError("Đã tạo thanh toán trực tuyến nhưng đường dẫn VNPay Sandbox không hợp lệ hoặc không có. Giao dịch vẫn được lưu; không tạo giao dịch khác."); return true;
       }
       if (method === "ONLINE") window.location.assign(payment.paymentUrl);
       return true;
     } catch (requestError) {
       setPaymentError(requestError.status === 409
-        ? "A payment already exists or the booking is no longer payable. Booking and payment history were refreshed."
-        : `Payment outcome is uncertain: ${requestError.message || "network error"}. Check refreshed history before trying again.`);
+        ? "Lịch đặt đã có giao dịch hoặc không còn đủ điều kiện thanh toán. Lịch đặt và lịch sử thanh toán đã được tải lại."
+        : `Chưa xác định được kết quả thanh toán: ${requestError.message || "lỗi kết nối"}. Hãy kiểm tra lịch sử vừa tải trước khi thử lại.`);
       try { await refreshAuthoritative(); } catch { /* Keep payment actions locked until the user refreshes. */ }
       setPaymentReconciliationRequired(true);
-      setPaymentError("Could not confirm the payment request outcome. Review the refreshed history, then manually refresh once more before trying again.");
+      setPaymentError("Chưa thể xác nhận kết quả yêu cầu thanh toán. Hãy kiểm tra lịch sử đã tải và làm mới thêm lần nữa trước khi thử lại.");
       return false;
     } finally { paymentAction.current = false; setPaymentBusyId(null); }
   }
@@ -122,20 +125,20 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
     if (paymentBusyId !== null || !canMemberCancel(booking, currentTimestamp()) || !acquirePtPaymentAction(paymentAction)) return;
     const paid = bookingPayments(payments, booking.id).some((payment) => payment.status === "SUCCESS");
     const prompt = paid
-      ? `Cancel confirmed PT booking #${booking.id}? The backend will create a refund-required record for the amount paid. A staff member must process and confirm the actual refund; this does not mean the refund is complete.`
+      ? `Hủy lịch PT #${booking.id} đã xác nhận? Hệ thống sẽ ghi nhận khoản cần hoàn theo số tiền đã trả. Nhân viên cần xử lý và xác nhận hoàn tiền; thông báo này không có nghĩa là tiền đã được hoàn.`
       : booking.status === "PENDING_PAYMENT"
-        ? `Cancel pending PT booking #${booking.id}? The booking and any pending payment will be cancelled. No refund is due for an unpaid payment.`
-        : `Cancel PT booking #${booking.id}?`;
+        ? `Hủy lịch PT #${booking.id} đang chờ thanh toán? Lịch đặt và giao dịch đang chờ sẽ bị hủy. Giao dịch chưa thanh toán không phát sinh khoản hoàn tiền.`
+        : `Hủy lịch PT #${booking.id}?`;
     if (!window.confirm(prompt)) { paymentAction.current = false; return; }
     setPaymentBusyId(booking.id); setPaymentError(""); setNotice("");
     try {
       await cancelPtBookingApi(token, booking.id);
       await refreshAuthoritative();
       setNotice(paid
-        ? `Booking #${booking.id} was cancelled. Its paid amount is awaiting staff refund confirmation.`
-        : `Booking #${booking.id} was cancelled.`);
+        ? `Đã hủy lịch PT #${booking.id}. Khoản đã thanh toán đang chờ nhân viên xác nhận hoàn tiền.`
+        : `Đã hủy lịch PT #${booking.id}.`);
     } catch (requestError) {
-      setPaymentError(ptErrorMessage(requestError, "Could not cancel this PT booking."));
+      setPaymentError(ptErrorMessage(requestError, "Không thể hủy lịch PT này."));
       try { await refreshAuthoritative(); } catch { /* Keep the server cancellation error visible. */ }
     } finally { paymentAction.current = false; setPaymentBusyId(null); }
   }
@@ -145,7 +148,7 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
     setPaymentBusyId(payment.id); setPaymentError("");
     try { await cancelPaymentApi(token, payment.id); await refreshAuthoritative(); }
     catch (requestError) {
-      setPaymentError(`Cancellation outcome is uncertain: ${requestError.message || "network error"}. Refresh history; do not create another payment until status is confirmed.`);
+      setPaymentError(`Chưa xác định được kết quả hủy giao dịch: ${requestError.message || "lỗi kết nối"}. Hãy làm mới lịch sử và chờ xác nhận trạng thái trước khi tạo thanh toán khác.`);
       try { await refreshAuthoritative(); } catch { /* Preserve uncertainty warning. */ }
     } finally { paymentAction.current = false; setPaymentBusyId(null); }
   }
@@ -159,7 +162,7 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
       try {
         const [items, bookings, paymentRows] = await Promise.all([getPublicSportsApi(), getMyPtBookingsApi(token), getMyPaymentsApi(token)]);
         if (active && lifecycle.current === version) { setSports(rows(items)); setHistory(rows(bookings)); setPayments(rows(paymentRows)); }
-      } catch (requestError) { if (active) setError(requestError.message || "Could not load booking data."); }
+      } catch (requestError) { if (active) setError(requestError.message || "Không thể tải dữ liệu đặt lịch PT."); }
       finally { if (active) setLoading(false); }
     });
     return () => { active = false; lifecycle.current += 1; };
@@ -188,21 +191,21 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
     if (!related.length && !(booking.status === "PENDING_PAYMENT" && (allowCreate || expired))) return null;
     return <div className="pt-payment-actions">
       {related.map((payment) => <div className="pt-payment-state" key={payment.id}>
-        <strong>{payment.method} payment #{payment.id}: {payment.status}</strong>
+        <strong>Thanh toán {PAYMENT_METHOD_LABELS[payment.method] || payment.method} #{payment.id}: {PAYMENT_STATUS_LABELS[payment.status] || payment.status}</strong>
         <span>{ptPaymentMoney(payment.amount)}</span>
         {payment.status === "PENDING" && <>
-          <small>{payment.method === "COUNTER" ? "Chờ xác nhận tại quầy. Booking chỉ được xác nhận sau khi nhân viên ghi nhận thanh toán." : "Đang chờ VNPay xác nhận. Việc quay về từ trình duyệt không tự xác nhận thanh toán."}</small>
+          <small>{payment.method === "COUNTER" ? "Chờ xác nhận tại quầy. Lịch đặt chỉ được xác nhận sau khi nhân viên ghi nhận thanh toán." : "Đang chờ VNPay xác nhận. Việc quay về từ trình duyệt không tự xác nhận thanh toán."}</small>
           <button type="button" className="pt-secondary-button" disabled={paymentBusyId !== null} onClick={() => void cancelPendingPayment(payment)}>Hủy thanh toán đang chờ</button>
         </>}
       </div>)}
       {booking.status === "PENDING_PAYMENT" && (expired
-        ? <p role="status">Đã hết hạn giữ chỗ; không thể tạo thanh toán mới cho booking này.</p>
+        ? <p role="status">Đã hết hạn giữ chỗ; không thể tạo thanh toán mới cho lịch đặt này.</p>
         : paymentReconciliationRequired
           ? <p role="alert">Hãy làm mới lịch sử thanh toán trước khi tiếp tục.</p>
           : pending
-            ? <p role="status">Đã có thanh toán {pending.method} đang chờ. Không tạo thanh toán khác; hãy chờ xác nhận hoặc hủy yêu cầu đang chờ.</p>
+            ? <p role="status">Đã có thanh toán {PAYMENT_METHOD_LABELS[pending.method] || pending.method} đang chờ. Không tạo thanh toán khác; hãy chờ xác nhận hoặc hủy yêu cầu đang chờ.</p>
             : allowCreate && <div className="pt-payment-choice">
-              <p>Chọn phương thức thanh toán. Booking chỉ được xác nhận theo trạng thái từ máy chủ.</p>
+              <p>Chọn phương thức thanh toán. Lịch đặt chỉ được xác nhận theo trạng thái từ máy chủ.</p>
               <button id={`pt-payment-button-${booking.id}`} type="button" disabled={paymentBusyId !== null || paymentReconciliationRequired} onClick={() => openPaymentModal(booking)}>
                 {paymentBusyId === booking.id ? "Đang xử lý…" : "Thanh toán"}
               </button>
@@ -211,7 +214,7 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
   }
 
   function bookingStatus(booking) {
-    return booking.status === "PENDING_PAYMENT" ? "Chờ thanh toán" : booking.status;
+    return PT_STATUS_LABELS[booking.status] || booking.status;
   }
 
   function bookingCard(booking, actionable = false) {
@@ -221,8 +224,8 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
         <span>{vietnamTime(booking.startTime, true)} – {vietnamTime(booking.endTime)}</span>
         {actionable && <small>Giữ chỗ đến {vietnamTime(booking.paymentExpiresAt, true)} (giờ Việt Nam)</small>}
         <span className="pt-status">{bookingStatus(booking)}</span>
-        {!actionable && canMemberCancel(booking, now) && <button type="button" className="pt-secondary-button" disabled={paymentBusyId !== null} onClick={() => void cancelBooking(booking)}>{paymentBusyId === booking.id ? "Cancelling…" : "Cancel booking"}</button>}
-        {booking.status === "PENDING_PAYMENT" && ptPaymentExpired(booking, now) && <small className="pt-expired-hold">Đã hết hạn theo thời gian giữ chỗ (trạng thái máy chủ: PENDING_PAYMENT).</small>}
+        {!actionable && canMemberCancel(booking, now) && <button type="button" className="pt-secondary-button" disabled={paymentBusyId !== null} onClick={() => void cancelBooking(booking)}>{paymentBusyId === booking.id ? "Đang hủy…" : "Hủy lịch đặt"}</button>}
+        {booking.status === "PENDING_PAYMENT" && ptPaymentExpired(booking, now) && <small className="pt-expired-hold">Đã hết hạn giữ chỗ; máy chủ vẫn đang ghi nhận trạng thái chờ thanh toán.</small>}
       </div>
       <div className="pt-booking-summary-side">
         <strong>{money(booking.finalPrice)}</strong>
@@ -237,7 +240,7 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
     event.preventDefault();
     if (action.current || loading) return;
     if (!sports.some((sport) => String(sport.id) === sportId) || !startTime) {
-      setError("Please select a sport and start time."); return;
+      setError("Vui lòng chọn bộ môn và thời gian bắt đầu."); return;
     }
     action.current = true; setBusy(true); setError(""); setNotice(""); setCoaches([]); setSelectedCoach("");
     const version = lifecycle.current;
@@ -245,8 +248,8 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
       const eligible = rows(await getPtEligibleCoachesApi(token, sportId, startTime));
       if (lifecycle.current !== version) return;
       setCoaches(eligible);
-      if (!eligible.length) setNotice("No qualified coaches are free at this time.");
-    } catch (requestError) { if (lifecycle.current === version) setError(requestError.message || "Could not check coach schedules."); }
+      if (!eligible.length) setNotice("Hiện không có huấn luyện viên phù hợp vào thời gian này.");
+    } catch (requestError) { if (lifecycle.current === version) setError(requestError.message || "Không thể kiểm tra lịch của huấn luyện viên."); }
     finally { action.current = false; if (lifecycle.current === version) setBusy(false); }
   }
 
@@ -254,21 +257,21 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
     event.preventDefault();
     if (action.current || loading) return;
     const choice = coaches.find((coach) => String(coach.coachId) === selectedCoach);
-    if (!choice) { setError("Please select an available coach."); return; }
+    if (!choice) { setError("Vui lòng chọn một huấn luyện viên còn lịch."); return; }
     action.current = true; setBusy(true); setError(""); setNotice("");
     const version = lifecycle.current;
     try {
       const result = await createPtBookingApi(token, { coachId: choice.coachId, sportId: Number(sportId), startTime });
       if (lifecycle.current !== version) return;
-      setNotice(`Booking #${result.id} is ${result.status}. Your 90-minute session is held until ${vietnamTime(result.paymentExpiresAt, true)} (Vietnam time). Complete payment within 15 minutes; this is not payment confirmation.`);
+      setNotice(`Lịch PT #${result.id} (${PT_STATUS_LABELS[result.status] || result.status}). Buổi tập 90 phút được giữ chỗ đến ${vietnamTime(result.paymentExpiresAt, true)} (giờ Việt Nam). Vui lòng thanh toán trong 15 phút; thông báo này không xác nhận thanh toán.`);
       setCoaches([]); setSelectedCoach("");
       // Keep the created pending booking visible even if the history read fails.
       setHistory((previous) => [result, ...previous.filter((booking) => booking.id !== result.id)]);
       focusBookingId.current = result.id;
       try {
         await refreshAuthoritative();
-      } catch (requestError) { if (lifecycle.current === version) setError("Booking #" + result.id + " was created, but history could not be refreshed: " + requestError.message); }
-    } catch (requestError) { if (lifecycle.current === version) setError(requestError.message || "Booking failed."); }
+      } catch (requestError) { if (lifecycle.current === version) setError(`Đã tạo lịch PT #${result.id} nhưng chưa thể làm mới lịch sử: ${requestError.message}`); }
+    } catch (requestError) { if (lifecycle.current === version) setError(requestError.message || "Không thể tạo lịch PT."); }
     finally { action.current = false; if (lifecycle.current === version) setBusy(false); }
   }
 
@@ -290,11 +293,10 @@ onLogout={onLogout}
             SPORTCENTER / MEMBER
           </p>
 
-          <h1>Book a 1-on-1 PT session</h1>
+          <h1>Đặt buổi huấn luyện cá nhân</h1>
 
           <p className="pt-description">
-            Each session lasts 90 minutes. New bookings
-            remain pending payment.
+            Mỗi buổi tập kéo dài 90 phút. Lịch đặt mới sẽ ở trạng thái chờ thanh toán.
           </p>
 
           <Link
@@ -327,10 +329,9 @@ onLogout={onLogout}
           </span>
 
           <div>
-            <h2>Choose a sport and start time</h2>
+            <h2>Chọn bộ môn và thời gian bắt đầu</h2>
             <p>
-              Select a sport and a suitable time for your
-              session.
+              Chọn bộ môn và khung giờ phù hợp cho buổi tập.
             </p>
           </div>
         </div>
@@ -338,7 +339,7 @@ onLogout={onLogout}
         {loading ? (
           <div className="pt-loading" role="status">
             <span className="pt-spinner" />
-            <span>Loading PT booking...</span>
+            <span>Đang tải dữ liệu đặt lịch PT…</span>
           </div>
         ) : (
           <form
@@ -346,7 +347,7 @@ onLogout={onLogout}
             onSubmit={findCoaches}
           >
             <label className="pt-field">
-              <span>Sport</span>
+              <span>Bộ môn</span>
 
               <select
                 required
@@ -356,7 +357,7 @@ onLogout={onLogout}
                 }
                 disabled={busy}
               >
-                <option value="">Select a sport</option>
+                <option value="">Chọn bộ môn</option>
 
                 {sports.map((sport) => (
                   <option
@@ -370,7 +371,7 @@ onLogout={onLogout}
             </label>
 
             <label className="pt-field">
-              <span>Start time</span>
+              <span>Thời gian bắt đầu</span>
 
               <input
                 required
@@ -389,8 +390,8 @@ onLogout={onLogout}
               disabled={busy || !sportId || !startTime}
             >
               {busy
-                ? "Checking..."
-                : "Find available coaches"}
+                ? "Đang kiểm tra…"
+                : "Tìm huấn luyện viên phù hợp"}
             </button>
           </form>
         )}
@@ -402,11 +403,10 @@ onLogout={onLogout}
           >
             <div className="pt-subsection-heading">
               <div>
-                <h3>Eligible coaches</h3>
+                <h3>Huấn luyện viên phù hợp</h3>
 
                 <p>
-                  {coaches.length} coach
-                  {coaches.length > 1 ? "es" : ""} available
+                  {coaches.length} huấn luyện viên có lịch phù hợp
                 </p>
               </div>
             </div>
@@ -443,7 +443,7 @@ onLogout={onLogout}
 
                     <small>
                       {coach.sportName} /{" "}
-                      {coach.durationMinutes} minutes
+                      {coach.durationMinutes} phút
                     </small>
                   </span>
 
@@ -457,7 +457,7 @@ onLogout={onLogout}
                     </strong>
 
                     <small>
-                      Discount {money(coach.discount)}
+                      Giảm giá {money(coach.discount)}
                     </small>
                   </span>
                 </label>
@@ -470,8 +470,8 @@ onLogout={onLogout}
               disabled={busy || !selectedCoach}
             >
               {busy
-                ? "Processing..."
-                : "Book session / payment pending"}
+                ? "Đang xử lý…"
+                : "Đặt lịch · chờ thanh toán"}
             </button>
           </form>
         )}
@@ -482,12 +482,12 @@ onLogout={onLogout}
           <span className="pt-section-icon"><span aria-hidden="true">⏳</span></span>
           <div>
             <h2 id="pt-actionable-title">Cần xử lý</h2>
-            <p>Booking đang giữ chỗ được sắp theo hạn thanh toán gần nhất.</p>
+            <p>Lịch đặt đang được giữ chỗ sắp xếp theo hạn thanh toán gần nhất.</p>
           </div>
-          <button type="button" className="pt-secondary-button pt-actionable-refresh" aria-label={"L\u00e0m m\u1edbi tr\u1ea1ng th\u00e1i booking v\u00e0 thanh to\u00e1n"} title={"L\u00e0m m\u1edbi tr\u1ea1ng th\u00e1i booking v\u00e0 thanh to\u00e1n"} disabled={paymentBusyId !== null} onClick={() => void refreshAuthoritative().catch((requestError) => setPaymentError("Could not refresh booking and payment history: " + requestError.message))}>{"L\u00e0m m\u1edbi"}</button>
+          <button type="button" className="pt-secondary-button pt-actionable-refresh" aria-label={"L\u00e0m m\u1edbi tr\u1ea1ng th\u00e1i l\u1ecbch \u0111\u1eb7t v\u00e0 thanh to\u00e1n"} title={"L\u00e0m m\u1edbi tr\u1ea1ng th\u00e1i l\u1ecbch \u0111\u1eb7t v\u00e0 thanh to\u00e1n"} disabled={paymentBusyId !== null} onClick={() => void refreshAuthoritative().catch((requestError) => setPaymentError("Kh\u00f4ng th\u1ec3 l\u00e0m m\u1edbi l\u1ecbch \u0111\u1eb7t v\u00e0 l\u1ecbch s\u1eed thanh to\u00e1n: " + requestError.message))}>{"L\u00e0m m\u1edbi"}</button>
         </div>
-        {loading ? <div className="pt-loading" role="status">Đang tải booking cần xử lý…</div>
-          : actionableBookings.length === 0 ? <div className="pt-empty"><strong>Không có booking cần xử lý.</strong><p>Booking mới sẽ xuất hiện ở đây sau khi được tạo.</p></div>
+        {loading ? <div className="pt-loading" role="status">Đang tải lịch đặt cần xử lý…</div>
+          : actionableBookings.length === 0 ? <div className="pt-empty"><strong>Không có lịch đặt cần xử lý.</strong><p>Lịch đặt mới sẽ xuất hiện ở đây sau khi được tạo.</p></div>
             : <div className="pt-actionable-list">{actionableBookings.map((booking) => bookingCard(booking, true))}</div>}
       </section>
 
@@ -498,19 +498,19 @@ onLogout={onLogout}
           </span>
 
           <div>
-            <h2 id="pt-history-title">Lịch sử Booking</h2>
-            <p>Booking đã xác nhận, đã hủy hoặc hết hạn được lưu tại đây.</p>
+            <h2 id="pt-history-title">Lịch sử đặt lịch</h2>
+            <p>Lịch đặt đã xác nhận, đã hủy hoặc hết hạn được lưu tại đây.</p>
           </div>
         </div>
 
         {loading ? (
           <div className="pt-loading" role="status">
-            Đang tải lịch sử booking…
+            Đang tải lịch sử đặt lịch…
           </div>
         ) : history.length === 0 ? (
           <div className="pt-empty">
-            <strong>Chưa có lịch sử booking.</strong>
-            <p>Booking sẽ chuyển vào lịch sử sau khi được xác nhận, hủy hoặc hết hạn.</p>
+            <strong>Chưa có lịch sử đặt lịch.</strong>
+            <p>Lịch đặt sẽ chuyển vào đây sau khi được xác nhận, hủy hoặc hết hạn.</p>
           </div>
         ) : <>
           <div className="pt-history-controls">
@@ -520,18 +520,18 @@ onLogout={onLogout}
             <label>Lọc trạng thái
               <select value={historyStatus} onChange={(event) => { setHistoryStatus(event.target.value); setHistoryPage(0); }}>
                 <option value="ALL">Tất cả trạng thái</option>
-                <option value="CONFIRMED">CONFIRMED</option>
-                <option value="CANCELLED">CANCELLED</option>
-                <option value="EXPIRED">EXPIRED</option>
-                <option value="PENDING_PAYMENT">PENDING_PAYMENT đã hết hạn</option>
+                <option value="CONFIRMED">Đã xác nhận</option>
+                <option value="CANCELLED">Đã hủy</option>
+                <option value="EXPIRED">Đã hết hạn</option>
+                <option value="PENDING_PAYMENT">Chờ thanh toán (đã hết hạn)</option>
               </select>
             </label>
           </div>
           {filteredHistory.length === 0
-            ? <div className="pt-empty"><strong>{historicalBookings.length ? "Không tìm thấy booking phù hợp." : "Chưa có booking trong lịch sử."}</strong><p>Thay đổi bộ lọc hoặc từ khóa để xem các booking khác.</p></div>
+            ? <div className="pt-empty"><strong>{historicalBookings.length ? "Không tìm thấy lịch đặt phù hợp." : "Chưa có lịch đặt trong lịch sử."}</strong><p>Thay đổi bộ lọc hoặc từ khóa để xem các lịch đặt khác.</p></div>
             : <div className="pt-compact-history" aria-live="polite">{historyPageData.items.map((booking) => bookingCard(booking))}</div>}
-          {filteredHistory.length > 0 && <nav className="pt-history-pagination" aria-label="Phân trang lịch sử booking">
-            <span>{filteredHistory.length} booking · Trang {historyPageData.page + 1} / {historyPageData.totalPages}</span>
+          {filteredHistory.length > 0 && <nav className="pt-history-pagination" aria-label="Phân trang lịch sử đặt lịch">
+            <span>{filteredHistory.length} lịch đặt · Trang {historyPageData.page + 1} / {historyPageData.totalPages}</span>
             <div>
               <button type="button" className="pt-secondary-button" onClick={() => setHistoryPage((page) => Math.max(0, page - 1))} disabled={historyPageData.page <= 0}>Trước</button>
               <button type="button" className="pt-secondary-button" onClick={() => setHistoryPage((page) => page + 1)} disabled={historyPageData.page + 1 >= historyPageData.totalPages}>Sau</button>
@@ -545,7 +545,7 @@ onLogout={onLogout}
 
 {paymentModalBooking && <PaymentMethodModal
   amount={money(paymentModalBooking.finalPrice)}
-  context={`PT Booking #${paymentModalBooking.id} · ${paymentModalBooking.sportName} với ${paymentModalBooking.coachName} · giữ chỗ đến ${vietnamTime(paymentModalBooking.paymentExpiresAt, true)} (giờ Việt Nam)`}
+  context={`Lịch PT #${paymentModalBooking.id} · ${paymentModalBooking.sportName} với ${paymentModalBooking.coachName} · giữ chỗ đến ${vietnamTime(paymentModalBooking.paymentExpiresAt, true)} (giờ Việt Nam)`}
   busy={paymentBusyId === paymentModalBooking.id}
   error={paymentError}
   canContinue={!paymentReconciliationRequired && !pendingPtPayment(payments, paymentModalBooking.id)}

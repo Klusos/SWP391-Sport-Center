@@ -1,5 +1,5 @@
-.member-attendance-main { min-width: 0; }
-.member-attendance-page { max-width: 1120px; margin: 0 auto; padding: 34px 24px 60px; }
+.member-attendance-main { min-width: 0; padding: 0; }
+.member-attendance-page { width: 100%; max-width: none; margin: 0; padding: 28px clamp(20px, 3vw, 36px) 56px; }
 .member-attendance-header { margin-bottom: 22px; }
 .member-attendance-header h1 { margin: 4px 0 8px; color: #123b63; }
 .member-attendance-header p:last-child, .member-attendance-toolbar p { color: var(--text-sub); margin: 4px 0 0; }
@@ -30,5 +30,5 @@
 .member-attendance-empty, .member-attendance-alert { padding: 13px 15px; border-radius: 9px; }
 .member-attendance-empty { color: var(--text-sub); background: #f4f8fb; }
 .member-attendance-alert { color: #842029; background: #f8d7da; }
-@media (max-width: 760px) { .member-attendance-page { padding: 24px 14px 48px; } .member-attendance-summary { grid-template-columns: 1fr; } .member-attendance-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .member-attendance-page { padding: 24px clamp(14px, 3vw, 24px) 48px; } .member-attendance-summary { grid-template-columns: 1fr; } .member-attendance-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 480px) { .member-attendance-toolbar, .member-attendance-card-heading { align-items: stretch; flex-direction: column; } .member-attendance-toolbar select { width: 100%; } .member-attendance-facts { grid-template-columns: 1fr; } }

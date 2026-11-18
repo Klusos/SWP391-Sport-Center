@@ -437,72 +437,30 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
       />
 
       <main className="main member-levels-page mla-workspace">
-        {/* TOP UTILITY BAR */}
-        <div className="mla-topbar">
-          <div className="mla-topbar-left">
-            <span className="mla-eyebrow-pill">SPORTCENTER / HỘI VIÊN</span>
-            <span className="mla-crumb-sep">/</span>
-            <button
-              type="button"
-              className={`mla-crumb-link ${!selectedSport ? "is-current" : ""}`}
-              onClick={handleBackToDirectory}
-            >
-              Trình độ &amp; đánh giá năng lực thể thao
-            </button>
-            {selectedSport && (
-              <>
-                <span className="mla-crumb-sep">/</span>
-                <span className="mla-crumb-active">
-                  <span className="mla-crumb-dot" aria-hidden="true" />
-                  {selectedSport.name}
-                </span>
-              </>
-            )}
-          </div>
-
-          <div className="mla-topbar-right">
+        <div className="mla-container">
+          <header className="mla-content-header">
+            <div className="mla-content-header-copy">
+              <h1>{"Tr\u00ecnh \u0111\u1ed9 & l\u1ecbch s\u1eed \u0111\u00e1nh gi\u00e1"}</h1>
+              <p>{"Theo d\u00f5i tr\u00ecnh \u0111\u1ed9 hi\u1ec7n t\u1ea1i, l\u1ecbch s\u1eed \u0111\u00e1nh gi\u00e1 v\u00e0 y\u00eau c\u1ea7u t\u01b0 v\u1ea5n."}</p>
+            </div>
+          <div className="mla-content-tools">
             <div className="mla-search-box">
-              <svg
-                className="mla-search-icon"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                aria-hidden="true"
-              >
+              <svg className="mla-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                 <circle cx="11" cy="11" r="8" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35" />
               </svg>
-              <input
-                type="search"
-                className="mla-search-input"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Tìm bộ môn hoặc Coach..."
-                aria-label="Tìm bộ môn hoặc Coach"
-              />
+              <input type="search" className="mla-search-input" value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder={"T\u00ecm b\u1ed9 m\u00f4n ho\u1eb7c Coach..."} aria-label={"T\u00ecm b\u1ed9 m\u00f4n ho\u1eb7c Coach"} />
             </div>
-
-            <button
-              type="button"
-              className="mla-primary-pill-btn"
-              onClick={() => openRequestModal(selectedSport?.id)}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.3"
-                aria-hidden="true"
-              >
+            <button type="button" className="mla-primary-pill-btn" onClick={() => openRequestModal(selectedSport?.id)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
               </svg>
-              <span>Đăng ký đánh giá mới</span>
+              <span>{"\u0110\u0103ng k\u00fd \u0111\u00e1nh gi\u00e1 m\u1edbi"}</span>
             </button>
           </div>
-        </div>
-
-        <div className="mla-container">
+          </header>
           {modalSuccess && (
             <div className="banner success mla-banner-success" role="status">
               <span>{modalSuccess}</span>
@@ -552,42 +510,6 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
               ===================================================================== */}
           {!loading && eligibilityAvailable && relevantSports.length > 0 && !selectedSport && (
             <div className="mla-step1-view">
-              {/* 1. PAGE HEADER */}
-              <header className="page-header mla-step1-header">
-                <div className="mla-step1-heading">
-                  <div className="mla-step-tag-row">
-                    <span className="eyebrow mla-step-badge">BƯỚC 1: CHỌN BỘ MÔN</span>
-                    <span className="mla-step-sublabel">Quy trình 2 bước</span>
-                  </div>
-                  <h1>Trình độ &amp; lịch sử đánh giá</h1>
-                  <p className="subtitle">
-                    Chọn một bộ môn bên dưới để xem chi tiết trình độ hiện tại, lịch sử đánh giá
-                    của Coach và lịch sử tư vấn.
-                  </p>
-                </div>
-
-                <div className="mla-stepper-pill" aria-label="Tiến trình xem hồ sơ">
-                  <div className="mla-stepper-item is-active">
-                    <span className="mla-stepper-num">1</span>
-                    <span>Chọn môn</span>
-                  </div>
-                  <svg
-                    className="mla-stepper-arrow"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    aria-hidden="true"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                  <div className="mla-stepper-item is-muted">
-                    <span className="mla-stepper-num">2</span>
-                    <span>Xem hồ sơ &amp; Lịch sử</span>
-                  </div>
-                </div>
-              </header>
-
               {/* 2. SUMMARY STRIP (3 KPI CARDS) */}
               <section className="mla-kpi-grid" aria-label="Thống kê nhanh trình độ">
                 <div className="mla-kpi-card">

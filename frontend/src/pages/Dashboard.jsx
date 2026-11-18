@@ -19,6 +19,7 @@ import { coachAssessmentSummary, confirmedEnrollmentCount, pendingCoachAssessmen
 import { activeMembershipPlanRows, pendingConsultationRows, receptionistDashboardMetrics, searchReceptionistMembers } from "../receptionistDashboard.js";
 import { visibleAdminDashboardSports } from "../adminDashboard.js";
 import "./ReceptionistDashboard.css";
+import { resolveMemberLevelSportName } from "../memberDashboard.js";
 
 /* ---------- helpers ---------- */
 const list = (d) => (Array.isArray(d) ? d : d?.content ?? []);
@@ -50,7 +51,7 @@ const LOADERS = {
   },
   MEMBER: {
     bookings: getMyPtBookingsApi, sessions: getMyClassSessionsApi,
-    levels: getMyMemberSportLevelsApi, attendance: getMyAttendanceApi,
+    levels: getMyMemberSportLevelsApi, sports: getSportsApi, attendance: getMyAttendanceApi,
     actionablePayments: getMyActionablePendingPaymentSummaryApi,
     profile: async (t) => {
       const user = await getCurrentUserApi(t);
@@ -517,7 +518,7 @@ function Member({ d, errors = {}, onNavigate }) {
         <button type="button" className="md-link" onClick={() => onNavigate("member-levels")}>Chi tiết →</button></div>
       {levels.length === 0 ? <p className="dash-empty">Bạn chưa được đánh giá trình độ.</p> : (
         <div className="md-levels">
-          {levels.map((l, i) => <div key={l.id ?? i}><span>{l.sportName || l.sport?.name || "Bộ môn #" + l.sportId}</span><b>{l.level || "—"}</b></div>)}
+          {levels.map((l, i) => <div key={l.id ?? i}><span>{resolveMemberLevelSportName(l, d.sports) || (errors.sports ? "Không tải được tên bộ môn" : "Chưa có thông tin bộ môn")}</span><b>{l.level || "—"}</b></div>)}
         </div>
       )}
     </section>

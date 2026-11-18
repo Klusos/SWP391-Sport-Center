@@ -98,3 +98,25 @@ test("consultation form retains full public catalog and decorative sport icons s
   assert.match(component, /sports\.map\(\(sport\) => \(\s*<option/);
   assert.doesNotMatch(component, /sport\.meta\.icon|mla-sport-icon|mla-hero-watermark/);
 });
+
+test("shared Portal Top Bar stays the only top bar and page tools remain in the content area", async () => {
+  const [component, styles] = await Promise.all([
+    readFile(new URL("../src/pages/MemberLevelsAssessments.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/pages/MemberLevelsAssessments.css", import.meta.url), "utf8"),
+  ]);
+  assert.doesNotMatch(component, /mla-topbar/);
+  assert.match(component, /<div className="mla-container">\s*<header className="mla-content-header">[\s\S]*?<div className="mla-content-tools"/);
+  assert.match(component, /mla-content-header-copy">\s*<h1>/);
+  assert.doesNotMatch(component, /className="page-header mla-step1-header">[\s\S]*?<h1>/);
+  assert.match(component, /value=\{searchQuery\}[\s\S]*?setSearchQuery/);
+  assert.match(component, /onClick=\{\(\) => openRequestModal\(selectedSport\?\.id\)\}/);
+  assert.match(component, /className="mla-primary-pill-btn" onClick=\{\(\) => openRequestModal\(selectedSport\?\.id\)\}/);
+  assert.match(component, /\\u0110\\u0103ng k\\u00fd/);
+  assert.match(styles, /\.mla-content-tools\s*\{[^}]*flex-wrap: wrap/);
+});
+
+test("Levels & Assessments uses available Member content width without changing global layout", async () => {
+  const styles = await readFile(new URL("../src/pages/MemberLevelsAssessments.css", import.meta.url), "utf8");
+  assert.match(styles, /\.mla-container\s*\{[^}]*width: 100%;[^}]*max-width: none;[^}]*margin: 0;/);
+  assert.match(styles, /\.mla-container\s*\{[^}]*padding: 28px clamp\(20px, 3vw, 36px\) 56px/);
+});
