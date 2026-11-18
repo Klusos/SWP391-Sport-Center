@@ -53,7 +53,9 @@ export function prepareCheckout(snapshot, id, method, retryAccepted, interrupted
   if (payments.some((payment) => ["SUCCESS", "REFUND_REQUIRED"].includes(payment.status))) throw new Error("Đã có khoản thanh toán cần đối soát. Vui lòng liên hệ lễ tân trước khi thanh toán thêm.");
   const counter = pendingCounter(payments);
   if (counter) return { counter };
-  if ((interrupted || payments.some((payment) => payment.method === "ONLINE" && payment.status === "PENDING")) && !retryAccepted) throw new Error("Có giao dịch có thể đang xử lý. Kiểm tra lại và đọc cảnh báo trước khi thử lại.");
+  const pendingOnline = payments.find((payment) => payment.method === "ONLINE" && payment.status === "PENDING");
+  if (pendingOnline) throw new Error("Đã có thanh toán VNPay đang chờ xử lý. Hãy làm mới trạng thái hoặc hủy giao dịch đang chờ trước khi tạo yêu cầu mới.");
+  if (interrupted && !retryAccepted) throw new Error("Có giao dịch có thể đang xử lý. Kiểm tra lại và đọc cảnh báo trước khi thử lại.");
   return { payload: checkoutPayload(id, method) };
 }
 

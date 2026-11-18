@@ -51,13 +51,50 @@ test("refund-required has distinct guidance and blocks another payment", () => {
   assert.match(paymentMessage(refund), /hoàn tiền/);
   assert.throws(() => prepareCheckout(snapshot([refund]), 123, "COUNTER"));
 });
-test("lost or potentially expired ONLINE links require explicit acknowledgement", () => {
+test("active ONLINE payment blocks another creation for either method, even after acknowledgement", () => {
   const online = { ...pending, method: "ONLINE" };
   assert.equal(validVnpayUrl(online.paymentUrl), false);
   assert.throws(() => prepareCheckout(snapshot([online]), 123, "ONLINE", false));
-  assert.equal(prepareCheckout(snapshot([online]), 123, "ONLINE", true).payload.referenceId, 123);
+  assert.throws(() => prepareCheckout(snapshot([online]), 123, "ONLINE", true));
+  assert.throws(() => prepareCheckout(snapshot([online]), 123, "COUNTER", true));
   assert.throws(() => prepareCheckout(snapshot(), 123, "COUNTER", false, true));
   assert.equal(prepareCheckout(snapshot([{ ...online, status: "CANCELLED" }]), 123, "ONLINE").payload.method, "ONLINE");
+});
+
+test("pending COUNTER remains visible and cannot be bypassed by switching to ONLINE", () => {
+  const counter = { ...pending, method: "COUNTER" };
+  assert.deepEqual(prepareCheckout(snapshot([counter]), 123, "ONLINE"), { counter });
+  assert.deepEqual(prepareCheckout(snapshot([counter]), 123, "COUNTER"), { counter });
+});
+
+test("409 recovery refreshes authoritative state and never auto-cancels or creates a replacement", async () => {
+  const source = await readFile(new URL("../src/pages/CourseCheckout.jsx", import.meta.url), "utf8");
+  assert.match(source, /requestError\?\.status === 409/);
+  assert.match(source, /const refreshed = await read\(\)/);
+  assert.match(source, /setData\(refreshed\)/);
+  assert.match(source, /setRetryAccepted\(false\)/);
+  assert.doesNotMatch(source, /requestError\?\.status === 409[\s\S]{0,500}cancelPaymentApi/);
+});
+
+test("pending ONLINE cancellation is explicit, warned, confirmed by API, then refreshed", async () => {
+  const source = await readFile(new URL("../src/pages/CourseCheckout.jsx", import.meta.url), "utf8");
+  assert.match(source, /payment\.method === "ONLINE" \? .*xác nhận muộn vẫn có thể cần đối soát hoặc hoàn tiền/s);
+  assert.match(source, /window\.confirm\(/);
+  assert.match(source, /cancelPaymentApi\(token, payment\.id\)/);
+  assert.ok(source.indexOf("const cancelled = await cancelPaymentApi") < source.indexOf("setData((previous) => previous ? ({ ...previous, payments:"));
+  assert.match(source, /const next = await read\(\)/);
+  assert.match(source, /payment\.method === "ONLINE" && payment\.status === "PENDING"[\s\S]*?cancelPendingPayment/);
+  assert.equal(canCheckout(registration), true);
+  assert.throws(() => prepareCheckout(snapshot([{ ...pending, method: "ONLINE", status: "PENDING" }]), 123, "ONLINE", true));
+  assert.equal(prepareCheckout(snapshot([{ ...pending, method: "ONLINE", status: "CANCELLED" }]), 123, "ONLINE").payload.method, "ONLINE");
+  assert.equal(canCheckout({ ...registration, status: "EXPIRED" }), false);
+});
+
+test("network failures do not infer payment cancellation or success", async () => {
+  const source = await readFile(new URL("../src/pages/CourseCheckout.jsx", import.meta.url), "utf8");
+  assert.match(source, /Yêu cầu có thể đã được gửi; hãy làm mới trạng thái trước khi thử lại/);
+  assert.match(source, /status === "PENDING"/);
+  assert.doesNotMatch(source, /catch \(requestError\) \{[^}]*setData\([^}]*status: "CANCELLED"/s);
 });
 test("URL policy rejects simulator, alternate hosts, credentials and wrong protocols", () => {
   const good = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Command=pay&vnp_SecureHash=abc";

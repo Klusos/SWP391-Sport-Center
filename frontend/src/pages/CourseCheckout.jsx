@@ -99,6 +99,7 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
   const registration = data?.registrations.find((item) => item.id === id);
   const payments = registrationPayments(data?.payments || [], id);
   const counter = pendingCounter(payments);
+  const pendingOnline = payments.find((payment) => payment.method === "ONLINE" && payment.status === "PENDING");
   const uncertain = payments.some((payment) => payment.method === "ONLINE" && payment.status === "PENDING") || (context()?.registrationId === id && context()?.uncertain);
   const blocked = payments.some((payment) => ["SUCCESS", "REFUND_REQUIRED"].includes(payment.status));
 
@@ -112,7 +113,7 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
 
   async function pay(method) {
     if (!acquireAction(action)) return;
-    setBusy(true); setError(""); setNotice("");
+    setBusy(true); setError(""); setStatusError(""); setNotice("");
     let started = false;
     try {
       const next = await read();
@@ -134,17 +135,37 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
         window.location.assign(payment.paymentUrl);
       } else setNotice(`Đã tạo thanh toán tại quầy #${payment.id}. Vui lòng đến lễ tân trước hạn đăng ký. Chỗ học chỉ được xác nhận sau khi nhân viên ghi nhận đã nhận tiền.`);
     } catch (requestError) {
-      if (alive.current) setError(`${requestError.message}${started ? " Nếu yêu cầu bị gián đoạn, hãy làm mới trạng thái trước khi thử lại; không thể kết luận tiền đã được nhận." : ""}`);
+      if (alive.current && requestError?.status === 409) {
+        setRetryAccepted(false);
+        try {
+          const refreshed = await read();
+          if (alive.current) {
+            setData(refreshed);
+            setError("");
+            setStatusError("");
+            setNotice("Đã có yêu cầu thanh toán đang chờ. Trạng thái mới nhất đã được tải; không tạo thêm giao dịch.");
+          }
+        } catch (refreshError) {
+          if (alive.current) {
+            setError("Đã có yêu cầu thanh toán đang chờ. Không thể tải lại trạng thái; vui lòng thử làm mới.");
+            setStatusError(refreshError.message);
+          }
+        }
+      } else if (alive.current) {
+        setError(`${requestError.message}${started ? " Yêu cầu có thể đã được gửi; hãy làm mới trạng thái trước khi thử lại." : ""}`);
+      }
     } finally { action.current = false; if (alive.current) setBusy(false); }
   }
 
-  async function cancelCounter(payment) {
-    if (action.current || !window.confirm(`Hủy thanh toán tại quầy #${payment.id}? Thao tác này không hủy đăng ký giữ chỗ.`)) return;
-    action.current = true; setBusy(true); setError("");
+  async function cancelPendingPayment(payment) {
+    const warning = payment.method === "ONLINE" ? " Nếu VNPay đã xử lý giao dịch, xác nhận muộn vẫn có thể cần đối soát hoặc hoàn tiền." : "";
+    if (action.current || !window.confirm(`Hủy thanh toán ${payment.method} #${payment.id}? Thao tác này không hủy đăng ký giữ chỗ.${warning}`)) return;
+    action.current = true; setBusy(true); setError(""); setStatusError(""); setNotice("");
     try {
-      await cancelPaymentApi(token, payment.id);
+      const cancelled = await cancelPaymentApi(token, payment.id);
+      if (alive.current) setData((previous) => previous ? ({ ...previous, payments: previous.payments.map((item) => item.id === cancelled.id ? cancelled : item) }) : previous);
       const next = await read();
-      if (alive.current) { setData(next); setNotice("Đã hủy thanh toán tại quầy. Đăng ký giữ chỗ có trạng thái riêng."); }
+      if (alive.current) { setData(next); setNotice(`Đã hủy thanh toán ${payment.method}. Đăng ký giữ chỗ vẫn có trạng thái riêng; hãy kiểm tra trạng thái mới trước khi thử lại.`); }
     } catch (requestError) { if (alive.current) setError(requestError.message); }
     finally { action.current = false; if (alive.current) setBusy(false); }
   }
@@ -182,12 +203,12 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
           </section>
           <section><h2>Lịch sử thanh toán của đăng ký</h2>{payments.length === 0 ? <p>Chưa có giao dịch được máy chủ ghi nhận.</p> : payments.map((payment) => <article key={payment.id}>
             <h3>Thanh toán #{payment.id} · {payment.method}</h3><p>{money(payment.amount)} · {payment.status}</p><p role="status">{paymentMessage(payment)}</p>
-            {payment.method === "COUNTER" && payment.status === "PENDING" && <><p>Đến lễ tân trước {deadline(registration.paymentDeadline)}. Hội viên không thể tự xác nhận đã nhận tiền.</p><button type="button" disabled={busy} onClick={() => void cancelCounter(payment)}>Hủy yêu cầu tại quầy</button></>}
-            {payment.method === "ONLINE" && payment.status === "PENDING" && <p>Liên kết VNPay có hiệu lực khoảng 15 phút và không thể khôi phục từ lịch sử. Không thể xác định giao dịch đang xử lý hay liên kết đã hết hạn. Không trả tiền lần nữa nếu đã bị trừ tiền; hãy liên hệ lễ tân.</p>}
+            {payment.method === "COUNTER" && payment.status === "PENDING" && <><p>Đến lễ tân trước {deadline(registration.paymentDeadline)}. Hội viên không thể tự xác nhận đã nhận tiền.</p><button type="button" disabled={busy} onClick={() => void cancelPendingPayment(payment)}>Hủy yêu cầu tại quầy</button></>}
+            {payment.method === "ONLINE" && payment.status === "PENDING" && <><p>Liên kết VNPay có hiệu lực khoảng 15 phút và không thể khôi phục từ lịch sử. Không thể xác định giao dịch đang xử lý hay liên kết đã hết hạn. Không trả tiền lần nữa nếu đã bị trừ tiền; hãy liên hệ lễ tân.</p><button type="button" disabled={busy} onClick={() => void cancelPendingPayment(payment)}>Hủy thanh toán đang chờ</button></>}
           </article>)}</section>
           {canCheckout(registration) && !blocked && <section><h2>Chọn cách thanh toán</h2>
-            {uncertain && <label className="checkout-warning"><input type="checkbox" checked={retryAccepted} disabled={busy} onChange={(event) => setRetryAccepted(event.target.checked)} /> Tôi đã kiểm tra giao dịch trước, chưa thanh toán và hiểu lần thử mới có thể tạo giao dịch trùng. Nếu đã trả tiền hoặc chưa chắc chắn, tôi sẽ liên hệ lễ tân.</label>}
-            {counter ? <p>Đã có yêu cầu tại quầy #{counter.id}. Hoàn tất tại lễ tân hoặc hủy yêu cầu này trước khi chọn cách khác.</p> : <div className="checkout-actions">
+            {uncertain && !pendingOnline && <label className="checkout-warning"><input type="checkbox" checked={retryAccepted} disabled={busy} onChange={(event) => setRetryAccepted(event.target.checked)} /> Tôi đã kiểm tra giao dịch trước, chưa thanh toán và hiểu lần thử mới có thể tạo giao dịch trùng. Nếu đã trả tiền hoặc chưa chắc chắn, tôi sẽ liên hệ lễ tân.</label>}
+            {pendingOnline ? <p role="status">Có thanh toán VNPay đang chờ xử lý. Không thể tạo thêm yêu cầu cho đến khi trạng thái được xác nhận là đã hủy hoặc hoàn tất.</p> : counter ? <p>Đã có yêu cầu tại quầy #{counter.id}. Hoàn tất tại lễ tân hoặc hủy yêu cầu này trước khi chọn cách khác.</p> : <div className="checkout-actions">
               <button type="button" disabled={busy || (uncertain && !retryAccepted)} onClick={() => void pay("ONLINE")}>Thanh toán VNPay Sandbox</button>
               <button type="button" disabled={busy || (uncertain && !retryAccepted)} onClick={() => void pay("COUNTER")}>Thanh toán tại lễ tân</button>
             </div>}
