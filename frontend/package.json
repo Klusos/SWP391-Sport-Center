@@ -9,6 +9,9 @@
     "lint": "eslint .",
     "test": "node --test \"tests/**/*.test.mjs\"",
     "test:e2e": "playwright test --config=playwright.config.js",
+    "auth:setup": "node scripts/playwright-auth.mjs setup",
+    "auth:check": "node scripts/playwright-auth.mjs check",
+    "auth:smoke": "node scripts/playwright-auth.mjs smoke",
     "preview": "vite preview"
   },
   "dependencies": {

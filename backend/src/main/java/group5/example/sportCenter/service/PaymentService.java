@@ -29,6 +29,7 @@ import group5.example.sportCenter.dto.CounterPaymentRequest;
 import group5.example.sportCenter.dto.CreatePaymentRequest;
 import group5.example.sportCenter.dto.ActionablePendingPaymentSummaryResponse;
 import group5.example.sportCenter.dto.PaymentResponse;
+import group5.example.sportCenter.dto.MembershipUpgradeQuoteResponse;
 import group5.example.sportCenter.dto.CourseRegistrationRefundContextResponse;
 import group5.example.sportCenter.dto.PendingCoursePaymentResponse;
 import group5.example.sportCenter.dto.PendingPtPaymentResponse;
@@ -51,11 +52,13 @@ import group5.example.sportCenter.payment.PaymentGateway;
 import group5.example.sportCenter.payment.PtBookingPaymentHandler;
 import group5.example.sportCenter.repository.MembershipPlanRepository;
 import group5.example.sportCenter.repository.MembershipRepository;
+import group5.example.sportCenter.repository.MembershipRenewalIntentRepository;
 import group5.example.sportCenter.repository.MembershipUpgradeRepository;
 import group5.example.sportCenter.repository.CourseRegistrationRepository;
 import group5.example.sportCenter.repository.PersonalTrainingBookingRepository;
 import group5.example.sportCenter.repository.PaymentRepository;
 import group5.example.sportCenter.repository.PendingAutoRenewalLockRow;
+import group5.example.sportCenter.repository.RenewalPaymentRoute;
 import group5.example.sportCenter.repository.UserRepository;
 
 @Service
@@ -69,6 +72,7 @@ public class PaymentService {
     private final UserRepository userRepository;
     private final MembershipPlanRepository membershipPlanRepository;
     private final MembershipRepository membershipRepository;
+    private final MembershipRenewalIntentRepository renewalIntentRepository;
     private final MembershipUpgradeRepository membershipUpgradeRepository;
     private final CourseRegistrationRepository courseRegistrationRepository;
     private final PersonalTrainingBookingRepository personalTrainingBookingRepository;
@@ -87,6 +91,7 @@ public class PaymentService {
             UserRepository userRepository,
             MembershipPlanRepository membershipPlanRepository,
             MembershipRepository membershipRepository,
+            MembershipRenewalIntentRepository renewalIntentRepository,
             MembershipUpgradeRepository membershipUpgradeRepository,
             CourseRegistrationRepository courseRegistrationRepository,
             PersonalTrainingBookingRepository personalTrainingBookingRepository,
@@ -103,6 +108,7 @@ public class PaymentService {
         this.userRepository = userRepository;
         this.membershipPlanRepository = membershipPlanRepository;
         this.membershipRepository = membershipRepository;
+        this.renewalIntentRepository = renewalIntentRepository;
         this.membershipUpgradeRepository = membershipUpgradeRepository;
         this.courseRegistrationRepository = courseRegistrationRepository;
         this.personalTrainingBookingRepository = personalTrainingBookingRepository;
@@ -129,14 +135,9 @@ public class PaymentService {
         User actor = currentActor(callerJwt);
         User member = resolveMember(actor, request.getMemberId());
 
-        Integer autoRenewSourceMembershipId = null;
         if (request.getRenewalSourcePaymentId() != null) {
-            if (request.getPurpose() != PaymentPurpose.MEMBERSHIP
-                    || request.getMethod() != PaymentMethod.ONLINE
-                    || !Boolean.TRUE.equals(request.getAutoRenew())) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                        "Auto-renew source is only valid for an ONLINE auto-renew Membership payment");
-            }
+            throw new ResponseStatusException(HttpStatus.GONE,
+                    "Legacy auto-renew Payment replacement is paused until Renewal Intent is available");
         }
 
         if (request.getPurpose() == PaymentPurpose.MEMBERSHIP || request.getPurpose() == PaymentPurpose.UPGRADE) {
@@ -148,11 +149,6 @@ public class PaymentService {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                         "Membership payment requires an ACTIVE MEMBER account");
             }
-        }
-
-        if (request.getRenewalSourcePaymentId() != null) {
-            autoRenewSourceMembershipId = membershipAutoRenewalService.validateOnlineReplacement(
-                    request.getRenewalSourcePaymentId(), member, request.getReferenceId());
         }
 
         if (request.getPurpose() == PaymentPurpose.PT_BOOKING) {
@@ -180,34 +176,55 @@ public class PaymentService {
                             "Course registration not found with id: " + request.getReferenceId()));
         }
 
-        // The upgrade quote checks pending payments itself and must be stored with the payment.
-        MembershipUpgradeService.Quote upgradeQuote = request.getPurpose() == PaymentPurpose.UPGRADE
-                ? membershipUpgradeService.quote(member, request.getReferenceId()) : null;
-        BigDecimal amount = upgradeQuote != null ? upgradeQuote.amount() : resolveAmountAndValidate(request, member);
-        if (request.getPurpose() == PaymentPurpose.COURSE_REGISTRATION
-                && paymentRepository.existsByPurposeAndReferenceIdAndStatus(
-                        PaymentPurpose.COURSE_REGISTRATION, request.getReferenceId(), PaymentStatus.PENDING)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "A pending payment already exists for this course registration; cancel it before retrying or changing method");
-        }
         if (request.getPurpose() == PaymentPurpose.MEMBERSHIP) {
-            LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
-            if (membershipRepository.existsByMemberIdAndStatusAndStartDateGreaterThan(
-                    member.getId(), "ACTIVE", today)) {
+            if (renewalIntentRepository.existsOpenByMemberId(member.getId())) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "A future membership period already exists for this member");
+                        "An open Membership Renewal Intent must be resolved before a new purchase");
+            }
+            LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+            if (membershipRepository.existsByMemberIdAndStatusAndStartDateLessThanEqualAndEndDateGreaterThan(
+                    member.getId(), "ACTIVE", today, today)
+                    || membershipRepository.existsByMemberIdAndStatusAndStartDateGreaterThan(
+                            member.getId(), "ACTIVE", today)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "An effective or future Membership already exists for this member");
             }
             if (paymentRepository.existsByMember_IdAndPurposeInAndStatus(
                     member.getId(), List.of(PaymentPurpose.MEMBERSHIP), PaymentStatus.PENDING)) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
                         "A pending membership payment already exists for this member");
             }
+            if (paymentRepository.existsByMember_IdAndPurposeInAndStatus(
+                    member.getId(), List.of(PaymentPurpose.UPGRADE), PaymentStatus.PENDING)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "A pending membership upgrade must be paid or cancelled before buying another plan");
+            }
         }
-        if (request.getPurpose() == PaymentPurpose.MEMBERSHIP
-                && paymentRepository.existsByMember_IdAndPurposeInAndStatus(
-                        member.getId(), List.of(PaymentPurpose.UPGRADE), PaymentStatus.PENDING)) {
+
+        MembershipPlan membershipQuotePlan = request.getPurpose() == PaymentPurpose.MEMBERSHIP
+                ? membershipPlanRepository.findById(request.getReferenceId())
+                        .orElseThrow(() -> new ResourceNotFoundException(
+                                "Membership plan not found with id: " + request.getReferenceId()))
+                : null;
+        if (membershipQuotePlan != null && !"ACTIVE".equalsIgnoreCase(membershipQuotePlan.getStatus())) {
+            throw new IllegalArgumentException("Membership plan is not active");
+        }
+        if (membershipQuotePlan != null && membershipQuotePlan.getPrice().signum() <= 0) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "A pending membership upgrade must be paid or cancelled before buying another plan");
+                    "A positive Membership price is required for verified paid-value provenance");
+        }
+
+        // The upgrade quote checks pending payments itself and must be stored with the payment.
+        MembershipUpgradeService.Quote upgradeQuote = request.getPurpose() == PaymentPurpose.UPGRADE
+                ? membershipUpgradeService.quote(member, request.getReferenceId()) : null;
+        BigDecimal amount = upgradeQuote != null ? upgradeQuote.amount()
+                : membershipQuotePlan != null ? membershipQuotePlan.getPrice()
+                        : resolveAmountAndValidate(request, member);
+        if (request.getPurpose() == PaymentPurpose.COURSE_REGISTRATION
+                && paymentRepository.existsByPurposeAndReferenceIdAndStatus(
+                        PaymentPurpose.COURSE_REGISTRATION, request.getReferenceId(), PaymentStatus.PENDING)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "A pending payment already exists for this course registration; cancel it before retrying or changing method");
         }
         if (request.getPurpose() == PaymentPurpose.PT_BOOKING
                 && paymentRepository.existsByPurposeAndReferenceIdAndStatus(
@@ -224,8 +241,16 @@ public class PaymentService {
         payment.setReferenceId(request.getReferenceId());
         payment.setAutoRenew(request.getPurpose() == PaymentPurpose.MEMBERSHIP
                 ? Boolean.TRUE.equals(request.getAutoRenew()) : null);
-        if (autoRenewSourceMembershipId != null) {
-            payment.setNote(MembershipAutoRenewalService.NOTE_PREFIX + autoRenewSourceMembershipId);
+        if (membershipQuotePlan != null) {
+            payment.setMembershipPlanNameSnapshot(membershipQuotePlan.getName());
+            payment.setMembershipPlanDescriptionSnapshot(membershipQuotePlan.getDescription());
+            payment.setMembershipPlanPriceSnapshot(membershipQuotePlan.getPrice());
+            payment.setMembershipDurationMonthsSnapshot(membershipQuotePlan.getDurationMonths());
+            payment.setMembershipCourseDiscountPercentSnapshot(membershipQuotePlan.getCourseDiscountPercent());
+            payment.setMembershipPtDiscountPercentSnapshot(membershipQuotePlan.getPersonalTrainingDiscountPercent());
+            payment.setMembershipAllowPtPlanSnapshot(membershipQuotePlan.getAllowPersonalTrainingPlan());
+            payment.setMembershipAllowOneOnOneSnapshot(membershipQuotePlan.getAllowOneOnOneCoaching());
+            payment.setMembershipQuoteCapturedAt(now());
         }
         payment.setStatus(PaymentStatus.PENDING);
         payment.setTransactionCode("TXN-" + UUID.randomUUID().toString().replace("-", "")
@@ -246,6 +271,11 @@ public class PaymentService {
     public PaymentResponse processAtCounter(Integer paymentId, CounterPaymentRequest request, Jwt callerJwt) {
         User actor = currentActor(callerJwt);
         requireStaff(actor);
+        if (paymentRepository.findRenewalPaymentRouteById(paymentId).map(RenewalPaymentRoute::isRenewal)
+                .orElse(false)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Renewal counter confirmation must use the Renewal collection adapter");
+        }
 
         PendingAutoRenewalLockRow candidate = paymentRepository.findPaymentLockRow(paymentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + paymentId));
@@ -260,13 +290,29 @@ public class PaymentService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "This payment is not a counter payment");
         }
         requirePending(payment);
-        if (payment.getPurpose() == PaymentPurpose.UPGRADE && Boolean.TRUE.equals(request.getSuccess())) {
-            membershipUpgradeService.requireOpenQuote(payment);
-        }
-
         payment.setProcessedBy(actor);
         return toResponse(finalizePayment(payment, request.getSuccess(), request.getNote(),
                 Boolean.TRUE.equals(request.getSuccess()) ? now() : null), null);
+    }
+
+    /** Shared authenticated staff check for the Renewal-specific COUNTER adapter. */
+    public User authorizeCounterActor(Jwt callerJwt) {
+        User actor = currentActor(callerJwt);
+        requireStaff(actor);
+        return actor;
+    }
+
+    /** Shared active identity lookup for a Renewal Member cancellation adapter. */
+    public User authenticatePaymentActor(Jwt callerJwt) {
+        return currentActor(callerJwt);
+    }
+
+    /** Re-loads a committed adapter result inside a read-only transaction for lazy response fields. */
+    @Transactional(readOnly = true)
+    public PaymentResponse getPaymentResponseForAdapter(Integer paymentId) {
+        Payment payment = paymentRepository.findById(paymentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + paymentId));
+        return toResponse(payment, null);
     }
 
     /**
@@ -281,6 +327,13 @@ public class PaymentService {
             return new OnlineCallbackResult(OnlineCallbackResult.Status.INVALID_SIGNATURE, null);
         }
         GatewayCallback callback = verified.get();
+        // Renewal settlement is intentionally restricted to the server-to-server IPN adapter.
+        // This relational dispatch happens before either Member or Payment callback locks.
+        Optional<RenewalPaymentRoute> renewalRoute =
+                paymentRepository.findRenewalPaymentRouteByTransactionCode(callback.transactionCode());
+        if (renewalRoute.isPresent() && renewalRoute.get().isRenewal()) {
+            return new OnlineCallbackResult(OnlineCallbackResult.Status.RENEWAL_IPN_REQUIRED, null);
+        }
         Optional<PendingAutoRenewalLockRow> candidate = paymentRepository.findCallbackLockRow(callback.transactionCode());
         if (candidate.isEmpty()) {
             return new OnlineCallbackResult(OnlineCallbackResult.Status.NOT_FOUND, null);
@@ -297,6 +350,9 @@ public class PaymentService {
         Payment payment = found.get();
         if (payment.getMethod() != PaymentMethod.ONLINE) {
             return new OnlineCallbackResult(OnlineCallbackResult.Status.NOT_ONLINE, null);
+        }
+        if (callback.providerSignatureVerified() && callback.amount() == null) {
+            return new OnlineCallbackResult(OnlineCallbackResult.Status.AMOUNT_MISMATCH, null);
         }
         if (callback.amount() != null && payment.getAmount().compareTo(callback.amount()) != 0) {
             return new OnlineCallbackResult(OnlineCallbackResult.Status.AMOUNT_MISMATCH, null);
@@ -334,6 +390,11 @@ public class PaymentService {
     @Transactional
     public PaymentResponse cancelPayment(Integer paymentId, Jwt callerJwt) {
         User actor = currentActor(callerJwt);
+        if (paymentRepository.findRenewalPaymentRouteById(paymentId).map(RenewalPaymentRoute::isRenewal)
+                .orElse(false)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Renewal cancellation must use the lock-ordered Renewal attempt operation");
+        }
         Payment payment = paymentRepository.findByIdForUpdate(paymentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + paymentId));
         if (!isStaff(actor) && !payment.getMember().getId().equals(actor.getId())) {
@@ -743,6 +804,22 @@ public class PaymentService {
     }
 
     private PaymentResponse toResponse(Payment p, String paymentUrl, CourseRegistrationRefundContextResponse context) {
+        MembershipUpgradeQuoteResponse upgradeQuote = p.getPurpose() == PaymentPurpose.UPGRADE
+                ? membershipUpgradeRepository.findByPaymentId(p.getId())
+                        .filter(MembershipUpgrade::hasCompleteFrozenQuote)
+                        .map(upgrade -> new MembershipUpgradeQuoteResponse(
+                                upgrade.getSourceMembership().getId(),
+                                upgrade.getSourcePeriodStartDate(), upgrade.getSourcePeriodEndDate(),
+                                upgrade.getCreditValuationDate(), upgrade.getSourceTotalDays(), upgrade.getSourceUnusedDays(),
+                                upgrade.getTargetPlanNameSnapshot(), upgrade.getTargetPlanDescriptionSnapshot(),
+                                upgrade.getTargetPlanPriceSnapshot(), upgrade.getTargetDurationMonthsSnapshot(),
+                                upgrade.getTargetCourseDiscountPercentSnapshot(), upgrade.getTargetPtDiscountPercentSnapshot(),
+                                upgrade.getTargetAllowPtPlanSnapshot(), upgrade.getTargetAllowOneOnOneSnapshot(),
+                                upgrade.getAppliedCreditAmount(),
+                                upgrade.getTargetPlanPriceSnapshot().subtract(upgrade.getAppliedCreditAmount()),
+                                upgrade.getExpiresAt()))
+                        .orElse(null)
+                : null;
         return new PaymentResponse(
                 p.getId(), p.getMember().getId(), p.getMember().getName(), p.getAmount(),
                 p.getMethod().name(), p.getPurpose().name(), p.getReferenceId(), p.getStatus().name(),
@@ -751,6 +828,7 @@ public class PaymentService {
                 context == null ? null : context.registrationId(),
                 context == null ? null : context.courseName(),
                 context == null ? null : context.courseOfferingName(),
-                context == null ? null : context.className());
+                context == null ? null : context.className(),
+                upgradeQuote);
     }
 }

@@ -27,7 +27,6 @@ import group5.example.sportCenter.entity.CourseRegistration;
 import group5.example.sportCenter.entity.CourseRegistrationStatus;
 import group5.example.sportCenter.entity.MemberSportLevel;
 import group5.example.sportCenter.entity.Membership;
-import group5.example.sportCenter.entity.MembershipPlan;
 import group5.example.sportCenter.entity.Payment;
 import group5.example.sportCenter.entity.PaymentPurpose;
 import group5.example.sportCenter.entity.PaymentStatus;
@@ -199,8 +198,8 @@ public class CourseRegistrationService {
                 .findByMemberIdAndStatusAndStartDateLessThanEqualAndEndDateGreaterThan(
                         member.getId(), "ACTIVE", registrationDate, registrationDate)
                 .stream()
-                .map(Membership::getPlan)
-                .map(MembershipPlan::getCourseDiscountPercent)
+                .map(MembershipBenefitValues::resolve)
+                .map(MembershipBenefitValues::courseDiscountPercent)
                 .filter(percent -> percent != null && percent.signum() >= 0 && percent.compareTo(ONE_HUNDRED) <= 0)
                 .max(BigDecimal::compareTo)
                 .orElse(BigDecimal.ZERO);

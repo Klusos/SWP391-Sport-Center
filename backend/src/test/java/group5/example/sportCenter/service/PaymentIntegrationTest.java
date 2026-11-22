@@ -81,6 +81,7 @@ import group5.example.sportCenter.repository.CourseRegistrationRepository;
 import group5.example.sportCenter.repository.CourseRepository;
 import group5.example.sportCenter.repository.MembershipPlanRepository;
 import group5.example.sportCenter.repository.MembershipRepository;
+import group5.example.sportCenter.repository.MembershipRenewalIntentRepository;
 import group5.example.sportCenter.repository.MembershipUpgradeRepository;
 import group5.example.sportCenter.repository.NotificationRepository;
 import group5.example.sportCenter.repository.PaymentRepository;
@@ -103,6 +104,7 @@ class PaymentIntegrationTest {
     @Autowired CourseRegistrationExpirationService registrationExpiration;
     @Autowired PaymentReportService reports;
     @MockitoSpyBean PaymentRepository payments;
+    @MockitoSpyBean MembershipRenewalIntentRepository renewalIntents;
     @Autowired NotificationRepository notifications;
     @Autowired UserRepository users;
     @Autowired JdbcTemplate jdbc;
@@ -175,7 +177,7 @@ class PaymentIntegrationTest {
     // ------------------------------------------------------------ membership
 
     @Test
-    void onlineMembershipPaymentActivatesThenRenewsFromCurrentEndDate() throws Exception {
+    void onlineMembershipPaymentUsesCapturedTermsAndRepeatedCallbackCreatesOnlyOnePeriod() throws Exception {
         PaymentResponse first = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
                 PaymentMethod.ONLINE), jwt(member));
         assertEquals("PENDING", first.getStatus());
@@ -195,6 +197,11 @@ class PaymentIntegrationTest {
         assertEquals(1, afterFirst.size());
         assertEquals(today, afterFirst.get(0).getStartDate());
         assertEquals(today.plusMonths(1), afterFirst.get(0).getEndDate());
+        assertEquals("COMPLETE", afterFirst.get(0).getBenefitSnapshotStatus());
+        assertEquals("PURCHASE", afterFirst.get(0).getBenefitSnapshotSource());
+        assertEquals("VERIFIED", afterFirst.get(0).getPaidValueBasisStatus());
+        assertEquals(new BigDecimal("300000.00"), afterFirst.get(0).getPaidValueBasisAmount());
+        assertEquals("PURCHASE_PAYMENT", afterFirst.get(0).getPaidValueBasisSource());
 
         // Replaying the same signed callback must not activate a second membership.
         clock.setInstant(clock.instant().plusSeconds(120));
@@ -203,38 +210,140 @@ class PaymentIntegrationTest {
                 "Duplicate success callback cannot overwrite the first paidAt");
         assertEquals(1, memberships.findByMemberId(member.getId()).size());
 
-        PaymentResponse renewal = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
-                PaymentMethod.COUNTER), jwt(member));
-        assertEquals("SUCCESS", service.processAtCounter(renewal.getId(), counter(true), jwt(receptionist)).getStatus());
-
-        List<Membership> afterRenewal = memberships.findByMemberId(member.getId()).stream()
-                .sorted(Comparator.comparing(Membership::getStartDate)).toList();
-        assertEquals(2, afterRenewal.size());
-        assertEquals(today.plusMonths(1), afterRenewal.get(1).getStartDate());
-        assertEquals(today.plusMonths(2), afterRenewal.get(1).getEndDate());
-        assertEquals(1, afterRenewal.stream().filter(row -> row.getStartDate().isAfter(today)).count());
-        assertEquals(today.plusMonths(1), afterRenewal.get(0).getEndDate(),
-                "The original paid period remains unchanged after queue settlement");
+        assertEquals(1, memberships.findByMemberId(member.getId()).size());
     }
 
     @Test
-    void ordinaryPurchaseAllowsOneQueuedPeriodButRejectsAnotherAcrossPlans() {
+    void ordinaryPurchaseIsBlockedByAnEffectiveMembership() {
         LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
-        MembershipPlan anotherPlan = additionalPlan("Pay alternate");
-        Membership current = membership(member, plan, today.minusDays(5), today.plusDays(25));
-
-        PaymentResponse queued = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
-                PaymentMethod.COUNTER), jwt(member));
-        assertEquals("SUCCESS", service.processAtCounter(queued.getId(), counter(true), jwt(receptionist)).getStatus());
-        Membership future = memberships.findByMemberId(member.getId()).stream()
-                .filter(row -> row.getStartDate().isAfter(today)).findFirst().orElseThrow();
-        assertEquals(current.getEndDate(), future.getStartDate());
-
-        ResponseStatusException duplicate = assertThrows(ResponseStatusException.class,
-                () -> service.createPayment(request(PaymentPurpose.MEMBERSHIP, anotherPlan.getId(),
+        membership(member, plan, today, today.plusDays(25));
+        ResponseStatusException conflict = assertThrows(ResponseStatusException.class,
+                () -> service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
                         PaymentMethod.COUNTER), jwt(member)));
-        assertEquals(409, duplicate.getStatusCode().value());
-        assertEquals(2, memberships.findByMemberId(member.getId()).size());
+        assertEquals(409, conflict.getStatusCode().value());
+        assertTrue(payments.findByMemberIdOrderByCreatedAtDesc(member.getId()).isEmpty());
+        assertEquals(1, memberships.findByMemberId(member.getId()).size());
+    }
+
+    @Test
+    void ordinaryPurchaseIsBlockedByOpenRenewalIntentBeforePlanOrPaymentCreation() {
+        org.mockito.Mockito.doReturn(true).when(renewalIntents).existsOpenByMemberId(member.getId());
+
+        ResponseStatusException conflict = assertThrows(ResponseStatusException.class,
+                () -> service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                        PaymentMethod.COUNTER), jwt(member)));
+
+        assertEquals(org.springframework.http.HttpStatus.CONFLICT, conflict.getStatusCode());
+        assertTrue(conflict.getReason().contains("open Membership Renewal Intent"));
+        assertTrue(payments.findByMemberIdOrderByCreatedAtDesc(member.getId()).isEmpty());
+    }
+
+    @Test
+    void futureMembershipBlocksPurchaseAndExpiredMembershipDoesNot() {
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        membership(member, plan, today.plusDays(1), today.plusMonths(1));
+        ResponseStatusException conflict = assertThrows(ResponseStatusException.class,
+                () -> service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                        PaymentMethod.COUNTER), jwt(member)));
+        assertEquals(409, conflict.getStatusCode().value());
+        assertTrue(payments.findByMemberIdOrderByCreatedAtDesc(member.getId()).isEmpty());
+
+        User expiredMember = user("MEMBER", "expired-membership-purchase");
+        membership(expiredMember, plan, today.minusMonths(1), today);
+        PaymentResponse afterExpiry = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(expiredMember));
+        assertEquals("PENDING", afterExpiry.getStatus());
+    }
+
+    @Test
+    void settlementRechecksEligibilityAndRoutesExternallySuccessfulPaymentToReconciliation() {
+        PaymentResponse pending = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
+        membership(member, plan, today, today.plusMonths(1));
+
+        PaymentResponse settled = service.processAtCounter(pending.getId(), counter(true), jwt(receptionist));
+        assertEquals("REFUND_REQUIRED", settled.getStatus());
+        assertEquals(1, memberships.findByMemberId(member.getId()).size());
+        assertNotNull(payments.findById(pending.getId()).orElseThrow().getPaidAt());
+    }
+
+    @Test
+    void paymentCapturesPlanQuoteAndSettlementIgnoresLaterPlanEditsAndDeactivation() {
+        PaymentResponse pending = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                PaymentMethod.COUNTER), jwt(member));
+        Payment captured = payments.findById(pending.getId()).orElseThrow();
+        assertTrue(captured.hasCompleteMembershipQuote());
+        assertEquals(plan.getName(), captured.getMembershipPlanNameSnapshot());
+        assertEquals(plan.getDescription(), captured.getMembershipPlanDescriptionSnapshot());
+        assertEquals(0, plan.getPrice().compareTo(captured.getMembershipPlanPriceSnapshot()));
+        assertEquals(plan.getDurationMonths(), captured.getMembershipDurationMonthsSnapshot());
+        assertEquals(0, plan.getCourseDiscountPercent().compareTo(captured.getMembershipCourseDiscountPercentSnapshot()));
+        assertEquals(0, plan.getPersonalTrainingDiscountPercent()
+                .compareTo(captured.getMembershipPtDiscountPercentSnapshot()));
+        assertEquals(plan.getAllowPersonalTrainingPlan(), captured.getMembershipAllowPtPlanSnapshot());
+        assertEquals(plan.getAllowOneOnOneCoaching(), captured.getMembershipAllowOneOnOneSnapshot());
+        assertNotNull(captured.getMembershipQuoteCapturedAt());
+
+        plan.setName("Edited after quote");
+        plan.setDescription("Edited terms");
+        plan.setPrice(new BigDecimal("900000.00"));
+        plan.setDurationMonths(3);
+        plan.setCourseDiscountPercent(new BigDecimal("90.00"));
+        plan.setPersonalTrainingDiscountPercent(new BigDecimal("85.00"));
+        plan.setAllowPersonalTrainingPlan(false);
+        plan.setAllowOneOnOneCoaching(false);
+        plan.setStatus("INACTIVE");
+        plans.saveAndFlush(plan);
+
+        PaymentResponse result = service.processAtCounter(pending.getId(), counter(true), jwt(receptionist));
+        assertEquals("SUCCESS", result.getStatus());
+        Membership activated = memberships.findByMemberId(member.getId()).get(0);
+        assertEquals(LocalDate.now(clock.withZone(BUSINESS_ZONE)), activated.getStartDate());
+        assertEquals(activated.getStartDate().plusMonths(captured.getMembershipDurationMonthsSnapshot()), activated.getEndDate());
+        assertEquals(captured.getMembershipPlanNameSnapshot(), activated.getPlanNameSnapshot());
+        assertEquals(captured.getMembershipPlanDescriptionSnapshot(), activated.getPlanDescriptionSnapshot());
+        assertEquals(captured.getMembershipPlanPriceSnapshot(), activated.getPlanPriceSnapshot());
+        assertEquals(captured.getMembershipCourseDiscountPercentSnapshot(), activated.getCourseDiscountPercentSnapshot());
+        assertEquals(captured.getMembershipPtDiscountPercentSnapshot(), activated.getPtDiscountPercentSnapshot());
+        assertEquals(captured.getMembershipAllowPtPlanSnapshot(), activated.getAllowPtPlanSnapshot());
+        assertEquals(captured.getMembershipAllowOneOnOneSnapshot(), activated.getAllowOneOnOneSnapshot());
+    }
+
+    @Test
+    void membershipPaymentAmountIsServerPricedAndClientAmountCannotOverrideIt() throws Exception {
+        String body = "{\"purpose\":\"MEMBERSHIP\",\"referenceId\":" + plan.getId()
+                + ",\"method\":\"COUNTER\",\"amount\":1}";
+
+        mvc.perform(post("/api/payments").header("Authorization", bearer(member))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.amount").value(300000.0));
+        Payment saved = payments.findByMemberIdOrderByCreatedAtDesc(member.getId()).get(0);
+        assertEquals(0, plan.getPrice().compareTo(saved.getAmount()));
+        assertEquals(0, plan.getPrice().compareTo(saved.getMembershipPlanPriceSnapshot()));
+    }
+
+    @Test
+    void zeroPriceMembershipPurchaseIsBlockedUntilPaidValueSchemaPolicyIsDefined() {
+        plan.setPrice(BigDecimal.ZERO);
+        plans.saveAndFlush(plan);
+
+        ResponseStatusException rejected = assertThrows(ResponseStatusException.class,
+                () -> service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+                        PaymentMethod.COUNTER), jwt(member)));
+        assertEquals(409, rejected.getStatusCode().value());
+        assertTrue(payments.findByMemberIdOrderByCreatedAtDesc(member.getId()).isEmpty());
+    }
+
+    @Test
+    void adminCannotCreateMembershipThroughDirectAssignmentEndpoint() throws Exception {
+        String body = "{\"memberId\":" + member.getId() + ",\"planId\":" + plan.getId()
+                + ",\"startDate\":\"" + LocalDate.now() + "\",\"autoRenew\":false}";
+        mvc.perform(post("/api/memberships").header("Authorization", bearer(admin))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isGone());
+        assertTrue(memberships.findByMemberId(member.getId()).isEmpty());
     }
 
     @Test
@@ -281,9 +390,8 @@ class PaymentIntegrationTest {
     }
 
     @Test
-    void concurrentDistinctMembershipSettlementsCreateOneFuturePeriodAndReconcileTheOther() throws Exception {
+    void concurrentDistinctMembershipSettlementsCreateOnePeriodAndReconcileTheOther() throws Exception {
         LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
-        Membership current = membership(member, plan, today.minusDays(5), today.plusDays(25));
         MembershipPlan anotherPlan = additionalPlan("Pay competing settlement");
         Payment first = queueFixture(member, PaymentMethod.COUNTER, PaymentPurpose.MEMBERSHIP, PaymentStatus.PENDING);
         Payment second = queueFixture(member, PaymentMethod.COUNTER, PaymentPurpose.MEMBERSHIP, PaymentStatus.PENDING);
@@ -317,15 +425,12 @@ class PaymentIntegrationTest {
         }
 
         List<Membership> rows = memberships.findByMemberId(member.getId());
-        assertEquals(2, rows.size());
-        assertEquals(1, rows.stream().filter(row -> row.getStartDate().isAfter(today)).count());
-        Membership unchanged = memberships.findById(current.getId()).orElseThrow();
-        assertEquals(today.minusDays(5), unchanged.getStartDate());
-        assertEquals(today.plusDays(25), unchanged.getEndDate());
+        assertEquals(1, rows.size());
+        assertEquals(today, rows.get(0).getStartDate());
         Payment refund = payments.findById(firstId).orElseThrow().getStatus() == PaymentStatus.REFUND_REQUIRED
                 ? payments.findById(firstId).orElseThrow() : payments.findById(secondId).orElseThrow();
         assertNotNull(refund.getPaidAt(), "Verified counter receipt time is retained for reconciliation");
-        assertTrue(refund.getNote().contains("future membership period"));
+        assertTrue(refund.getNote().contains("effective or future Membership"));
     }
 
     @Test
@@ -348,7 +453,7 @@ class PaymentIntegrationTest {
         assertEquals(verifiedPaymentTime, payments.findById(payment.getId()).orElseThrow().getPaidAt(),
                 "REFUND_REQUIRED retains verified provider payment time as reconciliation evidence");
         assertTrue(payments.findById(payment.getId()).orElseThrow().getNote()
-                .contains("future membership period"));
+                .contains("effective or future Membership"));
         assertEquals(2, memberships.findByMemberId(member.getId()).size());
     }
 
@@ -367,33 +472,13 @@ class PaymentIntegrationTest {
     }
 
     @Test
-    void concurrentAdminAssignmentsSerializeOnMemberAndPreserveTheExistingPeriod() throws Exception {
+    void directAdminAssignmentIsRejectedWithoutCreatingMembership() {
         LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
         CreateMembershipRequest request = assignment(otherMember, today.plusDays(10));
-        CountDownLatch ready = new CountDownLatch(2);
-        CountDownLatch start = new CountDownLatch(1);
-        ExecutorService pool = Executors.newFixedThreadPool(2);
-        try {
-            java.util.concurrent.Callable<Boolean> assign = () -> {
-                ready.countDown(); await(start);
-                try {
-                    membershipService.createMembership(request, jwt(admin));
-                    return true;
-                } catch (IllegalArgumentException conflict) {
-                    return false;
-                }
-            };
-            Future<Boolean> first = pool.submit(assign);
-            Future<Boolean> second = pool.submit(assign);
-            assertTrue(ready.await(5, TimeUnit.SECONDS));
-            start.countDown();
-            assertEquals(1, (first.get(10, TimeUnit.SECONDS) ? 1 : 0)
-                    + (second.get(10, TimeUnit.SECONDS) ? 1 : 0));
-        } finally {
-            pool.shutdownNow();
-        }
-        assertEquals(1, memberships.findByMemberId(otherMember.getId()).size());
-        assertTrue(memberships.findByMemberId(otherMember.getId()).get(0).getStartDate().isAfter(today));
+        ResponseStatusException rejected = assertThrows(ResponseStatusException.class,
+                () -> membershipService.createMembership(request, jwt(admin)));
+        assertEquals(410, rejected.getStatusCode().value());
+        assertTrue(memberships.findByMemberId(otherMember.getId()).isEmpty());
     }
 
     @Test
@@ -445,6 +530,22 @@ class PaymentIntegrationTest {
     }
 
     @Test
+    void receptionistRenewalIntentApiIsStaffOnlyAndKeepsIntentCreationInternal() throws Exception {
+        mvc.perform(get("/api/receptionist/members/" + member.getId() + "/renewal-intents")
+                        .header("Authorization", bearer(member)))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/receptionist/members/" + member.getId()
+                        + "/renewal-intents/999999/counter-attempts")
+                        .header("Authorization", bearer(member)))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/receptionist/members/" + member.getId() + "/renewal-intents")
+                        .header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
     void memberSelfServicePurchaseUsesJwtAndPreventsRepeatedPendingPlanRequests() throws Exception {
         String body = "{\"method\":\"COUNTER\",\"purpose\":\"MEMBERSHIP\",\"referenceId\":"
                 + plan.getId() + ",\"autoRenew\":false}";
@@ -491,9 +592,9 @@ class PaymentIntegrationTest {
     }
 
     @Test
-    void inactivePlanRejectsRenewalButReactivationAllowsANewRequest() {
+    void inactivePlanRejectsNewPurchaseAndReactivationAllowsPurchaseAfterExpiry() {
         LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
-        Membership current = membership(member, plan, today.minusDays(10), today.plusDays(20));
+        Membership expired = membership(member, plan, today.minusDays(30), today);
         plan.setStatus("INACTIVE");
         plans.saveAndFlush(plan);
 
@@ -505,39 +606,11 @@ class PaymentIntegrationTest {
 
         plan.setStatus("ACTIVE");
         plans.saveAndFlush(plan);
-        PaymentResponse renewed = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
+        PaymentResponse purchase = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
                 PaymentMethod.COUNTER), jwt(member));
-        assertEquals("PENDING", renewed.getStatus());
+        assertEquals("PENDING", purchase.getStatus());
         assertEquals(1, memberships.findByMemberId(member.getId()).size());
-        assertEquals(current.getStartDate(), memberships.findById(current.getId()).orElseThrow().getStartDate());
-        assertEquals(current.getEndDate(), memberships.findById(current.getId()).orElseThrow().getEndDate());
-    }
-
-    @Test
-    void preDeactivationMembershipPaymentMaySettleAndQueueWithoutChangingCurrentEntitlement() {
-        LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
-        Membership current = membership(member, plan, today.minusDays(10), today.plusDays(20));
-        LocalDate originalStart = current.getStartDate();
-        LocalDate originalEnd = current.getEndDate();
-        PaymentResponse pending = service.createPayment(request(PaymentPurpose.MEMBERSHIP, plan.getId(),
-                PaymentMethod.COUNTER), jwt(member));
-
-        plan.setStatus("INACTIVE");
-        plans.saveAndFlush(plan);
-        assertEquals(PaymentStatus.PENDING, payments.findById(pending.getId()).orElseThrow().getStatus());
-        assertEquals("ACTIVE", memberships.findById(current.getId()).orElseThrow().getStatus());
-        assertEquals(originalStart, memberships.findById(current.getId()).orElseThrow().getStartDate());
-        assertEquals(originalEnd, memberships.findById(current.getId()).orElseThrow().getEndDate());
-
-        assertEquals("SUCCESS", service.processAtCounter(pending.getId(), counter(true), jwt(receptionist)).getStatus());
-        List<Membership> chain = memberships.findByMemberId(member.getId()).stream()
-                .sorted(Comparator.comparing(Membership::getStartDate)).toList();
-        assertEquals(2, chain.size());
-        assertEquals(originalEnd, chain.get(1).getStartDate());
-        assertEquals(originalEnd.plusMonths(plan.getDurationMonths()), chain.get(1).getEndDate());
-        assertEquals(originalStart, chain.get(0).getStartDate());
-        assertEquals(originalEnd, chain.get(0).getEndDate());
-        assertEquals("INACTIVE", plans.findById(plan.getId()).orElseThrow().getStatus());
+        assertEquals(expired.getEndDate(), memberships.findById(expired.getId()).orElseThrow().getEndDate());
     }
 
     @Test
@@ -1787,6 +1860,17 @@ class PaymentIntegrationTest {
         payment.setPurpose(purpose);
         payment.setStatus(state);
         payment.setTransactionCode("QUEUE-" + java.util.UUID.randomUUID().toString().substring(0, 20));
+        if (purpose == PaymentPurpose.MEMBERSHIP) {
+            payment.setMembershipPlanNameSnapshot(plan.getName());
+            payment.setMembershipPlanDescriptionSnapshot(plan.getDescription());
+            payment.setMembershipPlanPriceSnapshot(plan.getPrice());
+            payment.setMembershipDurationMonthsSnapshot(plan.getDurationMonths());
+            payment.setMembershipCourseDiscountPercentSnapshot(plan.getCourseDiscountPercent());
+            payment.setMembershipPtDiscountPercentSnapshot(plan.getPersonalTrainingDiscountPercent());
+            payment.setMembershipAllowPtPlanSnapshot(plan.getAllowPersonalTrainingPlan());
+            payment.setMembershipAllowOneOnOneSnapshot(plan.getAllowOneOnOneCoaching());
+            payment.setMembershipQuoteCapturedAt(now());
+        }
         return payments.save(payment);
     }
 

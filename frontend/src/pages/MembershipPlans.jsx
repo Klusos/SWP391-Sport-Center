@@ -4,9 +4,12 @@ import AdminTopBar from "../components/AdminTopBar";
 import "./MembershipPlans.css";
 import {
   createMembershipPlanApi,
+  createMembershipUpgradePathApi,
+  getMembershipUpgradePathsApi,
   getMembershipPlansApi,
   getPublicMembershipPlansApi,
   updateMembershipPlanApi,
+  updateMembershipUpgradePathStatusApi,
   updateMembershipPlanStatusApi,
 } from "../api";
 
@@ -67,6 +70,12 @@ export default function MembershipPlans({ token, role, currentUserName, onLogout
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [upgradePaths, setUpgradePaths] = useState([]);
+  const [pathLoading, setPathLoading] = useState(false);
+  const [pathSaving, setPathSaving] = useState(false);
+  const [pathError, setPathError] = useState("");
+  const [pathNotice, setPathNotice] = useState("");
+  const [pathForm, setPathForm] = useState({ fromPlanId: "", toPlanId: "" });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -85,6 +94,64 @@ export default function MembershipPlans({ token, role, currentUserName, onLogout
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  const loadUpgradePaths = useCallback(async () => {
+    if (!admin) return;
+    setPathLoading(true);
+    setPathError("");
+    try {
+      const rows = await getMembershipUpgradePathsApi(token);
+      setUpgradePaths(Array.isArray(rows) ? rows : []);
+    } catch (requestError) {
+      setPathError(requestError.message || "Không thể tải các lộ trình nâng cấp.");
+    } finally {
+      setPathLoading(false);
+    }
+  }, [admin, token]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadUpgradePaths(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadUpgradePaths]);
+
+  async function createUpgradePath(event) {
+    event.preventDefault();
+    if (!pathForm.fromPlanId || !pathForm.toPlanId) {
+      setPathError("Hãy chọn gói nguồn và gói đích.");
+      return;
+    }
+    setPathSaving(true);
+    setPathError("");
+    setPathNotice("");
+    try {
+      await createMembershipUpgradePathApi(token, {
+        fromPlanId: Number(pathForm.fromPlanId),
+        toPlanId: Number(pathForm.toPlanId),
+      });
+      setPathForm({ fromPlanId: "", toPlanId: "" });
+      setPathNotice("Đã tạo lộ trình nâng cấp.");
+      await loadUpgradePaths();
+    } catch (requestError) {
+      setPathError(requestError.message || "Không thể tạo lộ trình nâng cấp.");
+    } finally {
+      setPathSaving(false);
+    }
+  }
+
+  async function changeUpgradePathStatus(path) {
+    setPathSaving(true);
+    setPathError("");
+    setPathNotice("");
+    try {
+      await updateMembershipUpgradePathStatusApi(token, path.id, !path.active);
+      setPathNotice(path.active ? "Đã tắt lộ trình nâng cấp." : "Đã bật lộ trình nâng cấp.");
+      await loadUpgradePaths();
+    } catch (requestError) {
+      setPathError(requestError.message || "Không thể cập nhật lộ trình nâng cấp.");
+    } finally {
+      setPathSaving(false);
+    }
+  }
 
   function startCreate() {
     setEditingId(null);
@@ -147,6 +214,7 @@ export default function MembershipPlans({ token, role, currentUserName, onLogout
       setEditingId(null);
       setForm(EMPTY_FORM);
       await load();
+      await loadUpgradePaths();
     } catch (requestError) {
       setError(requestError.message || "Không thể lưu gói hội viên.");
     } finally {
@@ -166,6 +234,7 @@ export default function MembershipPlans({ token, role, currentUserName, onLogout
       await updateMembershipPlanStatusApi(token, plan.id, nextStatus);
       setNotice(nextStatus === "INACTIVE" ? "Đã ngừng áp dụng gói hội viên." : "Đã kích hoạt gói hội viên.");
       await load();
+      await loadUpgradePaths();
     } catch (requestError) {
       setError(requestError.message || "Không thể thay đổi trạng thái gói.");
     } finally {
@@ -199,6 +268,45 @@ export default function MembershipPlans({ token, role, currentUserName, onLogout
           </button>
           {admin && <button type="button" onClick={startCreate}>Tạo gói hội viên</button>}
         </div>
+
+        {admin && <section className="membership-path-panel" aria-labelledby="membership-path-title">
+          <div className="membership-path-heading">
+            <div><h2 id="membership-path-title">Lộ trình nâng cấp</h2>
+              <p>Chỉ các cặp gói được Admin bật mới xuất hiện như lựa chọn nâng cấp. Thay đổi giá hoặc quyền lợi không sửa báo giá đã tạo.</p></div>
+            <button type="button" onClick={() => void loadUpgradePaths()} disabled={pathLoading}>
+              {pathLoading ? "Đang tải…" : "Làm mới lộ trình"}
+            </button>
+          </div>
+          {pathError && <p className="membership-path-error" role="alert">{pathError}</p>}
+          {pathNotice && <p className="membership-path-notice" role="status">{pathNotice}</p>}
+          <form className="membership-path-form" onSubmit={createUpgradePath}>
+            <label>Gói nguồn
+              <select required value={pathForm.fromPlanId} onChange={(event) => setPathForm({ ...pathForm, fromPlanId: event.target.value })}>
+                <option value="">Chọn gói nguồn</option>
+                {plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {plan.status}</option>)}
+              </select>
+            </label>
+            <label>Gói đích
+              <select required value={pathForm.toPlanId} onChange={(event) => setPathForm({ ...pathForm, toPlanId: event.target.value })}>
+                <option value="">Chọn gói đích</option>
+                {plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {plan.status}</option>)}
+              </select>
+            </label>
+            <button type="submit" disabled={pathSaving || pathLoading || plans.length < 2}>
+              {pathSaving ? "Đang lưu…" : "Thêm lộ trình"}
+            </button>
+          </form>
+          {pathLoading ? <p role="status">Đang tải danh sách lộ trình…</p>
+            : upgradePaths.length === 0 ? <p className="membership-path-empty">Chưa có lộ trình nâng cấp được cấu hình.</p>
+              : <div className="membership-path-list">{upgradePaths.map((path) => <div className="membership-path-row" key={path.id}>
+                <div><strong>{path.fromPlanName}</strong> <span>→</span> <strong>{path.toPlanName}</strong>
+                  <small>{formatPrice(path.fromPlanPrice)} → {formatPrice(path.toPlanPrice)} · {path.fromPlanStatus} → {path.toPlanStatus}</small></div>
+                <span className={path.active ? "membership-path-state active" : "membership-path-state inactive"}>{path.active ? "Đang bật" : "Đã tắt"}</span>
+                <button type="button" disabled={pathSaving} onClick={() => void changeUpgradePathStatus(path)}>
+                  {path.active ? "Tắt" : "Bật"}
+                </button>
+              </div>)}</div>}
+        </section>}
 
         {admin && formOpen && (
           <form className="form-card" onSubmit={savePlan}>

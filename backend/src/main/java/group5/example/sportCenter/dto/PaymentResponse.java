@@ -32,4 +32,5 @@ public class PaymentResponse {
     private String courseName;
     private String courseOfferingName;
     private String className;
+    private MembershipUpgradeQuoteResponse upgradeQuote;
 }

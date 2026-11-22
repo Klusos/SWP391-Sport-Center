@@ -34,3 +34,13 @@ When these sources disagree, document the contradiction and mark the product que
 - Backend tests use Maven. Inspect the selected profile and integration-test configuration before running them; some tests can connect to SQL Server. Use only a verified disposable clone for database integration tests. Do not run migrations as a test shortcut.
 - Unit, mock, H2, and static tests do not prove SQL Server behavior, deployment state, browser appearance, or product-owner approval. State those limitations explicitly.
 - For documentation-only changes, check links and claims against source and use `git diff --check`; do not run application or database workflows without a reason.
+
+## Autonomous execution and approval boundaries
+
+1. **One phase, one scoped authorization.** Once the owner explicitly authorizes a phase, complete its approved steps without requesting permission for every command. This does not authorize future phases or override narrower task restrictions.
+2. **Fix routine technical blockers autonomously.** Within scope, diagnose and correct shell/PowerShell errors, type-conversion and harness errors, incorrect arguments, non-destructive compilation/test failures, and other small directly related implementation defects.
+3. **Retry intelligently.** After identifying and correcting a routine issue, rerun the necessary safety checks and continue. Do not repeat a failing command without understanding its cause.
+4. **Reserve BLOCKED for meaningful boundaries.** Stop when an operation exceeds authorization; server/database identity cannot be verified; a destination exists or may be overwritten; destructive/irreversible work is required; migration preflight or verification detects a real schema/data-integrity anomaly; a failure cannot be safely understood or corrected in scope; or an explicit prohibition would be violated.
+5. **Database safety remains mandatory.** Never modify the original `SportCenterDemo` schema or business records without explicit authorization. Never overwrite backups, database files, or existing databases. Never automatically execute destructive rollback. Recheck identity and destinations before writes. Preserve backups and historical data.
+6. **Do not overengineer.** Prefer the smallest correct solution. Do not add infrastructure, tables, abstractions, or workflows without a demonstrated requirement.
+7. **Report after meaningful progress.** Summarize completed work, verification evidence, real blockers, and remaining risks. Avoid stopping after a minor recoverable error.

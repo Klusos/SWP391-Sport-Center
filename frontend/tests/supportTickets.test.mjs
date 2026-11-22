@@ -68,7 +68,8 @@ test("Support Tickets adds an Admin-only Top Bar without changing other role pre
   assert.match(page, /assignSupportTicketToMeApi\(token, selectedId\)/);
   assert.match(page, /createSupportTicketApi\(token/);
   assert.match(css, /support-admin-main \{ padding: 0; \}/);
-  assert.match(css, /support-nonadmin-content \{ display: contents; \}/);
+  assert.match(css, /support-nonadmin-content \{ box-sizing: border-box; width: 100%; max-width: 1440px; margin: 0 auto; \}/);
+  assert.match(css, /support-heading > \.btn-primary \{ width: auto; flex: 0 0 auto; white-space: nowrap; \}/);
   assert.match(app, /path="\/staff\/support-tickets" element=\{<SupportTickets \{\.\.\.staff\} \/>\}/);
   assert.match(app, /<Route element=\{<StaffRoute auth=\{auth\} \/>\}>[\s\S]*?path="\/staff\/support-tickets"/);
 });

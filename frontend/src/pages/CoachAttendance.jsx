@@ -7,7 +7,11 @@ import {
   markAttendanceApi,
 } from "../api";
 import { applyAttendanceRequestIfCurrent, attendanceRowKey, isCurrentAttendanceRosterRequest } from "../attendanceRequests";
-import { attendanceClassOptions, attendanceSessionsForClass } from "../coachAttendanceView.js";
+import {
+  attendanceClassOptions,
+  attendanceSessionsForClass,
+  paginateAttendanceSessions,
+} from "../coachAttendanceView.js";
 import { buildAttendanceCsv } from "../attendanceCsv.js";
 import "./CoachAttendance.css";
 
@@ -56,6 +60,8 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
   const [sessionsError, setSessionsError] = useState("");
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [classFilter, setClassFilter] = useState("");
+  const [view, setView] = useState("list");
+  const [sessionPage, setSessionPage] = useState(1);
   const [roster, setRoster] = useState(null);
   const [rosterLoading, setRosterLoading] = useState(false);
   const [rosterError, setRosterError] = useState("");
@@ -78,6 +84,9 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
   const historyRequestRef = useRef(0);
   const sessionsRequestSequenceRef = useRef(0);
   const mountedRef = useRef(false);
+  const detailHeadingRef = useRef(null);
+  const selectedSessionButtonRef = useRef(null);
+  const returnFocusSessionIdRef = useRef("");
 
   const selectedSession = useMemo(
     () => sessions.find((session) => String(session.classSessionId) === String(selectedSessionId)) || null,
@@ -85,6 +94,10 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
   );
   const classOptions = useMemo(() => attendanceClassOptions(sessions), [sessions]);
   const filteredSessions = useMemo(() => attendanceSessionsForClass(sessions, classFilter), [sessions, classFilter]);
+  const sessionPageData = useMemo(
+    () => paginateAttendanceSessions(filteredSessions, sessionPage),
+    [filteredSessions, sessionPage],
+  );
   const members = Array.isArray(roster?.members) ? roster.members : [];
   const sessionCancelled = String(roster?.sessionStatus || selectedSession?.sessionStatus || "").toUpperCase() === "CANCELLED";
   const canMark = Boolean(roster) && roster.markingAllowed === true && !sessionCancelled;
@@ -188,21 +201,33 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
     };
   }, [loadRoster, selectedSessionId]);
 
+  useEffect(() => {
+    if (view === "detail") {
+      detailHeadingRef.current?.focus();
+      return;
+    }
+    if (returnFocusSessionIdRef.current) selectedSessionButtonRef.current?.focus();
+  }, [view]);
+
   function chooseSession(sessionId) {
     historyRequestRef.current += 1;
     const nextSessionId = String(sessionId);
-    if (nextSessionId !== String(selectedSessionIdRef.current)) {
+    const changedSession = nextSessionId !== String(selectedSessionIdRef.current);
+    returnFocusSessionIdRef.current = nextSessionId;
+    if (changedSession) {
       selectedSessionIdRef.current = nextSessionId;
       rosterRequestSequenceRef.current += 1;
+      setRoster(null);
+      setRosterLoading(false);
+      setRosterError("");
+      setRowErrors({});
+      setNotice("");
+      setHistoryForMemberId(null);
+      setHistory([]);
+      setHistoryLoading(false);
     }
     setSelectedSessionId(nextSessionId);
-    setRoster(null);
-    setRosterLoading(false);
-    setRowErrors({});
-    setNotice("");
-    setHistoryForMemberId(null);
-    setHistory([]);
-    setHistoryLoading(false);
+    setView("detail");
   }
 
   function chooseClass(classKey) {
@@ -211,6 +236,9 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
       selectedSessionIdRef.current = "";
       rosterRequestSequenceRef.current += 1;
     }
+    returnFocusSessionIdRef.current = "";
+    setView("list");
+    setSessionPage(1);
     setClassFilter(classKey);
     setSelectedSessionId("");
     setRoster(null);
@@ -223,6 +251,10 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
     setHistory([]);
     setHistoryLoading(false);
     setHistoryError("");
+  }
+
+  function returnToSessionList() {
+    setView("list");
   }
 
   function setRowValue(setter, memberId, value) {
@@ -396,7 +428,9 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
             <div>
               <p className="pt-eyebrow">SPORTCENTER / COACH</p>
               <h1>Quản lý điểm danh</h1>
-              <p>Chọn buổi học được phân công để xem danh sách Member đã đăng ký.</p>
+              <p>{view === "list"
+                ? "Chọn lớp và buổi học được phân công để xem danh sách Member đã đăng ký."
+                : "Xem thông tin và điểm danh Member của buổi học đã chọn."}</p>
             </div>
             <button type="button" className="coach-attendance-refresh" onClick={() => void loadSessions()} disabled={sessionsLoading}>
               {sessionsLoading ? "Đang tải…" : "Làm mới"}
@@ -406,21 +440,20 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
           {sessionsError && <p className="coach-attendance-alert is-error" role="alert">{sessionsError}</p>}
           {notice && <p className="coach-attendance-alert is-success" role="status">{notice}</p>}
 
-          <div className={"coach-attendance-grid" + (selectedSessionId ? "" : " is-session-list-only")}>
-          <section className="coach-attendance-panel coach-attendance-sidepanel" aria-labelledby="coach-attendance-sessions-title">
+          {view === "list" ? <section className="coach-attendance-panel coach-attendance-session-list-view" aria-labelledby="coach-attendance-sessions-title">
             <div className="coach-attendance-section-heading">
               <div>
                 <h2 id="coach-attendance-sessions-title">Buổi học được phân công</h2>
                 <p>Chọn lớp trước, sau đó chọn buổi cần điểm danh.</p>
               </div>
-              <span>{filteredSessions.length} buổi</span>
+              <span>{sessionPageData.total} buổi</span>
             </div>
             {sessionsLoading ? <p className="coach-attendance-empty" role="status">Đang tải danh sách buổi học…</p>
               : sessionsError ? null
                 : sessions.length === 0 ? <p className="coach-attendance-empty">Hiện chưa có buổi học nào được phân công.</p>
                   : <>
                     <label className="coach-attendance-class-filter">
-                      <span>Lọc theo lớp</span>
+                      <span>Chọn lớp</span>
                       <select value={classFilter} onChange={(event) => chooseClass(event.target.value)}>
                         <option value="">Chọn lớp để xem các buổi học</option>
                         {classOptions.map((option) => <option key={option.key} value={option.key}>
@@ -431,13 +464,14 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
                     {!classFilter ? <p className="coach-attendance-selection-hint">Hãy chọn một lớp để lọc danh sách buổi học được phân công.</p>
                       : filteredSessions.length === 0 ? <p className="coach-attendance-empty">Lớp này hiện chưa có buổi học nào.</p>
                         : <div className="coach-attendance-sessions">
-                    {filteredSessions.map((session) => {
+                    {sessionPageData.items.map((session) => {
                       const id = session?.classSessionId;
                       const active = String(id) === String(selectedSessionId);
                       return <button
                         type="button"
                         className={"coach-attendance-session" + (active ? " is-selected" : "")}
                         key={id ?? String(session?.courseClassId) + "-" + String(session?.startTime)}
+                        ref={String(id) === returnFocusSessionIdRef.current ? selectedSessionButtonRef : undefined}
                         onClick={() => id != null && chooseSession(id)}
                         disabled={id == null}
                         aria-pressed={active}
@@ -458,13 +492,19 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
                       </button>;
                     })}
                   </div>}
+                    {sessionPageData.totalPages > 1 && <nav className="coach-attendance-session-pagination" aria-label="Phân trang buổi học">
+                      <button type="button" className="coach-attendance-history-button" onClick={() => setSessionPage(sessionPageData.page - 1)} disabled={sessionPageData.page <= 1}>Trước</button>
+                      <span aria-live="polite">Trang {sessionPageData.page}/{sessionPageData.totalPages} · {sessionPageData.total} buổi</span>
+                      <button type="button" className="coach-attendance-history-button" onClick={() => setSessionPage(sessionPageData.page + 1)} disabled={sessionPageData.page >= sessionPageData.totalPages}>Sau</button>
+                    </nav>}
                   </>}
-          </section>
-
-          {selectedSessionId && <section className="coach-attendance-panel coach-attendance-roster" aria-labelledby="coach-attendance-roster-title">
+          </section> : selectedSessionId ? <section className="coach-attendance-panel coach-attendance-detail-view" aria-labelledby="coach-attendance-roster-title">
+            <div className="coach-attendance-detail-toolbar">
+              <button type="button" className="coach-attendance-history-button" onClick={returnToSessionList}>Quay lại danh sách</button>
+            </div>
             <div className="coach-attendance-section-heading">
               <div>
-                <h2 id="coach-attendance-roster-title">Danh sách điểm danh</h2>
+                <h2 id="coach-attendance-roster-title" ref={detailHeadingRef} tabIndex={-1}>Danh sách điểm danh</h2>
                 <p>{roster?.courseClassName || selectedSession?.courseClassName || "Lớp học"} · Buổi #{roster?.classSessionId || selectedSessionId}</p>
               </div>
               <span className="coach-attendance-count">{members.length} học viên</span>
@@ -558,13 +598,11 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
                             })}</tbody>
                           </table>
                         </div>
-                        <p className="coach-attendance-footnote">API trả thời gian buổi học không kèm múi giờ; giao diện hiển thị theo giờ địa phương của thiết bị. Máy chủ vẫn xác nhận thời điểm và quyền điểm danh.</p>
                       </>}
                   </>}
-          </section>}
-          </div>
+          </section> : null}
 
-          {historyForMemberId != null && <section className="coach-attendance-panel coach-attendance-history" aria-labelledby="attendance-history-title">
+          {view === "detail" && historyForMemberId != null && <section className="coach-attendance-panel coach-attendance-history" aria-labelledby="attendance-history-title">
             <div className="coach-attendance-section-heading">
               <h2 id="attendance-history-title">Lịch sử điểm danh · Member #{historyMemberId}</h2>
               <button type="button" className="coach-attendance-history-button" onClick={closeHistory}>Đóng</button>

@@ -29,7 +29,7 @@ test("Receptionist plan choices adapt to the narrower portal content column with
 test("membership sales keeps counter payment creation, explicit confirmation, and duplicate-submit guards", () => {
   assert.match(sales, /createPaymentApi\(token, \{/);
   assert.match(sales, /method: "COUNTER"/);
-  assert.match(sales, /if \(saving \|\| !selectedMember \|\| !selectedPlan \|\| pendingPayment\) return/);
+  assert.match(sales, /if \(saving \|\| !selectedMember \|\| !selectedPlan \|\| pendingPayment \|\| purchaseBlockedByMembership\) return/);
   assert.match(sales, /processCounterPaymentApi\(token, pendingPayment\.id, success/);
   assert.match(sales, /pendingPayment\.status === "PENDING" && pendingPayment\.method === "COUNTER"/);
   assert.match(sales, /if \(result\.status === "SUCCESS"\)/);

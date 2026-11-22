@@ -238,6 +238,53 @@
   outline-offset: 2px;
 }
 
+.membership-main .membership-path-panel {
+  margin: 0 0 24px;
+  padding: 22px;
+  border: 1px solid #dce6f1;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 10px 26px rgba(20, 48, 82, .045);
+}
+.membership-main .membership-path-heading,
+.membership-main .membership-path-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.membership-main .membership-path-heading h2 { margin: 0 0 5px; color: #16365d; font-size: 19px; }
+.membership-main .membership-path-heading p { margin: 0; color: #718198; font-size: 13px; line-height: 1.5; }
+.membership-main .membership-path-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin: 18px 0;
+  padding: 16px;
+  border: 1px solid #e8eef5;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+.membership-main .membership-path-form label { display: grid; gap: 6px; color: #405572; font-size: 12px; font-weight: 700; }
+.membership-main .membership-path-form select {
+  width: 100%; min-height: 40px; padding: 7px 10px;
+  border: 1px solid #d7e1ed; border-radius: 9px; background: #fff; color: #172f4d; font: inherit;
+}
+.membership-main .membership-path-form select:focus-visible { outline: 3px solid rgba(23, 103, 210, .2); outline-offset: 1px; }
+.membership-main .membership-path-list { display: grid; }
+.membership-main .membership-path-row { padding: 12px 2px; border-top: 1px solid #e8eef5; }
+.membership-main .membership-path-row > div { display: grid; grid-template-columns: auto auto auto; align-items: center; justify-content: start; gap: 8px; }
+.membership-main .membership-path-row > div > span { color: #718198; }
+.membership-main .membership-path-row small { grid-column: 1 / -1; color: #718198; }
+.membership-main .membership-path-row button { min-width: 72px; }
+.membership-main .membership-path-state { padding: 5px 9px; border-radius: 999px; font-size: 11px; font-weight: 750; white-space: nowrap; }
+.membership-main .membership-path-state.active { color: #08794e; background: #eaf8f0; }
+.membership-main .membership-path-state.inactive { color: #718198; background: #eef2f6; }
+.membership-main .membership-path-error { margin: 12px 0; color: #b42318; }
+.membership-main .membership-path-notice { margin: 12px 0; color: #087443; }
+.membership-main .membership-path-empty { margin: 10px 0 0; color: #718198; }
+
 .membership-main .membership-view-switcher {
   display: inline-flex;
   gap: 3px;
@@ -329,6 +376,11 @@
   .membership-main .membership-view-switcher button { flex: 1; }
   .membership-main .membership-plan-card { padding: 18px; }
   .membership-main .membership-plan-card-heading { flex-direction: column; }
+  .membership-main .membership-path-panel { padding: 17px; }
+  .membership-main .membership-path-heading { align-items: flex-start; flex-direction: column; }
+  .membership-main .membership-path-form { grid-template-columns: minmax(0, 1fr); }
+  .membership-main .membership-path-row { align-items: flex-start; flex-wrap: wrap; }
+  .membership-main .membership-path-row > div { flex-basis: 100%; }
 }
 
 /* Form tạo / chỉnh sửa gói hội viên */

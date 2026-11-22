@@ -29,3 +29,21 @@ export function attendanceSessionsForClass(sessions, classKey) {
     .sort((left, right) => String(left?.startTime || "").localeCompare(String(right?.startTime || ""))
       || Number(left?.classSessionId || 0) - Number(right?.classSessionId || 0));
 }
+
+export const COACH_ATTENDANCE_SESSION_PAGE_SIZE = 8;
+
+export function paginateAttendanceSessions(sessions, requestedPage, pageSize = COACH_ATTENDANCE_SESSION_PAGE_SIZE) {
+  const items = Array.isArray(sessions) ? sessions : [];
+  const safePageSize = Number.isFinite(pageSize) && pageSize > 0 ? Math.floor(pageSize) : COACH_ATTENDANCE_SESSION_PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(items.length / safePageSize));
+  const parsedPage = Number.isFinite(requestedPage) ? Math.floor(requestedPage) : 1;
+  const page = Math.min(Math.max(parsedPage, 1), totalPages);
+  const start = (page - 1) * safePageSize;
+  return {
+    items: items.slice(start, start + safePageSize),
+    page,
+    pageSize: safePageSize,
+    total: items.length,
+    totalPages,
+  };
+}

@@ -8,6 +8,8 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.format.ResolverStyle;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Map;
@@ -35,6 +37,8 @@ public class VnpayPaymentGateway implements PaymentGateway {
 
     private static final ZoneId VNPAY_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final DateTimeFormatter VNPAY_TIME = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+    private static final DateTimeFormatter VNPAY_PAID_TIME = DateTimeFormatter.ofPattern("uuuuMMddHHmmss")
+            .withResolverStyle(ResolverStyle.STRICT);
     private static final String TXN_PREFIX = "TXN-";
 
     private final String tmnCode;
@@ -111,16 +115,32 @@ public class VnpayPaymentGateway implements PaymentGateway {
         try {
             amount = new BigDecimal(signed.get("vnp_Amount")).movePointLeft(2);
         } catch (RuntimeException e) {
-            return Optional.empty();
+            // The signature is already verified. Keep the signed callback distinguishable from a bad
+            // signature so Renewal can durably route an unparseable collection to reconciliation.
+            amount = null;
         }
         String responseCode = signed.get("vnp_ResponseCode");
         String transactionStatus = signed.get("vnp_TransactionStatus");
         boolean success = "00".equals(responseCode) && "00".equals(transactionStatus);
         String failureReason = success ? null
                 : "VNPay payment failed (response code " + responseCode + ", status " + transactionStatus + ")";
+        String rawPaidTime = signed.get("vnp_PayDate");
+        LocalDateTime parsedPaidTime = null;
+        GatewayCallback.PaidTimeStatus paidTimeStatus;
+        if (rawPaidTime == null || rawPaidTime.isBlank()) {
+            paidTimeStatus = GatewayCallback.PaidTimeStatus.MISSING;
+        } else {
+            try {
+                parsedPaidTime = LocalDateTime.parse(rawPaidTime, VNPAY_PAID_TIME);
+                paidTimeStatus = GatewayCallback.PaidTimeStatus.VALID;
+            } catch (DateTimeParseException e) {
+                paidTimeStatus = GatewayCallback.PaidTimeStatus.MALFORMED;
+            }
+        }
         return Optional.of(new GatewayCallback(
                 fromTxnRef(signed.get("vnp_TxnRef")), success, amount, failureReason,
-                signed.get("vnp_PayDate")));
+                rawPaidTime, signed.get("vnp_TransactionNo"), signed.get("vnp_CurrCode"),
+                true, parsedPaidTime, paidTimeStatus));
     }
 
     /** vnp_TxnRef chỉ nên chứa chữ và số: "TXN-ABC123" -> "TXNABC123". */
@@ -130,6 +150,11 @@ public class VnpayPaymentGateway implements PaymentGateway {
 
     private static String fromTxnRef(String txnRef) {
         String prefix = TXN_PREFIX.replace("-", "");
+        // Renewal attempts use TXN-REN-<16 hex chars>; preserve both separators when
+        // translating the VNPay alphanumeric reference back to the relational Payment key.
+        if (txnRef.startsWith("TXNREN") && txnRef.length() == 22) {
+            return "TXN-REN-" + txnRef.substring("TXNREN".length());
+        }
         return txnRef.startsWith(prefix) && !txnRef.contains("-")
                 ? TXN_PREFIX + txnRef.substring(prefix.length())
                 : txnRef;

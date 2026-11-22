@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { attendanceRowKey, isCurrentAttendanceRosterRequest } from "../src/attendanceRequests.js";
-import { attendanceClassOptions, attendanceSessionsForClass } from "../src/coachAttendanceView.js";
+import {
+  attendanceClassOptions,
+  attendanceSessionsForClass,
+  paginateAttendanceSessions,
+} from "../src/coachAttendanceView.js";
 
 const sourceUrl = new URL("../src/pages/CoachAttendance.jsx", import.meta.url);
 
@@ -73,6 +77,22 @@ test("class-first filtering derives class choices and ordered sessions from assi
   assert.deepEqual(attendanceSessionsForClass(sessions, ""), []);
 });
 
+test("session pagination keeps small classes on one page and preserves ordering across pages", () => {
+  const twoSessions = [{ classSessionId: 5 }, { classSessionId: 6 }];
+  assert.deepEqual(paginateAttendanceSessions(twoSessions, 1), {
+    items: twoSessions,
+    page: 1,
+    pageSize: 8,
+    total: 2,
+    totalPages: 1,
+  });
+
+  const tenSessions = Array.from({ length: 10 }, (_, index) => ({ classSessionId: index + 1 }));
+  assert.deepEqual(paginateAttendanceSessions(tenSessions, 1).items.map((session) => session.classSessionId), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.deepEqual(paginateAttendanceSessions(tenSessions, 2).items.map((session) => session.classSessionId), [9, 10]);
+  assert.equal(paginateAttendanceSessions(tenSessions, 20).page, 2);
+});
+
 test("Coach page keeps backend attendance contracts and backend-controlled edit eligibility", async () => {
   const source = await readFile(sourceUrl, "utf8");
   for (const api of ["getCoachAttendanceSessionsApi", "getAttendanceRosterApi", "markAttendanceApi", "getAttendanceHistoryApi"]) {
@@ -95,8 +115,9 @@ test("class filter controls responsive session selection and cancelled session s
     readFile(new URL("../src/pages/CoachAttendance.css", import.meta.url), "utf8"),
   ]);
   assert.match(source, /className="coach-attendance-class-filter"/);
+  assert.match(source, /<span>Chọn lớp<\/span>/);
   assert.match(source, /onChange=\{\(event\) => chooseClass\(event\.target\.value\)\}/);
-  assert.match(source, /filteredSessions\.map\(\(session\)/);
+  assert.match(source, /sessionPageData\.items\.map\(\(session\)/);
   assert.match(source, /aria-pressed=\{active\}/);
   assert.match(source, /sessionCancelled/);
   assert.match(css, /@media \(max-width: 760px\)/);
@@ -116,8 +137,10 @@ test("Coach Attendance exposes scoped summaries, search, bulk marking, and per-m
   assert.match(source, /setRowErrors\(\(current\) => \(\{ \.\.\.current, \[rowKey\]: errorMessage/);
   assert.match(source, /if \(correctionCount > 0 && !window\.confirm/);
   assert.match(source, /savingAll \? "Đang lưu/);
-  assert.match(source, /coach-attendance-grid.*is-session-list-only/);
   assert.match(source, /coach-attendance-stats/);
-  assert.match(css, /grid-template-columns: minmax\(270px, 330px\) minmax\(0, 1fr\)/);
+  assert.match(source, /Quay lại danh sách/);
+  assert.match(source, /sessionPageData\.items\.map/);
+  assert.match(css, /coach-attendance-session-pagination/);
+  assert.match(css, /coach-attendance-detail-view/);
   assert.match(css, /@media \(max-width: 1000px\)/);
 });

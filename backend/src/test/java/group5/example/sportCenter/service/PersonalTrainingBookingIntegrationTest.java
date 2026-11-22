@@ -41,6 +41,7 @@ import group5.example.sportCenter.entity.PaymentStatus;
 import group5.example.sportCenter.entity.Coach;
 import group5.example.sportCenter.entity.CoachSport;
 import group5.example.sportCenter.entity.ClassSession;
+import group5.example.sportCenter.entity.Facility;
 import group5.example.sportCenter.entity.Course;
 import group5.example.sportCenter.entity.CourseClass;
 import group5.example.sportCenter.entity.CourseOffering;
@@ -57,6 +58,7 @@ import group5.example.sportCenter.repository.CourseClassRepository;
 import group5.example.sportCenter.repository.CourseOfferingRepository;
 import group5.example.sportCenter.repository.CourseRegistrationRepository;
 import group5.example.sportCenter.repository.CourseRepository;
+import group5.example.sportCenter.repository.FacilityRepository;
 import group5.example.sportCenter.repository.MembershipPlanRepository;
 import group5.example.sportCenter.repository.MembershipRepository;
 import group5.example.sportCenter.repository.NotificationRepository;
@@ -92,6 +94,7 @@ class PersonalTrainingBookingIntegrationTest {
     @Autowired CourseClassRepository classes;
     @Autowired CourseOfferingRepository offerings;
     @Autowired CourseRepository courses;
+    @Autowired FacilityRepository facilities;
     @Autowired CourseRegistrationRepository courseRegistrations;
     @Autowired PaymentRepository payments;
     @Autowired PaymentService paymentService;
@@ -104,6 +107,7 @@ class PersonalTrainingBookingIntegrationTest {
     private User member;
     private Coach coach;
     private Sport sport;
+    private Facility facility;
     private Jwt jwt;
     private LocalDateTime slot;
     private MockMvc mvc;
@@ -122,6 +126,7 @@ class PersonalTrainingBookingIntegrationTest {
         memberships.deleteAll();
         payments.deleteAllInBatch();
         coachSports.deleteAll();
+        facilities.deleteAll();
         coaches.deleteAll();
         sports.deleteAll();
         plans.deleteAll();
@@ -132,6 +137,14 @@ class PersonalTrainingBookingIntegrationTest {
         sport.setName("PT Sport");
         sport.setStatus("ACTIVE");
         sport = sports.save(sport);
+
+        facility = new Facility();
+        facility.setSport(sport);
+        facility.setSports(new java.util.LinkedHashSet<>(List.of(sport)));
+        facility.setName("PT test facility");
+        facility.setType("COURT");
+        facility.setStatus("ACTIVE");
+        facility = facilities.save(facility);
 
         User coachUser = user("COACH", "ACTIVE", "coach-pt");
         coach = new Coach();
@@ -169,6 +182,47 @@ class PersonalTrainingBookingIntegrationTest {
         assertEquals(result.createdAt().plusMinutes(15), result.paymentExpiresAt());
         assertEquals(1, service.mine(jwt).size());
         assertEquals(0, notifications.count(), "A pending payment hold is not a confirmed booking event");
+    }
+
+    @Test
+    void verifiedPtEligibilityAndDiscountUsePurchasedSnapshotAfterPlanEdit() {
+        Membership purchased = verifiedMembership(true, "15.00");
+        MembershipPlan currentPlan = plans.findById(purchased.getPlan().getId()).orElseThrow();
+
+        currentPlan.setAllowOneOnOneCoaching(false);
+        currentPlan.setPersonalTrainingDiscountPercent(new BigDecimal("90.00"));
+        currentPlan.setStatus("INACTIVE");
+        plans.saveAndFlush(currentPlan);
+
+        var result = service.create(jwt, request(coach, sport, slot));
+        assertEquals(new BigDecimal("75000.00"), result.discount());
+        assertEquals(new BigDecimal("425000.00"), result.finalPrice());
+    }
+
+    @Test
+    void verifiedSnapshotDenialCannotBeOverriddenByPlanEligibility() {
+        Membership purchased = verifiedMembership(false, "15.00");
+        MembershipPlan currentPlan = plans.findById(purchased.getPlan().getId()).orElseThrow();
+
+        currentPlan.setAllowOneOnOneCoaching(true);
+        plans.saveAndFlush(currentPlan);
+
+        ResponseStatusException denied = assertThrows(ResponseStatusException.class,
+                () -> service.create(jwt, request(coach, sport, slot)));
+        assertEquals(403, denied.getStatusCode().value());
+    }
+
+    @Test
+    void membershipEndingOnSessionDateDoesNotGrantPtEligibility() {
+        memberships.deleteAll();
+        MembershipPlan currentPlan = plans.findAll().get(0);
+        Membership endedAtSessionDate = membership(currentPlan, member);
+        endedAtSessionDate.setEndDate(slot.toLocalDate());
+        memberships.saveAndFlush(endedAtSessionDate);
+
+        ResponseStatusException denied = assertThrows(ResponseStatusException.class,
+                () -> service.create(jwt, request(coach, sport, slot)));
+        assertEquals(403, denied.getStatusCode().value());
     }
 
     @Test
@@ -334,6 +388,7 @@ class PersonalTrainingBookingIntegrationTest {
             Future<String> classSession = pool.submit(() -> crossFlowAttempt(start, ready, () -> {
                 var create = new group5.example.sportCenter.dto.CreateClassSessionRequest();
                 create.setClassId(classId);
+                create.setFacilityId(facility.getId());
                 create.setStartTime(slot);
                 create.setEndTime(slot.plusHours(1));
                 create.setStatus("SCHEDULED");
@@ -569,6 +624,25 @@ class PersonalTrainingBookingIntegrationTest {
         membership.setStatus("ACTIVE");
         membership.setAutoRenew(false);
         return membership;
+    }
+
+    private Membership verifiedMembership(boolean oneOnOne, String percent) {
+        Membership existing = memberships.findByMemberId(member.getId()).get(0);
+        MembershipPlan plan = plans.findById(existing.getPlan().getId()).orElseThrow();
+        memberships.delete(existing);
+        memberships.flush();
+        Membership purchased = membership(plan, member);
+        purchased.setBenefitSnapshotStatus("COMPLETE");
+        purchased.setBenefitSnapshotSource("PURCHASE");
+        purchased.setPlanNameSnapshot(plan.getName());
+        purchased.setPlanDescriptionSnapshot(plan.getDescription());
+        purchased.setPlanPriceSnapshot(plan.getPrice());
+        purchased.setPlanDurationMonthsSnapshot(plan.getDurationMonths());
+        purchased.setCourseDiscountPercentSnapshot(BigDecimal.ZERO);
+        purchased.setPtDiscountPercentSnapshot(new BigDecimal(percent));
+        purchased.setAllowPtPlanSnapshot(false);
+        purchased.setAllowOneOnOneSnapshot(oneOnOne);
+        return memberships.saveAndFlush(purchased);
     }
 
     private CreatePersonalTrainingBookingRequest request(Coach assignedCoach, Sport selectedSport, LocalDateTime start) {

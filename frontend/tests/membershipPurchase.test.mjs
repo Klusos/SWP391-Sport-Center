@@ -4,38 +4,40 @@ import test from "node:test";
 
 import { membershipPurchaseErrorMessage } from "../src/membershipPurchase.js";
 
-test("disabled demo online payments produce a clear, non-success message", () => {
-  const message = membershipPurchaseErrorMessage({ status: 503, message: "An unexpected error occurred" });
-
-  assert.match(message, /chưa được bật cho bản demo/);
-  assert.match(message, /Không có thanh toán mới nào được tạo/);
+test("effective or future Membership conflict explains ordinary Purchase is blocked", () => {
+  assert.match(
+    membershipPurchaseErrorMessage({ status: 409, message: "An effective or future Membership already exists for this member" }),
+    /đang hiệu lực hoặc sắp có hiệu lực.*Không thể tạo giao dịch mua thông thường/
+  );
 });
 
-test("purchase errors remain visible after payment history is reloaded", async () => {
-  const source = await readFile(new URL("../src/pages/MemberMembership.jsx", import.meta.url), "utf8");
-  const reloadIndex = source.indexOf("await load();", source.indexOf("membershipPurchaseErrorMessage(requestError)"));
-  const displayIndex = source.indexOf("setError(`${message}", reloadIndex);
-
-  assert.notEqual(reloadIndex, -1);
-  assert.ok(displayIndex > reloadIndex);
+test("pending payment conflicts remain distinct from Membership eligibility conflicts", () => {
+  assert.match(
+    membershipPurchaseErrorMessage({ status: 409, message: "A pending membership payment already exists for this member" }),
+    /thanh toán Membership chờ xử lý/
+  );
 });
 
-test("membership payment methods are chosen in the shared modal before payment creation", async () => {
+test("Member UI blocks ordinary purchase for current or future ACTIVE Memberships and keeps server errors visible", async () => {
   const source = await readFile(new URL("../src/pages/MemberMembership.jsx", import.meta.url), "utf8");
-  const start = source.slice(source.indexOf("async function startPurchase"), source.indexOf("function openPurchaseModal"));
+  assert.match(source, /currentMemberships\.length > 0 \|\| sections\.upcoming\.length > 0/);
+  assert.match(source, /disabled=\{busyPlanId !== null \|\| purchaseBlockedByMembership/);
+  assert.match(source, /if \(busyPlanId !== null \|\| purchaseBlockedByMembership \|\| pendingMembershipPayments\.length > 0/);
+  assert.match(source, /membershipPurchaseErrorMessage\(requestError\)/);
+  assert.match(source, /reconciliationUnknown \? `\$\{message\} Làm mới lịch sử thanh toán trước khi thử lại\.` : message/);
+});
 
-  assert.match(source, /onClick=\{\(\) => openPurchaseModal\(plan\)\}/);
-  assert.match(source, /<PaymentMethodModal/);
-  assert.match(source, /function openPurchaseModal\(plan\)[\s\S]*?setPaymentModalPlan\(plan\)/);
-  assert.match(source, /function closePaymentModal\(\)[\s\S]*?setPaymentModalPlan\(null\)/);
-  assert.match(source, /onContinue=\{\(method\) => startPurchase\(paymentModalPlan, method\)\}/);
-  assert.match(start, /method,\s*purpose: "MEMBERSHIP",\s*referenceId: Number\(plan\.id\),\s*autoRenew: false/s);
-  assert.match(start, /if \(busyPlanId !== null \|\| pendingMembershipPayments\.length > 0 \|\| paymentReconciliationRequired\) return false/);
-  assert.doesNotMatch(start, /window\.confirm/);
-  assert.match(start, /validVnpayUrl\(payment\.paymentUrl\)/);
-  assert.match(start, /const payment = await createPaymentApi/);
-  assert.match(start, /const refreshedPayments = await load\(\)/);
-  assert.match(start, /if \(!validVnpayUrl\(payment\.paymentUrl\)\)[\s\S]*?return true/);
-  assert.match(source, /onSuccess=\{\(\) => setPaymentModalPlan\(null\)\}/);
-  assert.match(start, /setPaymentReconciliationRequired\(true\)/);
+test("Receptionist and Admin shared sales UI blocks Purchase and maps backend conflicts", async () => {
+  const source = await readFile(new URL("../src/pages/ReceptionistMembershipSales.jsx", import.meta.url), "utf8");
+  assert.match(source, /import \{ membershipPurchaseErrorMessage \} from "\.\.\/membershipPurchase\.js"/);
+  assert.match(source, /const purchaseBlockedByMembership = memberChain\.length > 0/);
+  assert.match(source, /membershipPurchaseErrorMessage\(requestError\)/);
+  assert.match(source, /memberMemberships === null \|\| purchaseBlockedByMembership/);
+});
+
+test("historical membership benefits render from Membership response fields, not the current Plan catalog", async () => {
+  const source = await readFile(new URL("../src/pages/MemberMembership.jsx", import.meta.url), "utf8");
+  assert.match(source, /renderMembershipBenefits\(membership\)/);
+  assert.match(source, /membership\.benefitSource === "LEGACY_PLAN_FALLBACK"/);
+  assert.doesNotMatch(source, /find\(\(item\) => Number\(item\.id\) === Number\(membership\.planId\)\)/);
 });

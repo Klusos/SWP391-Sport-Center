@@ -131,6 +131,36 @@ public class NotificationService {
         return toResponse(notifications.save(notification));
     }
 
+    /** Stable business-event deduplication using the existing notification row and exact event text. */
+    @Transactional
+    public NotificationResponse createForUserOnce(Integer userId, String title, String message) {
+        if (userId == null || title == null || title.isBlank() || title.length() > 150
+                || message == null || message.isBlank()) {
+            throw new IllegalArgumentException("Notification user, title, and message are required; title is limited to 150 characters");
+        }
+        // Serialize event deduplication per recipient across scheduler instances and repeated callbacks.
+        users.findByIdForBookingUpdate(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+        return notifications.findFirstByUserIdAndTitleAndMessageOrderByIdAsc(userId, title, message)
+                .map(this::toResponse)
+                .orElseGet(() -> createForUser(userId, title, message));
+    }
+
+    /** Member plus active staff visibility for collected Renewal money needing manual review. */
+    @Transactional
+    public void renewalReconciliationRequired(Integer paymentId, Integer memberId) {
+        if (paymentId == null || memberId == null) return;
+        String title = "Renewal payment needs manual reconciliation";
+        String message = "A collected Renewal payment (reference #" + paymentId
+                + ") could not be applied and requires manual reconciliation. This notice does not mean a refund has been completed; contact Sport Center staff.";
+        createForUserOnce(memberId, title, message);
+        for (String role : List.of("ADMIN", "RECEPTIONIST")) {
+            for (Integer staffId : users.findActiveUserIdsByRole(role)) {
+                createForUserOnce(staffId, title, message);
+            }
+        }
+    }
+
     private User authenticatedUser(Jwt jwt) {
         if (jwt == null || jwt.getSubject() == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authenticated user is required");

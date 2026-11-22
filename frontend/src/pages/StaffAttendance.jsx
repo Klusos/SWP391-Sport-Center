@@ -253,7 +253,8 @@ export default function StaffAttendance({ token, role, currentUserName, onLogout
         </header>
         {sessionsError && <p className="coach-attendance-alert is-error" role="alert">{sessionsError}</p>}
         {notice && <p className="coach-attendance-alert is-success" role="status">{notice}</p>}
-        <section className="coach-attendance-panel" aria-labelledby="staff-attendance-sessions-title">
+        <div className={`staff-attendance-workspace${selectedId ? " has-selection" : ""}`}>
+        <section className="coach-attendance-panel staff-attendance-session-panel" aria-labelledby="staff-attendance-sessions-title">
           <div className="coach-attendance-section-heading"><div><h2 id="staff-attendance-sessions-title">Danh sách buổi học</h2><p>Hiển thị dữ liệu từ các lớp học hiện có.</p></div><span>{visibleSessions.length}/{sessions.length} buổi</span></div>
           <div className="staff-attendance-filters">
             <label>Tìm theo môn, khóa, lớp hoặc mã buổi<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nhập từ khóa…" /></label>
@@ -264,7 +265,7 @@ export default function StaffAttendance({ token, role, currentUserName, onLogout
             : sessionsError ? null
               : sessions.length === 0 ? <p className="coach-attendance-empty">Chưa có buổi học nào.</p>
                 : visibleSessions.length === 0 ? <p className="coach-attendance-empty">Không tìm thấy buổi học phù hợp.</p>
-                  : <div className="coach-attendance-sessions">{visibleSessions.map((session) => {
+                  : <div className="coach-attendance-sessions staff-attendance-session-list" role="region" aria-label="Các buổi học có thể chọn" tabIndex={0}>{visibleSessions.map((session) => {
                     const id = session?.classSessionId; const active = String(id) === String(selectedId);
                     return <button type="button" className={`coach-attendance-session${active ? " is-selected" : ""}`} key={id ?? `${session?.courseClassId}-${session?.startTime}`} onClick={() => id != null && selectSession(id)} disabled={id == null} aria-pressed={active}>
                       <span className="coach-attendance-session-title"><strong>{session?.courseName || session?.courseOfferingName || "Khóa học"}</strong><span>{session?.courseClassName || (session?.courseClassId != null ? `Lớp #${session.courseClassId}` : "Chưa có tên lớp")}</span><span>{session?.sportName || (session?.sportId != null ? `Môn #${session.sportId}` : "Chưa có môn")}</span></span>
@@ -274,7 +275,7 @@ export default function StaffAttendance({ token, role, currentUserName, onLogout
                   })}</div>}
         </section>
 
-        {selectedId && <section className="coach-attendance-panel" aria-labelledby="staff-attendance-roster-title">
+        {selectedId && <section className="coach-attendance-panel staff-attendance-roster-panel" aria-labelledby="staff-attendance-roster-title">
           <div className="coach-attendance-section-heading"><div><h2 id="staff-attendance-roster-title">Danh sách điểm danh</h2><p>{roster?.courseClassName || selectedSession?.courseClassName || "Lớp học"} · Buổi #{roster?.classSessionId ?? selectedId}</p></div><span>{members.length} thành viên</span></div>
           {rosterLoading ? <p className="coach-attendance-empty" role="status">Đang tải danh sách thành viên…</p>
             : rosterError ? <p className="coach-attendance-alert is-error" role="alert">{rosterError}</p>
@@ -330,6 +331,7 @@ export default function StaffAttendance({ token, role, currentUserName, onLogout
                   <p className="coach-attendance-footnote">Không tự động ghi vắng mặt. Thời gian lịch học được hiển thị theo giờ địa phương của thiết bị; máy chủ quyết định quyền điểm danh.</p>
                 </>}
         </section>}
+        </div>
 
         {historyOpen && <section className="coach-attendance-panel coach-attendance-history" aria-labelledby="staff-attendance-history-title"><div className="coach-attendance-section-heading"><h2 id="staff-attendance-history-title">Lịch sử điểm danh</h2><button type="button" className="coach-attendance-history-button" onClick={closeHistory}>Đóng</button></div>
           {historyLoading ? <p role="status">Đang tải lịch sử…</p> : historyError ? <p className="coach-attendance-alert is-error" role="alert">{historyError}</p> : history.length === 0 ? <p className="coach-attendance-empty">Chưa có sự kiện lịch sử.</p> : <ol className="coach-attendance-history-list">{history.map((event) => <li key={event?.id ?? `${event?.changedAt}-${event?.newStatus}`}><strong>{event?.oldStatus ? `${labelStatus(event.oldStatus)} → ${labelStatus(event.newStatus)}` : `Đánh dấu ban đầu: ${labelStatus(event?.newStatus)}`}</strong><span>{dateTime(event?.changedAt)} · Người thực hiện ID: {event?.changedById ?? "—"}</span>{event?.reason && <p>Lý do: {event.reason}</p>}</li>)}</ol>}

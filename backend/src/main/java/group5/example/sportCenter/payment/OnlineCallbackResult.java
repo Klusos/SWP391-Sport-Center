@@ -13,6 +13,12 @@ public record OnlineCallbackResult(Status status, PaymentResponse payment) {
         INVALID_SIGNATURE,
         NOT_FOUND,
         NOT_ONLINE,
-        AMOUNT_MISMATCH
+        AMOUNT_MISMATCH,
+        /** Renewal may settle only through the trusted VNPay IPN adapter. */
+        RENEWAL_IPN_REQUIRED,
+        /** A signed browser Return was received; wait for the server-to-server IPN. */
+        AWAITING_IPN,
+        /** Signed collection was recorded, but requires manual reconciliation. */
+        RECONCILIATION_REQUIRED
     }
 }

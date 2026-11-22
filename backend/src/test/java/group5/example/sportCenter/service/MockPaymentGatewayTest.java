@@ -1,6 +1,7 @@
 package group5.example.sportCenter.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -49,6 +50,8 @@ class MockPaymentGatewayTest {
         assertEquals("TXN-2", verified.transactionCode());
         assertTrue(verified.success());
         assertEquals(params.get("paymentTime"), verified.verifiedPaymentTime());
+        assertFalse(verified.providerSignatureVerified());
+        assertFalse(verified.isRenewalCollectionEligible());
         assertTrue(gateway.verifyCallback(callback("TXN-2", "false", params.get("paymentTime"), signature)).isEmpty());
     }
 

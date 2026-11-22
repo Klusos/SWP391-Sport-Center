@@ -23,6 +23,19 @@ test("public consultation form requires email and preserves fields after client 
   assert.match(handler, /email,/);
   assert.ok(handler.indexOf("await createPublicConsultationRequestApi") < handler.indexOf("setForm(EMPTY_FORM)"));
   assert.ok(handler.indexOf("await createPublicConsultationRequestApi") < handler.indexOf("setSent(true)"));
+  assert.match(component, /Đã có tài khoản Member\?[\s\S]*href="\/login"[\s\S]*để yêu cầu được gắn đúng tài khoản/);
+});
+
+test("Receptionist cannot manually link a Guest request to an existing Member", async () => {
+  const [api, queue] = await Promise.all([
+    source("../src/api.js"),
+    source("../src/pages/ConsultationQueue.jsx"),
+  ]);
+  assert.doesNotMatch(api, /linkConsultationMemberApi|\/link-member/);
+  assert.doesNotMatch(queue, /handleLinkMember|memberCandidates|memberCandidate|Tìm thành viên hiện có/);
+  assert.match(queue, /Guest ch\\u01b0a li\\u00ean k\\u1ebft/);
+  assert.match(queue, /requestError\.status === 409[\s\S]*?requestError\.status === 400/);
+  assert.match(queue, /createConsultationMemberApi\(token, detail\.id/);
 });
 
 test("all existing consultation entry points require and send normalized email", async () => {

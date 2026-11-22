@@ -1,4 +1,4 @@
-.coach-pt-main .pt-page { display:grid; gap:18px; max-width:1180px; }
+.coach-pt-main .pt-page { display:grid; gap:18px; max-width:1440px; }
 .coach-pt-main .pt-header { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; margin:0; padding:0; border:0; border-radius:0; background:transparent; box-shadow:none; }
 .coach-pt-main .pt-header h1 { margin:4px 0 6px; color:#153451; font-size:clamp(27px,2.6vw,34px); font-weight:800; letter-spacing:-.025em; }
 .coach-pt-main .pt-header .pt-description { max-width:760px; color:#60758b; line-height:1.55; }

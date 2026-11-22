@@ -166,7 +166,7 @@
   display: grid;
   align-content: start;
   gap: 24px;
-  max-width: 1280px;
+  max-width: 1440px;
   margin: 0 auto;
   padding: 24px 32px 64px;
 }
@@ -1552,4 +1552,48 @@
   .member-membership-page .membership-current-entry,
   .member-membership-page .membership-plan-card { transition: none; }
   .member-membership-page .membership-plan-card:hover { transform: none; }
+}
+
+.member-membership-page .membership-upgrade-quote-details,
+.mm-upgrade-dialog .mm-upgrade-quote-details {
+  display: grid;
+  gap: 0;
+  margin: 12px 0;
+  border-top: 1px solid #e5edf4;
+}
+.member-membership-page .membership-upgrade-quote-details > div,
+.mm-upgrade-dialog .mm-upgrade-quote-details > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 9px 0;
+  border-bottom: 1px solid #e5edf4;
+  line-height: 1.45;
+}
+.member-membership-page .membership-upgrade-quote-details dt,
+.mm-upgrade-dialog .mm-upgrade-quote-details dt { color: #60758c; font-size: .86rem; }
+.member-membership-page .membership-upgrade-quote-details dd,
+.mm-upgrade-dialog .mm-upgrade-quote-details dd { margin: 0; color: #123b63; font-size: .88rem; font-weight: 700; text-align: right; }
+.member-membership-page .membership-upgrade-effective-note { color: #47647d; font-size: .84rem; line-height: 1.5; }
+.member-membership-page .membership-upgrade-payment-quote { margin-top: 10px; padding: 0 12px; border: 1px solid #e5edf4; border-radius: 10px; }
+.member-membership-page .membership-upgrade-quote-warning { padding: 10px 12px; border-radius: 8px; background: #fff7e8; color: #7c5200; font-size: .84rem; line-height: 1.5; }
+@media (max-width: 520px) {
+  .member-membership-page .membership-upgrade-quote-details > div,
+  .mm-upgrade-dialog .mm-upgrade-quote-details > div { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .member-membership-page .membership-upgrade-quote-details dd,
+  .mm-upgrade-dialog .mm-upgrade-quote-details dd { text-align: left; }
+}
+
+.member-membership-page .member-renewal-list { display: grid; gap: 14px; }
+.member-membership-page .member-renewal-card { min-width: 0; padding: 16px; border: 1px solid #dce8f2; border-radius: 12px; background: #fbfdff; }
+.member-membership-page .member-renewal-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.member-membership-page .member-renewal-heading h3 { margin: 0 0 4px; color: #123b63; }
+.member-membership-page .member-renewal-heading small,
+.member-membership-page .member-renewal-attempt { color: #60758c; font-size: .88rem; }
+.member-membership-page .member-renewal-result { margin: 10px 0; color: #36536c; line-height: 1.5; }
+.member-membership-page .member-renewal-attempt { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 10px 0; }
+.member-membership-page .member-renewal-attempt strong { color: #8a4b00; }
+.member-membership-page .member-renewal-card button { max-width: 100%; }
+@media (max-width: 520px) {
+  .member-membership-page .member-renewal-heading { flex-direction: column; }
 }

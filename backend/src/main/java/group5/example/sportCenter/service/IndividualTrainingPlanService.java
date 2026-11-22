@@ -209,7 +209,8 @@ public class IndividualTrainingPlanService {
 
     private void requireCurrentPlanEntitlement(Integer memberId) {
         LocalDate today = LocalDate.now(clock.withZone(BUSINESS_ZONE));
-        if (memberships.findEffectivePersonalTrainingPlanMemberships(memberId, today).isEmpty()) {
+        if (memberships.findEffectivePersonalTrainingPlanMemberships(memberId, today).stream()
+                .noneMatch(membership -> MembershipBenefitValues.resolve(membership).allowPersonalTrainingPlan())) {
             throw error(HttpStatus.FORBIDDEN,
                     "A currently effective Membership with personal training plan eligibility is required");
         }

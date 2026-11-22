@@ -21,6 +21,16 @@ export function canCheckout(registration, now = Date.now()) {
   return registration?.status === "PENDING_PAYMENT" && vietnamDate(registration.paymentDeadline)?.getTime() > now;
 }
 
+export function courseRegistrationDiscountPercent(registration) {
+  if (registration?.originalPrice == null || registration?.membershipDiscount == null) return null;
+  const originalPrice = Number(registration?.originalPrice);
+  const membershipDiscount = Number(registration?.membershipDiscount);
+  if (!Number.isFinite(originalPrice) || originalPrice <= 0
+      || !Number.isFinite(membershipDiscount) || membershipDiscount < 0
+      || membershipDiscount > originalPrice) return null;
+  return membershipDiscount / originalPrice * 100;
+}
+
 // Deliberately allow only the sandbox checkout host/path used by the current gateway.
 // A different provider URL requires an explicit frontend review, not a wildcard allowlist.
 export function validVnpayUrl(value) {

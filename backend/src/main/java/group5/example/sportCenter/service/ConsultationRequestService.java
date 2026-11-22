@@ -22,7 +22,6 @@ import group5.example.sportCenter.dto.ConsultationResponse;
 import group5.example.sportCenter.dto.CreateConsultationMemberRequest;
 import group5.example.sportCenter.dto.CreateConsultationRequest;
 import group5.example.sportCenter.dto.CreateMemberRequest;
-import group5.example.sportCenter.dto.LinkConsultationMemberRequest;
 import group5.example.sportCenter.entity.ConsultationRequest;
 import group5.example.sportCenter.entity.ConsultationStatus;
 import group5.example.sportCenter.entity.Sport;
@@ -203,10 +202,10 @@ public class ConsultationRequestService {
         requireAssignedHandlerOrAdmin(actor, consultation);
         requireInProgress(consultation);
         if (consultation.getMember() != null) {
-            throw error(HttpStatus.CONFLICT, "Consultation is already linked to a member; use link-member only when selecting an existing account");
+            throw error(HttpStatus.CONFLICT, "Consultation is already linked to a member");
         }
         if (consultation.getEmail() == null || consultation.getEmail().isBlank()) {
-            throw error(HttpStatus.BAD_REQUEST, "An email is required to create a login account; link an existing MEMBER instead");
+            throw error(HttpStatus.BAD_REQUEST, "An email is required to create a login account");
         }
 
         CreateMemberRequest memberRequest = new CreateMemberRequest();
@@ -233,29 +232,6 @@ public class ConsultationRequestService {
             throw error(HttpStatus.CONFLICT, "Consultation could not be linked; member creation was rolled back");
         }
         return response(consultation);
-    }
-
-    @Transactional
-    public ConsultationResponse linkMember(Integer id, LinkConsultationMemberRequest request, Jwt jwt) {
-        User actor = access.actor(jwt);
-        requireAssignedHandlerOrAdminRole(actor);
-        ConsultationRequest consultation = locked(id);
-        requireAssignedHandlerOrAdmin(actor, consultation);
-        requireInProgress(consultation);
-        if (consultation.getMember() != null) {
-            if (consultation.getMember().getId().equals(request.memberId())) {
-                return response(consultation);
-            }
-            throw error(HttpStatus.CONFLICT, "Consultation is already linked to another member");
-        }
-
-        User member = users.findById(request.memberId())
-                .orElseThrow(() -> error(HttpStatus.NOT_FOUND, "Member user not found"));
-        if (!"MEMBER".equalsIgnoreCase(member.getRole()) || !"ACTIVE".equalsIgnoreCase(member.getStatus())) {
-            throw error(HttpStatus.CONFLICT, "Target account must be an ACTIVE MEMBER");
-        }
-        consultation.setMember(member);
-        return response(consultations.saveAndFlush(consultation));
     }
 
     private void requireAssignedHandlerOrAdminRole(User actor) {

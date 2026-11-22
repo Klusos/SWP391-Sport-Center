@@ -167,6 +167,13 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/payments/member/*").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers("/api/payments", "/api/payments/**").denyAll()
 
+                .requestMatchers(HttpMethod.GET, "/api/receptionist/members/*/renewal-intents")
+                    .hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers(HttpMethod.POST,
+                        "/api/receptionist/members/*/renewal-intents/*/counter-attempts")
+                    .hasAnyRole("ADMIN", "RECEPTIONIST")
+                .requestMatchers("/api/receptionist/**").denyAll()
+
                 .requestMatchers(HttpMethod.POST, "/api/support-tickets").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/support-tickets/me").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/support-tickets").hasAnyRole("ADMIN", "RECEPTIONIST")
@@ -188,10 +195,14 @@ public class SecurityConfig {
 
                 .requestMatchers(HttpMethod.GET, "/api/membership-plans", "/api/membership-plans/**").hasRole("ADMIN")
                 .requestMatchers("/api/membership-plans", "/api/membership-plans/**").hasRole("ADMIN")
+                .requestMatchers("/api/membership-upgrade-paths", "/api/membership-upgrade-paths/**").hasRole("ADMIN")
 
                 .requestMatchers(HttpMethod.POST, "/api/memberships/expire", "/api/memberships/auto-renew/run").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/memberships").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/memberships/cancellation-requests").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/memberships/renewal-intents/me",
+                        "/api/memberships/renewal-intents/*").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.POST, "/api/memberships/renewal-intents/*/attempts").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/memberships/cancellation-requests/me").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.PATCH, "/api/memberships/cancellation-requests/*/withdraw").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/memberships/cancellation-requests").hasAnyRole("ADMIN", "RECEPTIONIST")

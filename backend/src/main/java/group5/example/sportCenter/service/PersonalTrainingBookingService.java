@@ -236,7 +236,7 @@ public class PersonalTrainingBookingService {
 
     private Membership eligibleMembership(Integer memberId, LocalDate sessionDate) {
         List<Membership> valid = memberships.findActiveAndValidForPt(memberId, sessionDate).stream()
-                .filter(m -> Boolean.TRUE.equals(m.getPlan().getAllowOneOnOneCoaching()))
+                .filter(m -> MembershipBenefitValues.resolve(m).allowOneOnOneCoaching())
                 .toList();
         if (valid.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
@@ -265,7 +265,7 @@ public class PersonalTrainingBookingService {
             throw new PtPricingConfigurationException(
                     "PT session pricing configuration is invalid; contact the center administrator");
         }
-        BigDecimal percent = membership.getPlan().getPersonalTrainingDiscountPercent();
+        BigDecimal percent = MembershipBenefitValues.resolve(membership).personalTrainingDiscountPercent();
         BigDecimal discount = base.multiply(percent).divide(HUNDRED, 2, RoundingMode.HALF_UP);
         BigDecimal finalPrice = base.subtract(discount).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
         return new Price(base, discount, finalPrice);

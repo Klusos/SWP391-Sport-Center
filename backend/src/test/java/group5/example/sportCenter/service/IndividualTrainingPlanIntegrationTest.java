@@ -364,7 +364,10 @@ class IndividualTrainingPlanIntegrationTest {
                         .contentType("application/json").content(body("Goal", "Week", "Exercise")))
                 .andExpect(status().isForbidden());
 
-        qualifyingMembership(member, true, false, today, today.plusMonths(1));
+        Membership purchased = verifiedQualifyingMembership(member, true, false, today, today.plusMonths(1));
+        MembershipPlan editedPlan = membershipPlans.findById(purchased.getPlan().getId()).orElseThrow();
+        editedPlan.setAllowPersonalTrainingPlan(false);
+        membershipPlans.saveAndFlush(editedPlan);
         mvc.perform(post(createUrl(member)).header("Authorization", bearer(coachUser))
                         .contentType("application/json").content(body("Goal", "Week", "Exercise")))
                 .andExpect(status().isCreated());
@@ -374,6 +377,19 @@ class IndividualTrainingPlanIntegrationTest {
                         .contentType("application/json").content(body("Goal", "Week", "Exercise")))
                 .andExpect(status().isConflict());
         assertEquals(1, plans.count());
+    }
+
+    @Test
+    void verifiedIndividualPlanDenialCannotBeOverriddenByCurrentPlanEdit() throws Exception {
+        Membership purchased = verifiedQualifyingMembership(member, false, true, today, today.plusMonths(1));
+        MembershipPlan editedPlan = membershipPlans.findById(purchased.getPlan().getId()).orElseThrow();
+        editedPlan.setAllowPersonalTrainingPlan(true);
+        membershipPlans.saveAndFlush(editedPlan);
+
+        mvc.perform(post(createUrl(member)).header("Authorization", bearer(coachUser))
+                        .contentType("application/json").content(body("Goal", "Week", "Exercise")))
+                .andExpect(status().isForbidden());
+        assertEquals(0, plans.count());
     }
 
     @Test
@@ -522,6 +538,16 @@ class IndividualTrainingPlanIntegrationTest {
 
     private Membership qualifyingMembership(User who, boolean benefit, boolean oneOnOne,
             LocalDate startDate, LocalDate endDate) {
+        return qualifyingMembership(who, benefit, oneOnOne, startDate, endDate, false);
+    }
+
+    private Membership verifiedQualifyingMembership(User who, boolean benefit, boolean oneOnOne,
+            LocalDate startDate, LocalDate endDate) {
+        return qualifyingMembership(who, benefit, oneOnOne, startDate, endDate, true);
+    }
+
+    private Membership qualifyingMembership(User who, boolean benefit, boolean oneOnOne,
+            LocalDate startDate, LocalDate endDate, boolean verifiedSnapshot) {
         memberships.deleteAll(memberships.findByMemberId(who.getId()));
         MembershipPlan plan = new MembershipPlan();
         plan.setName("Individual plan benefit " + UUID.randomUUID());
@@ -540,6 +566,18 @@ class IndividualTrainingPlanIntegrationTest {
         membership.setStartDate(startDate);
         membership.setEndDate(endDate);
         membership.setStatus("ACTIVE");
+        if (verifiedSnapshot) {
+            membership.setBenefitSnapshotStatus("COMPLETE");
+            membership.setBenefitSnapshotSource("PURCHASE");
+            membership.setPlanNameSnapshot(plan.getName());
+            membership.setPlanDescriptionSnapshot(plan.getDescription());
+            membership.setPlanPriceSnapshot(plan.getPrice());
+            membership.setPlanDurationMonthsSnapshot(plan.getDurationMonths());
+            membership.setCourseDiscountPercentSnapshot(plan.getCourseDiscountPercent());
+            membership.setPtDiscountPercentSnapshot(plan.getPersonalTrainingDiscountPercent());
+            membership.setAllowPtPlanSnapshot(benefit);
+            membership.setAllowOneOnOneSnapshot(oneOnOne);
+        }
         return memberships.saveAndFlush(membership);
     }
 

@@ -70,6 +70,7 @@ export default function ConsultForm({ showFieldPlaceholders = true } = {}) {
     <form className="consult-form" onSubmit={handleSubmit}>
       <h3>Đăng ký nhận tư vấn</h3>
       <p className="consult-form-intro">Cho chúng tôi biết một chút về nhu cầu tập luyện của bạn.</p>
+      <p className="consult-form-intro">Đã có tài khoản Member? <a href="/login">Đăng nhập</a> trước khi gửi để yêu cầu được gắn đúng tài khoản.</p>
       <label className="consult-field"><span>Họ và tên</span>
         <input className="form-control" name="name" type="text" placeholder={showFieldPlaceholders ? "Họ và tên" : undefined} aria-label="Họ và tên" maxLength={100} value={form.name} onChange={handleChange} required />
       </label>

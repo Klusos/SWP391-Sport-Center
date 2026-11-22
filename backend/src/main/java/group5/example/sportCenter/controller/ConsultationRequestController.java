@@ -21,7 +21,6 @@ import group5.example.sportCenter.dto.CompleteConsultationRequest;
 import group5.example.sportCenter.dto.ConsultationResponse;
 import group5.example.sportCenter.dto.CreateConsultationMemberRequest;
 import group5.example.sportCenter.dto.CreateConsultationRequest;
-import group5.example.sportCenter.dto.LinkConsultationMemberRequest;
 import group5.example.sportCenter.service.ConsultationRequestService;
 import jakarta.validation.Valid;
 
@@ -92,10 +91,9 @@ public class ConsultationRequestController {
     }
 
     @PatchMapping("/{id}/link-member")
-    public ConsultationResponse linkMember(
-            @PathVariable Integer id,
-            @Valid @RequestBody LinkConsultationMemberRequest request,
-            @AuthenticationPrincipal Jwt jwt) {
-        return service.linkMember(id, request, jwt);
+    @ResponseStatus(HttpStatus.GONE)
+    public void linkMemberDisabled() {
+        // Kept as a tombstone so old clients cannot silently use an unverified identity link.
     }
+
 }

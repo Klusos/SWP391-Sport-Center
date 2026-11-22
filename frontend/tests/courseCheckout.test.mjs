@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { acquireAction, canCheckout, checkoutAccess, checkoutPayload, paymentMessage, positiveId, prepareCheckout, registrationMessage, registrationPayments, shouldPoll, startStatusPolling, validVnpayUrl } from "../src/courseCheckout.js";
+import { acquireAction, canCheckout, checkoutAccess, checkoutPayload, courseRegistrationDiscountPercent, paymentMessage, positiveId, prepareCheckout, registrationMessage, registrationPayments, shouldPoll, startStatusPolling, validVnpayUrl } from "../src/courseCheckout.js";
 
 const registration = { id: 123, classId: 8, status: "PENDING_PAYMENT", paymentDeadline: "2099-01-01T10:00:00", finalPrice: 500000 };
 const pending = { id: 1, purpose: "COURSE_REGISTRATION", referenceId: 123, method: "COUNTER", status: "PENDING" };
@@ -19,6 +19,23 @@ test("ONLINE uses registration identity and excludes client price/member fields"
 });
 test("COUNTER uses the same registration without creating another hold", () => {
   assert.deepEqual(checkoutPayload(123, "COUNTER"), { method: "COUNTER", purpose: "COURSE_REGISTRATION", referenceId: 123 });
+});
+test("discount percentage is derived only from the stored registration price snapshot", () => {
+  assert.equal(courseRegistrationDiscountPercent({ originalPrice: 100, membershipDiscount: 20 }), 20);
+  assert.equal(courseRegistrationDiscountPercent({ originalPrice: 100, membershipDiscount: 0 }), 0);
+  assert.equal(courseRegistrationDiscountPercent({ originalPrice: 0, membershipDiscount: 0 }), null);
+  assert.equal(courseRegistrationDiscountPercent({ originalPrice: 100, membershipDiscount: 101 }), null);
+  assert.equal(courseRegistrationDiscountPercent({ originalPrice: 100, membershipDiscount: null }), null);
+  assert.equal(courseRegistrationDiscountPercent({ originalPrice: "unknown", membershipDiscount: 5 }), null);
+});
+test("checkout shows the saved registration price breakdown and safely omits unavailable percentage", async () => {
+  const source = await readFile(new URL("../src/pages/CourseCheckout.jsx", import.meta.url), "utf8");
+  assert.match(source, /aria-label="Chi tiết giá đăng ký"/);
+  assert.match(source, /money\(registration\.originalPrice\)/);
+  assert.match(source, /money\(registration\.membershipDiscount\)/);
+  assert.match(source, /discountPercent != null/);
+  assert.match(source, /money\(registration\.finalPrice\)/);
+  assert.doesNotMatch(source, /membership\.plan|plan\.courseDiscountPercent/);
 });
 test("CourseCheckout preserves VNPay and counter methods", async () => {
   const source = await readFile(new URL("../src/pages/CourseCheckout.jsx", import.meta.url), "utf8");

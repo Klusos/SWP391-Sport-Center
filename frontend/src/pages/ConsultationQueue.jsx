@@ -17,7 +17,6 @@ import {
   getUsersApi,
   createSkillAssessmentApi,
   getUserApi,
-  linkConsultationMemberApi,
   takeConsultationRequestApi,
 } from "../api";
 
@@ -48,11 +47,6 @@ export default function ConsultationQueue({ token, role, currentUserName, onLogo
   const [detailError, setDetailError] = useState("");
   const [resolutionNote, setResolutionNote] = useState("");
   const [completingId, setCompletingId] = useState(null);
-  const [memberCandidates, setMemberCandidates] = useState([]);
-  const [candidateSearch, setCandidateSearch] = useState("");
-  const [selectedMemberId, setSelectedMemberId] = useState("");
-  const [loadingCandidates, setLoadingCandidates] = useState(false);
-  const [linkingMember, setLinkingMember] = useState(false);
   const [memberDateOfBirth, setMemberDateOfBirth] = useState("");
   const [memberPassword, setMemberPassword] = useState("");
   const [creatingMember, setCreatingMember] = useState(false);
@@ -177,46 +171,6 @@ export default function ConsultationQueue({ token, role, currentUserName, onLogo
     }
   }
 
-  async function loadMemberCandidates() {
-    setLoadingCandidates(true);
-    setDetailError("");
-    try {
-      const users = await getUsersApi(token);
-      const members = Array.isArray(users)
-        ? users.filter((user) => user.role === "MEMBER" && user.status === "ACTIVE")
-        : [];
-      setMemberCandidates(members);
-      setSelectedMemberId("");
-    } catch (requestError) {
-      setDetailError(requestError.status === 403
-        ? "Tài khoản không có quyền tra cứu thành viên."
-        : requestError.message || "Không tải được danh sách thành viên.");
-    } finally {
-      setLoadingCandidates(false);
-    }
-  }
-
-  async function handleLinkMember() {
-    if (!detail || !selectedMemberId) return;
-    setLinkingMember(true);
-    setDetailError("");
-    setNotice("");
-    try {
-      await linkConsultationMemberApi(token, detail.id, Number(selectedMemberId));
-      await handleOpenDetail(detail.id);
-      await loadQueue();
-      setNotice("Đã liên kết yêu cầu với tài khoản MEMBER đã chọn.");
-    } catch (requestError) {
-      setDetailError(requestError.status === 409
-        ? "Yêu cầu đã được liên kết hoặc tài khoản không còn đủ điều kiện. Hãy tải lại chi tiết."
-        : requestError.status === 403
-          ? "Chỉ người tiếp nhận hoặc ADMIN mới được liên kết yêu cầu này."
-          : requestError.message || "Không thể liên kết thành viên.");
-    } finally {
-      setLinkingMember(false);
-    }
-  }
-
   async function handleCreateMember() {
     if (!detail || !memberDateOfBirth || memberPassword.length < 8) return;
     setCreatingMember(true);
@@ -234,7 +188,7 @@ export default function ConsultationQueue({ token, role, currentUserName, onLogo
       setNotice("Đã tạo và liên kết tài khoản MEMBER. Hãy chuyển thông tin đăng nhập cho khách qua kênh an toàn.");
     } catch (requestError) {
       setDetailError(requestError.status === 409
-        ? "Email của yêu cầu đã có tài khoản. Hãy chọn liên kết tài khoản MEMBER hiện có."
+        ? "Email n\u00e0y \u0111\u00e3 c\u00f3 t\u00e0i kho\u1ea3n Member. H\u00e3y h\u01b0\u1edbng d\u1eabn kh\u00e1ch \u0111\u0103ng nh\u1eadp v\u00e0 t\u1ef1 g\u1eedi y\u00eau c\u1ea7u; h\u1ec7 th\u1ed1ng kh\u00f4ng t\u1ef1 li\u00ean k\u1ebft t\u00e0i kho\u1ea3n."
         : requestError.status === 400
           ? requestError.message || "Yêu cầu email và ngày sinh hợp lệ để tạo tài khoản."
           : requestError.status === 403
@@ -539,40 +493,21 @@ export default function ConsultationQueue({ token, role, currentUserName, onLogo
             </section>}
             {detail.status === "IN_PROGRESS" && (role === "ADMIN" || (role === "RECEPTIONIST" && detail.handledBy === actorId)) && !detail.memberId && (
               <div className="consultation-member-link-form">
-                <h3>Liên kết tài khoản thành viên</h3>
-                <p>Chọn và xác minh trực tiếp tài khoản MEMBER; hệ thống không tự ghép theo email hoặc số điện thoại.</p>
-                <button type="button" onClick={loadMemberCandidates} disabled={loadingCandidates}>
-                  {loadingCandidates ? "Đang tải…" : "Tìm thành viên hiện có"}
-                </button>
-                {memberCandidates.length > 0 && (
-                  <>
-                    <label htmlFor="memberSearch">Tìm theo tên, email hoặc ID</label>
-                    <input id="memberSearch" value={candidateSearch} onChange={(event) => setCandidateSearch(event.target.value)} />
-                    <label htmlFor="memberCandidate">Tài khoản ACTIVE MEMBER</label>
-                    <select id="memberCandidate" value={selectedMemberId} onChange={(event) => setSelectedMemberId(event.target.value)}>
-                      <option value="">Chọn tài khoản đã xác minh</option>
-                      {memberCandidates.filter((user) => (user.name + " " + user.email + " " + user.id).toLowerCase().includes(candidateSearch.toLowerCase()))
-                        .map((user) => <option key={user.id} value={user.id}>#{user.id} · {user.name} · {user.email}</option>)}
-                    </select>
-                    <button type="button" onClick={handleLinkMember} disabled={linkingMember || !selectedMemberId}>
-                      {linkingMember ? "Đang liên kết…" : "Liên kết tài khoản đã chọn"}
-                    </button>
-                  </>
-                )}
-                {memberCandidates.length === 0 && !loadingCandidates && <p>Chưa tải danh sách, hoặc không có ACTIVE MEMBER phù hợp.</p>}
+                <h3>{"Y\u00eau c\u1ea7u Guest ch\u01b0a li\u00ean k\u1ebft"}</h3>
+                <p>{"Kh\u00f4ng th\u1ec3 li\u00ean k\u1ebft y\u00eau c\u1ea7u Guest v\u1edbi t\u00e0i kho\u1ea3n Member hi\u1ec7n c\u00f3. N\u1ebfu kh\u00e1ch \u0111\u00e3 c\u00f3 t\u00e0i kho\u1ea3n, h\u00e3y h\u01b0\u1edbng d\u1eabn h\u1ecd \u0111\u0103ng nh\u1eadp v\u00e0 t\u1ef1 g\u1eedi y\u00eau c\u1ea7u."}</p>
                 {detail.email ? (
                   <form onSubmit={(event) => { event.preventDefault(); handleCreateMember(); }}>
-                    <h4>Hoặc đăng ký tài khoản MEMBER mới</h4>
-                    <p>Email dùng để đăng nhập: <strong>{detail.email}</strong></p>
-                    <label htmlFor="newMemberDob">Ngày sinh</label>
+                    <h4>{"T\u1ea1o t\u00e0i kho\u1ea3n Member m\u1edbi"}</h4>
+                    <p>{"Email \u0111\u0103ng nh\u1eadp:"} <strong>{detail.email}</strong></p>
+                    <label htmlFor="newMemberDob">{"Ng\u00e0y sinh"}</label>
                     <input id="newMemberDob" type="date" required max={new Date().toISOString().slice(0, 10)} value={memberDateOfBirth} onChange={(event) => setMemberDateOfBirth(event.target.value)} />
-                    <label htmlFor="newMemberPassword">Mật khẩu khởi tạo (tối thiểu 8 ký tự)</label>
+                    <label htmlFor="newMemberPassword">{"M\u1eadt kh\u1ea9u kh\u1edfi t\u1ea1o (t\u1ed1i thi\u1ec3u 8 k\u00fd t\u1ef1)"}</label>
                     <input id="newMemberPassword" type="password" autoComplete="new-password" minLength={8} required value={memberPassword} onChange={(event) => setMemberPassword(event.target.value)} />
                     <button type="submit" disabled={creatingMember || memberPassword.length < 8 || !memberDateOfBirth}>
-                      {creatingMember ? "Đang tạo tài khoản…" : "Tạo và liên kết thành viên"}
+                      {creatingMember ? "\u0110ang t\u1ea1o t\u00e0i kho\u1ea3n..." : "T\u1ea1o v\u00e0 li\u00ean k\u1ebft th\u00e0nh vi\u00ean"}
                     </button>
                   </form>
-                ) : <p>Yêu cầu chưa có email. Hãy liên kết một tài khoản MEMBER hiện có.</p>}
+                ) : <p>{"Y\u00eau c\u1ea7u ch\u01b0a c\u00f3 email n\u00ean ch\u01b0a th\u1ec3 t\u1ea1o t\u00e0i kho\u1ea3n Member."}</p>}
               </div>
             )}
             {detail.status === "IN_PROGRESS" && (role === "ADMIN" || detail.handledBy === actorId) && (

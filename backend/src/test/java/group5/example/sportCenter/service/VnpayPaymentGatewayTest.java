@@ -12,6 +12,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.HexFormat;
 import java.util.Map;
@@ -67,6 +68,25 @@ class VnpayPaymentGatewayTest {
         assertTrue(callback.success());
         assertEquals(0, new BigDecimal("500000").compareTo(callback.amount()));
         assertEquals("20261019120500", callback.verifiedPaymentTime());
+        assertEquals("14000001", callback.providerTransactionReference());
+        assertEquals("VND", callback.currency());
+        assertTrue(callback.providerSignatureVerified());
+        assertEquals(LocalDateTime.of(2026, 10, 19, 12, 5), callback.parsedVerifiedPaidAt());
+        assertEquals(GatewayCallback.PaidTimeStatus.VALID, callback.paidTimeStatus());
+        assertTrue(callback.isRenewalCollectionEligible());
+    }
+
+    @Test
+    void renewalTransactionReferenceRoundTripsThroughVnpayAlphanumericReference() {
+        String renewalTransactionCode = "TXN-REN-0123456789ABCDEF";
+        Map<String, String> checkout = queryParams(
+                gateway.createPaymentUrl(renewalTransactionCode, new BigDecimal("725000.00"), "127.0.0.1"));
+        assertEquals("TXNREN0123456789ABCDEF", checkout.get("vnp_TxnRef"));
+
+        Map<String, String> callbackParams = signedReturn("00", "00", "72500000");
+        callbackParams.put("vnp_TxnRef", checkout.get("vnp_TxnRef"));
+        GatewayCallback callback = gateway.verifyCallback(resign(callbackParams)).orElseThrow();
+        assertEquals(renewalTransactionCode, callback.transactionCode());
     }
 
     @Test
@@ -97,11 +117,79 @@ class VnpayPaymentGatewayTest {
         missingDate.remove("vnp_SecureHash");
         missingDate.put("vnp_SecureHash", sign(missingDate));
         missingDate.put("vnp_SecureHashType", "HmacSHA512");
-        assertEquals(null, gateway.verifyCallback(missingDate).orElseThrow().verifiedPaymentTime());
+        GatewayCallback missing = gateway.verifyCallback(missingDate).orElseThrow();
+        assertEquals(null, missing.verifiedPaymentTime());
+        assertEquals(GatewayCallback.PaidTimeStatus.MISSING, missing.paidTimeStatus());
+        assertFalse(missing.isRenewalCollectionEligible());
 
         Map<String, String> tamperedDate = signedReturn("00", "00", "50000000");
         tamperedDate.put("vnp_PayDate", "20261031000000");
         assertTrue(gateway.verifyCallback(tamperedDate).isEmpty());
+    }
+
+    @Test
+    void missingOrMalformedProviderTransactionReferenceIsVerifiedButNotRenewalEligible() {
+        Map<String, String> missingReference = signedReturn("00", "00", "50000000");
+        missingReference.remove("vnp_TransactionNo");
+        GatewayCallback missing = gateway.verifyCallback(resign(missingReference)).orElseThrow();
+        assertTrue(missing.providerSignatureVerified());
+        assertEquals(null, missing.providerTransactionReference());
+        assertFalse(missing.isRenewalCollectionEligible());
+
+        Map<String, String> malformedReference = signedReturn("00", "00", "50000000");
+        malformedReference.put("vnp_TransactionNo", "not-a-provider-number");
+        GatewayCallback malformed = gateway.verifyCallback(resign(malformedReference)).orElseThrow();
+        assertTrue(malformed.providerSignatureVerified());
+        assertFalse(malformed.isRenewalCollectionEligible());
+    }
+
+    @Test
+    void signedCurrencyMismatchIsVerifiedButNotRenewalEligible() {
+        Map<String, String> params = signedReturn("00", "00", "50000000");
+        params.put("vnp_CurrCode", "USD");
+        GatewayCallback callback = gateway.verifyCallback(resign(params)).orElseThrow();
+
+        assertTrue(callback.providerSignatureVerified());
+        assertEquals("USD", callback.currency());
+        assertFalse(callback.isRenewalCollectionEligible());
+
+        Map<String, String> missingCurrency = signedReturn("00", "00", "50000000");
+        missingCurrency.remove("vnp_CurrCode");
+        GatewayCallback missing = gateway.verifyCallback(resign(missingCurrency)).orElseThrow();
+        assertTrue(missing.providerSignatureVerified());
+        assertEquals(null, missing.currency());
+        assertFalse(missing.isRenewalCollectionEligible());
+    }
+
+    @Test
+    void malformedOrMissingSignedAmountRemainsVerifiedButCannotSettleRenewal() {
+        Map<String, String> malformedAmount = signedReturn("00", "00", "50000000");
+        malformedAmount.put("vnp_Amount", "not-an-amount");
+        GatewayCallback malformed = gateway.verifyCallback(resign(malformedAmount)).orElseThrow();
+        assertTrue(malformed.providerSignatureVerified());
+        assertTrue(malformed.success());
+        assertEquals(null, malformed.amount());
+        assertFalse(malformed.isRenewalCollectionEligible());
+
+        Map<String, String> missingAmount = signedReturn("00", "00", "50000000");
+        missingAmount.remove("vnp_Amount");
+        GatewayCallback missing = gateway.verifyCallback(resign(missingAmount)).orElseThrow();
+        assertTrue(missing.providerSignatureVerified());
+        assertTrue(missing.success());
+        assertEquals(null, missing.amount());
+        assertFalse(missing.isRenewalCollectionEligible());
+    }
+
+    @Test
+    void malformedSignedProviderPaidTimeIsNotRenewalEligible() {
+        Map<String, String> params = signedReturn("00", "00", "50000000");
+        params.put("vnp_PayDate", "20261340129999");
+        GatewayCallback callback = gateway.verifyCallback(resign(params)).orElseThrow();
+
+        assertTrue(callback.providerSignatureVerified());
+        assertEquals(GatewayCallback.PaidTimeStatus.MALFORMED, callback.paidTimeStatus());
+        assertEquals(null, callback.parsedVerifiedPaidAt());
+        assertFalse(callback.isRenewalCollectionEligible());
     }
 
     @Test
@@ -131,6 +219,7 @@ class VnpayPaymentGatewayTest {
         params.put("vnp_CardType", "ATM");
         params.put("vnp_OrderInfo", "Thanh toan giao dich TXN-ABC123");
         params.put("vnp_PayDate", "20261019120500");
+        params.put("vnp_CurrCode", "VND");
         params.put("vnp_ResponseCode", responseCode);
         params.put("vnp_TmnCode", TMN_CODE);
         params.put("vnp_TransactionNo", "14000001");
@@ -152,6 +241,13 @@ class VnpayPaymentGatewayTest {
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    private static Map<String, String> resign(Map<String, String> params) {
+        params.remove("vnp_SecureHash");
+        params.remove("vnp_SecureHashType");
+        params.put("vnp_SecureHash", sign(params));
+        return params;
     }
 
     private static Map<String, String> queryParams(String url) {

@@ -6,9 +6,13 @@ import java.math.BigDecimal;
 public record MembershipUpgradeOptionResponse(
         Integer planId,
         String planName,
+        String planDescription,
         BigDecimal planPrice,
         Integer durationMonths,
         BigDecimal courseDiscountPercent,
         BigDecimal personalTrainingDiscountPercent,
+        Boolean allowPersonalTrainingPlan,
+        Boolean allowOneOnOneCoaching,
+        BigDecimal appliedCredit,
         BigDecimal amount) {
 }

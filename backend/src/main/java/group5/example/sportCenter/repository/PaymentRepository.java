@@ -32,6 +32,10 @@ public interface PaymentRepository extends JpaRepository<Payment, Integer> {
     Page<Payment> findByStatusAndMethodAndPurposeIn(PaymentStatus status, PaymentMethod method, List<PaymentPurpose> purposes, Pageable pageable);
 
     boolean existsByMember_IdAndPurposeInAndStatus(Integer memberId, List<PaymentPurpose> purposes, PaymentStatus status);
+    boolean existsByMember_IdAndPurposeInAndStatusIn(
+            Integer memberId, List<PaymentPurpose> purposes, List<PaymentStatus> statuses);
+    boolean existsByMember_IdAndPurposeInAndStatusAndIdNot(
+            Integer memberId, List<PaymentPurpose> purposes, PaymentStatus status, Integer excludedPaymentId);
 
     @Query("select case when count(p) > 0 then true else false end from Payment p "
             + "where p.status = :status and p.purpose = :purpose "
@@ -111,10 +115,25 @@ public interface PaymentRepository extends JpaRepository<Payment, Integer> {
 
     List<Payment> findByMemberIdOrderByCreatedAtDesc(Integer memberId);
 
+    List<Payment> findByRenewalIntent_IdOrderByCreatedAtAsc(Integer renewalIntentId);
+
     List<Payment> findByMemberIdAndStatusOrderByCreatedAtDesc(
             Integer memberId, PaymentStatus status);
 
     Optional<Payment> findByTransactionCode(String transactionCode);
+
+    /** Read-only dispatch projection: callers can identify Renewal before acquiring a Payment lock. */
+    @Query("select new group5.example.sportCenter.repository.RenewalPaymentRoute(p.id, p.renewalIntent.id, "
+            + "p.member.id, p.method, p.purpose, p.status, p.amount, p.transactionCode) "
+            + "from Payment p where p.transactionCode = :transactionCode")
+    Optional<RenewalPaymentRoute> findRenewalPaymentRouteByTransactionCode(
+            @Param("transactionCode") String transactionCode);
+
+    /** Read-only dispatch projection used before the generic COUNTER Payment lock. */
+    @Query("select new group5.example.sportCenter.repository.RenewalPaymentRoute(p.id, p.renewalIntent.id, "
+            + "p.member.id, p.method, p.purpose, p.status, p.amount, p.transactionCode) "
+            + "from Payment p where p.id = :paymentId")
+    Optional<RenewalPaymentRoute> findRenewalPaymentRouteById(@Param("paymentId") Integer paymentId);
 
     /** Khoá dòng payment để counter/callback xử lý song song không áp dụng 2 lần. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -125,10 +144,36 @@ public interface PaymentRepository extends JpaRepository<Payment, Integer> {
     @Query("select p from Payment p where p.transactionCode = :transactionCode")
     Optional<Payment> findByTransactionCodeForUpdate(@Param("transactionCode") String transactionCode);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Payment p where p.renewalIntent.id = :intentId order by p.id")
+    List<Payment> findByRenewalIntentIdForUpdate(@Param("intentId") Integer intentId);
+
+    boolean existsByRenewalIntent_IdAndRenewalSettlementAcceptedAtIsNotNull(Integer renewalIntentId);
+
+    @Query("select case when count(p) > 0 then true else false end from Payment p "
+            + "where p.renewalIntent is not null and p.renewalProviderTransactionReference = :reference "
+            + "and p.id <> :excludedPaymentId")
+    boolean existsByRenewalProviderReferenceOnOtherPayment(
+            @Param("reference") String reference, @Param("excludedPaymentId") Integer excludedPaymentId);
+
+    @Query("select p.id from Payment p where p.renewalIntent is not null "
+            + "and p.renewalCollectionVerifiedAt is not null and p.renewalSettlementAcceptedAt is null "
+            + "order by p.renewalCollectionVerifiedAt asc, p.id asc")
+    List<Integer> findRecordedRenewalCollectionsPendingReview();
+
     boolean existsByPurposeAndReferenceIdAndStatus(PaymentPurpose purpose, Integer referenceId, PaymentStatus status);
 
     boolean existsByMember_IdAndPurposeAndReferenceIdAndStatus(
             Integer memberId, PaymentPurpose purpose, Integer referenceId, PaymentStatus status);
+
+    @Query("select case when count(p) > 0 then true else false end from Payment p "
+            + "where p.member.id = :memberId and p.id <> :excludedPaymentId "
+            + "and p.status = group5.example.sportCenter.entity.PaymentStatus.PENDING "
+            + "and (p.purpose = group5.example.sportCenter.entity.PaymentPurpose.UPGRADE "
+            + "or (p.purpose = group5.example.sportCenter.entity.PaymentPurpose.MEMBERSHIP "
+            + "and p.renewalIntent is null))")
+    boolean existsConflictingPendingMembershipOrUpgrade(@Param("memberId") Integer memberId,
+            @Param("excludedPaymentId") Integer excludedPaymentId);
 
     boolean existsByPurposeAndReferenceIdAndStatusAndIdNot(
             PaymentPurpose purpose, Integer referenceId, PaymentStatus status, Integer id);

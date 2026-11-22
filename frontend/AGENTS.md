@@ -12,6 +12,7 @@
 - Reuse existing components and state/data helpers before adding another abstraction. Render backend data and preserve explicit loading, empty, error, and validation states. Do not substitute fixtures for real application data in product pages.
 - Keep business rules and access enforcement in the backend. Frontend checks are presentation/navigation only unless the same rule is independently enforced by the API.
 - Scope styles to their owning experience/page. Public site CSS is rooted at `.public-site`; Landing styles/tokens are rooted at `.lp`; authenticated portal styles belong to page or portal scopes. The Vite `publicCssIsolation` PostCSS plugin scopes the public stylesheet and selected Bootstrap styles. Do not treat `docs/SPORTCENTER_DESIGN_SYSTEM.md`'s future shared-token proposal as an active global token contract.
+- For populated interaction states that change a Grid/Flex layout, verify child containment and sibling-panel overlap at target widths; document-level overflow checks alone can miss a child escaping its assigned column.
 - Preserve accessible names, semantic controls, keyboard focus, responsive behavior, and reduced-motion handling already used by the component family. Avoid changing unrelated page styles.
 
 ## Tests and commands
@@ -28,6 +29,8 @@ npm run build
 `npm test` intentionally does not include the Playwright suite. E2E defaults to `http://localhost:5173`; override with `PLAYWRIGHT_BASE_URL` when needed. It expects the frontend and any required backend APIs to already be available and does not start services or seed data. Install the runner browser after dependency installation with `npx playwright install chromium` when it is not present.
 
 Use real API-backed data where the test is about application rendering. Avoid fixed record counts when the API owns the collection. Use stable roles, labels, and route behavior where possible; use page-specific class selectors only where no suitable semantic locator exists. Browser viewport emulation does not replace verification on real devices. Record viewport, role, data prerequisites, console errors, failed requests, and unverified states in browser reports.
+
+For authenticated browser QA, create local role-specific sessions with the interactive workflow in [`docs/PLAYWRIGHT_AUTH.md`](docs/PLAYWRIGHT_AUTH.md). Use `createRolePage` from `e2e/support/roleAuth.js` so each role gets an isolated context and its session is checked against a read-only page before testing. Never copy credentials, storage contents, or tokens into tests or logs.
 
 ## Browser and data safety
 

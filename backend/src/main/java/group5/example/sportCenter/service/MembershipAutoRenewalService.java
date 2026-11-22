@@ -104,71 +104,9 @@ public class MembershipAutoRenewalService {
      */
     @Transactional
     public Optional<Payment> createIfDue(Membership given) {
-        // The first read is only to discover the stable member-row lock. It is not authoritative:
-        // opt-out may commit while this transaction waits for that lock.
-        Membership membership = membershipRepository.findById(given.getId()).orElse(null);
-        if (membership == null) {
-            return Optional.empty();
-        }
-        Integer memberId = membership.getMember().getId();
-        // Same member-row lock as purchases and upgrades, so a manual purchase cannot race the job.
-        User lockedMember = userRepository.findByIdForBookingUpdate(memberId).orElse(null);
-        if (lockedMember == null) {
-            return Optional.empty();
-        }
-
-        // findById can return the already-managed pre-lock entity. refresh forces a database read
-        // after the lock is held, so a committed opt-out cannot be hidden by the persistence context.
-        try {
-            entityManager.refresh(membership);
-            entityManager.refresh(lockedMember);
-        } catch (EntityNotFoundException exception) {
-            return Optional.empty();
-        }
-
-        LocalDate today = today();
-        if (!Boolean.TRUE.equals(membership.getAutoRenew())
-                || !"ACTIVE".equalsIgnoreCase(membership.getStatus())
-                || !membership.getEndDate().isAfter(today)
-                || membership.getEndDate().isAfter(today.plusDays(RENEWAL_NOTICE_DAYS))
-                || !"ACTIVE".equalsIgnoreCase(lockedMember.getStatus())
-                || membershipRepository.existsByMemberIdAndStatusAndStartDateGreaterThanEqual(
-                        memberId, "ACTIVE", membership.getEndDate())
-                || paymentRepository.existsByMember_IdAndPurposeInAndStatus(
-                        memberId, MEMBERSHIP_PURPOSES, PaymentStatus.PENDING)
-                || paymentRepository.existsSuccessfulAutoRenewalForSource(
-                        PaymentStatus.SUCCESS, PaymentPurpose.MEMBERSHIP,
-                        NOTE_PREFIX + membership.getId())) {
-            return Optional.empty();
-        }
-        MembershipPlan plan = membership.getPlan();
-        if (!"ACTIVE".equalsIgnoreCase(plan.getStatus())) {
-            notificationService.createForUser(memberId, "Không thể tự gia hạn gói " + plan.getName(),
-                    "Gói " + plan.getName() + " đã ngừng bán nên không thể tự gia hạn. Gói hiện tại hết hạn ngày "
-                            + membership.getEndDate().format(VN_DATE) + "; vui lòng chọn gói khác tại trang Gói thành viên.");
-            return Optional.empty();
-        }
-
-        Payment payment = new Payment();
-        payment.setMember(membership.getMember());
-        payment.setAmount(plan.getPrice());
-        payment.setMethod(PaymentMethod.COUNTER);
-        payment.setPurpose(PaymentPurpose.MEMBERSHIP);
-        payment.setReferenceId(plan.getId());
-        payment.setAutoRenew(true);
-        payment.setStatus(PaymentStatus.PENDING);
-        payment.setTransactionCode("TXN-" + UUID.randomUUID().toString().replace("-", "")
-                .substring(0, 16).toUpperCase(Locale.ROOT));
-        payment.setNote(NOTE_PREFIX + membership.getId());
-        payment = paymentRepository.save(payment);
-
-        notificationService.createForUser(memberId, "Gói " + plan.getName() + " sắp hết hạn",
-                "Gói hết hạn ngày " + membership.getEndDate().format(VN_DATE) + ". Yêu cầu tự gia hạn #" + payment.getId()
-                        + " đã được tạo. Vui lòng thanh toán tại quầy hoặc qua VNPay trước ngày hết hạn; "
-                        + "nếu chưa thanh toán, yêu cầu sẽ tự huỷ.");
-        return Optional.of(payment);
+        // New note-based renewal Payments remain paused until the RenewalIntent workflow ships.
+        return Optional.empty();
     }
-
     /** Validate a member's request to replace a cancelled auto-renew COUNTER payment with ONLINE. */
     @Transactional(readOnly = true)
     public Integer validateOnlineReplacement(Integer sourcePaymentId, User member, Integer planId) {

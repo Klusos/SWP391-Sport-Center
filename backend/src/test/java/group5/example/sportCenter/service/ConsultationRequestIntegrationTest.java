@@ -43,7 +43,6 @@ import group5.example.sportCenter.dto.ConsultationResponse;
 import group5.example.sportCenter.dto.CreateConsultationMemberRequest;
 import group5.example.sportCenter.dto.CreateConsultationRequest;
 import group5.example.sportCenter.dto.CreateSkillAssessmentRequest;
-import group5.example.sportCenter.dto.LinkConsultationMemberRequest;
 import group5.example.sportCenter.entity.ConsultationRequest;
 import group5.example.sportCenter.entity.Coach;
 import group5.example.sportCenter.entity.CoachSport;
@@ -288,15 +287,18 @@ class ConsultationRequestIntegrationTest {
         String email = uniqueEmail();
         ConsultationResponse pending = service.create(request(email, null), null);
         service.take(pending.id(), jwt(receptionist));
-        users.saveAndFlush(userWithEmail(email));
+        User existing = users.saveAndFlush(userWithEmail(email));
+        long userCountBefore = users.count();
 
         assertStatus(409, () -> service.createMember(pending.id(),
                 new CreateConsultationMemberRequest("temporary-test-password", LocalDate.of(1998, 5, 1)), jwt(receptionist)));
         assertNull(service.get(pending.id(), jwt(receptionist)).memberId());
+        assertEquals(existing.getId(), users.findByEmail(email).orElseThrow().getId());
+        assertEquals(userCountBefore, users.count());
     }
 
     @Test
-    void legacyConsultationWithoutEmailBlocksAccountCreationButCanLinkAnExistingMember() {
+    void legacyConsultationWithoutEmailBlocksAccountCreationAndRemainsUnlinked() {
         ConsultationRequest legacy = new ConsultationRequest();
         legacy.setName("Legacy Guest");
         legacy.setPhone("0900000000");
@@ -310,12 +312,8 @@ class ConsultationRequestIntegrationTest {
         var blocked = assertThrows(ResponseStatusException.class, () -> service.createMember(legacyId,
                 new CreateConsultationMemberRequest("temporary-test-password", LocalDate.of(1998, 5, 1)), jwt(receptionist)));
         assertEquals(400, blocked.getStatusCode().value());
-        assertTrue(blocked.getReason().contains("link an existing MEMBER"));
+        assertTrue(blocked.getReason().contains("email is required"));
         assertNull(service.get(legacyId, jwt(receptionist)).memberId());
-
-        ConsultationResponse linked = service.linkMember(legacyId,
-                new LinkConsultationMemberRequest(member.getId()), jwt(receptionist));
-        assertEquals(member.getId(), linked.memberId());
     }
 
     @Test
@@ -335,33 +333,10 @@ class ConsultationRequestIntegrationTest {
     }
 
     @Test
-    void linksOnlyAnExplicitExistingActiveMemberAndRejectsDuplicateOrInvalidTargets() {
-        ConsultationResponse pending = service.create(request(uniqueEmail(), null), null);
+    void skillAssessmentCanUseMemberOwnedInProgressConsultationAndDoesNotCompleteIt() {
+        ConsultationResponse pending = service.create(request(uniqueEmail(), null), jwt(member));
         service.take(pending.id(), jwt(receptionist));
-        ConsultationResponse linked = service.linkMember(pending.id(),
-                new LinkConsultationMemberRequest(member.getId()), jwt(receptionist));
-        assertEquals(member.getId(), linked.memberId());
-        assertEquals(member.getId(), service.linkMember(pending.id(),
-                new LinkConsultationMemberRequest(member.getId()), jwt(receptionist)).memberId());
-        assertStatus(409, () -> service.linkMember(pending.id(),
-                new LinkConsultationMemberRequest(otherMember.getId()), jwt(receptionist)));
-
-        User inactive = user("MEMBER");
-        inactive.setStatus("INACTIVE");
-        users.saveAndFlush(inactive);
-        ConsultationResponse second = service.create(request(uniqueEmail(), null), null);
-        service.take(second.id(), jwt(receptionist));
-        assertStatus(409, () -> service.linkMember(second.id(), new LinkConsultationMemberRequest(inactive.getId()), jwt(receptionist)));
-        assertStatus(404, () -> service.linkMember(second.id(), new LinkConsultationMemberRequest(Integer.MAX_VALUE), jwt(receptionist)));
-        assertStatus(403, () -> service.linkMember(second.id(), new LinkConsultationMemberRequest(member.getId()), jwt(otherReceptionist)));
-    }
-
-    @Test
-    void skillAssessmentCanLinkToInProgressConsultationAndDoesNotCompleteIt() {
-        ConsultationResponse pending = service.create(request(uniqueEmail(), null), null);
-        service.take(pending.id(), jwt(receptionist));
-        ConsultationResponse linked = service.linkMember(pending.id(),
-                new LinkConsultationMemberRequest(member.getId()), jwt(receptionist));
+        ConsultationResponse linked = service.get(pending.id(), jwt(receptionist));
 
         var created = skillAssessments.create(new CreateSkillAssessmentRequest(
                 member.getId(), sport.getId(), coach.getId(), "Intake", linked.id()), jwt(receptionist));
@@ -373,9 +348,8 @@ class ConsultationRequestIntegrationTest {
 
     @Test
     void skillAssessmentConsultationMustMatchMemberSportAndRemainInProgress() {
-        ConsultationResponse pending = service.create(request(uniqueEmail(), null), null);
+        ConsultationResponse pending = service.create(request(uniqueEmail(), null), jwt(member));
         service.take(pending.id(), jwt(receptionist));
-        service.linkMember(pending.id(), new LinkConsultationMemberRequest(member.getId()), jwt(receptionist));
 
         assertStatus(409, () -> skillAssessments.create(new CreateSkillAssessmentRequest(
                 otherMember.getId(), sport.getId(), coach.getId(), null, pending.id()), jwt(receptionist)));
@@ -424,16 +398,19 @@ class ConsultationRequestIntegrationTest {
     }
 
     @Test
-    void httpCreationTrimsValidEmailAndDoesNotRequireEmailUniqueness() throws Exception {
+    void httpCreationTrimsEmailAndDoesNotAutoLinkWhenEmailBelongsToMember() throws Exception {
         String email = uniqueEmail();
+        users.saveAndFlush(userWithEmail(email));
         String body = "{\"name\":\"Guest\",\"phone\":\"0900000000\",\"email\":\"  "
                 + email + "  \",\"sportId\":" + sport.getId() + "}";
 
         mvc.perform(post("/api/consultation-requests").contentType("application/json").content(body))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.email").value(email));
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.email").value(email))
+                .andExpect(jsonPath("$.memberId").value(org.hamcrest.Matchers.nullValue()));
         mvc.perform(post("/api/consultation-requests").contentType("application/json")
                         .content(body.replace("Guest", "Second Guest")))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.email").value(email));
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.email").value(email))
+                .andExpect(jsonPath("$.memberId").value(org.hamcrest.Matchers.nullValue()));
         assertEquals(2, consultations.count());
     }
 
@@ -558,31 +535,26 @@ class ConsultationRequestIntegrationTest {
     }
 
     @Test
-    void httpLinkMemberRequiresAssignmentAndAcceptsOnlyActiveMembers() throws Exception {
+    void removedHttpLinkMemberEndpointCannotLinkGuestAndReceptionistCanStillProcess() throws Exception {
         ConsultationResponse pending = service.create(request(uniqueEmail(), null), null);
         String path = "/api/consultation-requests/" + pending.id() + "/link-member";
         String body = "{\"memberId\":" + member.getId() + "}";
         mvc.perform(patch(path).header("Authorization", bearer(admin)).contentType("application/json").content(body))
-                .andExpect(status().isConflict());
+                .andExpect(status().isGone());
 
         service.take(pending.id(), jwt(receptionist));
         mvc.perform(patch(path).header("Authorization", bearer(otherReceptionist)).contentType("application/json").content(body))
-                .andExpect(status().isForbidden());
-        mvc.perform(patch(path).header("Authorization", bearer(coachUser)).contentType("application/json").content(body))
-                .andExpect(status().isForbidden());
-        mvc.perform(patch(path).header("Authorization", bearer(member)).contentType("application/json").content(body))
-                .andExpect(status().isForbidden());
-        mvc.perform(patch(path).header("Authorization", bearer(receptionist)).contentType("application/json")
-                        .content("{\"memberId\":0}"))
-                .andExpect(status().isBadRequest());
-
-        var linked = mvc.perform(patch(path).header("Authorization", bearer(receptionist))
-                        .contentType("application/json").content(body))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.memberId").value(member.getId())).andReturn();
-        assertTrue(linked.getResponse().getContentAsString().contains("IN_PROGRESS"));
-        mvc.perform(patch(path).header("Authorization", bearer(receptionist)).contentType("application/json")
-                        .content("{\"memberId\":" + otherMember.getId() + "}"))
-                .andExpect(status().isConflict());
+                .andExpect(status().isGone());
+        mvc.perform(patch(path).header("Authorization", bearer(receptionist)).contentType("application/json").content(body))
+                .andExpect(status().isGone());
+        mvc.perform(get("/api/consultation-requests/" + pending.id())
+                        .header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.memberId").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
+        mvc.perform(patch("/api/consultation-requests/" + pending.id() + "/complete")
+                        .header("Authorization", bearer(receptionist)).contentType("application/json")
+                        .content("{\"resolutionNote\":\"Processed safely\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("COMPLETED"));
     }
 
     private User user(String role) {

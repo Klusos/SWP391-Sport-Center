@@ -486,6 +486,58 @@ class CourseRegistrationIntegrationTest {
     }
 
     @Test
+    void verifiedCourseDiscountUsesMembershipSnapshotAfterPlanEditAndDeactivation() {
+        LocalDate today = now.toLocalDate();
+        User pricedMember = user("MEMBER", "ACTIVE");
+        MembershipPlan plan = plan("20.00");
+        Membership purchased = new Membership();
+        purchased.setMember(pricedMember);
+        purchased.setPlan(plan);
+        purchased.setStartDate(today.minusDays(1));
+        purchased.setEndDate(today.plusMonths(1));
+        purchased.setStatus("ACTIVE");
+        purchased.setAutoRenew(false);
+        purchased.setBenefitSnapshotStatus("COMPLETE");
+        purchased.setBenefitSnapshotSource("PURCHASE");
+        purchased.setPlanNameSnapshot(plan.getName());
+        purchased.setPlanDescriptionSnapshot(plan.getDescription());
+        purchased.setPlanPriceSnapshot(plan.getPrice());
+        purchased.setPlanDurationMonthsSnapshot(plan.getDurationMonths());
+        purchased.setCourseDiscountPercentSnapshot(new BigDecimal("20.00"));
+        purchased.setPtDiscountPercentSnapshot(plan.getPersonalTrainingDiscountPercent());
+        purchased.setAllowPtPlanSnapshot(plan.getAllowPersonalTrainingPlan());
+        purchased.setAllowOneOnOneSnapshot(plan.getAllowOneOnOneCoaching());
+        memberships.saveAndFlush(purchased);
+
+        plan.setCourseDiscountPercent(new BigDecimal("90.00"));
+        plan.setStatus("INACTIVE");
+        plans.saveAndFlush(plan);
+
+        var membershipResponse = membershipService.getMembershipById(purchased.getId(), jwt(pricedMember));
+        assertEquals(plan.getName(), membershipResponse.getPlanName());
+        assertEquals(new BigDecimal("20.00"), membershipResponse.getCourseDiscountPercent());
+        assertEquals("VERIFIED_SNAPSHOT", membershipResponse.getBenefitSource());
+
+        var response = service.register(request(pricedClass("100.00")), jwt(pricedMember));
+        assertEquals(new BigDecimal("20.00"), response.membershipDiscount());
+        assertEquals(new BigDecimal("80.00"), response.finalPrice());
+    }
+
+    @Test
+    void legacyCourseDiscountUsesExplicitCurrentPlanFallback() {
+        User pricedMember = user("MEMBER", "ACTIVE");
+        MembershipPlan plan = plan("10.00");
+        membership(pricedMember, plan, now.toLocalDate().minusDays(1), now.toLocalDate().plusMonths(1), "ACTIVE", false);
+        plan.setCourseDiscountPercent(new BigDecimal("15.00"));
+        plans.saveAndFlush(plan);
+
+        var response = service.register(request(pricedClass("100.00")), jwt(pricedMember));
+        assertEquals(new BigDecimal("15.00"), response.membershipDiscount());
+        assertEquals("LEGACY_PLAN_FALLBACK",
+                membershipService.getMembershipsByMemberId(pricedMember.getId(), jwt(pricedMember)).get(0).getBenefitSource());
+    }
+
+    @Test
     void exclusiveMembershipDatesAndNoMembershipUseFullPrice() {
         LocalDate today = now.toLocalDate();
         MembershipPlan halfOff = plan("50.00");

@@ -19,6 +19,9 @@ public interface NotificationRepository extends JpaRepository<Notification, Inte
 
     Optional<Notification> findByIdAndUserId(Integer id, Integer userId);
 
+    Optional<Notification> findFirstByUserIdAndTitleAndMessageOrderByIdAsc(
+            Integer userId, String title, String message);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update Notification n set n.read = true where n.user.id = :userId and n.read = false")
     int markAllUnreadAsReadForUser(@Param("userId") Integer userId);

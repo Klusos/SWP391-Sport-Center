@@ -3,7 +3,7 @@ import { Link, Navigate, useLocation, useParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import PaymentResultCard from "../components/PaymentResultCard";
 import { createPaymentApi, getCurrentUserApi, getMembershipsByMemberApi, getMyPaymentsApi, getMyPtBookingsApi, getMyRegistrationsApi, cancelPaymentApi } from "../api";
-import { acquireAction, canCheckout, checkoutAccess, paymentMessage, pendingCounter, positiveId, prepareCheckout, registrationMessage, registrationPayments, shouldPoll, startStatusPolling, validVnpayUrl, vietnamDate } from "../courseCheckout";
+import { acquireAction, canCheckout, checkoutAccess, courseRegistrationDiscountPercent, paymentMessage, pendingCounter, positiveId, prepareCheckout, registrationMessage, registrationPayments, shouldPoll, startStatusPolling, validVnpayUrl, vietnamDate } from "../courseCheckout";
 import { findOwnedPayment, findOwnedPtBooking } from "../paymentReturn";
 import { isMembershipPayment } from "../membershipUpgrade";
 import "./CourseCheckout.css";
@@ -97,6 +97,7 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
   // A return query must resolve through authenticated ownership; never fall back to a guessed registration.
   const id = result ? (targetPayment?.purpose === "COURSE_REGISTRATION" ? targetPayment.referenceId : null) : positiveId(registrationId);
   const registration = data?.registrations.find((item) => item.id === id);
+  const discountPercent = courseRegistrationDiscountPercent(registration);
   const payments = registrationPayments(data?.payments || [], id);
   const counter = pendingCounter(payments);
   const pendingOnline = payments.find((payment) => payment.method === "ONLINE" && payment.status === "PENDING");
@@ -197,7 +198,13 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
         {!result && !registration && <p role="alert">Không tìm thấy đăng ký trong tài khoản của bạn.</p>}
         {registration && <>
           <section><h2>Đăng ký #{registration.id}</h2><p>{registration.courseName} · {registration.courseOfferingName} · {registration.className}</p>
-            <dl><dt>Thành tiền</dt><dd>{money(registration.finalPrice)}</dd><dt>Trạng thái đăng ký</dt><dd>{registration.status}</dd><dt>Hạn thanh toán (giờ Việt Nam)</dt><dd>{deadline(registration.paymentDeadline)}</dd></dl>
+            <table className="course-price-breakdown" aria-label="Chi tiết giá đăng ký"><caption>Chi tiết giá đăng ký</caption><tbody>
+              <tr><th scope="row">Giá gốc</th><td>{money(registration.originalPrice)}</td></tr>
+              <tr><th scope="row">Ưu đãi Membership</th><td>{Number(registration.membershipDiscount) > 0 ? "−" : ""}{money(registration.membershipDiscount)}</td></tr>
+              {discountPercent != null && <tr><th scope="row">Tỷ lệ ưu đãi theo giá đã lưu</th><td>{new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 6 }).format(discountPercent)}%</td></tr>}
+              <tr className="course-price-total"><th scope="row">Tổng thanh toán</th><td>{money(registration.finalPrice)}</td></tr>
+            </tbody></table>
+            <dl><dt>Trạng thái đăng ký</dt><dd>{registration.status}</dd><dt>Hạn thanh toán (giờ Việt Nam)</dt><dd>{deadline(registration.paymentDeadline)}</dd></dl>
             <p role="status">{registrationMessage(registration)}</p>
             {registration.status === "CONFIRMED" && <Link to="/member/schedule">Xem lịch học</Link>}
           </section>

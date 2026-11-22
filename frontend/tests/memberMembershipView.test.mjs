@@ -14,12 +14,13 @@ test("Membership overview uses the effective membership and has a real empty sta
   assert.match(source, /currentMemberships\.map\(\(membership\)/);
 });
 
-test("Benefits match the purchased plan by ID and unavailable data stays neutral", () => {
-  assert.match(source, /Number\(item\.id\) === Number\(membership\.planId\)/);
+test("Benefits render purchased Membership values and distinguish legacy Plan fallback", () => {
+  assert.match(source, /renderMembershipBenefits\(membership\)/);
+  assert.match(source, /membership\.benefitSource === "LEGACY_PLAN_FALLBACK"/);
   assert.match(source, /Chưa có dữ liệu quyền lợi cho gói Membership này/);
-  assert.match(source, /plan\.courseDiscountPercent/);
-  assert.match(source, /plan\.allowOneOnOneCoaching/);
-  assert.match(source, /plan\.allowPersonalTrainingPlan/);
+  assert.match(source, /membership\.courseDiscountPercent/);
+  assert.match(source, /membership\.allowOneOnOneCoaching/);
+  assert.match(source, /membership\.allowPersonalTrainingPlan/);
   assert.doesNotMatch(source, /courseDiscountPercent \?\? 20|personalTrainingDiscountPercent \?\? 15/);
 });
 
@@ -34,14 +35,14 @@ test("The Phase 16N.3 two-column overview is restored without a duplicate curren
   assert.match(source, /className="dash-card membership-current-card"/);
   assert.match(source, /className="dash-card membership-benefits-card"/);
   assert.match(source, /membership-auto-renew-control/);
-  assert.match(source, /renderMembershipBenefits\(plan\)/);
+  assert.match(source, /renderMembershipBenefits\(membership\)/);
   assert.equal((source.match(/aria-labelledby="membership-current-title"/g) || []).length, 1);
   assert.doesNotMatch(source, /membership-current-list/);
 });
 
 test("Every queued membership and pending payment is rendered from the loaded collections", () => {
   assert.match(source, /renderMembershipRows\(sections\.upcoming\)/);
-  assert.match(source, /pendingMembershipPayments\.map\(\(payment\)/);
+  assert.match(source, /visiblePendingMembershipPayments\.map\(\(payment\)/);
   assert.match(source, /paymentStatusLabel\[payment\.status\] \|\| payment\.status/);
   assert.match(source, /pagedPaymentHistory\.items\.map\(\(payment\)/);
 });
