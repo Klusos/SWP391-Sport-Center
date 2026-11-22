@@ -3,7 +3,8 @@
 ## Branch
 
 - Branch: `qa/team-integration-20261122`
-- Commit: record the final commit SHA with `git rev-parse HEAD` after checkout.
+- QA application candidate commit: `e26506b` (`chore: prepare SportCenter integration for team QA`).
+- For the latest branch tip, run `git rev-parse HEAD` after checkout.
 
 ## Prerequisites
 
