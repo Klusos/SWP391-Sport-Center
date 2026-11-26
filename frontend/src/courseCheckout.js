@@ -42,6 +42,28 @@ export function validVnpayUrl(value) {
   } catch { return false; }
 }
 
+export function validOnlinePaymentUrl(value, {
+  provider = import.meta.env?.VITE_PAYMENT_PROVIDER,
+  apiBaseUrl = import.meta.env?.VITE_API_BASE_URL || "http://localhost:8080",
+} = {}) {
+  if (validVnpayUrl(value)) return true;
+  if (provider !== "mock") return false;
+  try {
+    const url = new URL(value);
+    const api = new URL(apiBaseUrl);
+    const loopback = (host) => host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+    const requiredParams = ["transactionCode", "success", "paymentTime", "signature"];
+    return api.protocol === "http:" && loopback(api.hostname)
+      && url.protocol === "http:" && loopback(url.hostname)
+      && url.origin === api.origin && url.pathname === "/api/payments/online/callback"
+      && !url.username && !url.password && !url.hash
+      && requiredParams.every((key) => url.searchParams.getAll(key).length === 1 && url.searchParams.get(key))
+      && ["true", "false"].includes(url.searchParams.get("success"))
+      && /^[a-f0-9]{64}$/i.test(url.searchParams.get("signature"))
+      && [...url.searchParams.keys()].every((key) => requiredParams.includes(key));
+  } catch { return false; }
+}
+
 export function registrationPayments(payments, id) {
   return payments.filter((payment) => payment.purpose === "COURSE_REGISTRATION" && payment.referenceId === Number(id));
 }

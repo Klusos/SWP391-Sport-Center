@@ -230,3 +230,12 @@
   .rc-main.dash-main .rc-crumb { gap: 4px; font-size: 9px; }
   .dash-main .md-greet { padding-right: 48px; }
 }
+.coach-dashboard-header {
+  margin: 0 0 20px;
+  padding: clamp(20px, 2.5vw, 30px);
+  border: 1px solid #d7e7f7;
+  border-radius: 18px;
+  background: linear-gradient(120deg, #edf6ff 0%, #fff 78%);
+  box-shadow: 0 10px 28px rgba(18, 59, 99, .06);
+}
+.rc-main.dash-main .rc-head.coach-dashboard-header h1 { color: #102a4c; font-size: clamp(24px, 2.4vw, 32px); font-weight: 820; letter-spacing: -.035em; }

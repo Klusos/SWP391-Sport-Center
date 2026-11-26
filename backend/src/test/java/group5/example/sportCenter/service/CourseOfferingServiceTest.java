@@ -43,6 +43,7 @@ class CourseOfferingServiceTest {
     @Mock private CourseClassRepository classes;
     @Mock private ClassSessionService classSessionService;
     @Mock private CourseRegistrationRepository registrations;
+    @Mock private AuditLogService auditLogs;
 
     private CourseOfferingService service;
     private CourseOffering offering;
@@ -50,7 +51,7 @@ class CourseOfferingServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new CourseOfferingService(offerings, courses, sessions, classes, classSessionService, registrations,
+        service = new CourseOfferingService(offerings, courses, sessions, classes, classSessionService, registrations, auditLogs,
                 Clock.fixed(LocalDateTime.parse("2026-01-01T00:00:00").toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
         Sport sport = new Sport();
         sport.setId(7);
@@ -145,7 +146,7 @@ class CourseOfferingServiceTest {
 
     @Test
     void commercialFieldsLockAtOriginalScheduledOpeningAndCannotBeUnlockedByMovingDeadline() {
-        service = new CourseOfferingService(offerings, courses, sessions, classes, classSessionService, registrations,
+        service = new CourseOfferingService(offerings, courses, sessions, classes, classSessionService, registrations, auditLogs,
                 Clock.fixed(LocalDateTime.parse("2026-12-26T12:00:00").toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
         request.setPrice(new BigDecimal("150.00"));
         request.setRegistrationDeadline(LocalDateTime.of(2027, 2, 1, 12, 0));
@@ -174,7 +175,7 @@ class CourseOfferingServiceTest {
 
     @Test
     void descriptiveChangesRemainPossibleAfterLockAndEqualMoneyIgnoresScale() {
-        service = new CourseOfferingService(offerings, courses, sessions, classes, classSessionService, registrations,
+        service = new CourseOfferingService(offerings, courses, sessions, classes, classSessionService, registrations, auditLogs,
                 Clock.fixed(LocalDateTime.parse("2026-12-26T12:00:00").toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
         request.setName("Updated descriptive title");
         request.setPrice(new BigDecimal("100"));
@@ -194,7 +195,7 @@ class CourseOfferingServiceTest {
         when(offerings.findByCourseId(9)).thenReturn(java.util.List.of(offering));
         when(classes.findByCourseOfferingId(11)).thenReturn(java.util.List.of(readyClass));
         when(classSessionService.isRegistrationReady(readyClass)).thenReturn(true);
-        service = new CourseOfferingService(offerings, courses, sessions, classes, classSessionService, registrations,
+        service = new CourseOfferingService(offerings, courses, sessions, classes, classSessionService, registrations, auditLogs,
                 Clock.fixed(LocalDateTime.parse("2026-12-26T12:00:00").toInstant(ZoneOffset.UTC), ZoneOffset.UTC));
 
         var response = service.getOfferingsByCourse(9, true).get(0);

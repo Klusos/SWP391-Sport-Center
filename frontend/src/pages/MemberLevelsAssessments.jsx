@@ -396,7 +396,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
         phone: consultForm.phone.trim(),
         email,
         sportId: Number(consultForm.sportId),
-        age: null,
+        dateOfBirth: profile?.dateOfBirth || null,
         experience: consultForm.experience.trim() || null,
         note:
           consultForm.note.trim() ||

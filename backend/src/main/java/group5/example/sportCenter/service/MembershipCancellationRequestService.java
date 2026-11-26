@@ -45,6 +45,7 @@ public class MembershipCancellationRequestService {
     private final UserRepository userRepository;
     private final MembershipService membershipService;
     private final NotificationService notificationService;
+    private final AuditLogService auditLogs;
     private final Clock clock;
 
     public MembershipCancellationRequestService(
@@ -53,12 +54,14 @@ public class MembershipCancellationRequestService {
             UserRepository userRepository,
             MembershipService membershipService,
             NotificationService notificationService,
+            AuditLogService auditLogs,
             Clock clock) {
         this.requestRepository = requestRepository;
         this.membershipRepository = membershipRepository;
         this.userRepository = userRepository;
         this.membershipService = membershipService;
         this.notificationService = notificationService;
+        this.auditLogs = auditLogs;
         this.clock = clock;
     }
 
@@ -154,7 +157,11 @@ public class MembershipCancellationRequestService {
                 ? "Yêu cầu huỷ #" + request.getId() + ": " + request.getReason()
                 : "Yêu cầu huỷ #" + request.getId() + " của hội viên đã được duyệt");
         close(request, MembershipCancellationRequestStatus.APPROVED, actor, trimmedNote);
-        return toResponse(requestRepository.save(request));
+        MembershipCancellationRequest saved = requestRepository.saveAndFlush(request);
+        auditLogs.record("APPROVE", "MEMBERSHIP_CANCELLATION_REQUEST", saved.getId(),
+                "status=PENDING->APPROVED;membershipId=" + saved.getMembership().getId()
+                        + ";decisionNoteStoredOnRequest=" + (trimmedNote != null));
+        return toResponse(saved);
     }
 
     @Transactional
@@ -171,7 +178,11 @@ public class MembershipCancellationRequestService {
         notificationService.createForUser(request.getMember().getId(), "Yêu cầu huỷ gói bị từ chối",
                 "Yêu cầu huỷ gói " + membership.getPlan().getName() + " (" + membership.getStartDate().format(VN_DATE)
                         + " → " + membership.getEndDate().format(VN_DATE) + ") không được chấp nhận. Lý do: " + trimmedNote);
-        return toResponse(requestRepository.save(request));
+        MembershipCancellationRequest saved = requestRepository.saveAndFlush(request);
+        auditLogs.record("REJECT", "MEMBERSHIP_CANCELLATION_REQUEST", saved.getId(),
+                "status=PENDING->REJECTED;membershipId=" + saved.getMembership().getId()
+                        + ";decisionReasonStoredOnRequest=true");
+        return toResponse(saved);
     }
 
     /** Job hằng ngày: yêu cầu PENDING của gói đã bắt đầu (hoặc đã bị huỷ/nâng cấp) không duyệt được nữa. */

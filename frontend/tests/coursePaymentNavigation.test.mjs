@@ -58,8 +58,8 @@ test("Receptionist registration renders inline step icons and polished guidance 
   assert.equal((registration.match(/<path d="/g) || []).length >= 5, true, "The inline SVGs contain actual path geometry");
   assert.doesNotMatch(registration, /receptionist-step-icon" aria-hidden="true"><i\b/, "Step icons do not rely on the Bootstrap icon font pseudo-element");
   assert.match(css, /\.receptionist-step-icon svg\s*\{[\s\S]*?width: 20px;[\s\S]*?height: 20px;[\s\S]*?color: inherit/);
-  assert.match(registration, /<h2>Chọn khóa học và lớp<\/h2><p>Bộ môn → Khóa học → Đợt mở lớp → Lớp<\/p>/);
-  assert.match(registration, /Giữ chỗ chờ thanh toán có thể hết hạn[\s\S]*?chỉ xác nhận khi đã thực sự nhận tiền[\s\S]*?REFUND_REQUIRED[\s\S]*?không được tự động khôi phục/);
+  assert.match(registration, /<h2>Chọn khóa học và lớp<\/h2><p>Bộ môn → Khóa học → Đợt học → Lớp<\/p>/);
+  assert.match(registration, /Giữ chỗ chờ thanh toán có thể hết hạn[\s\S]*?chỉ xác nhận khi đã thực sự nhận tiền[\s\S]*?cần được đối soát để hoàn tiền[\s\S]*?không được tự động khôi phục/);
   assert.match(registration, /receptionist-pending-guidance/);
   assert.match(css, /\.receptionist-step-heading\s*\{[\s\S]*?background: #f3f8fd;[\s\S]*?border-radius/);
   assert.match(css, /\.receptionist-step > label\s*\{[\s\S]*?gap: 8px;[\s\S]*?margin-top: 16px/);

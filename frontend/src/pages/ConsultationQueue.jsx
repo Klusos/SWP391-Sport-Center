@@ -21,6 +21,7 @@ import {
 } from "../api";
 
 const PAGE_SIZE = 20;
+const CONSULTATION_TODAY = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const STATUSES = ["", "PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"];
 const STATUS_LABELS = { PENDING: "Ch\u1edd ti\u1ebfp nh\u1eadn", IN_PROGRESS: "\u0110ang x\u1eed l\u00fd", COMPLETED: "Ho\u00e0n t\u1ea5t", CANCELLED: "\u0110\u00e3 h\u1ee7y" };
 
@@ -93,6 +94,13 @@ export default function ConsultationQueue({ token, role, currentUserName, onLogo
   useEffect(() => { Promise.resolve().then(loadQueue); }, [loadQueue]);
 
   useEffect(() => {
+    if (!detail && !detailLoading && !detailError) return undefined;
+    const closeOnEscape = (event) => { if (event.key === "Escape") { setDetail(null); setDetailError(""); setDetailLoading(false); } };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [detail, detailLoading, detailError]);
+
+  useEffect(() => {
     if (!token || !allowedRole) return;
     getCurrentUserApi(token).then((user) => setActorId(user.id)).catch(() => setActorId(null));
   }, [token, allowedRole]);
@@ -161,6 +169,7 @@ export default function ConsultationQueue({ token, role, currentUserName, onLogo
     try {
       const request = await getConsultationRequestApi(token, requestId);
       setDetail(request);
+      setMemberDateOfBirth(request.dateOfBirth || "");
       setResolutionNote(request.resolutionNote || "");
     } catch (requestError) {
       setDetailError(requestError.status === 403
@@ -352,7 +361,7 @@ export default function ConsultationQueue({ token, role, currentUserName, onLogo
             {loading ? "\u0110ang t\u1ea3i\u2026" : "L\u00e0m m\u1edbi"}
           </button>
         </div>
-        <div className={`consultation-workspace${detail || detailLoading || detailError ? " has-detail" : ""}`}>
+        <div className="consultation-workspace">
           <section className="consultation-list-panel" aria-label={"Danh s\u00e1ch y\u00eau c\u1ea7u t\u01b0 v\u1ea5n"}>
 
         {loading ? (
@@ -378,7 +387,7 @@ export default function ConsultationQueue({ token, role, currentUserName, onLogo
                       <td>{request.sportName || "—"}</td>
                       <td><span className={"status-pill status-" + String(request.status).toLowerCase()}>{STATUS_LABELS[request.status] || request.status}</span></td>
                       <td>{formatDate(request.createdAt)}</td>
-                      <td>{request.handledBy == null ? "—" : "#" + request.handledBy}</td>
+                      <td className="consultation-assignee" title={request.handledByName || undefined}>{request.handledBy == null ? "Chưa phân công" : <div><span>{request.handledByName || "Tài khoản nhân viên"}</span><small>#{request.handledBy}</small></div>}</td>
                       <td className="queue-actions">
                         {(role === "ADMIN" || (actorId != null && request.handledBy === actorId)) && (
                           <button type="button" onClick={() => handleOpenDetail(request.id)}>Chi tiết</button>
@@ -404,10 +413,11 @@ export default function ConsultationQueue({ token, role, currentUserName, onLogo
           </>
         )}
           </section>
-          <aside className="consultation-detail-panel" aria-label={"Chi ti\u1ebft y\u00eau c\u1ea7u t\u01b0 v\u1ea5n"}>
+          {(detail || detailLoading || detailError) && <div className="consultation-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) { setDetail(null); setDetailError(""); } }}>
+          <section className="consultation-modal" role="dialog" aria-modal="true" aria-labelledby="consultation-detail-title">
 
-        {detailLoading && <div className="queue-state" role="status">Đang tải chi tiết yêu cầu…</div>}
-        {detailError && <div className="banner error" role="alert">{detailError}</div>}
+        {detailLoading && <div className="queue-state" role="status">Đang tải chi tiết yêu cầu… <button type="button" onClick={() => setDetailLoading(false)}>Đóng</button></div>}
+        {detailError && <div className="banner error" role="alert">{detailError}<button type="button" onClick={() => { setDetailError(""); setDetail(null); }}>Đóng</button></div>}
         {detail && (
           <section className="consultation-detail" aria-labelledby="consultation-detail-title">
             <div className="consultation-detail-heading">
@@ -417,10 +427,11 @@ export default function ConsultationQueue({ token, role, currentUserName, onLogo
             <dl className="consultation-detail-grid">
               <div><dt>Điện thoại</dt><dd>{detail.phone}</dd></div>
               <div><dt>Email</dt><dd>{detail.email || "—"}</dd></div>
+              <div><dt>Ngày sinh</dt><dd>{detail.dateOfBirth || "Chưa cung cấp"}</dd></div>
               <div><dt>Bộ môn</dt><dd>{detail.sportName}</dd></div>
               <div><dt>Trạng thái</dt><dd><span className={"status-pill status-" + String(detail.status).toLowerCase()}>{STATUS_LABELS[detail.status] || detail.status}</span></dd></div>
               <div><dt>Thành viên liên kết</dt><dd>{detail.memberId ? `#${detail.memberId}` : "Chưa liên kết"}</dd></div>
-              <div><dt>Tiếp nhận bởi</dt><dd>{detail.handledBy ? `#${detail.handledBy}` : "—"}</dd></div>
+              <div><dt>Người tiếp nhận hiện tại</dt><dd title={detail.handledByName || undefined}>{detail.handledBy ? <>{detail.handledByName || "Tài khoản nhân viên"} · #{detail.handledBy}</> : "Chưa phân công"}</dd></div>
               <div><dt>Kinh nghiệm</dt><dd>{detail.experience || "—"}</dd></div>
               <div><dt>Ghi chú khách hàng</dt><dd>{detail.note || "—"}</dd></div>
             </dl>
@@ -499,8 +510,17 @@ export default function ConsultationQueue({ token, role, currentUserName, onLogo
                   <form onSubmit={(event) => { event.preventDefault(); handleCreateMember(); }}>
                     <h4>{"T\u1ea1o t\u00e0i kho\u1ea3n Member m\u1edbi"}</h4>
                     <p>{"Email \u0111\u0103ng nh\u1eadp:"} <strong>{detail.email}</strong></p>
-                    <label htmlFor="newMemberDob">{"Ng\u00e0y sinh"}</label>
-                    <input id="newMemberDob" type="date" required max={new Date().toISOString().slice(0, 10)} value={memberDateOfBirth} onChange={(event) => setMemberDateOfBirth(event.target.value)} />
+                    {detail.dateOfBirth ? (
+                      <div className="consultation-member-dob-readonly">
+                        <span className="consultation-member-dob-label">{"Ng\u00e0y sinh"}</span>
+                        <strong>{detail.dateOfBirth}</strong>
+                      </div>
+                    ) : (
+                      <>
+                        <label htmlFor="newMemberDob">{"Ng\u00e0y sinh"}</label>
+                        <input id="newMemberDob" type="date" required max={CONSULTATION_TODAY} value={memberDateOfBirth || ""} onChange={(event) => setMemberDateOfBirth(event.target.value)} />
+                      </>
+                    )}
                     <label htmlFor="newMemberPassword">{"M\u1eadt kh\u1ea9u kh\u1edfi t\u1ea1o (t\u1ed1i thi\u1ec3u 8 k\u00fd t\u1ef1)"}</label>
                     <input id="newMemberPassword" type="password" autoComplete="new-password" minLength={8} required value={memberPassword} onChange={(event) => setMemberPassword(event.target.value)} />
                     <button type="submit" disabled={creatingMember || memberPassword.length < 8 || !memberDateOfBirth}>
@@ -521,8 +541,7 @@ export default function ConsultationQueue({ token, role, currentUserName, onLogo
             )}
           </section>
         )}
-            {!detail && !detailLoading && !detailError && <div className="consultation-detail-empty">{"Ch\u1ecdn m\u1ed9t y\u00eau c\u1ea7u \u0111\u1ec3 xem th\u00f4ng tin v\u00e0 c\u00e1c thao t\u00e1c \u0111\u01b0\u1ee3c ph\u00e9p."}</div>}
-          </aside>
+          </section></div>}
         </div>
         </div>
       </main>

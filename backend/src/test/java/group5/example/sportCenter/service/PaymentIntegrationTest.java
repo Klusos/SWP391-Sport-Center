@@ -73,6 +73,7 @@ import group5.example.sportCenter.entity.PersonalTrainingBookingStatus;
 import group5.example.sportCenter.entity.Sport;
 import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.repository.ClassSessionRepository;
+import group5.example.sportCenter.repository.AuditLogRepository;
 import group5.example.sportCenter.repository.CoachRepository;
 import group5.example.sportCenter.repository.CoachSportRepository;
 import group5.example.sportCenter.repository.CourseClassRepository;
@@ -106,6 +107,7 @@ class PaymentIntegrationTest {
     @MockitoSpyBean PaymentRepository payments;
     @MockitoSpyBean MembershipRenewalIntentRepository renewalIntents;
     @Autowired NotificationRepository notifications;
+    @Autowired AuditLogRepository auditLogs;
     @Autowired UserRepository users;
     @Autowired JdbcTemplate jdbc;
     @Autowired SportRepository sports;
@@ -189,6 +191,18 @@ class PaymentIntegrationTest {
         mvc.perform(get(callbackPath(first.getPaymentUrl())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("SUCCESS"));
+        var callbackAudit = auditLogs.findAll().stream()
+                .filter(entry -> "PAYMENT".equals(entry.getEntityType())
+                        && String.valueOf(first.getId()).equals(entry.getEntityId())
+                        && "ONLINE_CALLBACK".equals(entry.getAction()))
+                .findFirst().orElseThrow();
+        assertEquals("SYSTEM", callbackAudit.getActorRole());
+        assertTrue(callbackAudit.getDescription().contains("status=PENDING->SUCCESS"));
+        assertEquals(1, auditLogs.findAll().stream()
+                .filter(entry -> "PAYMENT".equals(entry.getEntityType())
+                        && String.valueOf(first.getId()).equals(entry.getEntityId())
+                        && "ONLINE_CALLBACK".equals(entry.getAction()))
+                .count());
         assertEquals(successfulSettlementTime, payments.findById(first.getId()).orElseThrow().getPaidAt(),
                 "Ordinary Membership success keeps callback processing time as paidAt");
 
@@ -209,6 +223,11 @@ class PaymentIntegrationTest {
         assertEquals(successfulSettlementTime, payments.findById(first.getId()).orElseThrow().getPaidAt(),
                 "Duplicate success callback cannot overwrite the first paidAt");
         assertEquals(1, memberships.findByMemberId(member.getId()).size());
+        assertEquals(1, auditLogs.findAll().stream()
+                .filter(entry -> "PAYMENT".equals(entry.getEntityType())
+                        && String.valueOf(first.getId()).equals(entry.getEntityId())
+                        && "ONLINE_CALLBACK".equals(entry.getAction()))
+                .count(), "a duplicate callback must not create another transition audit");
 
         assertEquals(1, memberships.findByMemberId(member.getId()).size());
     }
@@ -527,6 +546,14 @@ class PaymentIntegrationTest {
                 .andExpect(jsonPath("$.status").value("SUCCESS"));
         assertEquals(1, memberships.findByMemberId(member.getId()).size());
         assertEquals("ACTIVE", memberships.findByMemberId(member.getId()).get(0).getStatus());
+        var counterAudit = auditLogs.findAll().stream()
+                .filter(entry -> "PAYMENT".equals(entry.getEntityType())
+                        && String.valueOf(paymentId).equals(entry.getEntityId())
+                        && "COUNTER_CONFIRMATION".equals(entry.getAction()))
+                .findFirst().orElseThrow();
+        assertEquals(receptionist.getId(), counterAudit.getActorUserId());
+        assertEquals("RECEPTIONIST", counterAudit.getActorRole());
+        assertTrue(counterAudit.getDescription().contains("status=PENDING->SUCCESS"));
     }
 
     @Test
@@ -823,6 +850,14 @@ class PaymentIntegrationTest {
         mvc.perform(patch("/api/payments/" + online.getId() + "/refund")
                         .header("Authorization", bearer(receptionist)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("REFUNDED"));
+        var refundAudit = auditLogs.findAll().stream()
+                .filter(entry -> "PAYMENT".equals(entry.getEntityType())
+                        && String.valueOf(online.getId()).equals(entry.getEntityId())
+                        && "REFUND_CONFIRMED".equals(entry.getAction()))
+                .findFirst().orElseThrow();
+        assertEquals(receptionist.getId(), refundAudit.getActorUserId());
+        assertEquals("RECEPTIONIST", refundAudit.getActorRole());
+        assertTrue(refundAudit.getDescription().contains("status=REFUND_REQUIRED->REFUNDED"));
         mvc.perform(patch("/api/payments/" + online.getId() + "/refund")
                         .header("Authorization", bearer(receptionist)))
                 .andExpect(status().isConflict());

@@ -4,7 +4,7 @@ import Sidebar from "../components/Sidebar";
 import AdminTopBar from "../components/AdminTopBar";
 import RevenueBars from "../components/RevenueBars";
 import { defaultRevenueRange, formatVnd } from "../revenueReport";
-import { upcomingPtBookings } from "../ptBooking";
+import { ptStatusLabel, upcomingPtBookings } from "../ptBooking";
 import { isMembershipEffective, todayInVietnam } from "../membershipDates";
 import "./Dashboard.css";
 import "./Membertheme.css";
@@ -211,6 +211,10 @@ const RECEPTIONIST_ICON = {
   pt: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M19 8v6 M22 11h-6",
   ok: "M22 11.08V12a10 10 0 1 1-5.93-9.14 M22 4 12 14.01l-3-3",
   enroll: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20 M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z",
+  clipboardCheck: "M9 5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2 M9 5a3 3 0 0 1 6 0v2H9z M9 14l2 2 4-4",
+  calendarClock: "M8 2v4 M16 2v4 M3 10h13 M5 4h12a2 2 0 0 1 2 2v5 M5 4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h7 M16 18h3l2 2 M21 18a5 5 0 1 1-10 0 5 5 0 0 1 10 0z",
+  dumbbell: "M6.5 6.5h11 M6.5 17.5h11 M3 9v6 M6.5 4v16 M17.5 4v16 M21 9v6",
+  clipboardList: "M9 5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2 M9 5a3 3 0 0 1 6 0v2H9z M9 12h6 M9 16h6",
 };
 
 function ReceptionistIcon({ name, size = 18 }) {
@@ -314,7 +318,7 @@ function BookingList({ items, who }) {
         <li key={b.id}>
           <div><small>{fmt(b.startTime)}</small><b>{b.sportName || b.sport?.name || "Buổi PT"}</b></div>
           <span>{who(b)}</span>
-          <em className={"dash-status st-" + String(b.status).toLowerCase()}>{b.status}</em>
+          <em className={"dash-status st-" + String(b.status).toLowerCase()}>{ptStatusLabel[b.status] || b.status || "—"}</em>
         </li>
       ))}
     </ul>
@@ -322,6 +326,7 @@ function BookingList({ items, who }) {
 }
 
 function Coach({ d, errors = {} }) {
+  const [showAllClasses, setShowAllClasses] = useState(false);
   const up = upcoming(d.bookings);
   const pending = pendingCoachAssessments(d.assessments);
   const classes = list(d.classes);
@@ -330,20 +335,21 @@ function Coach({ d, errors = {} }) {
   const upcomingPt = up;
   return (<>
     <Stats items={[
-      { label: "Lớp được phân công", value: total(d.classes), color: "blue", icon: "cls", note: "Lớp đang phụ trách" },
-      { label: "Lượt đăng ký lớp đã xác nhận", value: d.classes == null ? "—" : confirmedEnrollmentCount(classes), color: "green", icon: "enroll", note: "Học viên đã xác nhận" },
-      { label: "Buổi dạy sắp tới", value: d.teachingSessions == null ? "—" : teachingSessions.length, color: "orange", icon: "cal", note: "Lịch dạy lớp học" },
-      { label: "Buổi PT sắp tới", value: d.bookings == null ? "—" : upcomingPt.length, color: "blue", icon: "pt", note: "Huấn luyện cá nhân" },
-      { label: "Đánh giá cần làm", value: d.assessments == null ? "—" : pending.length, color: "orange", icon: "ok", note: "Đánh giá kỹ năng đang chờ" },
+      { label: "Lớp được phân công", value: total(d.classes), color: "blue", icon: "members", note: "Lớp đang phụ trách" },
+      { label: "Lượt đăng ký lớp đã xác nhận", value: d.classes == null ? "—" : confirmedEnrollmentCount(classes), color: "green", icon: "clipboardCheck", note: "Học viên đã xác nhận" },
+      { label: "Buổi dạy sắp tới", value: d.teachingSessions == null ? "—" : teachingSessions.length, color: "orange", icon: "calendarClock", note: "Lịch dạy lớp học" },
+      { label: "Buổi PT sắp tới", value: d.bookings == null ? "—" : upcomingPt.length, color: "blue", icon: "dumbbell", note: "Huấn luyện cá nhân" },
+      { label: "Đánh giá cần làm", value: d.assessments == null ? "—" : pending.length, color: "orange", icon: "clipboardList", note: "Đánh giá kỹ năng đang chờ" },
     ]} />
     <div className="dash-grid wide">
       <Card title="Lớp được phân công" note={errors.classes ? "" : `${classes.length} lớp`}>
         {errors.classes ? <p className="dash-error" role="alert">Không tải được danh sách lớp: {errors.classes}</p>
           : classes.length === 0 ? <Empty>Chưa có lớp nào được phân công.</Empty>
-            : <ul className="dash-rows">{classes.slice(0, 6).map((item) => <li key={item.classId}>
+            : <ul className="dash-rows">{(showAllClasses ? classes : classes.slice(0, 6)).map((item) => <li key={item.classId}>
               <span><b>{item.className || `Lớp #${item.classId}`}</b><br /><small>{[item.courseName, item.sportName].filter(Boolean).join(" · ")}</small></span>
               <em>{Number(item.confirmedMembers || 0)} học viên</em>
             </li>)}</ul>}
+        {classes.length > 6 && <button type="button" className="md-link" onClick={() => setShowAllClasses((visible) => !visible)}>{showAllClasses ? "Thu gọn" : `Xem tất cả (${classes.length})`}</button>}
         <Link className="coach-dashboard-link" to="/coach/training">Mở quản lý giáo án</Link>
       </Card>
       <Card title="Lịch dạy sắp tới" note="Lớp học">
@@ -365,7 +371,7 @@ function Coach({ d, errors = {} }) {
               return <li className="dash-assessment-row" key={a.id}>
                 <span className="dash-assessment-info">
                   <b>{summary.member}</b>
-                  <small>{summary.sport} · Assessment #{a.id}</small>
+                  <small>{summary.sport} · Đánh giá #{a.id}</small>
                   <small>{summary.assignment}</small>
                 </span>
                 <em className="dash-assessment-status">{summary.status}</em>
@@ -385,7 +391,7 @@ function TeachingSessionList({ items }) {
   return <ul className="dash-sessions">{items.slice(0, 5).map((session) => <li key={session.classSessionId}>
     <div><small>{fmt(session.startTime)}</small><b>{session.courseClassName || "Lớp học"}</b></div>
     <span>{[session.courseName, session.sportName].filter(Boolean).join(" · ")}</span>
-    <em className={"dash-status st-" + String(session.sessionStatus || "SCHEDULED").toLowerCase()}>{session.sessionStatus || "SCHEDULED"}</em>
+    <em className={"dash-status st-" + String(session.sessionStatus || "SCHEDULED").toLowerCase()}>{SESSION_STATUS[String(session.sessionStatus || "SCHEDULED").toUpperCase()] || session.sessionStatus || "Đã lên lịch"}</em>
   </li>)}</ul>;
 }
 
@@ -408,7 +414,7 @@ const pick = (o, ...keys) => { for (const k of keys) if (o?.[k] != null && o[k] 
 const WD = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 const hm = (s) => new Date(s).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
 const vnd = (v) => Number(v || 0).toLocaleString("vi-VN") + "đ";
-const SESSION_STATUS = { SCHEDULED: "Đã lên lịch", CONFIRMED: "Đã xác nhận", PENDING_PAYMENT: "Chờ thanh toán", COMPLETED: "Hoàn thành" };
+const SESSION_STATUS = { SCHEDULED: "Đã lên lịch", CONFIRMED: "Đã xác nhận", PENDING_PAYMENT: "Chờ thanh toán", COMPLETED: "Hoàn thành", CANCELLED: "Đã hủy" };
 const ATT = { PRESENT: ["Có mặt", "ok"], ON_TIME: ["Đúng giờ", "ok"], LATE: ["Trễ giờ", "warn"], EXCUSED: ["Có phép", "warn"], ABSENT: ["Vắng", "bad"] };
 
 function MStat({ icon, tone, label, value, sub, action, onAction }) {
@@ -466,7 +472,7 @@ function Member({ d, errors = {}, onNavigate }) {
         <div className="md-hero-top">
           <span className="md-pill">GÓI {String(active.planName).toUpperCase()}</span>
           <span className="md-pill live">● Đang hoạt động</span>
-          <span className="md-pill">Tự gia hạn: {active.autoRenew ? "Bật" : "Tắt"}</span>
+          <span className="md-pill">Gia hạn: {active.autoRenew ? "Bật" : "Tắt"}</span>
         </div>
         <h2>Tập luyện cùng SPORTS CENTER</h2>
         <p>Gói có hiệu lực từ {active.startDate} đến {active.endDate}.</p>
@@ -606,7 +612,7 @@ export default function Dashboard({ token, role, onLogout, onNavigate, currentUs
           </header>
         )}
         <div className="rc-content">
-          <header className="rc-head">
+          <header className={`rc-head${role === "COACH" ? " coach-page-header coach-dashboard-header" : ""}`}>
             <div><p className="rc-eyebrow">SPORTCENTER / {roleLabel}</p><h1>{title}</h1><p>{sub || intro}</p></div>
             <span className="rc-date"><ReceptionistIcon name="pending" /><b>{dateLabel}</b><i aria-hidden="true" /><small>Hôm nay</small></span>
           </header>

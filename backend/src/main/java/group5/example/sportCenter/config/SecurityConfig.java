@@ -151,6 +151,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/pt-bookings/eligible-coaches", "/api/pt-bookings/me").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.POST, "/api/pt-bookings").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/pt-bookings/assigned").hasRole("COACH")
+                .requestMatchers(HttpMethod.PATCH, "/api/pt-bookings/*/outcome").hasRole("COACH")
                 .requestMatchers(HttpMethod.PATCH, "/api/pt-bookings/*/cancel").hasAnyRole("MEMBER", "ADMIN")
                 .requestMatchers("/api/pt-bookings", "/api/pt-bookings/**").denyAll()
 
@@ -190,6 +191,10 @@ public class SecurityConfig {
                 .requestMatchers("/api/admin/notifications", "/api/admin/notifications/**").denyAll()
                 .requestMatchers(HttpMethod.GET, "/api/admin/audit-logs").hasRole("ADMIN")
                 .requestMatchers("/api/admin/audit-logs", "/api/admin/audit-logs/**").denyAll()
+                .requestMatchers(HttpMethod.GET, "/api/admin/pt-bookings/*/outcome").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PATCH, "/api/admin/pt-bookings/*/outcome").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/admin/pt-bookings").hasRole("ADMIN")
+                .requestMatchers("/api/admin/pt-bookings", "/api/admin/pt-bookings/**").denyAll()
                 .requestMatchers("/api/notifications", "/api/notifications/**")
                     .hasAnyRole("ADMIN", "RECEPTIONIST", "COACH", "MEMBER")
 

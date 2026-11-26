@@ -37,7 +37,7 @@ const vietnamNowLocal = () => {
 };
 const deadlinePassed = (value) => !value || String(value).slice(0, 19) <= vietnamNowLocal();
 const purposeLabel = (payment) => payment?.purpose === "UPGRADE" ? "Nâng cấp lên "
-  : isAutoRenewalPayment(payment) ? "Gia hạn tự động · " : "";
+  : isAutoRenewalPayment(payment) ? "Giao dịch Renewal · " : "";
 
 const paymentTargetName = (payment, plans) => payment?.upgradeQuote?.targetPlanName
   || plans.find((plan) => String(plan.id) === String(payment?.referenceId))?.name
@@ -53,16 +53,22 @@ export default function ReceptionistMembershipSales({ token, role, currentUserNa
   const [paymentData, setPaymentData] = useState(null);
   const [renewalData, setRenewalData] = useState(null);
   const [pendingPayment, setPendingPayment] = useState(null);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [historyPage, setHistoryPage] = useState(0);
   const [queue, setQueue] = useState(null);
   const [queuePage, setQueuePage] = useState(0);
   const [queueLoading, setQueueLoading] = useState(false);
   const queueRequest = useRef(0);
   const [historyVersion, setHistoryVersion] = useState(0);
+  const [refundRefreshVersion, setRefundRefreshVersion] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [cancelRequests, setCancelRequests] = useState(null);
+  const [cancelDialogMembership, setCancelDialogMembership] = useState(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelDialogError, setCancelDialogError] = useState("");
 
   // Membership cancellation requests remain managed on the membership page.
   const loadReviewQueues = useCallback(async () => {
@@ -107,6 +113,7 @@ export default function ReceptionistMembershipSales({ token, role, currentUserNa
     setMemberId(String(payment.memberId));
     setPlanId(String(payment.referenceId));
     setPendingPayment(payment);
+    setPaymentDialogOpen(true);
     setNotice(""); setError("");
   }
 
@@ -135,6 +142,12 @@ export default function ReceptionistMembershipSales({ token, role, currentUserNa
     Promise.resolve().then(() => current && load());
     return () => { current = false; };
   }, [load]);
+  useEffect(() => {
+    if (!paymentDialogOpen) return undefined;
+    const closeOnEscape = (event) => { if (event.key === "Escape" && !saving) setPaymentDialogOpen(false); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [paymentDialogOpen, saving]);
   useEffect(() => {
     if (!memberId) return undefined;
     let current = true;
@@ -277,25 +290,35 @@ export default function ReceptionistMembershipSales({ token, role, currentUserNa
 
   async function cancelForMember(membership) {
     if (saving) return;
-    const upcoming = String(membership.startDate) > today;
-    let reason = null;
-    if (upcoming) {
-      if (!window.confirm(`Hủy gói #${membership.id} (${membership.planName}) chưa bắt đầu? Khoản đã mua gói sẽ chuyển sang "Cần hoàn tiền" để hoàn 100%.`)) return;
-    } else {
-      reason = window.prompt(`Hủy đặc biệt gói đang chạy #${membership.id} (${membership.planName}). Quyền lợi dừng ngay. Nhập lý do (bắt buộc):`);
-      if (reason === null) return;
-      if (!reason.trim()) { setError("Cần nhập lý do khi hủy gói đang chạy."); return; }
+    setCancelDialogMembership(membership);
+    setCancelReason("");
+    setCancelDialogError("");
+  }
+
+  async function submitExceptionalCancellation(event) {
+    event.preventDefault();
+    if (saving || !cancelDialogMembership) return;
+    const reason = cancelReason.trim();
+    if (!reason) {
+      setCancelDialogError("Vui lòng nhập lý do hủy Membership.");
+      return;
     }
-    setSaving(true); setError(""); setNotice("");
+    setSaving(true);
+    setCancelDialogError("");
+    setError("");
+    setNotice("");
     try {
-      await cancelMembershipApi(token, membership.id, reason);
-      setNotice(upcoming
-        ? `Đã hủy gói #${membership.id}. Hãy hoàn tiền khoản đã thanh toán cho gói này (trạng thái "Cần hoàn tiền").`
-        : `Đã hủy gói #${membership.id}. Hoàn tiền (nếu có) xử lý trực tiếp theo lý do đã ghi.`);
+      await cancelMembershipApi(token, cancelDialogMembership.id, reason);
+      setNotice(`Đã hủy Membership #${cancelDialogMembership.id}. Hệ thống đã yêu cầu hoàn 100% khoản thực tế đã thanh toán đủ điều kiện; yêu cầu được đưa vào hàng đợi hoàn tiền và chưa xác nhận tiền đã được trả lại.`);
       setHistoryVersion((value) => value + 1);
+      setRefundRefreshVersion((value) => value + 1);
+      setCancelDialogMembership(null);
+      setCancelReason("");
     } catch (requestError) {
-      setError(cancelMembershipErrorMessage(requestError));
-    } finally { setSaving(false); }
+      setCancelDialogError(cancelMembershipErrorMessage(requestError));
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function decideRequest(request, approve) {
@@ -324,7 +347,7 @@ export default function ReceptionistMembershipSales({ token, role, currentUserNa
     }
   }
 
-  function startAnother() { setPendingPayment(null); setNotice(""); setError(""); setPlanId(""); }
+  function startAnother() { setPendingPayment(null); setPaymentDialogOpen(false); setNotice(""); setError(""); setPlanId(""); }
 
   return <div className="layout">
     <Sidebar role={role} activePage={role === "ADMIN" ? "admin-membership-sales" : "membership-sales"} onNavigate={onNavigate} onLogout={onLogout} />
@@ -334,7 +357,7 @@ export default function ReceptionistMembershipSales({ token, role, currentUserNa
       <header className="membership-sales-header">
         <div><h1>Hỗ trợ mua gói hội viên</h1>
           <p>Tạo thanh toán tại quầy cho thành viên. Gói chỉ được kích hoạt hoặc gia hạn sau khi xác nhận thanh toán thành công.</p></div>
-        <button type="button" onClick={() => { void load(); void loadQueue(); void loadReviewQueues(); setHistoryVersion((value) => value + 1); }} disabled={loading || saving || queueLoading}>Làm mới</button>
+        <button type="button" onClick={() => { void load(); void loadQueue(); void loadReviewQueues(); setHistoryVersion((value) => value + 1); setRefundRefreshVersion((value) => value + 1); }} disabled={loading || saving || queueLoading}>Làm mới</button>
       </header>
       {error && <p className="membership-sales-alert error" role="alert">{error}</p>}
       {notice && <p className="membership-sales-alert success" role="status">{notice}</p>}
@@ -368,7 +391,7 @@ export default function ReceptionistMembershipSales({ token, role, currentUserNa
         <p className="membership-sales-note">Chỉ duyệt được khi gói chưa bắt đầu và là gói sau cùng. Yêu cầu chưa xử lý sẽ tự hết hiệu lực khi gói bắt đầu.</p>
       </section>
 
-      <ReceptionistRefundQueue token={token} purposes={MEMBERSHIP_REFUND_PURPOSES} groups={[{
+      <ReceptionistRefundQueue token={token} purposes={MEMBERSHIP_REFUND_PURPOSES} refreshVersion={refundRefreshVersion} groups={[{
         id: "membership",
         purposes: MEMBERSHIP_REFUND_PURPOSES,
         title: "Ho\u00e0n ti\u1ec1n h\u1ed9i vi\u00ean",
@@ -380,7 +403,7 @@ export default function ReceptionistMembershipSales({ token, role, currentUserNa
         <section className="membership-sales-card">
           <h2>1. Chọn thành viên</h2>
           <label>Tìm theo tên hoặc mã thành viên<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nhập tên hoặc mã…" /></label>
-          <label>Thành viên<select value={memberId} disabled={saving} onChange={(event) => { setMemberId(event.target.value); setMembershipData(null); setPaymentData(null); setPendingPayment(null); setNotice(""); setError(""); }}>
+          <label>Thành viên<select value={memberId} disabled={saving} onChange={(event) => { setMemberId(event.target.value); setMembershipData(null); setPaymentData(null); setPendingPayment(null); setPaymentDialogOpen(false); setHistoryPage(0); setNotice(""); setError(""); }}>
             {pendingPayment && !selectedMember && <option value={memberId}>#{memberId} · {pendingPayment.memberName}</option>}
             <option value="">Chọn thành viên ACTIVE</option>{visibleMembers.map((member) => <option key={member.id} value={member.id}>#{member.id} · {member.name || "Thành viên"}</option>)}
           </select></label>
@@ -397,23 +420,21 @@ export default function ReceptionistMembershipSales({ token, role, currentUserNa
           {selectedMember && memberChain.length > 0 && <div className="membership-sales-history">
             <h3>Gói hiện có</h3>
             {memberChain.map((membership) => <div key={membership.id} className="membership-sales-history-row">
-              <span>#{membership.id} · {membership.planName} · {membership.startDate} → {membership.endDate} · {String(membership.startDate) > today ? "Sắp bắt đầu" : "Đang chạy"}</span>
-              {membership.id === staffCancellableId && <button type="button" disabled={saving} onClick={() => void cancelForMember(membership)}>
-                {String(membership.startDate) > today ? "Hủy gói (hoàn 100%)" : "Hủy đặc biệt"}
-              </button>}
-              <small>{money(membership.planPrice)} · {membership.durationMonths ?? "—"} tháng · {membership.benefitSource === "LEGACY_PLAN_FALLBACK" ? "Quyền lợi theo Plan hiện tại (legacy chưa xác minh)." : "Quyền lợi theo snapshot Membership đã mua."}</small>
-              <small>{membershipPlanBenefits(membership).map(({ label, value }) => `${label}: ${value}`).join(" · ")}</small>
+              <div className="membership-sales-membership-info"><strong>#{membership.id} · {membership.planName}</strong><span>{membership.startDate} → {membership.endDate} · {String(membership.startDate) > today ? "Sắp bắt đầu" : "Đang chạy"}</span>
+              <small>{money(membership.planPrice)} · {membership.durationMonths ?? "—"} tháng · {membership.benefitSource === "LEGACY_PLAN_FALLBACK" ? "Quyền lợi của gói cũ chưa được xác minh." : "Quyền lợi theo gói tại thời điểm mua."}</small>
+              <small>{membershipPlanBenefits(membership).map(({ label, value }) => `${label}: ${value}`).join(" · ")}</small></div>
+              {membership.id === staffCancellableId && <div className="membership-sales-membership-actions"><button type="button" disabled={saving} onClick={() => void cancelForMember(membership)}>
+              {String(membership.startDate) > today ? "Hủy gói (yêu cầu hoàn 100%)" : "Hủy đặc biệt (yêu cầu hoàn 100%)"}
+              </button></div>}
             </div>)}
-            <p className="membership-sales-note">{role === "ADMIN"
-              ? "Gói chưa bắt đầu: hủy và đánh dấu hoàn 100% khoản đã mua. Gói đang chạy: chỉ hủy trong trường hợp đặc biệt, phải ghi lý do; hoàn tiền (nếu có) xử lý trực tiếp."
-              : "Lễ tân không hủy gói trực tiếp. Hội viên gửi yêu cầu hủy trên trang Gói thành viên; lễ tân duyệt hoặc từ chối ở mục \"Yêu cầu hủy gói chờ duyệt\". Trường hợp đặc biệt vui lòng chuyển cho quản trị viên."}</p>
           </div>}
           {selectedMember && paymentData?.memberId === memberId && <div className="membership-sales-history">
             <h3>Lịch sử thanh toán gói</h3>
-            {paymentData.rows.length === 0 ? <p>Chưa có giao dịch membership.</p> : paymentData.rows.map((payment) => <div key={payment.id} className="membership-sales-history-row">
+            {paymentData.rows.length === 0 ? <p>Chưa có giao dịch membership.</p> : paymentData.rows.slice(historyPage * 10, historyPage * 10 + 10).map((payment) => <div key={payment.id} className="membership-sales-history-row">
               <span>#{payment.id} · {payment.purpose === "UPGRADE" ? "Nâng cấp · " : ""}{money(payment.amount)} · {paymentStatusLabel[payment.status] || payment.status}</span>
               {payment.status === "PENDING" && payment.method === "COUNTER" && <button type="button" disabled={saving} onClick={() => selectPayment(payment)}>Tiếp tục xử lý</button>}
             </div>)}
+            {paymentData.rows.length > 0 && <div className="membership-sales-actions"><span>{paymentData.rows.length} giao dịch · Trang {historyPage + 1}/{Math.max(1,Math.ceil(paymentData.rows.length / 10))}</span><button type="button" onClick={() => setHistoryPage((p) => Math.max(0,p-1))} disabled={historyPage === 0}>Trang trước</button><button type="button" onClick={() => setHistoryPage((p) => Math.min(Math.ceil(paymentData.rows.length/10)-1,p+1))} disabled={historyPage + 1 >= Math.ceil(paymentData.rows.length / 10)}>Trang sau</button></div>}
           </div>}
         </section>
         {selectedMember && <section className="membership-sales-card" aria-label="Renewal của thành viên">
@@ -467,25 +488,29 @@ export default function ReceptionistMembershipSales({ token, role, currentUserNa
             </label>)}</div>
           </fieldset>}
           {selectedPlan && <div className="membership-sales-plan"><strong>{selectedPlan.name}</strong><small>Giá được backend xác định từ MembershipPlan; biểu mẫu không gửi số tiền.</small></div>}
+          {!pendingPayment && <button type="button" className="membership-sales-open-payment" onClick={() => { setPaymentDialogOpen(true); setError(""); }} disabled={!selectedMember || !selectedPlan || memberMemberships === null || purchaseBlockedByMembership || saving}>Xem lại và tạo thanh toán</button>}
         </section>
         </div>
-        <aside className="membership-sales-order-summary" aria-labelledby="membership-order-title">
+      </div>}
+      {paymentDialogOpen && <div className="membership-payment-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setPaymentDialogOpen(false); }}>
+        <section className="membership-payment-modal" role="dialog" aria-modal="true" aria-labelledby="membership-order-title">
           <p className="membership-sales-order-kicker">TÓM TẮT GIAO DỊCH</p>
-          <h2 id="membership-order-title">Thông tin thanh toán</h2>
+          <header><h2 id="membership-order-title">{pendingPayment ? `Thanh toán #${pendingPayment.id}` : "Xác nhận thông tin thanh toán"}</h2><button type="button" className="membership-payment-modal-close" onClick={() => setPaymentDialogOpen(false)} disabled={saving}>Đóng</button></header>
           <div className="membership-sales-order-row"><span>Thành viên</span><strong>{selectedMember?.name || (pendingPayment ? pendingPayment.memberName || `#${pendingPayment.memberId}` : "Chưa chọn")}</strong>
             {selectedMember && <small>#{selectedMember.id}</small>}</div>
           <div className="membership-sales-order-row"><span>Gói hội viên</span><strong>{selectedPlanName || "Chưa chọn"}</strong>
             {(selectedPlan || pendingPayment?.upgradeQuote) && <small>{selectedPlanDuration ?? "—"} tháng</small>}</div>
+          {pendingPayment && <div className="membership-sales-order-row"><span>Phương thức</span><strong>{pendingPayment.method || "—"}</strong></div>}
+          {pendingPayment && <div className="membership-sales-order-row"><span>Mã thanh toán</span><strong>#{pendingPayment.id}</strong></div>}
+          {pendingPayment && <div className="membership-sales-order-row"><span>Trạng thái hiện tại</span><strong>{paymentStatusLabel[pendingPayment.status] || pendingPayment.status}</strong></div>}
           <div className="membership-sales-order-amount"><span>{pendingPayment ? "Số tiền thanh toán" : "Giá niêm yết của gói"}</span>
             <strong>{pendingPayment ? money(pendingPayment.amount) : selectedPlan ? money(selectedPlan.price) : "Chưa xác định"}</strong></div>
-          {!pendingPayment && <p className="membership-sales-order-note">Số tiền chính thức và trạng thái sẽ được xác nhận từ phản hồi tạo giao dịch.</p>}
+          {!pendingPayment && <p className="membership-sales-order-note">Chưa tạo Payment. Số tiền và trạng thái chính thức được xác nhận từ phản hồi API sau khi bạn chọn tạo thanh toán.</p>}
           {!pendingPayment && <form onSubmit={createPendingPayment} className="membership-sales-actions">
             <button type="submit" disabled={saving || !selectedMember || !selectedPlan || memberMemberships === null || purchaseBlockedByMembership}>{saving ? "Đang tạo…" : "Tạo thanh toán tại quầy"}</button>
+            <button type="button" className="secondary" disabled={saving} onClick={() => setPaymentDialogOpen(false)}>Quay lại</button>
           </form>}
           {pendingPayment && <section className="membership-sales-payment" aria-live="polite">
-          <h2>Thanh toán #{pendingPayment.id}</h2><dl><div><dt>Thành viên</dt><dd>{pendingPayment.memberName || `#${pendingPayment.memberId}`}</dd></div>
-            <div><dt>Gói</dt><dd>{purposeLabel(pendingPayment)}{selectedPlanName || `Gói #${pendingPayment.referenceId}`}</dd></div><div><dt>Số tiền</dt><dd>{money(pendingPayment.amount)}</dd></div>
-            <div><dt>Trạng thái</dt><dd>{paymentStatusLabel[pendingPayment.status] || pendingPayment.status}</dd></div></dl>
                     {pendingPayment.purpose === "UPGRADE" && pendingPayment.upgradeQuote && <dl className="membership-sales-upgrade-quote">
             <div><dt>Membership nguồn</dt><dd>#{pendingPayment.upgradeQuote.sourceMembershipId} · {pendingPayment.upgradeQuote.sourceStartDate}–{pendingPayment.upgradeQuote.sourceEndDate}</dd></div>
             <div><dt>Giá gói đích</dt><dd>{money(pendingPayment.upgradeQuote.targetPrice)}</dd></div>
@@ -499,9 +524,22 @@ export default function ReceptionistMembershipSales({ token, role, currentUserNa
           </div> : <button type="button" onClick={startAnother}>Tạo giao dịch khác</button>}
           <p className="membership-sales-note">Chỉ xác nhận thành công sau khi đã nhận tiền tại quầy. Mọi thao tác ghi nhận qua API thanh toán hiện có.</p>
         </section>}
-        </aside>
-      </div>}
+        </section></div>}
       </div>
     </main>
+    {cancelDialogMembership && <div className="membership-cancel-dialog-backdrop">
+      <form className="membership-cancel-dialog" role="dialog" aria-modal="true" aria-labelledby="membership-cancel-title" onSubmit={submitExceptionalCancellation}>
+        <h2 id="membership-cancel-title">Hủy đặc biệt Membership #{cancelDialogMembership.id}</h2>
+        <p>Yêu cầu hoàn tiền gồm 100% khoản thực tế đã thanh toán đủ điều kiện trong chu kỳ Membership hiện tại, bao gồm các khoản nâng cấp của chu kỳ này; các chu kỳ Gia hạn trước không được tính. Đây là yêu cầu hoàn tiền, chưa xác nhận tiền đã được trả lại.</p>
+        <p>Quyền sử dụng Membership sẽ kết thúc khi hủy. Hệ thống yêu cầu hoàn 100% khoản thực tế đã thanh toán đủ điều kiện theo Payment liên kết; số tiền lấy từ Payment, không phải giá Plan hiện tại. Yêu cầu được đưa vào hàng đợi xử lý. Hủy Membership không xác nhận tiền đã được hoàn.</p>
+        <label htmlFor="membership-cancel-reason">Lý do hủy (bắt buộc)</label>
+        <textarea id="membership-cancel-reason" value={cancelReason} maxLength={250} onChange={(event) => { setCancelReason(event.target.value); if (cancelDialogError) setCancelDialogError(""); }} aria-invalid={Boolean(cancelDialogError)} aria-describedby={cancelDialogError ? "membership-cancel-error" : undefined} autoFocus />
+        {cancelDialogError && <p id="membership-cancel-error" className="membership-sales-alert error" role="alert">{cancelDialogError}</p>}
+        <div className="membership-cancel-dialog-actions">
+          <button type="button" className="secondary" disabled={saving} onClick={() => { setCancelDialogMembership(null); setCancelDialogError(""); }}>Đóng</button>
+          <button type="submit" disabled={saving}>{saving ? "Đang xử lý…" : "Xác nhận hủy"}</button>
+        </div>
+      </form>
+    </div>}
   </div>;
 }

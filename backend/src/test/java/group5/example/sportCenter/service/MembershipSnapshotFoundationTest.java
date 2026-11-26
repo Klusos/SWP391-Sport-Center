@@ -59,6 +59,46 @@ class MembershipSnapshotFoundationTest {
     }
 
     @Test
+    void completeMembershipSnapshotDoesNotFollowLaterPlanEdits() {
+        MembershipPlan plan = plan();
+        plan.setName("Current Plan");
+        plan.setDescription("Current description");
+        plan.setPrice(new BigDecimal("1200000.00"));
+        plan.setDurationMonths(3);
+        Membership membership = new Membership();
+        membership.setPlan(plan);
+        membership.setBenefitSnapshotStatus("COMPLETE");
+        membership.setBenefitSnapshotSource("PURCHASE");
+        membership.setPlanNameSnapshot("Purchased Plan");
+        membership.setPlanDescriptionSnapshot("Purchased description");
+        membership.setPlanPriceSnapshot(new BigDecimal("1000000.00"));
+        membership.setPlanDurationMonthsSnapshot(2);
+        membership.setCourseDiscountPercentSnapshot(new BigDecimal("20.00"));
+        membership.setPtDiscountPercentSnapshot(new BigDecimal("15.00"));
+        membership.setAllowPtPlanSnapshot(false);
+        membership.setAllowOneOnOneSnapshot(true);
+
+        MembershipBenefitValues beforeEdit = MembershipBenefitValues.resolve(membership);
+        plan.setName("Edited Plan");
+        plan.setDescription("Edited description");
+        plan.setPrice(new BigDecimal("2500000.00"));
+        plan.setDurationMonths(6);
+        plan.setCourseDiscountPercent(new BigDecimal("90.00"));
+        plan.setPersonalTrainingDiscountPercent(new BigDecimal("80.00"));
+        plan.setAllowPersonalTrainingPlan(true);
+        plan.setAllowOneOnOneCoaching(false);
+        MembershipBenefitValues afterEdit = MembershipBenefitValues.resolve(membership);
+
+        assertTrue(beforeEdit.isVerifiedHistoricalSnapshot());
+        assertEquals(beforeEdit, afterEdit);
+        assertEquals("Purchased Plan", afterEdit.planName());
+        assertEquals(new BigDecimal("20.00"), afterEdit.courseDiscountPercent());
+        assertEquals(new BigDecimal("15.00"), afterEdit.personalTrainingDiscountPercent());
+        assertFalse(afterEdit.allowPersonalTrainingPlan());
+        assertTrue(afterEdit.allowOneOnOneCoaching());
+    }
+
+    @Test
     void onlyPositiveVerifiedPaidValueCanBeExposedAsUpgradeEvidence() {
         Membership membership = new Membership();
         membership.setPaidValueBasisStatus("UNKNOWN");

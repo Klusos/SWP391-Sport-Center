@@ -58,6 +58,7 @@ class MembershipRenewalIntentServiceTest {
     @Mock PaymentRepository payments;
     @Mock UserRepository users;
     @Mock NotificationService notifications;
+    @Mock AuditLogService auditLogs;
 
     private User member;
     private Membership source;
@@ -98,6 +99,8 @@ class MembershipRenewalIntentServiceTest {
 
         assertEquals(MembershipRenewalIntentService.Outcome.CREATED, result.outcome());
         MembershipRenewalIntent intent = result.intent();
+        verify(auditLogs).record(eq("CREATE"), eq("RENEWAL_INTENT"), eq(intent.getId()),
+                org.mockito.ArgumentMatchers.contains("status=NONE->OPEN"));
         assertSame(source, intent.getSourceMembership());
         assertSame(currentPlan, intent.getTargetPlan());
         assertEquals(RenewalIntentCreationSource.AUTO_RENEW_SCHEDULER, intent.getCreationSource());
@@ -163,6 +166,33 @@ class MembershipRenewalIntentServiceTest {
         when(intents.saveAndFlush(any(MembershipRenewalIntent.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
+        assertEquals(MembershipRenewalIntentService.Outcome.CREATED,
+                service.createForScheduler(SOURCE_ID).outcome());
+    }
+
+    @Test
+    void acceptsTMinusTwoAndTMinusOneWithinTheThreeDayWindow() {
+        for (String instant : List.of("2026-11-21T05:00:00Z", "2026-11-22T05:00:00Z")) {
+            service = serviceAt(instant);
+            stubEligibleCreation();
+            when(intents.saveAndFlush(any(MembershipRenewalIntent.class)))
+                    .thenAnswer(invocation -> invocation.getArgument(0));
+            assertEquals(MembershipRenewalIntentService.Outcome.CREATED,
+                    service.createForScheduler(SOURCE_ID).outcome(), "expected eligible at " + instant);
+        }
+    }
+
+    @Test
+    void enablingRenewalAfterEnteringTheWindowAllowsIntentCreation() {
+        service = serviceAt("2026-11-21T05:00:00Z");
+        source.setAutoRenew(false);
+        stubEligibleCreation();
+        assertEquals(MembershipRenewalIntentService.Outcome.INELIGIBLE_SOURCE,
+                service.createForScheduler(SOURCE_ID).outcome());
+
+        source.setAutoRenew(true);
+        when(intents.saveAndFlush(any(MembershipRenewalIntent.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
         assertEquals(MembershipRenewalIntentService.Outcome.CREATED,
                 service.createForScheduler(SOURCE_ID).outcome());
     }
@@ -265,6 +295,8 @@ class MembershipRenewalIntentServiceTest {
         assertEquals(new BigDecimal("125000.00"), repeated.intent().getQuotedAmount());
         assertEquals("Current plan quote", repeated.intent().getPlanNameSnapshot());
         verify(intents, times(1)).saveAndFlush(any(MembershipRenewalIntent.class));
+        verify(auditLogs, times(1)).record(eq("CREATE"), eq("RENEWAL_INTENT"), eq(created.intent().getId()),
+                org.mockito.ArgumentMatchers.contains("status=NONE->OPEN"));
         verify(users, times(2)).findByIdForBookingUpdate(MEMBER_ID);
     }
 
@@ -304,7 +336,7 @@ class MembershipRenewalIntentServiceTest {
     private MembershipRenewalIntentService serviceAt(String instant) {
         Clock fixedClock = Clock.fixed(Instant.parse(instant), BUSINESS_ZONE);
         return new MembershipRenewalIntentService(memberships, intents, plans, payments, users, fixedClock,
-                notifications);
+                notifications, auditLogs);
     }
 
     private MembershipPlan plan(String name, String price, int duration, String courseDiscount, boolean ptPlan) {

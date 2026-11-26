@@ -8,6 +8,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.repository.query.Param;
 
 import group5.example.sportCenter.entity.ConsultationRequest;
@@ -19,8 +20,10 @@ public interface ConsultationRequestRepository extends JpaRepository<Consultatio
 
     List<ConsultationRequest> findByMemberIdOrderByCreatedAtDescIdDesc(Integer memberId);
 
+    @EntityGraph(attributePaths = {"member", "sport", "handledBy"})
     Page<ConsultationRequest> findAllByOrderByCreatedAtDescIdDesc(Pageable pageable);
 
+    @EntityGraph(attributePaths = {"member", "sport", "handledBy"})
     Page<ConsultationRequest> findByStatusOrderByCreatedAtDescIdDesc(
             ConsultationStatus status, Pageable pageable);
 

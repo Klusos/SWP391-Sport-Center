@@ -74,9 +74,11 @@ test("Landing consultation form remains singular and uses the existing API and f
   assert.doesNotMatch(layout, /ConsultForm|public-consultation/);
   assert.match(form, /createPublicConsultationRequestApi\(/);
   assert.match(form, /normalizeConsultationEmail\(form\.email\)/);
-  for (const field of ["name", "phone", "email", "sportId", "age", "experience", "note"]) {
+  for (const field of ["name", "phone", "email", "sportId", "dateOfBirth", "experience", "note"]) {
     assert.match(form, new RegExp(`name="${field}"`));
   }
+  assert.doesNotMatch(form, /name="age"/);
+  assert.match(form, /name="dateOfBirth"[^>]*required/);
 });
 
 test("Public CSS remains isolated and the Landing and Public shell share the persisted theme", async () => {

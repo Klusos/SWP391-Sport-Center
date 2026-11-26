@@ -20,15 +20,20 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import group5.example.sportCenter.dto.CreatePersonalTrainingBookingRequest;
 import group5.example.sportCenter.dto.EligiblePtCoachResponse;
 import group5.example.sportCenter.dto.PersonalTrainingBookingResponse;
+import group5.example.sportCenter.dto.PtBookingOutcomeRequest;
+import group5.example.sportCenter.dto.PtBookingOutcomeResponse;
+import group5.example.sportCenter.service.PtBookingOutcomeService;
 import group5.example.sportCenter.service.PersonalTrainingBookingService;
 
 @RestController
 @RequestMapping("/api/pt-bookings")
 public class PersonalTrainingBookingController {
     private final PersonalTrainingBookingService service;
+    private final PtBookingOutcomeService outcomeService;
 
-    public PersonalTrainingBookingController(PersonalTrainingBookingService service) {
+    public PersonalTrainingBookingController(PersonalTrainingBookingService service, PtBookingOutcomeService outcomeService) {
         this.service = service;
+        this.outcomeService = outcomeService;
     }
 
     @GetMapping("/eligible-coaches")
@@ -61,5 +66,11 @@ public class PersonalTrainingBookingController {
     @GetMapping("/assigned")
     public List<PersonalTrainingBookingResponse> assigned(@AuthenticationPrincipal Jwt jwt) {
         return service.assignedToMe(jwt);
+    }
+
+    @PatchMapping("/{id}/outcome")
+    public PtBookingOutcomeResponse recordOutcome(@PathVariable Integer id,
+            @Valid @RequestBody PtBookingOutcomeRequest request, @AuthenticationPrincipal Jwt jwt) {
+        return outcomeService.recordCoachOutcome(jwt, id, request.outcome());
     }
 }

@@ -22,6 +22,7 @@ public class MemberRegistrationService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AuditLogService auditLogs;
 
     @Transactional
     public MemberResponse createMember(CreateMemberRequest request) {
@@ -52,6 +53,7 @@ public class MemberRegistrationService {
         user.setCreatedAt(LocalDateTime.now());
 
         User savedUser = userRepository.save(user);
+        auditLogs.record("CREATE", "USER", savedUser.getId(), "Staff created MEMBER account.");
 
         return new MemberResponse(
             savedUser.getId(),
@@ -79,12 +81,23 @@ public class MemberRegistrationService {
                     HttpStatus.CONFLICT, "Email already exists");
         }
 
+        java.util.List<String> changedFields = new java.util.ArrayList<>();
+        if (!java.util.Objects.equals(member.getName(), request.getName().trim())) changedFields.add("name");
+        if (!java.util.Objects.equals(member.getEmail(), request.getEmail().trim())) changedFields.add("email");
+        if (!java.util.Objects.equals(member.getDateOfBirth(), request.getDateOfBirth())) changedFields.add("dateOfBirth");
+        if (!java.util.Objects.equals(member.getGender(), request.getGender())) changedFields.add("gender");
+        if (!java.util.Objects.equals(member.getPhone(), request.getPhone())) changedFields.add("phone");
         member.setName(request.getName().trim());
         member.setEmail(email);
         member.setDateOfBirth(request.getDateOfBirth());
         member.setGender(request.getGender());
         member.setPhone(request.getPhone());
-        return response(userRepository.save(member));
+        User saved = userRepository.saveAndFlush(member);
+        if (!changedFields.isEmpty()) {
+            auditLogs.record("PROFILE_UPDATE", "USER", id,
+                    "Administrative profile fields changed=" + String.join(",", changedFields) + ";values=not-copied");
+        }
+        return response(saved);
     }
 
     @Transactional
@@ -94,7 +107,9 @@ public class MemberRegistrationService {
                         HttpStatus.NOT_FOUND, "Member not found"));
         requireMember(member);
         member.setStatus("INACTIVE");
-        return response(userRepository.save(member));
+        User saved = userRepository.saveAndFlush(member);
+        auditLogs.record("STATUS_CHANGE", "USER", id, "Account status changed=ACTIVE->INACTIVE.");
+        return response(saved);
     }
 
     private void requireMember(User user) {

@@ -4,6 +4,9 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -95,7 +98,12 @@ public class AuditLogService {
         if (toUtc != null) spec = spec.and((root, query, cb) -> cb.lessThan(root.get("createdAt"), toUtc));
 
         Sort sort = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
-        return auditLogs.findAll(spec, PageRequest.of(page, size, sort)).map(AuditLogService::response);
+        Page<AuditLog> entries = auditLogs.findAll(spec, PageRequest.of(page, size, sort));
+        Set<Integer> actorIds = entries.getContent().stream().map(AuditLog::getActorUserId)
+                .filter(java.util.Objects::nonNull).collect(Collectors.toSet());
+        Map<Integer, String> currentNames = users.findAllById(actorIds).stream()
+                .collect(Collectors.toMap(User::getId, User::getName));
+        return entries.map(entry -> response(entry, currentNames.get(entry.getActorUserId())));
     }
 
     private Actor currentActor() {
@@ -143,8 +151,8 @@ public class AuditLogService {
         return uppercase ? normalized.toUpperCase(Locale.ROOT) : normalized;
     }
 
-    private static AuditLogResponse response(AuditLog entry) {
-        return new AuditLogResponse(entry.getId(), entry.getActorUserId(), entry.getActorRole(), entry.getAction(),
+    private static AuditLogResponse response(AuditLog entry, String currentName) {
+        return new AuditLogResponse(entry.getId(), entry.getActorUserId(), currentName, entry.getActorRole(), entry.getAction(),
                 entry.getEntityType(), entry.getEntityId(), entry.getDescription(), entry.getCreatedAt());
     }
 

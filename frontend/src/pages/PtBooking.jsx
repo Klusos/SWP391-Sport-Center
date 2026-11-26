@@ -10,7 +10,7 @@ import "./PtBooking.css";
 const rows = (value) => Array.isArray(value) ? value : value?.content ?? [];
 const money = (value) => new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(value ?? 0);
 const currentTimestamp = () => Date.now();
-const PT_STATUS_LABELS = { PENDING_PAYMENT: "Chờ thanh toán", CONFIRMED: "Đã xác nhận", CANCELLED: "Đã hủy", EXPIRED: "Đã hết hạn" };
+const PT_STATUS_LABELS = { PENDING_PAYMENT: "Chờ thanh toán", CONFIRMED: "Đã xác nhận", CANCELLED: "Đã hủy", EXPIRED: "Đã hết hạn", COMPLETED: "Đã hoàn thành", NO_SHOW: "Vắng mặt (buổi đã sử dụng)" };
 const PAYMENT_STATUS_LABELS = { PENDING: "Đang chờ", SUCCESS: "Thành công", CANCELLED: "Đã hủy", FAILED: "Thất bại", REFUND_REQUIRED: "Chờ xử lý hoàn tiền", REFUNDED: "Đã hoàn tiền" };
 const PAYMENT_METHOD_LABELS = { ONLINE: "Trực tuyến", COUNTER: "Tại quầy" };
 function vietnamTime(value, date = false) {

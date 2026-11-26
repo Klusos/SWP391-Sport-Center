@@ -21,6 +21,9 @@ test("assessment UI retains assigned APIs, guarded completion, and error handlin
   assert.match(source, /selected\.status !== "PENDING" \|\| submitting/);
   assert.match(source, /requestError\.status === 403/);
   assert.match(source, /requestError\.status === 409/);
+  assert.match(source, /Không có đánh giá đang chờ phù hợp với bộ lọc/);
+  assert.doesNotMatch(source, /Không có assessment PENDING phù hợp/);
+  assert.match(source, /Học viên #\{item\.memberId\}/);
 });
 
 test("assessment page uses compact pending/processed counts and the two-panel list/detail hierarchy", async () => {

@@ -2,6 +2,12 @@
 .receptionist-refund-alert{margin-top:14px;padding:12px 15px;border:1px solid #c43f3f;border-radius:8px;background:#fff1f1;color:#802020}.receptionist-refund-alert ul{margin:7px 0 0;padding-left:20px}
 .receptionist-eligibility-warning{padding:10px 12px;border:1px solid #efd17d;border-radius:8px;background:#fff8e5;color:#745500}
 
+/* Align the top-level registration header with the Consultation page treatment. */
+.receptionist-registration-header{align-items:center;padding:clamp(20px,2.5vw,30px);border:1px solid #d7e7f7;border-radius:18px;background:linear-gradient(120deg,#edf6ff,#fff 78%);box-shadow:0 10px 28px rgba(18,59,99,.06)}
+.receptionist-registration-header h1{font-size:clamp(24px,2.4vw,32px);font-weight:820;letter-spacing:-.035em}
+.receptionist-registration-header .subtitle{max-width:680px;margin:7px 0 0;color:#60758c;line-height:1.6}
+@media(max-width:620px){.receptionist-registration-header{align-items:flex-start;flex-direction:column}.receptionist-registration-header>button{margin-top:0}}
+
 /* Admin gets a flush shared Top Bar; keep page padding on the content below it. */
 .layout > main.main.receptionist-registration.receptionist-registration--admin { max-width: none; padding: 0; }
 .receptionist-registration-content--admin { box-sizing: border-box; width: 100%; max-width: 1440px; margin: 0 auto; padding: 32px 48px 52px; }

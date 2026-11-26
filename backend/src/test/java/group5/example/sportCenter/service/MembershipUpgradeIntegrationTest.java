@@ -60,6 +60,7 @@ import group5.example.sportCenter.repository.MembershipRenewalIntentRepository;
 import group5.example.sportCenter.repository.MembershipRenewalIntentRepository;
 import group5.example.sportCenter.repository.MembershipUpgradeRepository;
 import group5.example.sportCenter.repository.MembershipUpgradePathRepository;
+import group5.example.sportCenter.repository.AuditLogRepository;
 import group5.example.sportCenter.repository.NotificationRepository;
 import group5.example.sportCenter.repository.PaymentRepository;
 import group5.example.sportCenter.repository.UserRepository;
@@ -79,6 +80,7 @@ class MembershipUpgradeIntegrationTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired MembershipUpgradeRepository upgrades;
     @Autowired MembershipUpgradePathRepository paths;
+    @Autowired AuditLogRepository auditLogs;
     @Autowired MembershipUpgradePathService pathService;
     @Autowired MembershipRepository memberships;
     @MockitoSpyBean MembershipRenewalIntentRepository renewalIntents;
@@ -145,7 +147,7 @@ class MembershipUpgradeIntegrationTest {
     }
 
     @Test
-    void counterUpgradeUsesFrozenWholeVndCreditAndFullTargetDuration() {
+    void counterUpgradeUsesFrozenWholeVndCreditAndFullTargetDuration() throws Exception {
         PaymentResponse payment = payments.createPayment(upgrade(premium, PaymentMethod.COUNTER), jwt(member));
         assertEquals("PENDING", payment.getStatus());
         assertEquals(new BigDecimal("1166667.00"), payment.getAmount());
@@ -174,11 +176,40 @@ class MembershipUpgradeIntegrationTest {
         assertEquals("PREMIUM", upgraded.getPlanNameSnapshot());
         assertEquals(new BigDecimal("1500000.00"), upgraded.getPaidValueBasisAmount());
         assertEquals("UPGRADE_CHAIN", upgraded.getPaidValueBasisSource());
+        String membershipResponse = mvc.perform(get("/api/memberships/member/" + member.getId()).header("Authorization", bearer(member)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertTrue(membershipResponse.contains("\"id\":" + upgraded.getId() + ",\"memberId\":"));
+        assertTrue(membershipResponse.contains("\"purchasePaymentId\":" + payment.getId()));
 
         MembershipUpgrade record = upgrades.findByPaymentId(payment.getId()).orElseThrow();
         assertEquals(20, record.getRemainingDays());
         assertNotNull(record.getResultMembership());
         assertEquals(upgraded.getId(), record.getResultMembership().getId());
+        var upgradeAudit = auditLogs.findAll().stream().filter(entry -> "MEMBERSHIP_UPGRADE".equals(entry.getEntityType())
+                && String.valueOf(record.getId()).equals(entry.getEntityId()) && "SETTLE".equals(entry.getAction()))
+                .findFirst().orElseThrow();
+        assertTrue(upgradeAudit.getDescription().contains("sourceMembership=" + current.getId()));
+        assertTrue(upgradeAudit.getDescription().contains("replacementMembership=" + upgraded.getId()));
+        assertTrue(upgradeAudit.getDescription().contains("chargedAmount=" + payment.getAmount().stripTrailingZeros().toPlainString()));
+    }
+
+    @Test
+    void directPurchaseResponseLinksOnlyTheMembershipCreatedByThatPayment() throws Exception {
+        current.setStatus("EXPIRED");
+        current.setEndDate(today.minusDays(1));
+        memberships.saveAndFlush(current);
+
+        PaymentResponse pending = payments.createPayment(purchase(standard), jwt(member));
+        assertEquals("PENDING", pending.getStatus());
+        assertEquals("SUCCESS", payments.processAtCounter(pending.getId(), counter(true), jwt(receptionist)).getStatus());
+        Membership purchased = memberships.findByMemberId(member.getId()).stream()
+                .filter(row -> row.getPurchasePayment() != null && pending.getId().equals(row.getPurchasePayment().getId()))
+                .findFirst().orElseThrow();
+
+        String membershipResponse = mvc.perform(get("/api/memberships/member/" + member.getId()).header("Authorization", bearer(member)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertTrue(membershipResponse.contains("\"id\":" + purchased.getId() + ",\"memberId\":"));
+        assertTrue(membershipResponse.contains("\"purchasePaymentId\":" + pending.getId()));
     }
 
     @Test

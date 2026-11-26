@@ -40,6 +40,7 @@ public class CourseClassService {
     private final CoachScheduleConflictService coachScheduleConflicts;
     private final Clock clock;
     private final ApplicationEventPublisher events;
+    private final AuditLogService auditLogs;
 
     public CourseClassService(
             CourseClassRepository courseClassRepository,
@@ -50,6 +51,7 @@ public class CourseClassService {
             ApplicationEventPublisher events,
             ClassSessionRepository classSessionRepository,
             CoachScheduleConflictService coachScheduleConflicts,
+            AuditLogService auditLogs,
             Clock clock) {
 
         this.courseClassRepository = courseClassRepository;
@@ -58,6 +60,7 @@ public class CourseClassService {
         this.coachRepository = coachRepository;
         this.coachSportRepository = coachSportRepository;
         this.events = events;
+        this.auditLogs = auditLogs;
         this.classSessionRepository = classSessionRepository;
         this.coachScheduleConflicts = coachScheduleConflicts;
         this.clock = clock;
@@ -118,6 +121,8 @@ public class CourseClassService {
         courseClass.setStatus("ACTIVE");
 
         CourseClass created = courseClassRepository.save(courseClass);
+        auditLogs.record("CREATE", "COURSE_CLASS", created.getId(),
+                "Course class created;offeringId=" + offering.getId() + ";coachId=" + coach.getId() + ".");
         CourseClassResponse response = toResponse(created);
         events.publishEvent(new NotificationBusinessEvents.CourseCoachAssigned(created.getId(), coach.getId()));
         return response;
@@ -183,6 +188,7 @@ public class CourseClassService {
         }
 
         Integer previousCoachId = courseClass.getCoach().getId();
+        String previousStatus = courseClass.getStatus();
 
         Coach coach =
                 coachRepository.findByIdForBookingUpdate(request.getCoachId())
@@ -245,6 +251,10 @@ public class CourseClassService {
         courseClass.setStatus(CatalogValues.status(request.getStatus(), "CourseClass", List.of("ACTIVE", "INACTIVE")));
 
         CourseClass updated = courseClassRepository.save(courseClass);
+        auditLogs.record("UPDATE", "COURSE_CLASS", updated.getId(),
+                "Course class updated;coachId=" + previousCoachId + "->" + coach.getId()
+                        + ";status=" + previousStatus + "->" + updated.getStatus()
+                        + ";capacity=" + updated.getCapacity() + ".");
         CourseClassResponse response = toResponse(updated);
         if (!Objects.equals(previousCoachId, coach.getId())) {
             events.publishEvent(new NotificationBusinessEvents.CourseCoachAssigned(updated.getId(), coach.getId()));

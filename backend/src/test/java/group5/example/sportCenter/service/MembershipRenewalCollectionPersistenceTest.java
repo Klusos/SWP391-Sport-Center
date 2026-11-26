@@ -50,7 +50,7 @@ import group5.example.sportCenter.repository.UserRepository;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("phase1")
 @Import({ MembershipRenewalCollectionPersistenceService.class, MembershipRenewalCollectionService.class,
-        MembershipRenewalSettlementService.class, MembershipRenewalCollectionPersistenceTest.FixedClockConfiguration.class })
+        MembershipRenewalSettlementService.class, AuditLogService.class, MembershipRenewalCollectionPersistenceTest.FixedClockConfiguration.class })
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class MembershipRenewalCollectionPersistenceTest {
     private static final ZoneId VN = ZoneId.of("Asia/Ho_Chi_Minh");

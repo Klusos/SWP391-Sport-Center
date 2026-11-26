@@ -54,6 +54,7 @@ class MembershipRenewalSettlementServiceTest {
     @Mock MembershipRepository memberships;
     @Mock EntityManager entityManager;
     @Mock NotificationService notifications;
+    @Mock AuditLogService auditLogs;
 
     private MembershipRenewalSettlementService service;
     private User member;
@@ -65,7 +66,7 @@ class MembershipRenewalSettlementServiceTest {
     @BeforeEach
     void setUp() {
         service = new MembershipRenewalSettlementService(users, intents, payments, memberships,
-                Clock.fixed(NOW.atZone(VN).toInstant(), VN), entityManager, notifications);
+                Clock.fixed(NOW.atZone(VN).toInstant(), VN), entityManager, notifications, auditLogs);
         member = new User(); member.setId(MEMBER_ID); member.setRole("MEMBER"); member.setStatus("ACTIVE");
         plan = new MembershipPlan(); plan.setId(22); plan.setName("Frozen plan");
         source = new Membership(); source.setId(SOURCE_ID); source.setMember(member); source.setPlan(plan);

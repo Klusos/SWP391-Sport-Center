@@ -133,9 +133,11 @@ test("Landing remains the sole Public consultation form after legacy route conso
   assert.equal((publicLayout.match(/ConsultForm/g) || []).length, 0);
   assert.match(form, /showFieldPlaceholders = true/);
   assert.match(form, /createPublicConsultationRequestApi\(/);
-  for (const field of ["name", "phone", "email", "sportId", "age", "experience", "note"]) {
+  for (const field of ["name", "phone", "email", "sportId", "dateOfBirth", "experience", "note"]) {
     assert.match(form, new RegExp(`name="${field}"`));
   }
+  assert.doesNotMatch(form, /name="age"/);
+  assert.match(form, /name="dateOfBirth"[^>]*required/);
   assert.match(form, /placeholder=\{showFieldPlaceholders \?/);
 });
 

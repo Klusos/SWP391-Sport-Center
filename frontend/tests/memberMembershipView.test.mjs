@@ -61,7 +61,10 @@ test("Membership and payment history have independent accessible pagination and 
 
 test("Auto-renew stays on the existing API flow and explains that payment is still required", () => {
   assert.match(source, /setAutoRenewApi\(token, membership\.id, enable\)/);
-  assert.match(source, /không tự động trừ tiền hoặc kích hoạt gói gia hạn nếu chưa có thanh toán thành công/);
+  assert.match(source, /tạo yêu cầu gia hạn/);
+  assert.match(source, /3 ngày cuối/);
+  assert.match(source, /thanh toán thành công/);
+  assert.match(source, /không tự động thu tiền/);
   assert.equal((source.match(/onClick=\{\(\) => void toggleAutoRenew\(membership\)\}/g) || []).length, 2);
   assert.match(source, /\{last && <button/);
   assert.match(source, /\{last \? <button/);
@@ -78,6 +81,28 @@ test("Upgrade choices and purchase actions use existing server data and handlers
 test("Pending payment view does not invent a VNPay expiry or countdown", () => {
   assert.match(source, /payment\.createdAt/);
   assert.doesNotMatch(source, /23:59 hôm nay|Hết hạn thanh toán|countdown|expiresAt/);
+});
+
+test("Pending Upgrade presents the frozen quote once in a compact responsive price row", () => {
+  const pendingCard = source.slice(source.indexOf('className="membership-pending-card"'), source.indexOf("</article>;", source.indexOf('className="membership-pending-card"')));
+  assert.match(pendingCard, /membership-upgrade-payment-quote/);
+  assert.match(pendingCard, /money\(quote\.targetPrice\)/);
+  assert.match(pendingCard, /Giá trị khấu trừ/);
+  assert.match(pendingCard, /money\(quote\.appliedCredit\)/);
+  assert.match(pendingCard, /money\(quote\.payable\)/);
+  assert.match(pendingCard, /quote\.targetDurationMonths/);
+  assert.match(pendingCard, /paymentMethodLabel\[payment\.method\]/);
+  const upgradeQuote = pendingCard.slice(pendingCard.indexOf('className="membership-upgrade-payment-quote"'), pendingCard.indexOf("</dl>", pendingCard.indexOf('className="membership-upgrade-payment-quote"')));
+  assert.doesNotMatch(upgradeQuote, /quote\.sourceMembershipId|quote\.sourceStartDate|Tạo lúc/);
+  assert.match(css, /membership-upgrade-payment-quote\s*\{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(css, /membership-upgrade-payable/);
+  assert.match(css, /@media \(max-width: 520px\)\s*\{[\s\S]*?membership-upgrade-payment-quote\s*\{\s*grid-template-columns:1fr/);
+});
+
+test("Member-facing status and plan benefit descriptions avoid implementation jargon", () => {
+  assert.doesNotMatch(source, /TRẠNG THÁI TỪ MÁY CHỦ|snapshot|Purchase thông thường/);
+  assert.match(source, /Thanh toán gói thành viên đang chờ/);
+  assert.match(source, /Quyền lợi theo gói tại thời điểm mua/);
 });
 
 test("Unsupported mock membership claims and fake identities are absent", () => {

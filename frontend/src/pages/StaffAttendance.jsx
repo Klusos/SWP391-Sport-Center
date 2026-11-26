@@ -4,6 +4,7 @@ import AdminTopBar from "../components/AdminTopBar";
 import { getAttendanceHistoryApi, getAttendanceRosterApi, getStaffAttendanceSessionsApi, markAttendanceApi } from "../api";
 import { buildAttendanceCsv } from "../attendanceCsv.js";
 import { applyAttendanceRequestIfCurrent } from "../attendanceRequests.js";
+import { attendanceClassKey, attendanceClassOptions } from "../coachAttendanceView.js";
 import "./CoachAttendance.css";
 import "./StaffAttendance.css";
 
@@ -36,6 +37,8 @@ export default function StaffAttendance({ token, role, currentUserName, onLogout
   const [sportFilter, setSportFilter] = useState("");
   const [memberFilter, setMemberFilter] = useState("");
   const [page, setPage] = useState(1);
+  const [sessionPage, setSessionPage] = useState(1);
+  const [selectedClassKey, setSelectedClassKey] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [roster, setRoster] = useState(null);
   const [rosterLoading, setRosterLoading] = useState(false);
@@ -101,6 +104,18 @@ export default function StaffAttendance({ token, role, currentUserName, onLogout
         && (!sportFilter || String(item?.sportId ?? item?.sportName ?? "") === sportFilter);
     });
   }, [sessions, query, statusFilter, sportFilter]);
+  const classOptions = useMemo(() => attendanceClassOptions(sessions), [sessions]);
+  const visibleClassOptions = useMemo(() => {
+    const visibleKeys = new Set(visibleSessions.map(attendanceClassKey));
+    return classOptions.filter((option) => visibleKeys.has(option.key));
+  }, [classOptions, visibleSessions]);
+  const selectedClass = classOptions.find((option) => option.key === selectedClassKey) || null;
+  const classSessions = selectedClassKey
+    ? visibleSessions.filter((session) => attendanceClassKey(session) === selectedClassKey)
+    : [];
+  const sessionPageCount = Math.max(1, Math.ceil(classSessions.length / PAGE_SIZE));
+  const currentSessionPage = Math.min(sessionPage, sessionPageCount);
+  const pagedSessions = classSessions.slice((currentSessionPage - 1) * PAGE_SIZE, currentSessionPage * PAGE_SIZE);
 
   const loadSessions = useCallback(async () => {
     setSessionsLoading(true); setSessionsError("");
@@ -131,6 +146,18 @@ export default function StaffAttendance({ token, role, currentUserName, onLogout
     historyRequestRef.current += 1;
     setSelectedId(String(id)); setNotice(""); setRowErrors({}); setHistory([]); setHistoryOpen(false); setHistoryError(""); setHistoryLoading(false);
     setMemberFilter(""); setPage(1);
+  }
+  function returnToClassSelection() {
+    selectedIdRef.current = "";
+    rosterRequestRef.current += 1;
+    setSelectedId("");
+    setSelectedClassKey("");
+    setSessionPage(1);
+  }
+  function returnToSessions() {
+    selectedIdRef.current = "";
+    rosterRequestRef.current += 1;
+    setSelectedId("");
   }
   function editRow(setter, rowKey, value) {
     setter((current) => ({ ...current, [rowKey]: value }));
@@ -253,29 +280,66 @@ export default function StaffAttendance({ token, role, currentUserName, onLogout
         </header>
         {sessionsError && <p className="coach-attendance-alert is-error" role="alert">{sessionsError}</p>}
         {notice && <p className="coach-attendance-alert is-success" role="status">{notice}</p>}
-        <div className={`staff-attendance-workspace${selectedId ? " has-selection" : ""}`}>
-        <section className="coach-attendance-panel staff-attendance-session-panel" aria-labelledby="staff-attendance-sessions-title">
+        {role === "ADMIN" && <section className="coach-attendance-panel staff-attendance-admin-navigation" aria-labelledby="staff-attendance-admin-heading">
+          <div className="coach-attendance-section-heading">
+            <div><h2 id="staff-attendance-admin-heading">{selectedId ? "Điểm danh buổi học" : selectedClass ? `Buổi học · ${selectedClass.name}` : "Chọn lớp học"}</h2>
+              <p>{selectedId ? `${roster?.courseClassName || selectedClass?.name || "Lớp học"} · Buổi #${selectedId}` : selectedClass ? `${selectedClass.courseName || "Khóa học"} · Lớp #${selectedClassKey.replace(/^(id:|name:)/, "")}` : "Chọn lớp để xem các buổi học và danh sách điểm danh."}</p>
+            </div>
+            <span>{selectedId ? "Danh sách lớp" : selectedClass ? `${classSessions.length} buổi` : `${visibleClassOptions.length} lớp`}</span>
+          </div>
+          {!selectedId && <>
+            {selectedClass && <button type="button" className="coach-attendance-history-button staff-attendance-back" onClick={returnToClassSelection}>Quay lại danh sách lớp</button>}
+            <div className="staff-attendance-filters">
+              <label>Tìm theo môn, khóa, lớp hoặc mã buổi<input value={query} onChange={(event) => { setQuery(event.target.value); setSessionPage(1); }} placeholder="Nhập từ khóa" /></label>
+              <label>Trạng thái buổi học<select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setSessionPage(1); }}><option value="">Tất cả</option><option value="SCHEDULED">Đã lên lịch</option><option value="COMPLETED">Đã hoàn thành</option><option value="CANCELLED">Đã hủy</option></select></label>
+              <label>Môn thể thao<select value={sportFilter} onChange={(event) => { setSportFilter(event.target.value); setSessionPage(1); }}><option value="">Tất cả môn</option>{sports.map((sport) => <option key={sport.value} value={sport.value}>{sport.label}</option>)}</select></label>
+            </div>
+            {sessionsLoading ? <p className="coach-attendance-empty" role="status">Đang tải dữ liệu lớp học…</p>
+              : sessionsError ? null
+                : !selectedClass ? visibleClassOptions.length === 0 ? <p className="coach-attendance-empty">Không tìm thấy lớp học phù hợp.</p>
+                  : <div className="staff-attendance-class-list" aria-label="Các lớp học được phép truy cập">{visibleClassOptions.map((option) => {
+                    const optionSessions = visibleSessions.filter((session) => attendanceClassKey(session) === option.key);
+                    const sportNames = [...new Set(optionSessions.map((session) => session.sportName).filter(Boolean))];
+                    return <button type="button" className="coach-attendance-session staff-attendance-class-card" key={option.key} onClick={() => { setSelectedClassKey(option.key); setSessionPage(1); }}>
+                      <span className="coach-attendance-session-title"><strong>{option.name}</strong><span>{option.courseName || "Khóa học"}</span><span>{sportNames.join(" · ") || "Môn thể thao"}</span></span>
+                      <span className="staff-attendance-class-count">{optionSessions.length} buổi phù hợp</span>
+                    </button>;
+                  })}</div>
+                  : classSessions.length === 0 ? <p className="coach-attendance-empty">Lớp này không có buổi học phù hợp với bộ lọc hiện tại.</p>
+                    : <><div className="coach-attendance-sessions staff-attendance-session-list" role="region" aria-label="Buổi học của lớp đã chọn">{pagedSessions.map((session) => {
+                      const id = session?.classSessionId;
+                      return <button type="button" className="coach-attendance-session" key={id ?? `${session?.courseClassId}-${session?.startTime}`} onClick={() => id != null && selectSession(id)} disabled={id == null}>
+                        <span className="coach-attendance-session-title"><strong>{session?.courseName || session?.courseOfferingName || "Khóa học"}</strong><span>{session?.courseClassName || (session?.courseClassId != null ? `Lớp #${session.courseClassId}` : "Chưa có tên lớp")}</span><span>{session?.sportName || (session?.sportId != null ? `Môn #${session.sportId}` : "Chưa có môn")}</span></span>
+                        <span className="coach-attendance-session-time"><strong>{dateTime(session?.startTime)}</strong><span>{time(session?.startTime)} – {time(session?.endTime)}</span></span>
+                        <span className={`coach-attendance-badge status-${String(session?.sessionStatus || "unknown").toLowerCase()}`}>{SESSION_LABELS[session?.sessionStatus] || session?.sessionStatus || "Chưa xác định"}</span>
+                      </button>;
+                    })}</div><nav className="staff-attendance-session-pager" aria-label="Phân trang buổi học"><span>Hiển thị {pagedSessions.length}/{classSessions.length} buổi · Trang {currentSessionPage}/{sessionPageCount}</span><div><button type="button" onClick={() => setSessionPage((current) => Math.max(1, current - 1))} disabled={currentSessionPage <= 1}>Trước</button><button type="button" onClick={() => setSessionPage((current) => Math.min(sessionPageCount, current + 1))} disabled={currentSessionPage >= sessionPageCount}>Sau</button></div></nav></>}
+          </>}
+          {selectedId && <button type="button" className="coach-attendance-history-button staff-attendance-back" onClick={returnToSessions}>Quay lại buổi học</button>}
+        </section>}
+        <div className={`staff-attendance-workspace${selectedId ? " has-selection" : ""}${role === "ADMIN" && selectedId ? " is-admin-roster" : ""}`}>
+        {role !== "ADMIN" && <section className="coach-attendance-panel staff-attendance-session-panel" aria-labelledby="staff-attendance-sessions-title">
           <div className="coach-attendance-section-heading"><div><h2 id="staff-attendance-sessions-title">Danh sách buổi học</h2><p>Hiển thị dữ liệu từ các lớp học hiện có.</p></div><span>{visibleSessions.length}/{sessions.length} buổi</span></div>
           <div className="staff-attendance-filters">
-            <label>Tìm theo môn, khóa, lớp hoặc mã buổi<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nhập từ khóa…" /></label>
-            <label>Trạng thái buổi học<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">Tất cả</option><option value="SCHEDULED">Đã lên lịch</option><option value="COMPLETED">Đã hoàn thành</option><option value="CANCELLED">Đã hủy</option></select></label>
-            <label>Môn thể thao<select value={sportFilter} onChange={(event) => setSportFilter(event.target.value)}><option value="">Tất cả môn</option>{sports.map((sport) => <option key={sport.value} value={sport.value}>{sport.label}</option>)}</select></label>
+            <label>Tìm theo môn, khóa, lớp hoặc mã buổi<input value={query} onChange={(event) => { setQuery(event.target.value); setSessionPage(1); }} placeholder="Nhập từ khóa…" /></label>
+            <label>Trạng thái buổi học<select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setSessionPage(1); }}><option value="">Tất cả</option><option value="SCHEDULED">Đã lên lịch</option><option value="COMPLETED">Đã hoàn thành</option><option value="CANCELLED">Đã hủy</option></select></label>
+            <label>Môn thể thao<select value={sportFilter} onChange={(event) => { setSportFilter(event.target.value); setSessionPage(1); }}><option value="">Tất cả môn</option>{sports.map((sport) => <option key={sport.value} value={sport.value}>{sport.label}</option>)}</select></label>
           </div>
           {sessionsLoading ? <p className="coach-attendance-empty" role="status">Đang tải danh sách buổi học…</p>
             : sessionsError ? null
               : sessions.length === 0 ? <p className="coach-attendance-empty">Chưa có buổi học nào.</p>
                 : visibleSessions.length === 0 ? <p className="coach-attendance-empty">Không tìm thấy buổi học phù hợp.</p>
-                  : <div className="coach-attendance-sessions staff-attendance-session-list" role="region" aria-label="Các buổi học có thể chọn" tabIndex={0}>{visibleSessions.map((session) => {
+                  : <><div className="coach-attendance-sessions staff-attendance-session-list" role="region" aria-label="Các buổi học có thể chọn">{pagedSessions.map((session) => {
                     const id = session?.classSessionId; const active = String(id) === String(selectedId);
                     return <button type="button" className={`coach-attendance-session${active ? " is-selected" : ""}`} key={id ?? `${session?.courseClassId}-${session?.startTime}`} onClick={() => id != null && selectSession(id)} disabled={id == null} aria-pressed={active}>
                       <span className="coach-attendance-session-title"><strong>{session?.courseName || session?.courseOfferingName || "Khóa học"}</strong><span>{session?.courseClassName || (session?.courseClassId != null ? `Lớp #${session.courseClassId}` : "Chưa có tên lớp")}</span><span>{session?.sportName || (session?.sportId != null ? `Môn #${session.sportId}` : "Chưa có môn")}</span></span>
                       <span className="coach-attendance-session-time"><strong>{dateTime(session?.startTime)}</strong><span>{time(session?.startTime)} – {time(session?.endTime)}</span></span>
                       <span className={`coach-attendance-badge status-${String(session?.sessionStatus || "unknown").toLowerCase()}`}>{SESSION_LABELS[session?.sessionStatus] || session?.sessionStatus || "Chưa xác định"}</span>
                     </button>;
-                  })}</div>}
-        </section>
+                  })}</div><nav className="staff-attendance-session-pager" aria-label="Phân trang buổi học"><span>Hiển thị {pagedSessions.length}/{visibleSessions.length} buổi · Trang {currentSessionPage}/{sessionPageCount}</span><div><button type="button" onClick={() => setSessionPage((current) => Math.max(1, current - 1))} disabled={currentSessionPage <= 1}>Trước</button><button type="button" onClick={() => setSessionPage((current) => Math.min(sessionPageCount, current + 1))} disabled={currentSessionPage >= sessionPageCount}>Sau</button></div></nav></>}
+        </section>}
 
-        {selectedId && <section className="coach-attendance-panel staff-attendance-roster-panel" aria-labelledby="staff-attendance-roster-title">
+        {selectedId && <section className={`coach-attendance-panel staff-attendance-roster-panel${role === "ADMIN" ? " is-admin-dedicated" : ""}`} aria-labelledby="staff-attendance-roster-title">
           <div className="coach-attendance-section-heading"><div><h2 id="staff-attendance-roster-title">Danh sách điểm danh</h2><p>{roster?.courseClassName || selectedSession?.courseClassName || "Lớp học"} · Buổi #{roster?.classSessionId ?? selectedId}</p></div><span>{members.length} thành viên</span></div>
           {rosterLoading ? <p className="coach-attendance-empty" role="status">Đang tải danh sách thành viên…</p>
             : rosterError ? <p className="coach-attendance-alert is-error" role="alert">{rosterError}</p>

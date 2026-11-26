@@ -98,7 +98,7 @@ export default function CoachSkillAssessments({ token, role, onLogout, onNavigat
           ? "Bạn không được phân công assessment này nên không thể xem trình độ."
           : requestError?.status === 401
             ? "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại."
-            : requestError?.message || "Không tải được trình độ hiện tại của Member.");
+          : requestError?.message || "Không tải được trình độ hiện tại của học viên.");
       } finally {
         if (active) setLevelLoading(false);
       }
@@ -152,7 +152,7 @@ export default function CoachSkillAssessments({ token, role, onLogout, onNavigat
       });
       setSelected(updated);
       setAssignments((current) => current.map((item) => item.id === updated.id ? updated : item));
-      setNotice("Đã hoàn tất assessment và cập nhật trình độ đã xác minh của Member.");
+      setNotice("Đã hoàn tất đánh giá và cập nhật trình độ đã xác minh của học viên.");
       setReloadLevel((current) => current + 1);
       await loadAssignments();
     } catch (requestError) {
@@ -169,8 +169,8 @@ export default function CoachSkillAssessments({ token, role, onLogout, onNavigat
     const sportName = sportNames.get(Number(item.sportId));
     return <article className="coach-assessment-row" key={item.id}>
       <div className="coach-assessment-row-main">
-        <strong>Assessment #{item.id} · Member #{item.memberId}</strong>
-        <span>{sportName ? `${sportName} · Sport #${item.sportId}` : `Sport #${item.sportId}`}</span>
+        <strong>Đánh giá #{item.id} · Học viên #{item.memberId}</strong>
+        <span>{sportName ? `${sportName} · Bộ môn #${item.sportId}` : `Bộ môn #${item.sportId}`}</span>
       </div>
       <div className="coach-assessment-row-meta">
         <span className={`coach-assessment-status status-${String(item.status).toLowerCase()}`}>{STATUS_LABEL[item.status] || item.status}</span>
@@ -187,7 +187,7 @@ export default function CoachSkillAssessments({ token, role, onLogout, onNavigat
     <Sidebar role={role} activePage="coach-assessments" onNavigate={onNavigate} onLogout={onLogout} />
     <main className="main coach-skill-assessments-page">
       <header className="coach-assessment-header"><div><p className="eyebrow">SPORTCENTER / COACH</p><h1>Đánh giá kỹ năng</h1>
-        <p className="subtitle">Theo dõi các đánh giá được phân công và cập nhật trình độ Member.</p></div></header>
+        <p className="subtitle">Theo dõi các đánh giá được phân công và cập nhật trình độ học viên.</p></div></header>
       {notice && <p className="banner success" role="status">{notice}</p>}
       {error && <p className="banner error" role="alert">{error}</p>}
       {sportsError && <p className="banner" role="status">{sportsError}</p>}
@@ -216,24 +216,24 @@ export default function CoachSkillAssessments({ token, role, onLogout, onNavigat
           </select>
         </label>}
         {activeTab === "pending" && <section className="coach-assessment-group"><h2>Đang chờ đánh giá</h2>
-          {visiblePending.length === 0 ? <p className="queue-state">Không có assessment PENDING phù hợp với bộ lọc.</p> : <div className="coach-assessment-list">{visiblePending.map(renderAssessment)}</div>}
+        {visiblePending.length === 0 ? <p className="queue-state">Không có đánh giá đang chờ phù hợp với bộ lọc.</p> : <div className="coach-assessment-list">{visiblePending.map(renderAssessment)}</div>}
         </section>}
         {activeTab === "history" && <section className="coach-assessment-group"><h2>Lịch sử assessment</h2>
-          {visibleHistory.length === 0 ? <p className="queue-state">Chưa có assessment lịch sử phù hợp với bộ lọc.</p> : <div className="coach-assessment-list">{visibleHistory.map(renderAssessment)}</div>}
+          {visibleHistory.length === 0 ? <p className="queue-state">Chưa có đánh giá nào trong lịch sử phù hợp với bộ lọc.</p> : <div className="coach-assessment-list">{visibleHistory.map(renderAssessment)}</div>}
         </section>}
       </>}
       </section>
 
       {selected && <section className="coach-assessment-detail" aria-labelledby="coach-assessment-detail-title">
-        <header><div><p className="subtitle">Assessment #{selected.id}</p><h2 id="coach-assessment-detail-title">{sportNames.get(Number(selected.sportId)) || `Sport #${selected.sportId}`}</h2></div>
+        <header><div><p className="subtitle">Đánh giá #{selected.id}</p><h2 id="coach-assessment-detail-title">{sportNames.get(Number(selected.sportId)) || `Bộ môn #${selected.sportId}`}</h2></div>
           <button type="button" onClick={closeAssessment} disabled={submitting}>Đóng</button></header>
         <dl className="coach-assessment-facts">
-          <div><dt>Member</dt><dd>#{selected.memberId}</dd></div>
+          <div><dt>Học viên</dt><dd>#{selected.memberId}</dd></div>
           <div><dt>Trạng thái</dt><dd>{STATUS_LABEL[selected.status] || selected.status}</dd></div>
           <div><dt>Ngày phân công</dt><dd>{formatDate(selected.createdAt)}</dd></div>
           {selected.assessedAt && <div><dt>Ngày hoàn tất</dt><dd>{formatDate(selected.assessedAt)}</dd></div>}
         </dl>
-        <p className="coach-assessment-member-limit">Assignment API chỉ cung cấp Member ID, không có tên Member. Trang này không gọi endpoint bị giới hạn quyền để tra cứu tên.</p>
+        <p className="coach-assessment-member-limit">Dữ liệu phân công chỉ cung cấp mã học viên, chưa có tên học viên. Trang này không gọi endpoint bị giới hạn quyền để tra cứu tên.</p>
         {selected.notes && <div className="coach-assessment-detail-notes"><strong>Ghi chú assignment / kết quả</strong><p>{selected.notes}</p></div>}
 
         {levelLoading || (!levelError && !levelRecord) ? <p role="status">Đang tải trình độ hiện tại…</p>

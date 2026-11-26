@@ -88,7 +88,7 @@ test("upgrade dialog shows backend quote details and selects the existing COUNTE
   assert.match(source, /value: "ONLINE", label: "VNPay Sandbox \(ONLINE\)"/);
   assert.match(source, /startUpgrade\(upgradeModal\.option, upgradeModal\.method\)/);
   assert.match(source, /purpose: "UPGRADE", referenceId: Number\(option\.planId\)/);
-  assert.match(source, /if \(method === "ONLINE"\)[\s\S]*?validVnpayUrl\(payment\.paymentUrl\)[\s\S]*?window\.location\.assign\(payment\.paymentUrl\)/);
+  assert.match(source, /if \(method === "ONLINE"\)[\s\S]*?validOnlinePaymentUrl\(payment\.paymentUrl\)[\s\S]*?window\.location\.assign\(payment\.paymentUrl\)/);
   assert.match(source, /setNotice\(`Đã tạo yêu cầu nâng cấp/);
 });
 

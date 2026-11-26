@@ -151,15 +151,15 @@
 .coach-attendance-main .coach-attendance-header {
   align-items: center;
   margin-bottom: 20px;
-  padding: clamp(20px, 3vw, 32px);
-  border: 1px solid #d8e7f6;
-  border-radius: 20px;
-  background: linear-gradient(120deg, #edf6ff 0%, #fff 76%);
-  box-shadow: 0 10px 28px rgba(17, 49, 87, .06);
+  padding: clamp(20px, 2.5vw, 30px);
+  border: 1px solid #d7e7f7;
+  border-radius: 18px;
+  background: linear-gradient(120deg, #edf6ff 0%, #fff 78%);
+  box-shadow: 0 10px 28px rgba(18, 59, 99, .06);
 }
 .coach-attendance-main .coach-attendance-header h1 {
   color: #102a4c;
-  font-size: clamp(1.7rem, 3vw, 2.2rem);
+  font-size: clamp(24px, 2.4vw, 32px);
   font-weight: 820;
   letter-spacing: -.035em;
 }
@@ -246,7 +246,13 @@
   font: inherit;
   font-size: 13px;
 }
-.coach-attendance-main .coach-attendance-save { min-height: 38px; border-color: #1767d2; border-radius: 9px; background: #1767d2; }
+.coach-attendance-main .coach-attendance-save { min-height: 38px; border-color: #1767d2; border-radius: 9px; background: #1767d2; color: #fff; }
+.coach-attendance-main .coach-attendance-save:hover:not(:disabled),
+.coach-attendance-main .coach-attendance-save-all:hover:not(:disabled) { border-color: #0e4fae; background: #0e4fae; color: #fff; }
+.coach-attendance-main .coach-attendance-save:disabled,
+.coach-attendance-main .coach-attendance-save-all:disabled { color: #fff; }
+.coach-attendance-main .coach-attendance-save:focus-visible,
+.coach-attendance-main .coach-attendance-save-all:focus-visible { outline: 3px solid rgb(23 103 210 / 32%); outline-offset: 3px; }
 .coach-attendance-main .coach-attendance-history-button { min-height: 36px; border-radius: 9px; }
 .coach-attendance-main .coach-attendance-alert,
 .coach-attendance-main .coach-attendance-empty { border: 1px solid transparent; line-height: 1.55; }
@@ -269,6 +275,7 @@
 .coach-attendance-stats .stat { display: grid; gap: 6px; padding: 12px; border-radius: 11px; }
 .coach-attendance-stats .stat span { font-size: 11px; font-weight: 700; }
 .coach-attendance-stats .stat strong { font-size: 24px; line-height: 1; }
+.coach-attendance-stats-note { margin: -5px 0 14px; color: var(--text-sub); font-size: 12px; }
 .stat-total { background: #eaf1fd; color: #1767d2; }
 .stat-present { background: #e7f7ef; color: #0e8a57; }
 .stat-absent { background: #fdecee; color: #d6293e; }

@@ -16,6 +16,10 @@
 .training-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
 .training-tabs button { border-radius: 999px; padding: 8px 16px; background: #fff; color: inherit; border: 1px solid var(--border, #dfe6ee); }
 .training-tabs button.active { background: #0a61f2; border-color: #0a61f2; color: #fff; }
+.training-admin-view-tabs { display:flex; gap:8px; flex-wrap:wrap; margin:0 0 18px; padding:5px; border:1px solid #dce7f3; border-radius:12px; background:#f3f7fc; }
+.training-admin-view-tabs button { min-height:40px; padding:8px 14px; border:0; border-radius:8px; background:transparent; color:#415973; font:inherit; font-weight:650; cursor:pointer; }
+.training-admin-view-tabs button.active { background:#1767d2; color:#fff; box-shadow:0 3px 9px rgba(23,103,210,.2); }
+.training-admin-view-tabs button:focus-visible { outline:3px solid rgba(23,103,210,.28); outline-offset:2px; }
 .training-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; align-items: start; }
 .training-form { display: flex; flex-direction: column; gap: 10px; }
 .training-form label, .training-inline label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
@@ -161,6 +165,11 @@
   align-items: center;
   gap: 10px;
 }
+
+.training-page .training-header { align-items:center; margin-bottom:18px; padding:clamp(20px,2.5vw,30px); border:1px solid #d7e7f7; border-radius:18px; background:linear-gradient(120deg,#edf6ff,#fff 78%); box-shadow:0 10px 28px rgba(18,59,99,.06); }
+.training-page .training-header h1 { color:#102a4c; font-size:clamp(24px,2.4vw,32px); font-weight:820; letter-spacing:-.035em; }
+.training-page .training-header .subtitle { max-width:680px; margin:7px 0 0; line-height:1.6; }
+@media(max-width:700px){.training-page .training-header{align-items:flex-start}}
 
 .training-btn-refresh {
   display: inline-flex;

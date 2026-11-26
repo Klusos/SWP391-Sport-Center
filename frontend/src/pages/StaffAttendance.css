@@ -2,6 +2,16 @@
 .staff-attendance-content { min-width: 0; padding: 32px 48px; }
 @media (max-width: 760px) { .staff-attendance-content { padding: 24px 18px; } }
 
+.staff-attendance-admin-navigation { width: 100%; margin-bottom: 16px; }
+.staff-attendance-back { margin: 0 0 14px; }
+.staff-attendance-class-list { display: grid; gap: 10px; }
+.staff-attendance-class-card { width: 100%; text-align: left; }
+.staff-attendance-class-count { align-self: center; white-space: nowrap; color: var(--text-sub); }
+@media (max-width: 620px) {
+  .staff-attendance-class-card { grid-template-columns: minmax(0, 1fr); }
+  .staff-attendance-class-count { justify-self: start; }
+}
+
 .staff-attendance-workspace.has-selection {
   display: grid;
   grid-template-columns: minmax(0, .9fr) minmax(0, 1.7fr);
@@ -10,9 +20,6 @@
 }
 .staff-attendance-workspace.has-selection > .coach-attendance-panel { min-width: 0; margin: 0; }
 .staff-attendance-session-list {
-  max-height: 60vh;
-  overflow-y: auto;
-  overscroll-behavior: contain;
   padding: 2px 5px 2px 2px;
 }
 .staff-attendance-session-list:focus-visible {
@@ -30,6 +37,8 @@
 @media (max-width: 1000px) {
   .staff-attendance-workspace.has-selection { grid-template-columns: minmax(0, 1fr); }
 }
+.staff-attendance-workspace.is-admin-roster { display: block; }
+.staff-attendance-workspace.is-admin-roster > .staff-attendance-roster-panel { width: 100%; margin: 0; }
 
 .staff-attendance-filters { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(180px, .45fr) minmax(160px, .45fr); gap: 12px; margin-bottom: 14px; }
 .staff-attendance-filters label { display: grid; gap: 6px; color: var(--text-sub); font-size: 13px; }
@@ -41,5 +50,10 @@
 .staff-attendance-pager button { min-height: 36px; padding: 6px 12px; border: 1px solid #bdccda; border-radius: 8px; background: #fff; color: var(--text-main); font: inherit; cursor: pointer; }
 .staff-attendance-pager button:disabled { opacity: .5; cursor: not-allowed; }
 .staff-attendance-pager button:focus-visible { outline: 3px solid rgb(23 103 210 / 28%); outline-offset: 2px; }
+.staff-attendance-session-pager { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-top:12px; color:var(--text-sub); font-size:13px; }
+.staff-attendance-session-pager > div { display:flex; gap:8px; }
+.staff-attendance-session-pager button { min-height:36px; padding:6px 12px; border:1px solid #bdccda; border-radius:8px; background:#fff; color:var(--text-main); font:inherit; cursor:pointer; }
+.staff-attendance-session-pager button:disabled { opacity:.5; cursor:not-allowed; }
+.staff-attendance-session-pager button:focus-visible { outline:3px solid rgb(23 103 210 / 28%); outline-offset:2px; }
 @media (max-width: 760px) { .staff-attendance-filters { grid-template-columns: 1fr; } .staff-attendance-roster-toolbar { align-items: stretch; } }
 @media (max-width: 1000px) { .staff-attendance-filters { grid-template-columns: minmax(0, 1fr); } }

@@ -1,6 +1,7 @@
 package group5.example.sportCenter.entity;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 import org.hibernate.annotations.Nationalized;
 
@@ -52,6 +53,9 @@ public class ConsultationRequest {
     private Sport sport;
 
     private Integer age;
+
+    @Column(name = "date_of_birth")
+    private LocalDate dateOfBirth;
 
     @Nationalized
     @Column(columnDefinition = "nvarchar(max)")

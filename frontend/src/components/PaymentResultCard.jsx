@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { paymentPurposePresentation, paymentServiceLabel, paymentStatusPresentation, serviceStatusLabel } from "../paymentResult";
+import { membershipsForPayment, paymentPurposePresentation, paymentServiceLabel, paymentStatusPresentation, serviceStatusLabel } from "../paymentResult";
 import "./PaymentResultCard.css";
 
 const money = (value) => Number.isFinite(Number(value))
@@ -33,6 +33,7 @@ function ServiceDetails({ payment, ptBooking, membershipRecords, registration })
       return <>
         <Detail label="Mã gói">#{payment.referenceId}</Detail>
         {membershipRecords.length ? membershipRecords.map((membership) => <div className="payment-result-membership" key={membership.id}>
+          {membership.renewalIntentId != null && <Detail label="Loại entitlement">Gia hạn · Intent #{membership.renewalIntentId}</Detail>}
           <Detail label="Mã kỳ hội viên">#{membership.id}</Detail>
           <Detail label="Gói hội viên">{membership.planName || `Gói #${membership.planId}`}</Detail>
           <Detail label="Trạng thái hội viên"><span className={`payment-result-resource-status status-${String(membership.status || "unknown").toLowerCase()}`}>{serviceStatusLabel(membership.status)}</span></Detail>
@@ -41,10 +42,17 @@ function ServiceDetails({ payment, ptBooking, membershipRecords, registration })
       </>;
     case "UPGRADE":
       return <>
+        {membershipRecords.map((membership) => <div className="payment-result-membership" key={membership.id}>
+          {payment.upgradeQuote?.sourceMembershipId != null && <Detail label="Membership nguồn">#{payment.upgradeQuote.sourceMembershipId}</Detail>}
+          <Detail label="Membership thay thế">#{membership.id}</Detail>
+          <Detail label="Gói hội viên">{membership.planName || `Gói #${membership.planId}`}</Detail>
+          <Detail label="Trạng thái Membership"><span className={`payment-result-resource-status status-${String(membership.status || "unknown").toLowerCase()}`}>{serviceStatusLabel(membership.status)}</span></Detail>
+          <Detail label="Thời hạn">{membership.startDate || "—"} – {membership.endDate || "—"}</Detail>
+        </div>)}
         <Detail label="Mã gói đích">#{payment.referenceId}</Detail>
-        <Detail label="Trạng thái nâng cấp">{payment.status === "SUCCESS"
-          ? "Thanh toán đã được máy chủ xác nhận. Hãy kiểm tra danh sách gói hội viên để xem trạng thái gói mới."
-          : "Thông tin gói mới chỉ được cập nhật sau khi máy chủ xác nhận thanh toán."}</Detail>
+        <Detail label="Trạng thái nâng cấp">{membershipRecords.length
+          ? (payment.status === "SUCCESS" ? "Thanh toán đã được máy chủ xác nhận; Membership thay thế được liên kết ở trên." : "Membership thay thế chỉ được cấp sau khi máy chủ xác nhận thanh toán.")
+          : (payment.status === "SUCCESS" ? "Thanh toán thành công nhưng chưa tìm thấy Membership thay thế được liên kết trực tiếp; entitlement chưa được xác nhận." : "Membership thay thế chỉ được cấp sau khi máy chủ xác nhận thanh toán.")}</Detail>
       </>;
     case "COURSE_REGISTRATION":
       return registration ? <>
@@ -72,11 +80,9 @@ export default function PaymentResultCard({
 }) {
   const purpose = paymentPurposePresentation(payment);
   const status = paymentStatusPresentation(payment?.status);
-  const matchingMemberships = payment?.purpose === "MEMBERSHIP"
-    ? memberships.filter((item) => Number(item.planId) === Number(payment.referenceId))
-    : [];
+  const matchingMemberships = membershipsForPayment(memberships, payment);
   const serviceStatus = payment?.purpose === "PT_BOOKING" ? ptBooking?.status
-    : payment?.purpose === "MEMBERSHIP" ? matchingMemberships.some((item) => item.status === "ACTIVE") ? "ACTIVE" : matchingMemberships[0]?.status
+    : ["MEMBERSHIP", "UPGRADE"].includes(payment?.purpose) ? matchingMemberships[0]?.status
       : payment?.purpose === "UPGRADE" ? null
       : payment?.purpose === "COURSE_REGISTRATION" ? registration?.status : null;
   const needsRefresh = !payment || payment?.status === "PENDING"

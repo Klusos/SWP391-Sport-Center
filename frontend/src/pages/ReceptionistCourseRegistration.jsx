@@ -15,6 +15,10 @@ import "./ReceptionistCourseRegistration.css";
 const list = (data) => Array.isArray(data) ? data : data?.content ?? [];
 const money = (value) => value == null ? "—" : `${Number(value).toLocaleString("vi-VN")} ₫`;
 const isStaff = (role) => ["ADMIN", "RECEPTIONIST"].includes(String(role || "").toUpperCase());
+const registrationStatusLabel = { PENDING_PAYMENT: "Chờ thanh toán", CONFIRMED: "Đã xác nhận", EXPIRED: "Đã hết hạn", CANCELLED: "Đã hủy" };
+const paymentStatusLabel = { PENDING: "Đang chờ", SUCCESS: "Thành công", FAILED: "Thất bại", REFUND_REQUIRED: "Cần đối soát hoàn tiền", REFUNDED: "Đã hoàn tiền" };
+const paymentMethodLabel = { COUNTER: "Tại quầy", ONLINE: "Trực tuyến" };
+const formatVietnamDate = (value) => value ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium", timeZone: "Asia/Ho_Chi_Minh" }).format(new Date(`${value}T00:00:00+07:00`)) : "—";
 
 export default function ReceptionistCourseRegistration({ token, role, currentUserName, onLogout, onNavigate }) {
   const isAdmin = String(role || "").toUpperCase() === "ADMIN";
@@ -125,8 +129,8 @@ export default function ReceptionistCourseRegistration({ token, role, currentUse
       const response = await createStaffCourseRegistrationApi(token, selectedMember.id, selectedClass.id);
       setMemberRegistrations((current) => [response, ...current]);
       setAllRegistrations((current) => [response, ...current]);
-      setNotice(`Đã tạo đăng ký #${response.id} ở trạng thái ${response.status}. Giá gốc ${money(response.originalPrice)}, ưu đãi hội viên ${money(response.membershipDiscount)}, cần thanh toán ${money(response.finalPrice)} trước ${formatVietnamTime(response.paymentDeadline)}.`);
-    } catch (requestError) { setError(requestError.message || "Không tạo được đăng ký. Máy chủ đã kiểm tra điều kiện cuối cùng."); }
+      setNotice(`Đã tạo đăng ký #${response.id} ở trạng thái ${registrationStatusLabel[response.status] || response.status}. Giá gốc ${money(response.originalPrice)}, ưu đãi hội viên ${money(response.membershipDiscount)}, cần thanh toán ${money(response.finalPrice)} trước ${formatVietnamTime(response.paymentDeadline)}.`);
+    } catch (requestError) { setError(requestError.message || "Không thể tạo đăng ký với thông tin hiện tại."); }
     finally { lock.current = false; setBusy(false); }
   }
 
@@ -140,8 +144,8 @@ export default function ReceptionistCourseRegistration({ token, role, currentUse
       && Number(payment.referenceId) === Number(registration.id) && payment.status === "PENDING");
     if (priorPending) {
       setNotice(priorPending.method === "COUNTER"
-        ? `Đang tiếp tục yêu cầu COUNTER #${priorPending.id}; thanh toán vẫn chờ xác nhận tại quầy.`
-        : `Đã có thanh toán ONLINE #${priorPending.id} đang chờ. Không tạo yêu cầu trùng; kiểm tra trạng thái giao dịch trước.`);
+        ? `Đang tiếp tục yêu cầu thanh toán tại quầy #${priorPending.id}; cần xác nhận sau khi nhận tiền.`
+        : `Đã có giao dịch trực tuyến #${priorPending.id} đang chờ. Không tạo yêu cầu trùng; hãy kiểm tra trạng thái giao dịch.`);
       return;
     }
     lock.current = true; setBusy(true); setError(""); setNotice("");
@@ -151,7 +155,7 @@ export default function ReceptionistCourseRegistration({ token, role, currentUse
       const payment = await createPaymentApi(token, counterCoursePaymentPayload(selectedMember.id, registration.id));
       setUncertainRegistrationId(null);
       setPayments((current) => [payment, ...current]);
-      setNotice(`Đã tạo yêu cầu COUNTER #${payment.id} cho đăng ký #${registration.id}. Trạng thái ${payment.status}; chưa xác nhận đã nhận tiền.`);
+      setNotice(`Đã tạo yêu cầu thanh toán tại quầy #${payment.id} cho đăng ký #${registration.id}. Trạng thái ${paymentStatusLabel[payment.status] || payment.status}; chưa xác nhận đã nhận tiền.`);
       await refreshMember(selectedMember.id);
     } catch (requestError) {
       if (createStarted && (!requestError.status || requestError.status >= 500)) setUncertainRegistrationId(registration.id);
@@ -168,7 +172,7 @@ export default function ReceptionistCourseRegistration({ token, role, currentUse
     <main className={`main receptionist-registration${isAdmin ? " receptionist-registration--admin" : ""}`}>
       {isAdmin && <AdminTopBar pageLabel="ĐĂNG KÝ KHÓA HỌC" displayName={currentUserName} avatarName={currentUserName} />}
       <div className={`receptionist-registration-content${isAdmin ? " receptionist-registration-content--admin" : ""}`}>
-      <header className="receptionist-registration-header"><div><h1>Đăng ký khóa học tại quầy</h1><p className="subtitle">Tạo giữ chỗ cho thành viên; chỉ xác nhận lớp khi máy chủ ghi nhận thanh toán thành công.</p></div>
+      <header className="receptionist-registration-header"><div><h1>Đăng ký khóa học tại quầy</h1><p className="subtitle">Chọn thành viên và lớp học để đăng ký.</p></div>
         <button type="button" disabled={loading || busy} onClick={() => { setLoading(true); setError(""); refreshAll().catch((e) => setError(e.message || "Không làm mới được dữ liệu.")).finally(() => setLoading(false)); if (memberId) void refreshMember(memberId); }}>Làm mới</button></header>
       {error && <p className="banner error" role="alert">{error}</p>}{notice && <p className="banner info" role="status">{notice}</p>}
       {loading ? <p role="status">Đang tải dữ liệu…</p> : <>
@@ -176,42 +180,42 @@ export default function ReceptionistCourseRegistration({ token, role, currentUse
           <label htmlFor="receptionist-member">Chọn thành viên</label><select id="receptionist-member" value={memberId} disabled={busy} onChange={(event) => { memberRequest.current++; setMemberId(event.target.value); setMemberLoading(false); setMemberRegistrations([]); setPayments([]); setMemberships([]); setLevels([]); setUncertainRegistrationId(null); setNotice(""); }}><option value="">Chọn thành viên…</option>{visibleMembers.map((member) => <option key={member.id} value={member.id}>{member.name} · #{member.id} · {member.email}</option>)}</select>
           {selectedMember && <p className="receptionist-selected">Đang phục vụ: <strong>{selectedMember.name}</strong> · #{selectedMember.id} · {selectedMember.email}</p>}
         </section>
-        <section className="dash-card receptionist-step">{isAdmin ? <h2>2. Chọn Sport → Course → Offering → Class</h2> : <div className="receptionist-step-heading"><span className="receptionist-step-number">02</span><span className="receptionist-step-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 5.5A2.5 2.5 0 0 1 5.5 3H21v17H5.5A2.5 2.5 0 0 1 3 17.5z" /><path d="M3 5.5v12A2.5 2.5 0 0 1 5.5 15H21M8 7h9M8 10h7" /></svg></span><div><h2>Chọn khóa học và lớp</h2><p>Bộ môn → Khóa học → Đợt mở lớp → Lớp</p></div></div>}<div className="receptionist-course-selects">
-          <label>Sport<select value={sportId} onChange={(event) => { setSportId(event.target.value); setCourseId(""); setOfferingId(""); setClassId(""); }}><option value="">Chọn Sport…</option>{sports.map((sport) => <option key={sport.id} value={sport.id}>{sport.name}</option>)}</select></label>
-          <label>Course<select value={courseId} disabled={!sportId} onChange={(event) => { setCourseId(event.target.value); setOfferingId(""); setClassId(""); }}><option value="">Chọn Course…</option>{courses.map((course) => <option key={course.id} value={course.id}>{course.name}</option>)}</select></label>
-          <label>Offering<select value={offeringId} disabled={!courseId} onChange={(event) => { setOfferingId(event.target.value); setClassId(""); }}><option value="">Chọn Offering…</option>{offerings.map((offering) => <option key={offering.id} value={offering.id}>{offering.name} · {money(offering.price)}</option>)}</select></label>
-          <label>Class<select value={classId} disabled={!offeringId} onChange={(event) => setClassId(event.target.value)}><option value="">Chọn Class…</option>{classes.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.coachName || "Chưa phân HLV"}</option>)}</select></label>
+        <section className="dash-card receptionist-step">{isAdmin ? <h2>2. Chọn bộ môn → khóa học → đợt học → lớp</h2> : <div className="receptionist-step-heading"><span className="receptionist-step-number">02</span><span className="receptionist-step-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 5.5A2.5 2.5 0 0 1 5.5 3H21v17H5.5A2.5 2.5 0 0 1 3 17.5z" /><path d="M3 5.5v12A2.5 2.5 0 0 1 5.5 15H21M8 7h9M8 10h7" /></svg></span><div><h2>Chọn khóa học và lớp</h2><p>Bộ môn → Khóa học → Đợt học → Lớp</p></div></div>}<div className="receptionist-course-selects">
+          <label>Bộ môn<select value={sportId} onChange={(event) => { setSportId(event.target.value); setCourseId(""); setOfferingId(""); setClassId(""); }}><option value="">Chọn bộ môn…</option>{sports.map((sport) => <option key={sport.id} value={sport.id}>{sport.name}</option>)}</select></label>
+          <label>Khóa học<select value={courseId} disabled={!sportId} onChange={(event) => { setCourseId(event.target.value); setOfferingId(""); setClassId(""); }}><option value="">Chọn khóa học…</option>{courses.map((course) => <option key={course.id} value={course.id}>{course.name}</option>)}</select></label>
+          <label>Đợt học<select value={offeringId} disabled={!courseId} onChange={(event) => { setOfferingId(event.target.value); setClassId(""); }}><option value="">Chọn đợt học…</option>{offerings.map((offering) => <option key={offering.id} value={offering.id}>{offering.name} · {money(offering.price)}</option>)}</select></label>
+          <label>Lớp<select value={classId} disabled={!offeringId} onChange={(event) => setClassId(event.target.value)}><option value="">Chọn lớp…</option>{classes.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.coachName || "Chưa phân HLV"}</option>)}</select></label>
         </div>
           {selectedClass && <div className="receptionist-class-summary"><h3>{selectedCourse?.name} / {selectedOffering?.name} / {selectedClass.name}</h3>
-            <p>{selectedClass.coachName || "Chưa phân HLV"} · Sức chứa {occupied}/{selectedClass.capacity} · {selectedClass.status}</p>
-            {selectedOffering && <p>Đăng ký đến: {formatVietnamTime(selectedOffering.registrationDeadline)} · Thời gian khóa: {selectedOffering.startDate} – {selectedOffering.endDate}</p>}
-            {selectedMember && <><p>Ưu đãi hội viên hiện tại: {discountPercent}% · Giá dự kiến: {estimate ? money(estimate.finalPrice) : "—"}</p><small>Giá và điều kiện cuối cùng do máy chủ tính khi tạo đăng ký.</small></>}
+            <p>{selectedClass.coachName || "Chưa phân HLV"} · Sức chứa {occupied}/{selectedClass.capacity} · Đang mở</p>
+            {selectedOffering && <p>Đăng ký đến: {formatVietnamTime(selectedOffering.registrationDeadline)} · Thời gian học: {formatVietnamDate(selectedOffering.startDate)} – {formatVietnamDate(selectedOffering.endDate)}</p>}
+            {selectedMember && <p>Ưu đãi hội viên hiện tại: {discountPercent}% · Giá dự kiến: {estimate ? money(estimate.finalPrice) : "—"}</p>}
             {ageWarning && <p className="receptionist-eligibility-warning" role="status">{ageWarning}</p>}
             {issues.length > 0 ? <ul className="receptionist-eligibility-error" role="alert">{issues.map((issue) => <li key={issue}>{issue}</li>)}</ul>
-              : selectedMember && <p className="receptionist-eligibility-ok">Điều kiện hồ sơ sơ bộ đạt. Máy chủ sẽ kiểm tra lại lịch đăng ký, trình độ, chỗ trống và lịch học.</p>}
-            <button type="button" disabled={!selectedMember || !selectedClass || issues.length > 0 || busy || memberLoading || occupied >= selectedClass.capacity} onClick={() => void createRegistration()}>{busy ? "Đang xử lý…" : "Tạo giữ chỗ PENDING_PAYMENT"}</button>
+              : selectedMember && <p className="receptionist-eligibility-ok">Điều kiện hồ sơ sơ bộ đạt. Lịch đăng ký, trình độ, chỗ trống và lịch học sẽ được kiểm tra khi đăng ký.</p>}
+            <button type="button" disabled={!selectedMember || !selectedClass || issues.length > 0 || busy || memberLoading || occupied >= selectedClass.capacity} onClick={() => void createRegistration()}>{busy ? "Đang xử lý…" : "Đăng ký khóa học"}</button>
           </div>}
         </section>
 
         <section className="dash-card receptionist-step">{isAdmin ? <h2>3. Đăng ký đang chờ của thành viên</h2> : <div className="receptionist-step-heading"><span className="receptionist-step-number">03</span><span className="receptionist-step-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4.5h6v3H9zM8.5 13l2.2 2.2 4.8-5" /></svg></span><div><h2>Đăng ký đang chờ của thành viên</h2><p>Kiểm tra trạng thái giữ chỗ và tiếp tục thanh toán khi cần.</p></div></div>}
-          {!selectedMember ? <p>Chọn thành viên để xem các giữ chỗ còn chờ và tiếp tục thanh toán.</p> : memberLoading ? <p role="status">Đang tải đăng ký và thanh toán…</p>
-            : matchingPending.length === 0 ? <p className="dash-empty">Thành viên không có đăng ký PENDING_PAYMENT nào.</p>
+          {!selectedMember ? <p>Chọn thành viên để xem các đăng ký đang chờ và tiếp tục thanh toán.</p> : memberLoading ? <p role="status">Đang tải đăng ký và thanh toán…</p>
+            : matchingPending.length === 0 ? <p className="dash-empty">Thành viên chưa có đăng ký nào đang chờ thanh toán.</p>
               : <div className="receptionist-pending-list">{matchingPending.map((registration) => {
                 const payment = payments.find((item) => item.purpose === "COURSE_REGISTRATION" && Number(item.referenceId) === Number(registration.id) && item.status === "PENDING");
                 const expired = Number.isFinite(vietnamTime(registration.paymentDeadline)) && vietnamTime(registration.paymentDeadline) <= now;
                 return <article key={registration.id} className={expired ? "is-expired" : ""}>
                   <div><strong>{registration.courseName} · {registration.courseOfferingName}</strong><span>{registration.className} · Đăng ký #{registration.id}</span>
                     <span>Giá gốc {money(registration.originalPrice)} · Ưu đãi {money(registration.membershipDiscount)} · Cần thu {money(registration.finalPrice)}</span>
-                    <span>Hạn thanh toán: {formatVietnamTime(registration.paymentDeadline)} · Trạng thái đăng ký: {registration.status}{expired ? " (có thể đã hết hạn)" : ""}</span>
-                    {payment && <span>Thanh toán #{payment.id} · {payment.method} · {payment.status}</span>}
+                    <span>Hạn thanh toán: {formatVietnamTime(registration.paymentDeadline)} · Trạng thái: {registrationStatusLabel[registration.status] || registration.status}{expired ? " (có thể đã hết hạn)" : ""}</span>
+                    {payment && <span>Thanh toán #{payment.id} · {paymentMethodLabel[payment.method] || payment.method} · {paymentStatusLabel[payment.status] || payment.status}</span>}
                   </div>
                   {payment?.status === "PENDING" && payment.method === "COUNTER"
                     ? <button type="button" disabled={busy} onClick={() => navigate(`/receptionist/course-payments?paymentId=${encodeURIComponent(payment.id)}&registrationId=${encodeURIComponent(registration.id)}`)}>Đến trang thanh toán #{payment.id}</button>
-                    : payment?.status === "PENDING" ? <p role="status">Đang có giao dịch ONLINE #{payment.id}; không tạo thanh toán trùng.</p>
-                      : <button type="button" disabled={busy || expired} onClick={() => uncertainRegistrationId === registration.id ? void refreshMember(selectedMember.id) : void createOrReusePayment(registration)}>{expired ? "Giữ chỗ có thể đã hết hạn" : uncertainRegistrationId === registration.id ? "Làm mới để kiểm tra thanh toán" : "Tạo / tiếp tục yêu cầu COUNTER"}</button>}
+                    : payment?.status === "PENDING" ? <p role="status">Đang có giao dịch trực tuyến #{payment.id}; không tạo thanh toán trùng.</p>
+                      : <button type="button" disabled={busy || expired} onClick={() => uncertainRegistrationId === registration.id ? void refreshMember(selectedMember.id) : void createOrReusePayment(registration)}>{expired ? "Giữ chỗ có thể đã hết hạn" : uncertainRegistrationId === registration.id ? "Làm mới để kiểm tra thanh toán" : "Tạo / tiếp tục yêu cầu tại quầy"}</button>}
                 </article>;
               })}</div>}
-          <aside className="receptionist-pending-guidance" aria-label="Lưu ý về giữ chỗ và thanh toán"><i className="bi bi-info-circle" aria-hidden="true" /><p>Giữ chỗ chờ thanh toán có thể hết hạn theo thời hạn hiển thị. Nếu nhận thanh toán sau khi hết hạn, chỉ xác nhận khi đã thực sự nhận tiền; giao dịch có thể chuyển thành REFUND_REQUIRED. Giữ chỗ đã hết hạn không được tự động khôi phục.</p></aside>
+          <aside className="receptionist-pending-guidance" aria-label="Lưu ý về giữ chỗ và thanh toán"><i className="bi bi-info-circle" aria-hidden="true" /><p>Giữ chỗ chờ thanh toán có thể hết hạn theo thời hạn hiển thị. Nếu nhận thanh toán sau khi hết hạn, chỉ xác nhận khi đã thực sự nhận tiền; giao dịch cần được đối soát để hoàn tiền. Giữ chỗ đã hết hạn không được tự động khôi phục.</p></aside>
           {payments.some((payment) => payment.purpose === "COURSE_REGISTRATION" && payment.status === "REFUND_REQUIRED") && <div className="receptionist-refund-alert" role="alert"><strong>Cần đối soát thanh toán</strong><ul>{payments.filter((payment) => payment.purpose === "COURSE_REGISTRATION" && payment.status === "REFUND_REQUIRED").map((payment) => <li key={payment.id}>Thanh toán #{payment.id} · {money(payment.amount)} · đăng ký #{payment.referenceId}. Liên hệ người phụ trách để xử lý hoàn tiền.</li>)}</ul></div>}
         </section>
       </>}

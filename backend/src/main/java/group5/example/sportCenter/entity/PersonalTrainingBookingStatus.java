@@ -4,5 +4,7 @@ public enum PersonalTrainingBookingStatus {
     PENDING_PAYMENT,
     CONFIRMED,
     CANCELLED,
-    EXPIRED
+    EXPIRED,
+    COMPLETED,
+    NO_SHOW
 }

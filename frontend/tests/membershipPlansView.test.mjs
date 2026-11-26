@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 const source = await readFile(new URL("../src/pages/MembershipPlans.jsx", import.meta.url), "utf8");
 
 test("Membership Plans switches between card and list presentations of the same loaded plans", () => {
-  assert.match(source, /const \[viewMode, setViewMode\] = useState\("cards"\)/);
+  assert.match(source, /const \[viewMode, setViewMode\] = useState\(admin \? "list" : "cards"\)/);
   assert.match(source, /aria-pressed=\{viewMode === "cards"\}[\s\S]*?setViewMode\("cards"\)/);
   assert.match(source, /aria-pressed=\{viewMode === "list"\}[\s\S]*?setViewMode\("list"\)/);
   assert.match(source, /viewMode === "cards" \? <div className="membership-plan-grid">[\s\S]*?plans\.map\(\(plan\)/);

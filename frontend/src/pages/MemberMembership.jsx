@@ -16,7 +16,7 @@ import {
   startRenewalPaymentAttemptApi,
   withdrawCancellationRequestApi,
 } from "../api";
-import { validVnpayUrl } from "../courseCheckout";
+import { validOnlinePaymentUrl } from "../courseCheckout";
 import {
   canRequestCancellation,
   CANCELLATION_NOTICE_HOURS,
@@ -39,7 +39,6 @@ import {
   autoRenewalOnlineReplacementPayload,
   cancellableMembershipId,
   isAutoRenewalPayment,
-  RENEWAL_NOTICE_DAYS,
 } from "../membershipRenewal";
 import { membershipPurchaseErrorMessage } from "../membershipPurchase";
 import { membershipPlanBenefits } from "../membershipPlanPresentation.js";
@@ -175,7 +174,7 @@ export default function MemberMembership({
       const action = await startRenewalPaymentAttemptApi(token, intent.intentId);
       setRenewalIntents((current) => (current || []).map((item) =>
         item.intentId === intent.intentId ? action.intent : item));
-      if (!validVnpayUrl(action.checkoutUrl)) {
+      if (!validOnlinePaymentUrl(action.checkoutUrl)) {
         await load();
         setError("Yêu cầu gia hạn đã được ghi nhận nhưng liên kết thanh toán không hợp lệ. Hãy làm mới trạng thái; yêu cầu chưa được xác nhận là đã thanh toán.");
         return;
@@ -269,7 +268,7 @@ export default function MemberMembership({
       });
       setPayments((current) => [payment, ...(current || [])]);
       if (method === "ONLINE") {
-        if (!validVnpayUrl(payment.paymentUrl)) {
+        if (!validOnlinePaymentUrl(payment.paymentUrl)) {
           await load();
           setError(
             `Đã tạo thanh toán nâng cấp #${payment.id}, nhưng máy chủ không trả về liên kết VNPay Sandbox hợp lệ. Hãy làm mới trạng thái hoặc hủy yêu cầu rồi thử lại.`
@@ -341,7 +340,7 @@ export default function MemberMembership({
         ]);
       }
       if (method === "ONLINE") {
-        if (!validVnpayUrl(payment.paymentUrl)) {
+        if (!validOnlinePaymentUrl(payment.paymentUrl)) {
           setError(
             `Đã tạo thanh toán #${payment.id}, nhưng máy chủ không trả về liên kết VNPay Sandbox hợp lệ. Thanh toán vẫn đang chờ; không tạo lại hoặc tự hủy. Hãy làm mới trạng thái và liên hệ lễ tân nếu cần hỗ trợ.`
           );
@@ -426,7 +425,7 @@ export default function MemberMembership({
     if (
       !enable &&
       !window.confirm(
-        "Tắt tự gia hạn? Yêu cầu gia hạn tự động chưa thanh toán (nếu có) sẽ bị hủy."
+        "Tắt gia hạn? Yêu cầu gia hạn chưa thanh toán (nếu có) sẽ bị hủy."
       )
     )
       return;
@@ -438,14 +437,14 @@ export default function MemberMembership({
       await load();
       setNotice(
         enable
-          ? `Đã bật tự gia hạn. ${RENEWAL_NOTICE_DAYS} ngày trước khi gói “${membership.planName}” hết hạn, hệ thống sẽ tạo yêu cầu gia hạn và gửi thông báo cho bạn.`
-          : "Đã tắt tự gia hạn."
+          ? `Đã bật gia hạn. Trong 3 ngày cuối trước khi gói “${membership.planName}” hết hạn, hệ thống có thể tạo yêu cầu gia hạn nếu đủ điều kiện. Bạn cần thanh toán thành công; hệ thống không tự động thu tiền.`
+          : "Đã tắt gia hạn."
       );
     } catch (requestError) {
       setError(
         requestError.status === 401
           ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
-          : requestError.message || "Không thể thay đổi tự gia hạn."
+          : requestError.message || "Không thể thay đổi cài đặt gia hạn."
       );
     } finally {
       setTogglingId(null);
@@ -469,7 +468,7 @@ export default function MemberMembership({
         token,
         autoRenewalOnlineReplacementPayload(payment)
       );
-      if (!validVnpayUrl(online.paymentUrl)) {
+      if (!validOnlinePaymentUrl(online.paymentUrl)) {
         await load();
         setError(
           `Đã tạo thanh toán #${online.id}, nhưng máy chủ không trả về liên kết VNPay Sandbox hợp lệ. Hãy làm mới trạng thái hoặc liên hệ lễ tân.`
@@ -574,14 +573,14 @@ export default function MemberMembership({
       <div className="mm-chain-plan"><b>{membership.planName || "Membership"}</b>
         <small>Mã Membership #{membership.id}</small>
         <small>{formatDate(membership.startDate)} → {formatDate(membership.endDate)} (ngày kết thúc không bao gồm)</small>
-        <small>{money(membership.planPrice)} · {membership.durationMonths ?? "—"} tháng · {membership.benefitSource === "LEGACY_PLAN_FALLBACK" ? "quyền lợi theo Plan hiện tại (legacy)" : "quyền lợi theo snapshot đã mua"}</small>
+        <small>{money(membership.planPrice)} · {membership.durationMonths ?? "—"} tháng · {membership.benefitSource === "LEGACY_PLAN_FALLBACK" ? "quyền lợi của gói cũ chưa được xác minh" : "quyền lợi theo gói tại thời điểm mua"}</small>
       </div>
       <span className="mm-chain-status upcoming">Sắp có hiệu lực — chưa có hiệu lực hôm nay</span>
       <div className="mm-chain-renew">
-        <small>Tự gia hạn: {membership.autoRenew ? "Bật" : "Tắt"}</small>
+        <small>Gia hạn: {membership.autoRenew ? "Bật" : "Tắt"}</small>
         {last ? <button type="button" className={membership.autoRenew ? "" : "secondary"} disabled={togglingId !== null}
           aria-pressed={Boolean(membership.autoRenew)} onClick={() => void toggleAutoRenew(membership)}>
-          {togglingId === membership.id ? "Đang lưu…" : membership.autoRenew ? "Tự gia hạn: Bật" : "Tự gia hạn: Tắt"}
+          {togglingId === membership.id ? "Đang lưu…" : membership.autoRenew ? "Tắt gia hạn" : "Bật gia hạn"}
         </button> : <small>Đã có gói nối tiếp</small>}
       </div>
       <div className="mm-chain-cancel">
@@ -633,8 +632,8 @@ export default function MemberMembership({
                     </div>
                     <div className="membership-current-meta"><span>Mã Membership #{membership.id}</span>{remainingDays !== null && <span>Còn {remainingDays} ngày hiệu lực</span>}</div>
                     <div className="membership-current-actions">
-                      <div className="membership-auto-renew-control"><span>Tự gia hạn: <strong>{membership.autoRenew ? "Bật" : "Tắt"}</strong></span>
-                        {last && <button type="button" className={membership.autoRenew ? "" : "secondary"} disabled={togglingId !== null} aria-pressed={Boolean(membership.autoRenew)} onClick={() => void toggleAutoRenew(membership)}>{togglingId === membership.id ? "Đang lưu…" : membership.autoRenew ? "Tắt tự gia hạn" : "Bật tự gia hạn"}</button>}
+                      <div className="membership-auto-renew-control"><span>Gia hạn: <strong>{membership.autoRenew ? "Bật" : "Tắt"}</strong></span>
+                        {last && <button type="button" className={membership.autoRenew ? "" : "secondary"} disabled={togglingId !== null} aria-pressed={Boolean(membership.autoRenew)} onClick={() => void toggleAutoRenew(membership)}>{togglingId === membership.id ? "Đang lưu…" : membership.autoRenew ? "Tắt gia hạn" : "Bật gia hạn"}</button>}
                         {!last && <small>Đã có Membership nối tiếp</small>}
                       </div>
                       <div className="mm-chain-cancel">{pendingRequest ? <><button type="button" className="secondary" disabled={togglingId !== null} onClick={() => void withdrawRequest(pendingRequest)}>Rút yêu cầu hủy</button><small>Đang chờ nhân viên duyệt</small></> : requestable ? <><button type="button" className="secondary" disabled={togglingId !== null} onClick={() => void requestCancellation(membership)}>Yêu cầu hủy gói</button><small>Hạn gửi: hết ngày {formatDate(lastRequestDay(membership.startDate))}</small></> : membership.id === cancellableId ? <small>Đã quá hạn yêu cầu hủy</small> : null}</div>
@@ -642,7 +641,7 @@ export default function MemberMembership({
                   </article>;
                 })}</div>}
             {hasOverlappingEffectiveMemberships(sections) && <p className="banner info" role="status">Có nhiều Membership cùng hiệu lực hôm nay. Hệ thống không tự thay đổi dữ liệu; vui lòng liên hệ lễ tân nếu cần kiểm tra.</p>}
-            {membershipChain.length > 0 && <p className="membership-policy-note">Bật tự gia hạn có thể tạo yêu cầu thanh toán đang chờ gần ngày hết hạn. Hệ thống không tự động trừ tiền hoặc kích hoạt gói gia hạn nếu chưa có thanh toán thành công. Yêu cầu hủy Membership sắp có hiệu lực cần gửi trước ít nhất {CANCELLATION_NOTICE_HOURS} giờ.</p>}
+            {membershipChain.length > 0 && <p className="membership-policy-note">Khi bật gia hạn, trong 3 ngày cuối trước khi hết hạn hệ thống có thể tạo yêu cầu gia hạn nếu đủ điều kiện. Bạn vẫn cần thanh toán thành công; hệ thống không tự động thu tiền hoặc tự kích hoạt quyền lợi. Yêu cầu hủy Membership sắp có hiệu lực cần gửi trước ít nhất {CANCELLATION_NOTICE_HOURS} giờ.</p>}
           </section>
 
           <section className="dash-card membership-benefits-card" aria-labelledby="membership-benefits-title">
@@ -651,10 +650,10 @@ export default function MemberMembership({
               ? <p className="membership-neutral-note">Quyền lợi theo gói sẽ hiển thị khi bạn có Membership đang hiệu lực.</p>
               : <div className="membership-benefits-groups">{currentMemberships.map((membership) => {
                   return <div className="membership-benefit-group" key={membership.id}>
-                    {currentMemberships.length > 1 && <h3>{membership.planName || "Membership"} · #{membership.id}</h3>}
+                    {currentMemberships.length > 1 && <h3>{membership.planName || "Gói thành viên"} · #{membership.id}</h3>}
                     <p className="membership-neutral-note">{membership.benefitSource === "LEGACY_PLAN_FALLBACK"
-                      ? "Hồ sơ Membership cũ chưa có snapshot xác minh; quyền lợi đang hiển thị theo cấu hình Plan hiện tại."
-                      : "Quyền lợi được lưu theo Membership đã mua."}</p>
+                      ? "Hồ sơ gói cũ chưa có thông tin quyền lợi đã xác minh; nội dung đang hiển thị theo cấu hình hiện tại."
+                      : "Quyền lợi áp dụng theo gói tại thời điểm mua."}</p>
                     {renderMembershipBenefits(membership)}
                   </div>;
                 })}</div>}
@@ -741,7 +740,7 @@ export default function MemberMembership({
         </section>}
 
         <section className="dash-card membership-pending-section" aria-labelledby="membership-pending-title">
-          <div className="membership-section-heading"><div><p className="membership-eyebrow">TRẠNG THÁI TỪ MÁY CHỦ</p><h2 id="membership-pending-title">Thanh toán Membership đang chờ</h2></div>
+          <div className="membership-section-heading"><div><h2 id="membership-pending-title">Thanh toán gói thành viên đang chờ</h2></div>
             {!loading && <span className={visiblePendingMembershipPayments.length ? "membership-count-badge pending" : "membership-count-badge"}>{visiblePendingMembershipPayments.length}</span>}
           </div>
           {loading ? <p role="status">Đang tải thanh toán…</p> : visiblePendingMembershipPayments.length === 0
@@ -757,17 +756,24 @@ export default function MemberMembership({
                     : targetName;                return <article className="membership-pending-card" key={payment.id}>
                   <div className="membership-pending-main"><div><span className="membership-field-label">{title}</span><strong>Thanh toán #{payment.id}</strong></div>
                     <span className={"member-payment-status " + String(payment.status).toLowerCase()}>{paymentStatusLabel[payment.status] || payment.status}</span></div>
-                  <dl className="membership-payment-facts"><div><dt>Số tiền</dt><dd>{money(payment.amount)}</dd></div><div><dt>Phương thức</dt><dd>{paymentMethodLabel[payment.method] || payment.method}</dd></div><div><dt>Tạo lúc</dt><dd>{formatDateTime(payment.createdAt)}</dd></div></dl>
-                  {payment.purpose === "UPGRADE" && quote && <dl className="membership-payment-facts membership-upgrade-payment-quote">
-                    <div><dt>Membership nguồn</dt><dd>#{quote.sourceMembershipId} · {formatDate(quote.sourceStartDate)}–{formatDate(quote.sourceEndDate)}</dd></div>
-                    <div><dt>Giá đầy đủ gói đích</dt><dd>{money(quote.targetPrice)}</dd></div>
-                    <div><dt>Credit</dt><dd>−{money(quote.appliedCredit)}</dd></div>
-                    <div><dt>Thời hạn mới</dt><dd>{quote.targetDurationMonths} tháng</dd></div>
-                    <div><dt>Thanh toán</dt><dd>{money(quote.payable)}</dd></div>
+                  {payment.purpose === "UPGRADE" && quote ? <>
+                    <dl className="membership-payment-facts membership-upgrade-payment-quote">
+                      <div><dt>Giá gói đích</dt><dd>{money(quote.targetPrice)}</dd></div>
+                      <div><dt>Giá trị khấu trừ</dt><dd>−{money(quote.appliedCredit)}</dd></div>
+                      <div className="membership-upgrade-payable"><dt>Cần thanh toán</dt><dd>{money(quote.payable)}</dd></div>
+                    </dl>
+                    <dl className="membership-payment-facts membership-upgrade-payment-meta">
+                      <div><dt>Thời hạn mới</dt><dd>{quote.targetDurationMonths} tháng</dd></div>
+                      <div><dt>Phương thức</dt><dd>{paymentMethodLabel[payment.method] || payment.method}</dd></div>
+                    </dl>
+                  </> : <dl className="membership-payment-facts">
+                    <div><dt>Số tiền</dt><dd>{money(payment.amount)}</dd></div>
+                    <div><dt>Phương thức</dt><dd>{paymentMethodLabel[payment.method] || payment.method}</dd></div>
+                    <div><dt>Tạo lúc</dt><dd>{formatDateTime(payment.createdAt)}</dd></div>
                   </dl>}
-                  {payment.purpose === "UPGRADE" && !quote && <p className="membership-upgrade-quote-warning" role="note">Báo giá Upgrade cũ chưa có snapshot đầy đủ; cần đối soát thủ công nếu thanh toán thành công.</p>}                  <div className="membership-payment-actions">
+                  {payment.purpose === "UPGRADE" && !quote && <p className="membership-upgrade-quote-warning" role="note">Thông tin giá của yêu cầu cũ chưa đầy đủ; vui lòng liên hệ nhân viên để được kiểm tra trước khi thanh toán.</p>}                  <div className="membership-payment-actions">
                     {payment.purpose === "MEMBERSHIP" && payment.method === "COUNTER" && <button type="button" className="button-secondary" disabled={cancelingId !== null || busyPlanId !== null} onClick={() => void switchToVnpay(payment)}>Chuyển sang VNPay</button>}
-                    {payment.method === "ONLINE" && <button type="button" disabled={cancelingId !== null} onClick={() => { if (validVnpayUrl(payment.paymentUrl)) window.location.assign(payment.paymentUrl); else setError("Liên kết VNPay không hợp lệ. Vui lòng làm mới trạng thái thanh toán."); }}>Tiếp tục thanh toán</button>}
+                  {payment.method === "ONLINE" && <button type="button" disabled={cancelingId !== null} onClick={() => { if (validOnlinePaymentUrl(payment.paymentUrl)) window.location.assign(payment.paymentUrl); else setError("Liên kết thanh toán không hợp lệ. Vui lòng làm mới trạng thái."); }}>Tiếp tục thanh toán</button>}
                     <button type="button" className="button-secondary" disabled={cancelingId !== null || busyPlanId !== null} onClick={() => void cancelPendingPayment(payment)}>{cancelingId === payment.id ? "Đang hủy…" : "Hủy yêu cầu"}</button>
                   </div>
                 </article>;
@@ -794,7 +800,7 @@ export default function MemberMembership({
                   {busyPlanId === plan.id ? "Đang tạo yêu cầu…" : purchaseBlockedByMembership ? "Đã có Membership" : "Mua gói"}
                 </button>
               </article>)}</div>}
-          {purchaseBlockedByMembership && <p className="membership-policy-note" role="status">Bạn đã có Membership đang hiệu lực hoặc sắp có hiệu lực. Không thể tạo Purchase thông thường cho đến khi Membership hiện tại hết hạn.</p>}
+          {purchaseBlockedByMembership && <p className="membership-policy-note" role="status">Bạn đã có gói thành viên đang có hiệu lực hoặc sắp có hiệu lực. Có thể đăng ký gói mới sau khi gói hiện tại hết hạn.</p>}
           <p className="membership-policy-note">Membership chỉ được kích hoạt hoặc gia hạn sau khi máy chủ xác nhận thanh toán thành công.</p>
         </section>
 
@@ -804,7 +810,7 @@ export default function MemberMembership({
             ? <p className="dash-empty">Chưa có Membership trong lịch sử.</p>
             : <><div className="mm-chain">{pagedMembershipHistory.items.map((membership) => <div className="mm-chain-row history-row" key={membership.id}>
                 <div className="mm-chain-plan"><b>{membership.planName || "Membership"}</b><small>{formatDate(membership.startDate)} → {formatDate(membership.endDate)} · {money(membership.planPrice)} · {membership.durationMonths ?? "—"} tháng</small>
-                  <small>{membership.benefitSource === "LEGACY_PLAN_FALLBACK" ? "Quyền lợi theo Plan hiện tại (hồ sơ cũ chưa có snapshot xác minh)." : "Quyền lợi theo snapshot Membership đã mua."}</small>
+                  <small>{membership.benefitSource === "LEGACY_PLAN_FALLBACK" ? "Quyền lợi của gói cũ chưa được xác minh." : "Quyền lợi theo gói tại thời điểm mua."}</small>
                   <small>{membershipPlanBenefits(membership).map(({ label, value }) => `${label}: ${value}`).join(" · ")}</small></div>
                 <span className="mm-chain-status">{String(membership.status).toUpperCase() === "ACTIVE" && membership.endDate && String(membership.endDate) <= today ? "Hết hiệu lực (trạng thái " + membership.status + ")" : statusLabel[String(membership.status).toUpperCase()] || membership.status || "Không rõ trạng thái"}</span>
                 <span>Mã Membership #{membership.id}</span>
@@ -822,7 +828,7 @@ export default function MemberMembership({
               </div>
               {filteredPaymentHistory.length === 0 ? <p className="dash-empty">Không có giao dịch khớp bộ lọc.</p> : <>
                 <div className="member-payment-history"><table><thead><tr><th>Mã</th><th>Thời gian</th><th>Nội dung</th><th>Hình thức</th><th>Số tiền</th><th>Trạng thái</th></tr></thead>
-                  <tbody>{pagedPaymentHistory.items.map((payment) => <tr key={payment.id}><td>#{payment.id}</td><td>{formatDateTime(payment.createdAt)}</td><td>{paymentPurposeLabel[payment.purpose] || payment.purpose}{isAutoRenewalPayment(payment) ? " (tự gia hạn)" : ""}</td><td>{paymentMethodLabel[payment.method] || payment.method}</td><td>{money(payment.amount)}</td>
+                  <tbody>{pagedPaymentHistory.items.map((payment) => <tr key={payment.id}><td>#{payment.id}</td><td>{formatDateTime(payment.createdAt)}</td><td>{paymentPurposeLabel[payment.purpose] || payment.purpose}{isAutoRenewalPayment(payment) ? " (Renewal)" : ""}</td><td>{paymentMethodLabel[payment.method] || payment.method}</td><td>{money(payment.amount)}</td>
                     <td><span className={"member-payment-status " + String(payment.status).toLowerCase()}>{paymentStatusLabel[payment.status] || payment.status}</span>{payment.status === "REFUNDED" && payment.refundedAt && <small>{formatDateTime(payment.refundedAt)}</small>}{payment.status === "REFUND_REQUIRED" && <small>Liên hệ lễ tân để nhận tiền</small>}</td></tr>)}</tbody>
                 </table></div><HistoryPagination label="thanh toán" page={pagedPaymentHistory.page} pageCount={pagedPaymentHistory.pageCount} onPageChange={setPaymentHistoryPage} />
               </>}

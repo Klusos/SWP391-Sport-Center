@@ -8,18 +8,25 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import jakarta.persistence.EntityManager;
 
 import group5.example.sportCenter.dto.CreateMembershipRequest;
 import group5.example.sportCenter.dto.MembershipResponse;
 import group5.example.sportCenter.entity.Membership;
 import group5.example.sportCenter.entity.MembershipCancellationRequestStatus;
 import group5.example.sportCenter.entity.MembershipPlan;
+import group5.example.sportCenter.entity.MembershipUpgrade;
 import group5.example.sportCenter.entity.Payment;
 import group5.example.sportCenter.entity.PaymentPurpose;
 import group5.example.sportCenter.entity.PaymentStatus;
@@ -28,6 +35,7 @@ import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.MembershipCancellationRequestRepository;
 import group5.example.sportCenter.repository.MembershipPlanRepository;
 import group5.example.sportCenter.repository.MembershipRepository;
+import group5.example.sportCenter.repository.MembershipUpgradeRepository;
 import group5.example.sportCenter.repository.PaymentRepository;
 import group5.example.sportCenter.repository.UserRepository;
 
@@ -41,6 +49,7 @@ public class MembershipService {
     private static final List<PaymentPurpose> MEMBERSHIP_PURPOSES = List.of(PaymentPurpose.MEMBERSHIP, PaymentPurpose.UPGRADE);
 
     private final MembershipRepository membershipRepository;
+    private final MembershipUpgradeRepository membershipUpgradeRepository;
     private final MembershipCancellationRequestRepository cancellationRequestRepository;
     private final UserRepository userRepository;
     private final MembershipPlanRepository membershipPlanRepository;
@@ -48,10 +57,13 @@ public class MembershipService {
     private final MembershipRenewalLifecycleService renewalLifecycleService;
     private final PaymentRepository paymentRepository;
     private final NotificationService notificationService;
+    private final AuditLogService auditLogs;
     private final Clock clock;
+    private final EntityManager entityManager;
 
     public MembershipService(
             MembershipRepository membershipRepository,
+            MembershipUpgradeRepository membershipUpgradeRepository,
             MembershipCancellationRequestRepository cancellationRequestRepository,
             UserRepository userRepository,
             MembershipPlanRepository membershipPlanRepository,
@@ -59,8 +71,11 @@ public class MembershipService {
             MembershipRenewalLifecycleService renewalLifecycleService,
             PaymentRepository paymentRepository,
             NotificationService notificationService,
-            Clock clock) {
+            AuditLogService auditLogs,
+            Clock clock,
+            EntityManager entityManager) {
         this.membershipRepository = membershipRepository;
+        this.membershipUpgradeRepository = membershipUpgradeRepository;
         this.cancellationRequestRepository = cancellationRequestRepository;
         this.userRepository = userRepository;
         this.membershipPlanRepository = membershipPlanRepository;
@@ -68,7 +83,9 @@ public class MembershipService {
         this.renewalLifecycleService = renewalLifecycleService;
         this.paymentRepository = paymentRepository;
         this.notificationService = notificationService;
+        this.auditLogs = auditLogs;
         this.clock = clock;
+        this.entityManager = entityManager;
     }
 
     @Transactional(readOnly = true)
@@ -240,14 +257,22 @@ public class MembershipService {
         Membership membership = membershipRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Membership not found with id: " + id));
         Integer memberId = membership.getMember().getId();
+        userRepository.findByIdForBookingUpdate(memberId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + memberId));
+        membership = membershipRepository.findByIdForRenewalUpdate(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Membership not found with id: " + id));
+        entityManager.refresh(membership);
         LocalDate today = lockAndRequireLastActive(membership);
         String trimmedReason = reason == null || reason.isBlank() ? null : reason.trim();
-        boolean upcoming = membership.getStartDate().isAfter(today);
-        if (!upcoming) {
-            if (trimmedReason == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A reason is required to cancel a running membership");
-            }
+        if (trimmedReason == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A cancellation reason is required");
         }
+        if (trimmedReason.length() > 250) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cancellation reason must be at most 250 characters");
+        }
+        boolean upcoming = membership.getStartDate().isAfter(today);
+
+        ExceptionalRefundPlan refundPlan = exceptionalCancellationPayments(membership);
 
         // An unpaid auto-renewal for this membership is pointless once it is cancelled.
         autoRenewalService.cancelPendingFor(membership);
@@ -255,6 +280,8 @@ public class MembershipService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Finish or cancel the member's pending membership payment before cancelling the running membership");
         }
+        // An open Intent without an active attempt must not survive cancellation of its source period.
+        renewalLifecycleService.closeForMembershipCancelled(membership.getId());
 
         // A direct cancellation answers the member's pending request, if any.
         cancellationRequestRepository.findFirstByMembershipIdAndStatus(id, MembershipCancellationRequestStatus.PENDING)
@@ -265,8 +292,7 @@ public class MembershipService {
                     request.setDecisionNote("Quản trị viên đã huỷ gói trực tiếp");
                     cancellationRequestRepository.save(request);
                 });
-        return toResponse(applyCancellation(membership,
-                trimmedReason != null ? trimmedReason : "Cancelled by " + role + " before it started", upcoming));
+        return toResponse(applyExceptionalCancellation(membership, trimmedReason, refundPlan, actor));
     }
 
     /**
@@ -281,7 +307,7 @@ public class MembershipService {
                     "The membership has already started; the cancellation request can no longer be approved");
         }
         autoRenewalService.cancelPendingFor(membership);
-        return applyCancellation(membership, reason, true);
+        return applyCancellation(membership, reason, true, null, false);
     }
 
     /** Khoá dòng member (giống mua gói, nâng cấp, job tự gia hạn), rồi kiểm tra gói còn ACTIVE và là gói cuối. */
@@ -299,7 +325,175 @@ public class MembershipService {
         return today;
     }
 
-    private Membership applyCancellation(Membership membership, String reason, boolean upcoming) {
+    private ExceptionalRefundPlan exceptionalCancellationPayments(Membership target) {
+        Integer memberId = target.getMember().getId();
+        Membership cursor = target;
+        Set<Integer> visitedMemberships = new HashSet<>();
+        Set<Integer> seenPayments = new HashSet<>();
+        List<Payment> lineage = new ArrayList<>();
+        Integer cycleRootId;
+
+        while (true) {
+            if (!visitedMemberships.add(cursor.getId())) {
+                throw financialLineageConflict("Membership lineage contains a cycle");
+            }
+            if (cursor.getMember() == null || !memberId.equals(cursor.getMember().getId())) {
+                throw financialLineageConflict("Membership lineage crosses member accounts");
+            }
+            List<MembershipUpgrade> incoming = membershipUpgradeRepository
+                    .findAllByResultMembership_Id(cursor.getId());
+            if (incoming.size() > 1) {
+                throw financialLineageConflict("More than one Upgrade points to this Membership");
+            }
+            if (incoming.isEmpty()) {
+                cycleRootId = cursor.getId();
+                validateMembershipPayment(cursor, memberId);
+                addEligiblePayment(lineage, seenPayments, cursor.getPurchasePayment(), memberId);
+                validateRenewalBoundary(cursor, cursor.getPurchasePayment());
+                break;
+            }
+            MembershipUpgrade upgrade = incoming.get(0);
+            Membership source = upgrade.getSourceMembership();
+            Payment upgradePayment = upgrade.getPayment();
+            if (source == null || source.getId() == null || source.getId().equals(cursor.getId())
+                    || upgrade.getResultMembership() == null
+                    || !cursor.getId().equals(upgrade.getResultMembership().getId())
+                    || source.getMember() == null || !memberId.equals(source.getMember().getId())
+                    || upgrade.getTargetPlan() == null || cursor.getPlan() == null
+                    || !upgrade.getTargetPlan().getId().equals(cursor.getPlan().getId())
+                    || cursor.getPurchasePayment() == null || upgradePayment == null
+                    || !cursor.getPurchasePayment().getId().equals(upgradePayment.getId())
+                    || !"UPGRADED".equalsIgnoreCase(source.getStatus())
+                    || upgradePayment.getPurpose() != PaymentPurpose.UPGRADE
+                    || !memberId.equals(upgradePayment.getMember().getId())
+                    || !upgrade.getTargetPlan().getId().equals(upgradePayment.getReferenceId())
+                    || upgradePayment.getRenewalIntent() != null
+                    || !upgrade.hasCompleteFrozenQuote()) {
+                throw financialLineageConflict("Upgrade financial lineage is incomplete or inconsistent");
+            }
+            addEligiblePayment(lineage, seenPayments, upgradePayment, memberId);
+            cursor = source;
+        }
+
+        // Lock all financial rows in a stable order after the per-member lock. Re-read each status
+        // under lock so concurrent refund confirmation cannot race this obligation creation.
+        List<Payment> locked = lineage.stream().map(Payment::getId).sorted()
+                .map(paymentId -> paymentRepository.findByIdForUpdate(paymentId)
+                        .orElseThrow(() -> financialLineageConflict("A linked Payment disappeared")))
+                .toList();
+        for (Payment payment : locked) validateRefundablePayment(payment, memberId);
+        java.math.BigDecimal paidTotal = locked.stream().map(Payment::getAmount)
+                .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+        java.math.BigDecimal refundDue = locked.stream().filter(p -> p.getStatus() != PaymentStatus.REFUNDED)
+                .map(Payment::getAmount).reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+        return new ExceptionalRefundPlan(cycleRootId, locked, paidTotal, refundDue);
+    }
+
+    private void validateMembershipPayment(Membership root, Integer memberId) {
+        Payment payment = root.getPurchasePayment();
+        if (payment == null || payment.getPurpose() != PaymentPurpose.MEMBERSHIP
+                || !memberId.equals(payment.getMember().getId()) || root.getPlan() == null
+                || !root.getPlan().getId().equals(payment.getReferenceId())) {
+            throw financialLineageConflict("Membership cycle has no matching purchase Payment");
+        }
+    }
+
+    private void validateRenewalBoundary(Membership root, Payment payment) {
+        var intent = root.getRenewalIntent();
+        if (intent == null) {
+            if (payment.getRenewalIntent() != null || payment.getRenewalSettlementAcceptedAt() != null) {
+                throw financialLineageConflict("Renewal Payment is not linked to the entitlement cycle");
+            }
+            return;
+        }
+        if (payment.getRenewalIntent() == null || !intent.getId().equals(payment.getRenewalIntent().getId())
+                || intent.getSettledPayment() == null || !payment.getId().equals(intent.getSettledPayment().getId())
+                || intent.getIntentStatus() != group5.example.sportCenter.entity.RenewalIntentStatus.SETTLED
+                || payment.getRenewalSettlementAcceptedAt() == null
+                || intent.getSourceMembership() == null
+                || !intent.getSourceMembership().getMember().getId().equals(root.getMember().getId())
+                || intent.getSourceMembership().getEndDate() == null
+                || !intent.getSourceMembership().getEndDate().equals(root.getStartDate())) {
+            throw financialLineageConflict("Renewal boundary is not backed by an accepted settlement");
+        }
+    }
+
+    private void addEligiblePayment(List<Payment> lineage, Set<Integer> seen, Payment payment, Integer memberId) {
+        if (payment == null || payment.getId() == null || !seen.add(payment.getId())
+                || payment.getPurpose() == null || !MEMBERSHIP_PURPOSES.contains(payment.getPurpose())
+                || payment.getMember() == null || !memberId.equals(payment.getMember().getId())
+                || payment.getAmount() == null || payment.getAmount().signum() <= 0
+                || payment.getPaidAt() == null) {
+            throw financialLineageConflict("Payment evidence is missing, duplicated, unpaid, or belongs to another member");
+        }
+        lineage.add(payment);
+    }
+
+    private void validateRefundablePayment(Payment payment, Integer memberId) {
+        if (!memberId.equals(payment.getMember().getId()) || payment.getAmount() == null
+                || payment.getAmount().signum() <= 0 || payment.getPaidAt() == null) {
+            throw financialLineageConflict("Linked Payment lacks actual paid amount evidence");
+        }
+        if (payment.getStatus() == PaymentStatus.SUCCESS) return;
+        if (payment.getStatus() == PaymentStatus.REFUND_REQUIRED) return;
+        if (payment.getStatus() == PaymentStatus.REFUNDED && payment.getRefundedAt() != null) return;
+        throw financialLineageConflict("A linked Payment is not successful or has an inconsistent refund status");
+    }
+
+    private ResponseStatusException financialLineageConflict(String detail) {
+        return new ResponseStatusException(HttpStatus.CONFLICT,
+                "Không thể xác định an toàn các khoản đã thanh toán thuộc chu kỳ Membership hiện tại: " + detail
+                + ". Membership chưa bị hủy và không tạo yêu cầu hoàn tiền.");
+    }
+
+    private record ExceptionalRefundPlan(Integer cycleRootId, List<Payment> payments,
+            java.math.BigDecimal paidTotal, java.math.BigDecimal refundDue) { }
+
+    private Membership applyExceptionalCancellation(Membership membership, String reason,
+            ExceptionalRefundPlan plan, User actor) {
+        membership.setStatus(CANCELLED);
+        membership.setCancelledAt(LocalDateTime.now(clock.withZone(BUSINESS_ZONE)));
+        membership.setCancelReason(reason);
+        Map<Integer, PaymentStatus> previousStatuses = new HashMap<>();
+        for (Payment payment : plan.payments()) {
+            previousStatuses.put(payment.getId(), payment.getStatus());
+            if (payment.getStatus() == PaymentStatus.SUCCESS) {
+                payment.setStatus(PaymentStatus.REFUND_REQUIRED);
+                paymentRepository.save(payment);
+            }
+        }
+        Membership saved = membershipRepository.saveAndFlush(membership);
+        String summary = "actorUserId=" + actor.getId() + ";actorRole=ADMIN;status=ACTIVE->CANCELLED;cycleRootMembershipId=" + plan.cycleRootId()
+                + ";eligiblePaymentCount=" + plan.payments().size()
+                + ";eligiblePaidAmount=" + plan.paidTotal().stripTrailingZeros().toPlainString()
+                + ";refundAmountDue=" + plan.refundDue().stripTrailingZeros().toPlainString()
+                + ";refundDisposition=REFUND_REQUIRED_PENDING_DISBURSEMENT_CONFIRMATION;reason=" + reason;
+        auditLogs.record("CANCEL", "MEMBERSHIP", saved.getId(), summary);
+        for (Payment payment : plan.payments()) {
+            PaymentStatus before = previousStatuses.get(payment.getId());
+            PaymentStatus after = payment.getStatus();
+            String disposition = switch (before) {
+                case SUCCESS -> "NEW_REFUND_OBLIGATION_PENDING_DISBURSEMENT";
+                case REFUND_REQUIRED -> "EXISTING_REFUND_OBLIGATION_PRESERVED";
+                case REFUNDED -> "ALREADY_REFUNDED_NO_DUPLICATE_OBLIGATION";
+                default -> throw financialLineageConflict("Unexpected Payment state after locked validation");
+            };
+            String action = before == PaymentStatus.SUCCESS
+                    ? "EXCEPTIONAL_CANCEL_REFUND" : "EXCEPTIONAL_CANCEL_PAYMENT_EVIDENCE";
+            auditLogs.record(action, "PAYMENT", payment.getId(),
+                    "membershipId=" + saved.getId() + ";cycleRootMembershipId=" + plan.cycleRootId()
+                            + ";actualPaidAmount=" + payment.getAmount().stripTrailingZeros().toPlainString()
+                            + ";status=" + before + "->" + after + ";disposition=" + disposition);
+        }
+        notificationService.createForUser(saved.getMember().getId(), "Membership đã được huỷ",
+                "Membership #" + saved.getId() + " đã được huỷ. Yêu cầu hoàn 100% tổng số tiền thực tế đã thanh toán trong chu kỳ hiện tại ("
+                        + plan.refundDue().stripTrailingZeros().toPlainString()
+                        + "đ) đã được ghi nhận. Khoản này chưa được xác nhận là đã hoàn tiền.");
+        return saved;
+    }
+
+    private Membership applyCancellation(Membership membership, String reason, boolean upcoming,
+            Payment exceptionalRefundPayment, boolean exceptionalAdmin) {
         Integer memberId = membership.getMember().getId();
         membership.setStatus(CANCELLED);
         membership.setCancelledAt(LocalDateTime.now(clock.withZone(BUSINESS_ZONE)));
@@ -307,7 +501,17 @@ public class MembershipService {
 
         String moneyMessage;
         Payment purchase = membership.getPurchasePayment();
-        if (upcoming && purchase != null && purchase.getStatus() == PaymentStatus.SUCCESS) {
+        if (exceptionalAdmin && exceptionalRefundPayment != null) {
+            exceptionalRefundPayment.setStatus(PaymentStatus.REFUND_REQUIRED);
+            exceptionalRefundPayment.setNote("Exceptional Admin cancellation: full actual paid amount requested for Membership #"
+                    + membership.getId());
+            paymentRepository.save(exceptionalRefundPayment);
+            moneyMessage = "Yêu cầu hoàn 100% số tiền thực tế đã thanh toán ("
+                    + exceptionalRefundPayment.getAmount().stripTrailingZeros().toPlainString()
+                    + "đ) đã được ghi vào hàng đợi. Đây chưa phải xác nhận tiền đã được hoàn.";
+        } else if (exceptionalAdmin) {
+            moneyMessage = "Không có Payment thành công liên kết để yêu cầu hoàn tiền. Hủy Membership không xác nhận tiền đã được hoàn.";
+        } else if (upcoming && purchase != null && purchase.getStatus() == PaymentStatus.SUCCESS) {
             purchase.setStatus(PaymentStatus.REFUND_REQUIRED);
             purchase.setNote("Refund 100%: membership #" + membership.getId() + " was cancelled before it started");
             paymentRepository.save(purchase);
@@ -320,7 +524,24 @@ public class MembershipService {
         notificationService.createForUser(memberId, "Gói " + membership.getPlan().getName() + " đã được huỷ",
                 "Gói " + membership.getStartDate().format(VN_DATE) + " → " + membership.getEndDate().format(VN_DATE)
                         + " đã được huỷ. " + moneyMessage);
-        return membershipRepository.save(membership);
+        Membership saved = membershipRepository.saveAndFlush(membership);
+        Payment auditedPayment = exceptionalAdmin ? exceptionalRefundPayment : purchase;
+        String paymentSummary = auditedPayment == null
+                ? "payment=none-linked"
+                : "paymentId=" + auditedPayment.getId()
+                    + ";paymentStatus=" + auditedPayment.getStatus()
+                    + ";actualPaidAmount=" + (auditedPayment.getAmount() == null ? "unknown"
+                            : auditedPayment.getAmount().stripTrailingZeros().toPlainString())
+                    + ";refundAmount=" + (exceptionalAdmin && exceptionalRefundPayment != null
+                            ? exceptionalRefundPayment.getAmount().stripTrailingZeros().toPlainString()
+                            : "not-applicable")
+                    + ";refundDisposition=" + (exceptionalAdmin
+                            ? exceptionalRefundPayment == null ? "NO_LINKED_SUCCESSFUL_PAYMENT" : "REFUND_REQUIRED_PENDING_DISBURSEMENT_CONFIRMATION"
+                            : "existing-ordinary-cancellation-policy");
+        auditLogs.record("CANCEL", "MEMBERSHIP", saved.getId(),
+                "status=ACTIVE->CANCELLED;" + paymentSummary + ";reason="
+                        + (exceptionalAdmin ? reason : "stored-on-membership-or-request"));
+        return saved;
     }
 
     @Transactional
@@ -356,8 +577,16 @@ public class MembershipService {
         if (chain.stream().noneMatch(item -> item.getId().equals(membership.getId()))) {
             chain = List.of(membership);
         }
+        List<Integer> changedIds = chain.stream()
+                .filter(item -> !java.util.Objects.equals(item.getAutoRenew(), enabled))
+                .map(Membership::getId).toList();
         chain.forEach(item -> item.setAutoRenew(enabled));
         List<Membership> saved = membershipRepository.saveAllAndFlush(chain);
+        for (Integer changedId : changedIds) {
+            auditLogs.record("RENEWAL_PREFERENCE", "MEMBERSHIP", changedId,
+                    "member renewal preference=" + (enabled ? "OFF->ON" : "ON->OFF")
+                            + ";system-collection=not-authorized-by-this-setting");
+        }
         for (Membership item : saved) {
             if (!enabled) {
                 autoRenewalService.cancelPendingFor(item);
@@ -368,12 +597,17 @@ public class MembershipService {
     }
 
     /** Chạy job tự gia hạn ngay (ADMIN), giống job lúc nửa đêm; dùng cho demo và kiểm tra. */
+    @Transactional
     public MembershipAutoRenewalService.RunResult runAutoRenewal(Jwt callerJwt) {
         User actor = currentActor(callerJwt);
         if (!"ADMIN".equalsIgnoreCase(actor.getRole())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only ADMIN can run auto-renewal manually");
         }
-        return autoRenewalService.runDaily();
+        MembershipAutoRenewalService.RunResult result = autoRenewalService.runDaily();
+        auditLogs.record("MANUAL_RUN", "MEMBERSHIP_RENEWAL", null,
+                "Admin manually invoked legacy renewal processing;created=" + result.created()
+                        + ";cancelled=" + result.cancelled() + ".");
+        return result;
     }
 
     private void validateActiveMembership(Membership membership) {
@@ -383,12 +617,16 @@ public class MembershipService {
     }
 
     /** Endpoint-only guard; the scheduler continues to call the existing no-argument method. */
+    @Transactional
     public int expireMemberships(Jwt callerJwt) {
         User actor = currentActor(callerJwt);
         if (!"ADMIN".equalsIgnoreCase(actor.getRole())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only ADMIN can manually expire memberships");
         }
-        return expireMemberships();
+        int expired = expireMemberships();
+        auditLogs.record("MANUAL_EXPIRE", "MEMBERSHIP", null,
+                "Admin manually expired eligible Memberships;count=" + expired + ".");
+        return expired;
     }
 
     public int expireMemberships() {
@@ -458,6 +696,8 @@ public class MembershipService {
                 membership.getEndDate(),
                 membership.getAutoRenew(),
                 membership.getStatus(),
-                membership.getCancelReason());
+                membership.getCancelReason(),
+                membership.getPurchasePayment() == null ? null : membership.getPurchasePayment().getId(),
+                membership.getRenewalIntent() == null ? null : membership.getRenewalIntent().getId());
     }
 }

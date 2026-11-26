@@ -170,12 +170,36 @@ class ConsultationRequestIntegrationTest {
     }
 
     @Test
+    void guestSubmissionRequiresPastDobAndRejectsExistingAccountEmailWithoutAccountDisclosure() {
+        User existing = user("MEMBER");
+        existing.setEmail("Known.Account@example.test");
+        existing.setStatus("ACTIVE");
+        existing = users.saveAndFlush(existing);
+        CreateConsultationRequest existingEmail = new CreateConsultationRequest("Visitor", "0900000000",
+                "  KNOWN.ACCOUNT@example.test ", sport.getId(), null, null, null, LocalDate.of(1990, 1, 1));
+        ResponseStatusException duplicate = assertThrows(ResponseStatusException.class,
+                () -> service.create(existingEmail, null));
+        assertEquals(400, duplicate.getStatusCode().value());
+        assertFalse(duplicate.getReason().contains(existing.getEmail()));
+        assertEquals(0, consultations.count());
+
+        CreateConsultationRequest missingDob = new CreateConsultationRequest("Visitor", "0900000000",
+                uniqueEmail(), sport.getId(), null, null, null, null);
+        assertStatus(400, () -> service.create(missingDob, null));
+        CreateConsultationRequest futureDob = new CreateConsultationRequest("Visitor", "0900000000",
+                uniqueEmail(), sport.getId(), null, null, null, LocalDate.now().plusDays(1));
+        assertStatus(400, () -> service.create(futureDob, null));
+        assertEquals(0, consultations.count());
+    }
+
+    @Test
     void pendingRequestCanBeTakenThenCompletedByItsHandler() {
         ConsultationResponse created = service.create(request(uniqueEmail(), null), null);
 
         ConsultationResponse taken = service.take(created.id(), jwt(receptionist));
         assertEquals("IN_PROGRESS", taken.status());
         assertEquals(receptionist.getId(), taken.handledBy());
+        assertEquals(receptionist.getName(), taken.handledByName());
         assertNotNull(taken.handledAt());
 
         ConsultationResponse completed = service.complete(created.id(),
@@ -275,11 +299,31 @@ class ConsultationRequestIntegrationTest {
 
         User created = users.findByEmail(email).orElseThrow();
         assertEquals("MEMBER", created.getRole());
+        assertEquals(LocalDate.of(1990, 1, 1), created.getDateOfBirth(),
+                "the persisted Consultation DOB must win over a valid, different API payload DOB");
         assertTrue(passwordEncoder.matches("temporary-test-password", created.getPasswordHash()));
         assertEquals(created.getId(), linked.memberId());
         assertFalse(linked.toString().contains("temporary-test-password"));
         assertFalse(linked.toString().contains(created.getPasswordHash()));
         assertEquals(1, consultations.count());
+    }
+
+    @Test
+    void legacyConsultationWithoutDobUsesValidatedSubmittedDob() {
+        ConsultationRequest legacy = new ConsultationRequest();
+        String email = uniqueEmail();
+        legacy.setName("Legacy Guest");
+        legacy.setPhone("0900000000");
+        legacy.setEmail(email);
+        legacy.setSport(sport);
+        legacy.setStatus(group5.example.sportCenter.entity.ConsultationStatus.IN_PROGRESS);
+        legacy.setHandledBy(receptionist);
+        legacy = consultations.saveAndFlush(legacy);
+
+        service.createMember(legacy.getId(),
+                new CreateConsultationMemberRequest("temporary-test-password", LocalDate.of(1998, 5, 1)), jwt(receptionist));
+
+        assertEquals(LocalDate.of(1998, 5, 1), users.findByEmail(email).orElseThrow().getDateOfBirth());
     }
 
     @Test
@@ -371,7 +415,8 @@ class ConsultationRequestIntegrationTest {
     @Test
     void httpSecurityAllowsPublicOrMemberSubmissionAndRestrictsConsultationRoutes() throws Exception {
         String body = "{\"name\":\"Guest\",\"phone\":\"0900000000\",\"email\":\"guest-"
-                + UUID.randomUUID() + "@example.test\",\"sportId\":" + sport.getId() + ",\"age\":25}";
+                + UUID.randomUUID() + "@example.test\",\"sportId\":" + sport.getId()
+                + ",\"dateOfBirth\":\"1990-01-01\",\"age\":25}";
         mvc.perform(post("/api/consultation-requests").contentType("application/json").content(body))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.memberId").value(org.hamcrest.Matchers.nullValue()))
                 .andExpect(jsonPath("$.status").value("PENDING"));
@@ -398,36 +443,36 @@ class ConsultationRequestIntegrationTest {
     }
 
     @Test
-    void httpCreationTrimsEmailAndDoesNotAutoLinkWhenEmailBelongsToMember() throws Exception {
+    void httpGuestSubmissionRejectsEmailAlreadyOwnedByAnAccountWithoutDisclosingAccount() throws Exception {
         String email = uniqueEmail();
         users.saveAndFlush(userWithEmail(email));
         String body = "{\"name\":\"Guest\",\"phone\":\"0900000000\",\"email\":\"  "
-                + email + "  \",\"sportId\":" + sport.getId() + "}";
+                + email + "  \",\"sportId\":" + sport.getId() + ",\"dateOfBirth\":\"1990-01-01\"}";
 
-        mvc.perform(post("/api/consultation-requests").contentType("application/json").content(body))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.email").value(email))
-                .andExpect(jsonPath("$.memberId").value(org.hamcrest.Matchers.nullValue()));
-        mvc.perform(post("/api/consultation-requests").contentType("application/json")
-                        .content(body.replace("Guest", "Second Guest")))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.email").value(email))
-                .andExpect(jsonPath("$.memberId").value(org.hamcrest.Matchers.nullValue()));
-        assertEquals(2, consultations.count());
+        String response = mvc.perform(post("/api/consultation-requests").contentType("application/json").content(body))
+                .andExpect(status().isBadRequest()).andReturn().getResponse().getContentAsString();
+        assertFalse(response.contains(email));
+        assertEquals(0, consultations.count());
     }
 
     @Test
     void httpCreationCoversAgeEmailLengthSportAndJwtIdentityValidation() throws Exception {
         for (int age : List.of(1, 120)) {
             String valid = "{\"name\":\"Guest\",\"phone\":\"0900000000\",\"email\":\""
-                    + uniqueEmail() + "\",\"sportId\":" + sport.getId() + ",\"age\":" + age + "}";
+                    + uniqueEmail() + "\",\"sportId\":" + sport.getId()
+                    + ",\"dateOfBirth\":\"1990-01-01\",\"age\":" + age + "}";
             mvc.perform(post("/api/consultation-requests").contentType("application/json").content(valid))
-                    .andExpect(status().isCreated()).andExpect(jsonPath("$.age").value(age));
+                    .andExpect(status().isCreated()).andExpect(jsonPath("$.dateOfBirth").value("1990-01-01"))
+                    .andExpect(jsonPath("$.age").value(org.hamcrest.Matchers.nullValue()));
         }
 
-        String base = "\"name\":\"Guest\",\"phone\":\"0900000000\",\"sportId\":" + sport.getId();
+        String base = "\"name\":\"Guest\",\"phone\":\"0900000000\",\"sportId\":" + sport.getId()
+                + ",\"dateOfBirth\":\"1990-01-01\"";
         for (String invalid : List.of(
                 "{" + base + ",\"age\":0}",
                 "{" + base + ",\"age\":121}",
-                "{" + base + "}",
+                "{\"name\":\"Guest\",\"phone\":\"0900000000\",\"sportId\":" + sport.getId() + "}",
+                "{" + base.replace("1990-01-01", "2999-01-01") + "}",
                 "{" + base + ",\"email\":null}",
                 "{" + base + ",\"email\":\"\"}",
                 "{" + base + ",\"email\":\"   \"}",
@@ -443,7 +488,7 @@ class ConsultationRequestIntegrationTest {
         }
 
         String missingSport = "{\"name\":\"Guest\",\"phone\":\"0900000000\",\"email\":\""
-                + uniqueEmail() + "\",\"sportId\":" + Integer.MAX_VALUE + "}";
+                + uniqueEmail() + "\",\"sportId\":" + Integer.MAX_VALUE + ",\"dateOfBirth\":\"1990-01-01\"}";
         mvc.perform(post("/api/consultation-requests").contentType("application/json").content(missingSport))
                 .andExpect(status().isNotFound());
 
@@ -452,7 +497,7 @@ class ConsultationRequestIntegrationTest {
         inactive.setStatus("INACTIVE");
         inactive = sports.saveAndFlush(inactive);
         String inactiveSport = "{\"name\":\"Guest\",\"phone\":\"0900000000\",\"email\":\""
-                + uniqueEmail() + "\",\"sportId\":" + inactive.getId() + "}";
+                + uniqueEmail() + "\",\"sportId\":" + inactive.getId() + ",\"dateOfBirth\":\"1990-01-01\"}";
         mvc.perform(post("/api/consultation-requests").contentType("application/json").content(inactiveSport))
                 .andExpect(status().isConflict());
 
@@ -504,7 +549,8 @@ class ConsultationRequestIntegrationTest {
 
     @Test
     void httpCreateMemberRequiresAssignedStaffInProgressAndValidCredentials() throws Exception {
-        ConsultationResponse pending = service.create(request(uniqueEmail(), null), null);
+        String email = uniqueEmail();
+        ConsultationResponse pending = service.create(request(email, null), null);
         String path = "/api/consultation-requests/" + pending.id() + "/create-member";
         String validBody = "{\"password\":\"" + UUID.randomUUID() + "Aa1!\",\"dateOfBirth\":\"1990-05-01\"}";
 
@@ -532,6 +578,8 @@ class ConsultationRequestIntegrationTest {
         String responseBody = result.getResponse().getContentAsString();
         assertFalse(responseBody.contains(validBody));
         assertFalse(responseBody.contains("password"));
+        assertEquals(LocalDate.of(1990, 1, 1), users.findByEmail(email).orElseThrow().getDateOfBirth(),
+                "the HTTP API must use the stored Consultation DOB when the payload proposes another DOB");
     }
 
     @Test
@@ -579,7 +627,7 @@ class ConsultationRequestIntegrationTest {
 
     private CreateConsultationRequest request(String email, Integer age) {
         return new CreateConsultationRequest("Nguyễn An", "0900000000", email,
-                sport.getId(), age, "Kinh nghiệm cơ bản", "Muốn được tư vấn");
+                sport.getId(), age, "Kinh nghiệm cơ bản", "Muốn được tư vấn", java.time.LocalDate.of(1990, 1, 1));
     }
 
     private String uniqueEmail() {

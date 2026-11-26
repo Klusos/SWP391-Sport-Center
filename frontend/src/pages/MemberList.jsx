@@ -405,9 +405,9 @@ export default function MemberList({ token, role, currentUserName, onLogout, onN
             <section className="member-detail-section" aria-labelledby="member-physical-title">
               <h3 id="member-physical-title">{"H\u1ed3 s\u01a1 th\u1ec3 ch\u1ea5t"}</h3>
               {selected.profile ? <>
-                <div className="member-detail-field"><ProfileIcon type="height" /><div><span className="member-detail-label">{"Chi\u1ec1u cao / C\u00e2n n\u1eb7ng"}</span><span className="member-detail-value">{selected.profile.height} cm \u00b7 {selected.profile.weight} kg</span></div></div>
+                <div className="member-detail-field"><ProfileIcon type="height" /><div><span className="member-detail-label">{"Chi\u1ec1u cao / C\u00e2n n\u1eb7ng"}</span><span className="member-detail-value">{selected.profile.height} cm{" · "}{selected.profile.weight} kg</span></div></div>
                 <div className="member-detail-field"><ProfileIcon type="goal" /><div><span className="member-detail-label">{"M\u1ee5c ti\u00eau"}</span><span className="member-detail-value">{selected.profile.goal || "Ch\u01b0a c\u1eadp nh\u1eadt"}</span></div></div>
-              </> : <p className="member-detail-empty-note">Ch\u01b0a c\u00f3 h\u1ed3 s\u01a1 th\u1ec3 ch\u1ea5t.</p>}
+              </> : <p className="member-detail-empty-note">{"Ch\u01b0a c\u00f3 h\u1ed3 s\u01a1 th\u1ec3 ch\u1ea5t."}</p>}
             </section>
           </div> : <div className="member-edit-grid">
             <form className="form-card" onSubmit={saveAccount}>

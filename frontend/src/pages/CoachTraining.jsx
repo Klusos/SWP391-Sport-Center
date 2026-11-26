@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import AdminTopBar from "../components/AdminTopBar";
 import IndividualTrainingPlans from "../components/IndividualTrainingPlans";
+import AdminPtOutcomePanel from "./AdminPtOutcomePanel.jsx";
 import { acquireAction } from "../courseCheckout";
 import { canManageTrainingForRole } from "../trainingCapabilities";
 import {
@@ -38,6 +39,7 @@ export default function CoachTraining({ token, role, currentUserName, onLogout, 
   const [classes, setClasses] = useState([]);
   const [classId, setClassId] = useState("");
   const [tab, setTab] = useState("plan");
+  const [adminTrainingView, setAdminTrainingView] = useState("class");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -84,10 +86,18 @@ export default function CoachTraining({ token, role, currentUserName, onLogout, 
           </select>
         </label>
       </header>
+      {isAdmin && <nav className="training-admin-view-tabs" role="tablist" aria-label="Khu vực giám sát huấn luyện">
+        <button type="button" role="tab" aria-selected={adminTrainingView === "class"} className={adminTrainingView === "class" ? "active" : ""} onClick={() => setAdminTrainingView("class")}>Giáo án &amp; kết quả lớp học</button>
+        <button type="button" role="tab" aria-selected={adminTrainingView === "pt"} className={adminTrainingView === "pt" ? "active" : ""} onClick={() => setAdminTrainingView("pt")}>Giám sát huấn luyện cá nhân</button>
+      </nav>}
       {error && <div className="banner error" role="alert">{error}</div>}
       {notice && <div className="banner success" role="status">{notice}</div>}
 
-      {loading ? <p role="status">Đang tải…</p> : !selected ? <p className="dash-empty">Bạn chưa được giao lớp nào.</p> : <>
+      {isAdmin && adminTrainingView === "pt" ? <section className="training-admin-pt-supervision" aria-label="Giám sát kết quả PT">
+        <AdminPtOutcomePanel token={token} />
+      </section> : null}
+
+      {(!isAdmin || adminTrainingView === "class") && (loading ? <p role="status">Đang tải…</p> : !selected ? <p className="dash-empty">Bạn chưa được giao lớp nào.</p> : <>
         <section className="training-summary">
           <span><b>{selected.sportName}</b> · {selected.courseOfferingName}</span>
           <span>{selected.confirmedMembers} học viên</span>
@@ -102,7 +112,7 @@ export default function CoachTraining({ token, role, currentUserName, onLogout, 
         {tab === "sessions" && <SessionsTab key={classId} token={token} classId={classId} canManageTraining={canManageTraining} onChanged={loadClasses} flash={flash} fail={fail} />}
         {tab === "progress" && <ProgressTab key={classId} token={token} classId={classId} canManageTraining={canManageTraining} flash={flash} fail={fail} />}
         {tab === "individual" && <IndividualTrainingPlans key={classId} mode={canManageTraining ? "coach" : "admin-readonly"} canManageTraining={canManageTraining} token={token} classId={classId} />}
-      </>}
+      </>)}
       </div>
     </main>
   </div>;

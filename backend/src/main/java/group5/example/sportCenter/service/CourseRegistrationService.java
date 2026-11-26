@@ -65,13 +65,14 @@ public class CourseRegistrationService {
     private final CourseRegistrationExpirationService expiration;
     private final CourseAgePolicyEvaluator courseAgePolicyEvaluator;
     private final ClassSessionService classSessionService;
+    private final AuditLogService auditLogs;
 
     public CourseRegistrationService(CourseRegistrationRepository registrations, PaymentRepository payments,
             CourseClassRepository courseClasses,
             UserRepository users, MemberSportLevelRepository levels, ClassSessionRepository classSessions,
             MembershipRepository memberships, AssessmentAccess access, Clock clock,
             CourseRegistrationExpirationService expiration, CourseAgePolicyEvaluator courseAgePolicyEvaluator,
-            ClassSessionService classSessionService) {
+            ClassSessionService classSessionService, AuditLogService auditLogs) {
         this.registrations = registrations;
         this.payments = payments;
         this.courseClasses = courseClasses;
@@ -84,6 +85,7 @@ public class CourseRegistrationService {
         this.expiration = expiration;
         this.courseAgePolicyEvaluator = courseAgePolicyEvaluator;
         this.classSessionService = classSessionService;
+        this.auditLogs = auditLogs;
     }
 
     @Transactional
@@ -100,7 +102,10 @@ public class CourseRegistrationService {
         if (memberId == null || memberId <= 0) {
             throw error(HttpStatus.BAD_REQUEST, "A valid target member ID is required");
         }
-        return registerForMember(memberId, request);
+        CourseRegistrationResponse created = registerForMember(memberId, request);
+        auditLogs.record("STAFF_REGISTER", "COURSE_REGISTRATION", created.id(),
+                "memberId=" + memberId + ";classId=" + request.classId() + ";status=" + created.status());
+        return created;
     }
 
     private CourseRegistrationResponse registerForMember(Integer memberId, CreateCourseRegistrationRequest request) {
@@ -268,7 +273,10 @@ public class CourseRegistrationService {
         } else {
             throw error(HttpStatus.CONFLICT, "Only unpaid pending course registrations can be cancelled");
         }
-        return response(registrations.save(registration));
+        CourseRegistration saved = registrations.save(registration);
+        auditLogs.record("CANCEL", "COURSE_REGISTRATION", saved.getId(),
+                "status=PENDING_PAYMENT->CANCELLED;payment=none-settled");
+        return response(saved);
     }
 
     private CourseRegistrationResponse cancelConfirmed(Integer id, User actor) {
@@ -348,6 +356,10 @@ public class CourseRegistrationService {
         // back the registration cancellation and the refund-required transition together.
         registrations.save(registration);
         payments.save(payment);
+        auditLogs.record("CANCEL", "COURSE_REGISTRATION", registration.getId(),
+                "status=CONFIRMED->CANCELLED;paymentId=" + payment.getId() + ";paymentStatus=SUCCESS->REFUND_REQUIRED"
+                        + ";refundAmount=" + payment.getAmount().stripTrailingZeros().toPlainString()
+                        + ";refundPendingDisbursementConfirmation");
         return response(registration);
     }
 

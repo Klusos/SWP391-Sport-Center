@@ -58,6 +58,7 @@ public class MembershipUpgradeService {
     private final PaymentRepository paymentRepository;
     private final UserRepository userRepository;
     private final Clock clock;
+    private final AuditLogService auditLogs;
 
     public MembershipUpgradeService(
             MembershipRepository membershipRepository,
@@ -67,7 +68,8 @@ public class MembershipUpgradeService {
             MembershipUpgradeRepository upgradeRepository,
             PaymentRepository paymentRepository,
             UserRepository userRepository,
-            Clock clock) {
+            Clock clock,
+            AuditLogService auditLogs) {
         this.membershipRepository = membershipRepository;
         this.renewalIntentRepository = renewalIntentRepository;
         this.membershipPlanRepository = membershipPlanRepository;
@@ -76,6 +78,7 @@ public class MembershipUpgradeService {
         this.paymentRepository = paymentRepository;
         this.userRepository = userRepository;
         this.clock = clock;
+        this.auditLogs = auditLogs;
     }
 
     /** Frozen server quote written with the corresponding UPGRADE Payment. */
@@ -234,6 +237,11 @@ public class MembershipUpgradeService {
         Optional<MembershipUpgrade> found = upgradeRepository.findByPaymentId(payment.getId());
         if (found.isEmpty()) return Optional.of("Upgrade details are missing for this payment");
         MembershipUpgrade upgrade = found.get();
+        if (upgrade.getResultMembership() != null) {
+            // A retry after the first committed application is successful but must not duplicate
+            // either the successor or its audit event.
+            return Optional.empty();
+        }
         if (!upgrade.hasCompleteFrozenQuote()) {
             return Optional.of("Legacy Upgrade has no complete frozen quote; manual reconciliation is required");
         }
@@ -334,6 +342,12 @@ public class MembershipUpgradeService {
         Membership saved = membershipRepository.save(upgraded);
         upgrade.setResultMembership(saved);
         upgradeRepository.save(upgrade);
+        auditLogs.record("SETTLE", "MEMBERSHIP_UPGRADE", upgrade.getId(),
+                "Upgrade " + upgrade.getId() + "; sourceMembership=" + source.getId() + " ACTIVE->UPGRADED"
+                        + "; replacementMembership=" + saved.getId() + " -> ACTIVE"
+                        + "; sourcePlan=" + source.getPlan().getId() + "; targetPlan=" + upgrade.getTargetPlan().getId()
+                        + "; paymentId=" + payment.getId() + "; paymentStatus=" + payment.getStatus() + "->SUCCESS"
+                        + "; chargedAmount=" + payment.getAmount().stripTrailingZeros().toPlainString());
         return Optional.empty();
     }
 

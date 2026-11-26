@@ -1575,9 +1575,16 @@
 .member-membership-page .membership-upgrade-quote-details dd,
 .mm-upgrade-dialog .mm-upgrade-quote-details dd { margin: 0; color: #123b63; font-size: .88rem; font-weight: 700; text-align: right; }
 .member-membership-page .membership-upgrade-effective-note { color: #47647d; font-size: .84rem; line-height: 1.5; }
-.member-membership-page .membership-upgrade-payment-quote { margin-top: 10px; padding: 0 12px; border: 1px solid #e5edf4; border-radius: 10px; }
+.member-membership-page .membership-upgrade-payment-quote { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:10px; padding:12px; border:1px solid #e5edf4; border-radius:10px; }
+.member-membership-page .membership-upgrade-payment-quote > div { min-width:0; }
+.member-membership-page .membership-upgrade-payment-quote dt { color:#60758c; font-size:.84rem; }
+.member-membership-page .membership-upgrade-payment-quote dd { margin:4px 0 0; color:#123b63; font-size:1rem; font-weight:750; overflow-wrap:anywhere; }
+.member-membership-page .membership-upgrade-payment-quote .membership-upgrade-payable { padding:9px 11px; border-radius:8px; background:#eaf4fc; }
+.member-membership-page .membership-upgrade-payment-quote .membership-upgrade-payable dd { color:#075b98; font-size:1.16rem; }
+.member-membership-page .membership-upgrade-payment-meta { margin-top:8px; }
 .member-membership-page .membership-upgrade-quote-warning { padding: 10px 12px; border-radius: 8px; background: #fff7e8; color: #7c5200; font-size: .84rem; line-height: 1.5; }
 @media (max-width: 520px) {
+  .member-membership-page .membership-upgrade-payment-quote { grid-template-columns:1fr; }
   .member-membership-page .membership-upgrade-quote-details > div,
   .mm-upgrade-dialog .mm-upgrade-quote-details > div { align-items: flex-start; flex-direction: column; gap: 3px; }
   .member-membership-page .membership-upgrade-quote-details dd,

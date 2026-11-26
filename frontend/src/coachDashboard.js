@@ -17,9 +17,9 @@ export function coachAssessmentSummary(assessment, sports = []) {
       || (memberId != null ? `Học viên #${memberId}` : "Học viên"),
     sport: assessment?.sportName || assessment?.sport?.name || sportNames.get(Number(sportId))
       || (sportId != null ? `Bộ môn #${sportId}` : "Bộ môn"),
-    status: assessment?.status || "UNKNOWN",
+    status: ({ PENDING: "Đang chờ", COMPLETED: "Đã hoàn tất", CANCELLED: "Đã hủy" })[assessment?.status] || assessment?.status || "Chưa xác định",
     assignment: assessment?.assignedCoachId != null
-      ? `Được giao cho Coach #${assessment.assignedCoachId}` : "Được giao cho Coach",
+      ? `Được phân công cho HLV #${assessment.assignedCoachId}` : "Được phân công cho HLV",
   };
 }
 

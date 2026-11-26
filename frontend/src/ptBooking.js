@@ -24,9 +24,11 @@ export const ptStatusLabel = {
   CONFIRMED: "Đã xác nhận",
   CANCELLED: "Đã hủy",
   EXPIRED: "Hết hạn giữ chỗ",
+  COMPLETED: "Đã hoàn thành",
+  NO_SHOW: "Vắng mặt (buổi đã sử dụng)",
 };
 
-export const ptStatusClass = { PENDING_PAYMENT: "pending", CONFIRMED: "completed", CANCELLED: "cancelled", EXPIRED: "cancelled" };
+export const ptStatusClass = { PENDING_PAYMENT: "pending", CONFIRMED: "completed", COMPLETED: "completed", NO_SHOW: "no-show", CANCELLED: "cancelled", EXPIRED: "cancelled" };
 
 export function holdActive(booking, now = Date.now()) {
   const expires = vietnamInstant(booking?.paymentExpiresAt);
@@ -40,7 +42,10 @@ export function ptBookingActive(booking, now = Date.now()) {
 
 // The calendar also keeps cancelled sessions (greyed out) but drops expired holds and lapsed pending rows.
 export function ptBookingOnCalendar(booking, now = Date.now()) {
-  return ptBookingActive(booking, now) || booking?.status === "CANCELLED";
+  // Preserve completed and no-show sessions on their scheduled date. They are
+  // historical calendar entries only; upcomingPtBookings still excludes them.
+  return ptBookingActive(booking, now)
+    || ["CANCELLED", "COMPLETED", "NO_SHOW"].includes(String(booking?.status || "").toUpperCase());
 }
 
 // Upcoming sessions for dashboards, soonest first.

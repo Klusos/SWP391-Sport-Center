@@ -246,6 +246,30 @@ export function getAssignedPtBookingsApi(token) {
   return request("/api/pt-bookings/assigned", { headers: authenticatedHeaders(token) });
 }
 
+export function recordPtBookingOutcomeApi(token, bookingId, outcome) {
+  return request("/api/pt-bookings/" + encodeURIComponent(bookingId) + "/outcome", {
+    method: "PATCH", headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ outcome }),
+  });
+}
+
+export function getAdminPtBookingOutcomeApi(token, bookingId) {
+  return request("/api/admin/pt-bookings/" + encodeURIComponent(bookingId) + "/outcome", {
+    headers: authenticatedHeaders(token),
+  });
+}
+
+export function getAdminPtBookingsApi(token) {
+  return request("/api/admin/pt-bookings", { headers: authenticatedHeaders(token) });
+}
+
+export function correctAdminPtBookingOutcomeApi(token, bookingId, outcome, reason) {
+  return request("/api/admin/pt-bookings/" + encodeURIComponent(bookingId) + "/outcome", {
+    method: "PATCH", headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ outcome, reason }),
+  });
+}
+
 export function cancelPtBookingApi(token, bookingId) {
   return request("/api/pt-bookings/" + encodeURIComponent(bookingId) + "/cancel", {
     method: "PATCH",

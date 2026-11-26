@@ -43,19 +43,21 @@ public class MembershipRenewalSettlementService {
     private final MembershipRepository memberships;
     private final Clock clock;
     private final NotificationService notifications;
+    private final AuditLogService auditLogs;
 
     private final EntityManager entityManager;
 
     public MembershipRenewalSettlementService(UserRepository users,
             MembershipRenewalIntentRepository intents, PaymentRepository payments,
             MembershipRepository memberships, Clock clock, EntityManager entityManager,
-            NotificationService notifications) {
+            NotificationService notifications, AuditLogService auditLogs) {
         this.users = users;
         this.intents = intents;
         this.payments = payments;
         this.memberships = memberships;
         this.clock = clock;
         this.notifications = notifications;
+        this.auditLogs = auditLogs;
         this.entityManager = entityManager;
     }
 
@@ -306,6 +308,10 @@ public class MembershipRenewalSettlementService {
 
         Membership successor = createSuccessor(source, intent, payment);
         Membership saved = memberships.saveAndFlush(successor);
+        auditLogs.record("SETTLE", "RENEWAL_PAYMENT", payment.getId(),
+                "Renewal Intent " + intent.getId() + "; Payment " + payment.getId()
+                        + " PENDING -> SUCCESS; verified amount " + payment.getAmount()
+                        + "; successor Membership " + saved.getId());
         notifySettled(intent);
         return new RenewalSettlementResult(RenewalSettlementOutcome.ACCEPTED, payment, saved,
                 "Verified Renewal Payment accepted");
@@ -378,10 +384,17 @@ public class MembershipRenewalSettlementService {
             return RenewalSettlementResult.of(RenewalSettlementOutcome.INVALID_EVIDENCE, payment, detail);
         }
         persistEvidence(payment, evidence, evidence.verifiedPaidAt());
-        if (payment.getStatus() != PaymentStatus.REFUNDED) {
+        PaymentStatus previousStatus = payment.getStatus();
+        if (previousStatus != PaymentStatus.REFUNDED) {
             payment.setStatus(PaymentStatus.REFUND_REQUIRED);
         }
         payments.saveAndFlush(payment);
+        if (previousStatus != payment.getStatus()) {
+            auditLogs.record("RECONCILIATION_REQUIRED", "RENEWAL_PAYMENT", payment.getId(),
+                    "Renewal Intent " + (payment.getRenewalIntent() == null ? "unknown" : payment.getRenewalIntent().getId())
+                            + "; Payment " + payment.getId() + " " + previousStatus + " -> " + payment.getStatus()
+                            + "; amount " + payment.getAmount() + "; reason: " + detail);
+        }
         if (payment.getRenewalIntent() != null) {
             notifications.renewalReconciliationRequired(payment.getId(), payment.getMember().getId());
         }

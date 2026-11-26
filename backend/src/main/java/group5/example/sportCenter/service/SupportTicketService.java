@@ -36,12 +36,14 @@ public class SupportTicketService {
     private final SupportTicketRepository tickets;
     private final SupportTicketMessageRepository messages;
     private final AssessmentAccess access;
+    private final AuditLogService auditLogs;
 
     public SupportTicketService(SupportTicketRepository tickets, SupportTicketMessageRepository messages,
-            AssessmentAccess access) {
+            AssessmentAccess access, AuditLogService auditLogs) {
         this.tickets = tickets;
         this.messages = messages;
         this.access = access;
+        this.auditLogs = auditLogs;
     }
 
     @Transactional
@@ -137,7 +139,11 @@ public class SupportTicketService {
         if (next == SupportTicketStatus.RESOLVED) ticket.setResolvedAt(now);
         if (next == SupportTicketStatus.CLOSED) ticket.setClosedAt(now);
         if (next == SupportTicketStatus.OPEN) ticket.setResolvedAt(null);
-        return detail(tickets.saveAndFlush(ticket));
+        SupportTicket saved = tickets.saveAndFlush(ticket);
+        auditLogs.record("STATUS_CHANGE", "SUPPORT_TICKET", saved.getId(),
+                "status=" + current + "->" + next + ";resolvedAt=" + (saved.getResolvedAt() != null)
+                        + ";closedAt=" + (saved.getClosedAt() != null) + ".");
+        return detail(saved);
     }
 
     @Transactional
@@ -151,8 +157,14 @@ public class SupportTicketService {
         if (ticket.getAssignedStaff() != null && !ticket.getAssignedStaff().getId().equals(actor.getId())) {
             throw AssessmentAccess.error(HttpStatus.CONFLICT, "Ticket is assigned to another staff member");
         }
+        Integer previousAssigneeId = ticket.getAssignedStaff() == null ? null : ticket.getAssignedStaff().getId();
         ticket.setAssignedStaff(actor);
-        return detail(tickets.saveAndFlush(ticket));
+        SupportTicket saved = tickets.saveAndFlush(ticket);
+        if (!java.util.Objects.equals(previousAssigneeId, actor.getId())) {
+            auditLogs.record("ASSIGN", "SUPPORT_TICKET", saved.getId(),
+                    "assignedStaffId=" + previousAssigneeId + "->" + actor.getId() + ".");
+        }
+        return detail(saved);
     }
 
     private PageRequest pageable(int page, int size) {

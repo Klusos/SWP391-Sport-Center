@@ -7,17 +7,22 @@ const salesCss = await readFile(new URL("../src/pages/ReceptionistMembershipSale
 const queue = await readFile(new URL("../src/pages/ConsultationQueue.jsx", import.meta.url), "utf8");
 const queueCss = await readFile(new URL("../src/pages/ConsultationQueue.css", import.meta.url), "utf8");
 const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
+const courseRegistration = await readFile(new URL("../src/pages/ReceptionistCourseRegistration.jsx", import.meta.url), "utf8");
+const registrationPolicy = await readFile(new URL("../src/receptionistRegistration.js", import.meta.url), "utf8");
 
-test("membership sales presents real member and plan selections beside a truthful payment summary", () => {
+test("membership sales keeps member/plan selection full-width and opens payment review in a modal", () => {
   assert.match(sales, /membership-sales-checkout-layout/);
   assert.match(sales, /membership-sales-selected-member/);
   assert.match(sales, /membershipPlan/);
-  assert.match(sales, /membership-sales-order-summary/);
+  assert.match(sales, /membership-payment-modal-backdrop/);
+  assert.match(sales, /role="dialog" aria-modal="true" aria-labelledby="membership-order-title"/);
+  assert.match(sales, /setPaymentDialogOpen\(true\)/);
   assert.match(sales, /pendingPayment \? money\(pendingPayment\.amount\) : selectedPlan \? money\(selectedPlan\.price\)/);
   assert.match(sales, /membership-sales-order-note/);
   assert.equal((sales.match(/name="membershipPlan"/g) || []).length, 1);
   assert.match(salesCss, /@media \(max-width:900px\)/);
-  assert.match(salesCss, /membership-sales-order-summary/);
+  assert.match(salesCss, /membership-payment-modal/);
+  assert.match(salesCss, /grid-template-columns:minmax\(0,1fr\)/);
 });
 
 test("Receptionist plan choices adapt to the narrower portal content column without changing Admin breakpoints", () => {
@@ -58,8 +63,9 @@ test("consultation segmented filters preserve backend status paging and role res
   assert.match(queue, /actorId != null && request\.handledBy === actorId/);
   assert.match(queue, /setPage\(\(current\) => current \+ 1\)/);
   assert.match(queueCss, /consultation-filter-segments/);
-  assert.match(queueCss, /consultation-workspace\.has-detail/);
-  assert.match(queueCss, /@media \(max-width:1150px\)/);
+  assert.match(queueCss, /consultation-modal-backdrop/);
+  assert.match(queueCss, /consultation-modal \{ width:min\(100%,920px\)/);
+  assert.match(queue, /role="dialog" aria-modal="true" aria-labelledby="consultation-detail-title"/);
 });
 
 test("Consultations adds Admin-only account context and preserves Receptionist presentation and workflow", () => {
@@ -77,8 +83,29 @@ test("Consultations adds Admin-only account context and preserves Receptionist p
   assert.match(queueCss, /consultation-admin-content/);
   assert.match(queueCss, /\.main\.consultation-queue-page--admin \{ padding: 0; gap: 0; \}/);
   assert.match(queue, /consultation-queue-page--receptionist/);
-  assert.match(queueCss, /\.main\.consultation-queue-page--receptionist \{ width: 100%; max-width: none; margin-inline: 0; padding: clamp\(18px,2\.5vw,34px\) clamp\(16px,2\.7vw,40px\) 48px; \}/);
+  assert.match(queueCss, /\.main\.consultation-queue-page--receptionist \{ box-sizing: border-box; width: 100%; max-width: none; margin-inline: 0; padding: clamp\(18px,2\.5vw,34px\) clamp\(16px,2\.7vw,40px\) 48px; container-type: inline-size; \}/);
   assert.match(queueCss, /consultation-receptionist-content \{ display: contents; \}/);
   assert.match(app, /path="\/staff\/consultations"[\s\S]*?element=\{<ConsultationQueue \{\.\.\.staff\} \/>\}/);
   assert.match(app, /currentUserName: auth\?\.name/);
+});
+
+test("Receptionist sales and Consultation DOB omit unnecessary process explanations", () => {
+  assert.doesNotMatch(sales, /Lễ tân không hủy gói trực tiếp|Hủy đặc biệt áp dụng cho gói chưa bắt đầu/);
+  assert.doesNotMatch(sales, /Quyền lợi theo snapshot Membership đã mua|Trạng thái từ máy chủ/);
+  assert.match(sales, /Quyền lợi theo gói tại thời điểm mua/);
+  const readOnlyDob = queue.slice(queue.indexOf('className="consultation-member-dob-readonly"'), queue.indexOf("</div>", queue.indexOf('className="consultation-member-dob-readonly"')));
+  assert.match(readOnlyDob, /detail\.dateOfBirth/);
+  assert.doesNotMatch(readOnlyDob, /<small>/);
+  assert.match(queue, /type="date" required max=\{CONSULTATION_TODAY\}/);
+});
+
+test("Course registration uses natural Vietnamese labels and the approved 14-day opening", () => {
+  assert.match(courseRegistration, /Đăng ký khóa học"\}/);
+  assert.match(courseRegistration, /label>Bộ môn/);
+  assert.match(courseRegistration, /label>Khóa học/);
+  assert.match(courseRegistration, /label>Đợt học/);
+  assert.match(courseRegistration, /label>Lớp/);
+  assert.doesNotMatch(courseRegistration, /Tạo giữ chỗ PENDING_PAYMENT|Giá và điều kiện cuối cùng do máy chủ tính|Chọn Sport|Chọn Course|Chọn Offering|Chọn Class/);
+  assert.match(registrationPolicy, /14 \* 24 \* 60 \* 60 \* 1000/);
+  assert.doesNotMatch(registrationPolicy, /opens\.setUTCDate\(opens\.getUTCDate\(\) - 30\)/);
 });

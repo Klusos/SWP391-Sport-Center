@@ -3,7 +3,7 @@ import Sidebar from "../components/Sidebar";
 import "./Portal.css";
 import { getCoachAttendanceSessionsApi, getAssignedPtBookingsApi, getMyPtBookingsApi, getMyClassSessionsApi, getMyRegistrationsApi } from "../api";
 import { ptBookingOnCalendar, ptStatusLabel } from "../ptBooking";
-const STATUS_LABEL = { ...ptStatusLabel, SCHEDULED: "Đã lên lịch", COMPLETED: "Hoàn thành" };
+ const STATUS_LABEL = { ...ptStatusLabel, SCHEDULED: "Đã lên lịch", CONFIRMED: "Đã xác nhận", PENDING_PAYMENT: "Chờ thanh toán", COMPLETED: "Hoàn thành", NO_SHOW: "Vắng mặt", CANCELLED: "Đã hủy", EXPIRED: "Đã hết hạn" };
 const STATUS_CLASS = { CANCELLED: " off", PENDING_PAYMENT: " pending" };
 const list = (d) => Array.isArray(d) ? d : d?.content ?? [];
 const DAYS = ["Chủ nhật","Thứ 2","Thứ 3","Thứ 4","Thứ 5","Thứ 6","Thứ 7"];
@@ -21,7 +21,7 @@ export default function Schedule({token,role,onLogout,onNavigate}) {
  const days=Array.from({length:7},(_,i)=>{const d=new Date(week);d.setDate(d.getDate()+i);return d;});
  const shift=(n)=>setWeek(w=>{const d=new Date(w);d.setDate(d.getDate()+7*n);return d;});
  return <div className="layout"><Sidebar role={role} activePage={coach?"coach-schedule":"member-schedule"} onLogout={onLogout} onNavigate={onNavigate}/><main className="main">
- <h1>Lịch trình</h1><p className="subtitle">{coach?"Các lớp được giao cho bạn và buổi huấn luyện cá nhân.":"Các lớp đã đăng ký và buổi huấn luyện cá nhân của bạn."}</p>{error&&<div className="banner error" role="alert">{error}</div>}
+ <header className={coach ? "coach-page-header coach-schedule-header" : "schedule-page-header"}><div><p className="eyebrow">SPORTCENTER / {coach ? "HUẤN LUYỆN VIÊN" : "HỘI VIÊN"}</p><h1>Lịch trình</h1><p className="subtitle">{coach?"Các lớp được giao cho bạn và buổi huấn luyện cá nhân.":"Các lớp đã đăng ký và buổi huấn luyện cá nhân của bạn."}</p></div></header>{error&&<div className="banner error" role="alert">{error}</div>}
  <div className="pf-weekbar"><button onClick={()=>shift(-1)}>Tuần trước</button><button onClick={()=>setWeek(monday(new Date()))}>Tuần này</button><button onClick={()=>shift(1)}>Tuần sau</button><strong>{short(days[0])} – {short(days[6])}/{days[6].getFullYear()}</strong></div>
  {items===null?<div className="queue-state">Đang tải lịch…</div>:<div className="pf-week">{days.map(d=>{const rows=items.filter(x=>x.startTime&&new Date(x.startTime).toDateString()===d.toDateString()).sort((a,b)=>new Date(a.startTime)-new Date(b.startTime));return <section key={d.toISOString()} className={"pf-day"+(d.toDateString()===new Date().toDateString()?" today":"")}><h2>{DAYS[d.getDay()]}<small>{short(d)}</small></h2>{rows.length===0?<p className="pf-none">Không có buổi</p>:rows.map(x=><div key={x.id} className={"pf-session"+(STATUS_CLASS[String(x.status||"").toUpperCase()]||"")}><small>{time(x.startTime)}{x.endTime?" – "+time(x.endTime):""}</small><b>{x.title}</b>{x.sub&&<span>{x.sub}</span>}{x.status&&<em>{STATUS_LABEL[String(x.status).toUpperCase()]||x.status}</em>}</div>)}</section>})}</div>}
  {!coach&&<section className="dash-card" style={{marginTop:24}}><h2>Lớp đã đăng ký</h2>{regs.length===0?<p className="dash-empty">Bạn chưa đăng ký lớp nào.</p>:<ul className="dash-rows">{regs.map(r=><li key={r.id}><span><b>{r.className||"Lớp #"+r.classId}</b><br/><small>{[r.courseName,r.courseOfferingName].filter(Boolean).join(" · ")}</small></span><em>{r.status}</em></li>)}</ul>}</section>}

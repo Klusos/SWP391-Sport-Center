@@ -140,6 +140,12 @@ public class UserService {
 
         String previousRole = user.getRole();
         String previousStatus = user.getStatus();
+        java.util.List<String> changedProfileFields = new java.util.ArrayList<>();
+        if (!java.util.Objects.equals(user.getName(), request.getName())) changedProfileFields.add("name");
+        if (!java.util.Objects.equals(user.getEmail(), request.getEmail())) changedProfileFields.add("email");
+        if (!java.util.Objects.equals(user.getDateOfBirth(), request.getDateOfBirth())) changedProfileFields.add("dateOfBirth");
+        if (!java.util.Objects.equals(user.getGender(), request.getGender())) changedProfileFields.add("gender");
+        if (!java.util.Objects.equals(user.getPhone(), request.getPhone())) changedProfileFields.add("phone");
         user.setName(request.getName());
         user.setEmail(request.getEmail());
         user.setDateOfBirth(request.getDateOfBirth());
@@ -149,6 +155,11 @@ public class UserService {
         user.setStatus(request.getStatus());
 
         User updatedUser = userRepository.save(user);
+        if (!changedProfileFields.isEmpty()) {
+            auditLogs.record("PROFILE_UPDATE", "USER", id,
+                    "Administrative profile fields changed=" + String.join(",", changedProfileFields)
+                            + ";values=not-copied");
+        }
         if (!previousRole.equalsIgnoreCase(updatedUser.getRole())) {
             auditLogs.record("ROLE_CHANGE", "USER", id, "User role changed.");
         }
@@ -195,9 +206,11 @@ public class UserService {
                     "This account is referenced by audit history and cannot be physically deleted");
         }
 
+        auditLogs.record("DELETE", "USER", id, "Privileged staff account deleted; account details retained only in current database state.");
         userRepository.delete(user);
     }
 
+    @Transactional
     public void changePassword(
             Integer userId,
             ChangePasswordRequest request) {
@@ -229,6 +242,7 @@ public class UserService {
         );
 
         userRepository.save(user);
+        auditLogs.record("PASSWORD_CHANGE", "USER", userId, "User password changed; secret values are not recorded.");
     }
 
     public UserResponse getUserById(Integer id, Jwt callerJwt) {

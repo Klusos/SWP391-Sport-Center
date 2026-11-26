@@ -35,6 +35,7 @@ public class CourseOfferingService {
     private final CourseClassRepository courseClassRepository;
     private final ClassSessionService classSessionService;
     private final CourseRegistrationRepository courseRegistrationRepository;
+    private final AuditLogService auditLogs;
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     public CourseOfferingService(
@@ -44,6 +45,7 @@ public class CourseOfferingService {
             CourseClassRepository courseClassRepository,
             ClassSessionService classSessionService,
             CourseRegistrationRepository courseRegistrationRepository,
+            AuditLogService auditLogs,
             Clock clock) {
 
         this.courseOfferingRepository = courseOfferingRepository;
@@ -52,6 +54,7 @@ public class CourseOfferingService {
         this.courseClassRepository = courseClassRepository;
         this.classSessionService = classSessionService;
         this.courseRegistrationRepository = courseRegistrationRepository;
+        this.auditLogs = auditLogs;
         this.clock = clock;
     }
 
@@ -94,8 +97,10 @@ public class CourseOfferingService {
 
         offering.setStatus("OPEN");
 
-        return toResponse(
-                courseOfferingRepository.save(offering));
+        CourseOffering saved = courseOfferingRepository.save(offering);
+        auditLogs.record("CREATE", "COURSE_OFFERING", saved.getId(),
+                "Course offering created;courseId=" + course.getId() + ";status=OPEN.");
+        return toResponse(saved);
     }
 
     public List<CourseOfferingResponse> getAllOfferings() {
@@ -212,6 +217,7 @@ public class CourseOfferingService {
                     "CourseOffering dates cannot exclude an existing ClassSession");
         }
 
+        String previousStatus = offering.getStatus();
         offering.setName(request.getName());
         offering.setPrice(request.getPrice());
         offering.setPlannedSessions(
@@ -226,8 +232,11 @@ public class CourseOfferingService {
                 request.getCancellationDeadline());
         offering.setStatus(CatalogValues.status(request.getStatus(), "CourseOffering", List.of("OPEN", "CLOSED")));
 
-        return toResponse(
-                courseOfferingRepository.save(offering));
+        CourseOffering saved = courseOfferingRepository.save(offering);
+        auditLogs.record("UPDATE", "COURSE_OFFERING", saved.getId(),
+                "Course offering updated;status=" + previousStatus + "->" + saved.getStatus()
+                        + ";courseId=" + saved.getCourse().getId() + ".");
+        return toResponse(saved);
     }
 
     private boolean hasDuration(LocalDateTime startTime, LocalDateTime endTime, Integer durationMinutes) {

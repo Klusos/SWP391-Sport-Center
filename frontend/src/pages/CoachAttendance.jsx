@@ -532,6 +532,11 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
                           <div className="stat stat-excused"><span>Có phép</span><strong>{stats.excused}</strong></div>
                           <div className="stat stat-pending"><span>Chưa điểm danh</span><strong>{stats.pending}</strong></div>
                         </div>
+                        <p className="coach-attendance-stats-note" role="status">
+                          {pendingMembers.length > 0
+                            ? `Thống kê tính theo lựa chọn hiện tại; ${pendingMembers.length} thay đổi chưa được lưu.`
+                            : "Thống kê phản ánh điểm danh đã lưu."}
+                        </p>
                         <div className="coach-attendance-toolbar">
                           <label className="coach-attendance-search-label">Tìm học viên
                             <input className="coach-attendance-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tên hoặc mã học viên" />
@@ -546,7 +551,7 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
                         </div>
                         <div className="coach-attendance-table-wrap">
                           <table className="coach-attendance-table">
-                            <thead><tr><th>Member</th><th>Trạng thái</th><th>Lần đánh dấu gần nhất</th><th>Ghi chú</th><th>Thao tác</th></tr></thead>
+                            <thead><tr><th>Học viên</th><th>Trạng thái</th><th>Lần đánh dấu gần nhất</th><th>Ghi chú</th><th>Thao tác</th></tr></thead>
                             <tbody>{visibleMembers.length === 0 ? <tr><td colSpan={5}>Không tìm thấy học viên phù hợp.</td></tr> : visibleMembers.map((member) => {
                               const memberId = member?.memberId;
                               const rowKey = attendanceRowKey(selectedSessionId, memberId);

@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.http.MediaType;
 import org.springframework.security.web.FilterChainProxy;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.test.context.ActiveProfiles;
@@ -78,6 +79,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @TestPropertySource(properties = "app.pt.session-base-price=500000")
 class PersonalTrainingBookingIntegrationTest {
     @Autowired PersonalTrainingBookingService service;
+    @Autowired PtBookingOutcomeService outcomeService;
     @Autowired ClassSessionService classSessionService;
     @Autowired PtBookingExpirationService expirationService;
     @Autowired UserRepository users;
@@ -552,12 +554,22 @@ class PersonalTrainingBookingIntegrationTest {
                         .header("Authorization", "Bearer " + tokens.generateToken(receptionist())))
                 .andExpect(status().isForbidden());
         assertEquals("CANCELLED", service.cancel(jwt(admin()), booking.id()).status());
+        Integer paidId = payments.findIdsByPurposeAndReferenceIdAndStatusIn(
+                PaymentPurpose.PT_BOOKING, booking.id(), List.of(PaymentStatus.REFUND_REQUIRED)).get(0);
+        Payment refundRequired = payments.findById(paidId).orElseThrow();
+        assertEquals(PaymentStatus.REFUND_REQUIRED, refundRequired.getStatus());
+        assertEquals(null, refundRequired.getRefundedAt(), "cancellation queues a refund; it does not prove disbursement");
+        assertEquals(1L, jdbc.queryForObject("select count(*) from audit_log where entity_type = 'PT_BOOKING' and entity_id = ? and action = 'CANCEL'",
+                Long.class, String.valueOf(booking.id())));
+        assertEquals(1L, jdbc.queryForObject("select count(*) from audit_log where entity_type = 'PT_BOOKING_PAYMENT' and entity_id = ? and action = 'CANCEL'",
+                Long.class, String.valueOf(paidId)));
     }
 
     @Test
     void missingBasePriceFailsClearlyInsteadOfSubstitutingAValue() {
         PersonalTrainingBookingService unconfigured = new PersonalTrainingBookingService(bookings, users, coaches,
-                coachSports, sports, memberships, coachScheduleConflicts, payments, notificationService, clock, "");
+                coachSports, sports, memberships, coachScheduleConflicts, payments, notificationService,
+                context.getBean(AuditLogService.class), clock, "");
         ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> unconfigured.eligibleCoaches(jwt, sport.getId(), slot));
         assertEquals(503, exception.getStatusCode().value());
@@ -566,6 +578,215 @@ class PersonalTrainingBookingIntegrationTest {
         assertEquals(503, error.getBody().status());
         assertTrue(error.getBody().message().contains("pricing is not configured"));
     }
+
+    @Test
+    void assignedCoachCanRecordOutcomeOnceAfterSessionAndPaymentRemainsSuccessful() throws Exception {
+        var fixture = confirmedOutcomeFixture();
+        mvc.perform(patch("/api/pt-bookings/" + fixture.bookingId() + "/outcome")
+                        .header("Authorization", "Bearer " + tokens.generateToken(coach.getUser()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"COMPLETED\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("COMPLETED"));
+        assertEquals(1L, outcomeAuditCount(fixture.bookingId()));
+        assertTrue(jdbc.queryForObject("select description from audit_log where entity_type='PT_BOOKING_OUTCOME' and entity_id=? and action='RECORD'",
+                String.class, String.valueOf(fixture.bookingId())).contains("previous=CONFIRMED;new=COMPLETED"));
+        assertEquals(1L, jdbc.queryForObject("select count(*) from audit_log where entity_type='PT_BOOKING_OUTCOME' and entity_id=? and created_at is not null",
+                Long.class, String.valueOf(fixture.bookingId())));
+
+        mvc.perform(patch("/api/pt-bookings/" + fixture.bookingId() + "/outcome")
+                        .header("Authorization", "Bearer " + tokens.generateToken(coach.getUser()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"COMPLETED\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(patch("/api/pt-bookings/" + fixture.bookingId() + "/outcome")
+                        .header("Authorization", "Bearer " + tokens.generateToken(coach.getUser()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"NO_SHOW\"}"))
+                .andExpect(status().isConflict());
+        assertEquals(1L, outcomeAuditCount(fixture.bookingId()));
+        assertEquals(PaymentStatus.SUCCESS, payments.findById(fixture.paymentId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void coachCannotRecordBeforeEndAndOnlyAssignedActiveCoachMayRecord() throws Exception {
+        var fixture = confirmedOutcomeFixture();
+        jdbc.update("update personal_training_booking set end_time = ? where id = ?",
+                LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")).plusMinutes(1), fixture.bookingId());
+        mvc.perform(patch("/api/pt-bookings/" + fixture.bookingId() + "/outcome")
+                        .header("Authorization", "Bearer " + tokens.generateToken(coach.getUser()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"NO_SHOW\"}"))
+                .andExpect(status().isConflict());
+
+        User otherCoach = user("COACH", "ACTIVE", "other-coach-pt");
+        mvc.perform(patch("/api/pt-bookings/" + fixture.bookingId() + "/outcome")
+                        .header("Authorization", "Bearer " + tokens.generateToken(otherCoach))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"NO_SHOW\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(patch("/api/pt-bookings/" + fixture.bookingId() + "/outcome")
+                        .header("Authorization", "Bearer " + tokens.generateToken(receptionist()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"NO_SHOW\"}"))
+                .andExpect(status().isForbidden());
+        coach.setStatus("INACTIVE");
+        coaches.saveAndFlush(coach);
+        mvc.perform(patch("/api/pt-bookings/" + fixture.bookingId() + "/outcome")
+                        .header("Authorization", "Bearer " + tokens.generateToken(coach.getUser()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"NO_SHOW\"}"))
+                .andExpect(status().isForbidden());
+        assertEquals(0L, outcomeAuditCount(fixture.bookingId()));
+    }
+
+    @Test
+    void adminPtListReturnsDiscoverableBookingDetailsAndRejectsOtherRoles() throws Exception {
+        var fixture = confirmedOutcomeFixture();
+        String path = "/api/admin/pt-bookings";
+        mvc.perform(get(path).header("Authorization", "Bearer " + tokens.generateToken(admin())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(fixture.bookingId()))
+                .andExpect(jsonPath("$[0].memberName").value(member.getName()))
+                .andExpect(jsonPath("$[0].coachName").value(coach.getUser().getName()))
+                .andExpect(jsonPath("$[0].status").value("CONFIRMED"));
+        mvc.perform(get(path).header("Authorization", "Bearer " + tokens.generateToken(receptionist())))
+                .andExpect(status().isForbidden());
+        mvc.perform(get(path).header("Authorization", "Bearer " + tokens.generateToken(member)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void adminCorrectionRequiresReasonAndKeepsBothAuditEventsAndPaymentUnchanged() throws Exception {
+        var fixture = confirmedOutcomeFixture();
+        jdbc.update("update personal_training_booking set end_time = ? where id = ?",
+                LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")).minusSeconds(1), fixture.bookingId());
+        mvc.perform(patch("/api/pt-bookings/" + fixture.bookingId() + "/outcome")
+                        .header("Authorization", "Bearer " + tokens.generateToken(coach.getUser()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"COMPLETED\"}"))
+                .andExpect(status().isOk());
+        User admin = admin();
+        String path = "/api/admin/pt-bookings/" + fixture.bookingId() + "/outcome";
+        mvc.perform(patch(path).header("Authorization", "Bearer " + tokens.generateToken(receptionist()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"NO_SHOW\",\"reason\":\"not permitted\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(patch(path).header("Authorization", "Bearer " + tokens.generateToken(member))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"NO_SHOW\",\"reason\":\"not permitted\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(patch(path).header("Authorization", "Bearer " + tokens.generateToken(admin))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"NO_SHOW\",\"reason\":\"  \"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(patch(path).header("Authorization", "Bearer " + tokens.generateToken(admin))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"NO_SHOW\",\"reason\":\"Verified attendance record\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("NO_SHOW"));
+        mvc.perform(patch(path).header("Authorization", "Bearer " + tokens.generateToken(admin))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"NO_SHOW\",\"reason\":\"duplicate\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(patch(path).header("Authorization", "Bearer " + tokens.generateToken(admin))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"COMPLETED\",\"reason\":\"Rechecked record\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("COMPLETED"));
+        mvc.perform(patch(path).header("Authorization", "Bearer " + tokens.generateToken(admin))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"NO_SHOW\",\"reason\":\"" + "x".repeat(301) + "\"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(patch(path).header("Authorization", "Bearer " + tokens.generateToken(admin))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"NO_SHOW\",\"reason\":\"" + ";".repeat(300) + "\"}"))
+                .andExpect(status().isBadRequest());
+        assertEquals(3L, outcomeAuditCount(fixture.bookingId()));
+        assertEquals("COACH", jdbc.queryForObject("select actor_role from audit_log where entity_type='PT_BOOKING_OUTCOME' and entity_id=? and action='RECORD'",
+                String.class, String.valueOf(fixture.bookingId())));
+        assertEquals(2L, jdbc.queryForObject("select count(*) from audit_log where entity_type='PT_BOOKING_OUTCOME' and entity_id=? and action='CORRECT' and actor_role='ADMIN'",
+                Long.class, String.valueOf(fixture.bookingId())));
+        assertTrue(jdbc.queryForList("select description from audit_log where entity_type='PT_BOOKING_OUTCOME' and entity_id=? and action='CORRECT'",
+                String.class, String.valueOf(fixture.bookingId())).stream().anyMatch(value -> value.contains("Verified attendance record")));
+        assertEquals(PaymentStatus.SUCCESS, payments.findById(fixture.paymentId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void fallbackUsesInclusiveTwentyFourHourBoundaryAndWritesSystemAuditOnlyOnce() {
+        var fixture = confirmedOutcomeFixture();
+        LocalDateTime end = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")).minusHours(30).withNano(0);
+        jdbc.update("update personal_training_booking set end_time = ? where id = ?", end, fixture.bookingId());
+        LocalDateTime due = end.plusHours(24);
+        assertEquals(false, outcomeService.autoComplete(fixture.bookingId(), end, due.minusNanos(1)));
+        assertEquals(true, outcomeService.autoComplete(fixture.bookingId(), end, due));
+        assertEquals(false, outcomeService.autoComplete(fixture.bookingId(), end, due.plusMinutes(1)));
+        assertEquals("COMPLETED", bookings.findById(fixture.bookingId()).orElseThrow().getStatus().name());
+        assertEquals("SYSTEM", jdbc.queryForObject("select actor_role from audit_log where entity_type='PT_BOOKING_OUTCOME' and entity_id=?",
+                String.class, String.valueOf(fixture.bookingId())));
+        assertEquals(1L, outcomeAuditCount(fixture.bookingId()));
+        assertEquals(PaymentStatus.SUCCESS, payments.findById(fixture.paymentId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void coachCanRecordNoShowAndFallbackExcludesCancelledAndPreCutoverRows() throws Exception {
+        var noShow = confirmedOutcomeFixture();
+        mvc.perform(patch("/api/pt-bookings/" + noShow.bookingId() + "/outcome")
+                        .header("Authorization", "Bearer " + tokens.generateToken(coach.getUser()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"NO_SHOW\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("NO_SHOW"));
+        assertEquals(PaymentStatus.SUCCESS, payments.findById(noShow.paymentId()).orElseThrow().getStatus());
+
+        var cancelled = confirmedOutcomeFixture();
+        jdbc.update("update personal_training_booking set status='CANCELLED', end_time=? where id=?",
+                LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")).minusHours(30).withNano(0), cancelled.bookingId());
+        assertEquals(false, outcomeService.autoComplete(cancelled.bookingId(), LocalDateTime.MIN,
+                LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"))));
+        assertEquals("CANCELLED", bookings.findById(cancelled.bookingId()).orElseThrow().getStatus().name());
+        assertEquals(0L, outcomeAuditCount(cancelled.bookingId()));
+
+        for (String terminalOrPending : List.of("EXPIRED", "PENDING_PAYMENT")) {
+            var excluded = confirmedOutcomeFixture();
+            LocalDateTime oldEnd = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")).minusHours(30).withNano(0);
+            jdbc.update("update personal_training_booking set status=?, end_time=? where id=?",
+                    terminalOrPending, oldEnd, excluded.bookingId());
+            assertEquals(false, outcomeService.autoComplete(excluded.bookingId(), LocalDateTime.MIN, oldEnd.plusHours(25)));
+            assertEquals(terminalOrPending, bookings.findById(excluded.bookingId()).orElseThrow().getStatus().name());
+            assertEquals(0L, outcomeAuditCount(excluded.bookingId()));
+        }
+
+        var beforeCutover = confirmedOutcomeFixture();
+        LocalDateTime oldEnd = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")).minusHours(30).withNano(0);
+        jdbc.update("update personal_training_booking set end_time=? where id=?", oldEnd, beforeCutover.bookingId());
+        assertEquals(false, outcomeService.autoComplete(beforeCutover.bookingId(), oldEnd.plusSeconds(1), oldEnd.plusHours(25)));
+        assertEquals("CONFIRMED", bookings.findById(beforeCutover.bookingId()).orElseThrow().getStatus().name());
+        assertEquals(PaymentStatus.SUCCESS, payments.findById(beforeCutover.paymentId()).orElseThrow().getStatus());
+    }
+
+    @Test
+    void concurrentIdenticalCoachOutcomeRequestsProduceOneAuditEvent() throws Exception {
+        var fixture = confirmedOutcomeFixture();
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<Integer> first = pool.submit(() -> outcomeRequestAfter(ready, start, fixture.bookingId()));
+            Future<Integer> second = pool.submit(() -> outcomeRequestAfter(ready, start, fixture.bookingId()));
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            assertEquals(200, first.get(10, TimeUnit.SECONDS));
+            assertEquals(200, second.get(10, TimeUnit.SECONDS));
+            assertEquals("COMPLETED", bookings.findById(fixture.bookingId()).orElseThrow().getStatus().name());
+            assertEquals(1L, outcomeAuditCount(fixture.bookingId()));
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    private int outcomeRequestAfter(CountDownLatch ready, CountDownLatch start, Integer bookingId) throws Exception {
+        ready.countDown();
+        start.await(5, TimeUnit.SECONDS);
+        return mvc.perform(patch("/api/pt-bookings/" + bookingId + "/outcome")
+                        .header("Authorization", "Bearer " + tokens.generateToken(coach.getUser()))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"outcome\":\"COMPLETED\"}"))
+                .andReturn().getResponse().getStatus();
+    }
+
+    private OutcomeFixture confirmedOutcomeFixture() {
+        var created = service.create(jwt, request(coach, sport, slot));
+        PaymentResponse paid = payAtCounter(created.id());
+        jdbc.update("update personal_training_booking set end_time = ? where id = ?",
+                LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh")).minusSeconds(2), created.id());
+        return new OutcomeFixture(created.id(), paid.getId());
+    }
+
+    private long outcomeAuditCount(Integer bookingId) {
+        return jdbc.queryForObject("select count(*) from audit_log where entity_type='PT_BOOKING_OUTCOME' and entity_id=?",
+                Long.class, String.valueOf(bookingId));
+    }
+
+    private record OutcomeFixture(Integer bookingId, Integer paymentId) { }
 
     private CreatePaymentRequest ptPayment(Integer bookingId) {
         CreatePaymentRequest request = new CreatePaymentRequest();

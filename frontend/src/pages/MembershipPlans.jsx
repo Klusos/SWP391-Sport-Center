@@ -66,7 +66,7 @@ export default function MembershipPlans({ token, role, currentUserName, onLogout
   const [statusSaving, setStatusSaving] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [viewMode, setViewMode] = useState("cards");
+  const [viewMode, setViewMode] = useState(admin ? "list" : "cards");
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -113,6 +113,13 @@ export default function MembershipPlans({ token, role, currentUserName, onLogout
     const timer = window.setTimeout(() => void loadUpgradePaths(), 0);
     return () => window.clearTimeout(timer);
   }, [loadUpgradePaths]);
+
+  useEffect(() => {
+    if (!formOpen) return undefined;
+    const closeOnEscape = (event) => { if (event.key === "Escape" && !saving) setFormOpen(false); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [formOpen, saving]);
 
   async function createUpgradePath(event) {
     event.preventDefault();
@@ -309,8 +316,9 @@ export default function MembershipPlans({ token, role, currentUserName, onLogout
         </section>}
 
         {admin && formOpen && (
-          <form className="form-card" onSubmit={savePlan}>
-            <h2>{editingId === null ? "Tạo gói hội viên" : "Chỉnh sửa gói hội viên"}</h2>
+          <div className="membership-plan-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !saving) setFormOpen(false); }}>
+          <form className="form-card membership-plan-modal" role="dialog" aria-modal="true" aria-labelledby="membership-plan-form-title" onSubmit={savePlan}>
+            <h2 id="membership-plan-form-title">{editingId === null ? "Tạo gói hội viên" : "Chỉnh sửa gói hội viên"}</h2>
             <div className="row g-3">
               <div className="col-md-6">
                 <label className="form-label" htmlFor="planName">Tên gói</label>
@@ -359,7 +367,7 @@ export default function MembershipPlans({ token, role, currentUserName, onLogout
               <button type="submit" disabled={saving}>{saving ? "Đang lưu…" : "Lưu gói"}</button>
               <button type="button" onClick={() => setFormOpen(false)} disabled={saving}>Hủy</button>
             </div>
-          </form>
+          </form></div>
         )}
 
         {loading ? <p role="status">Đang tải danh sách gói hội viên…</p>
@@ -390,7 +398,7 @@ export default function MembershipPlans({ token, role, currentUserName, onLogout
                 <tbody>
                   {plans.map((plan) => (
                     <tr key={plan.id}>
-                      <td><strong>{plan.name}</strong><br /><small>{plan.description || "Chưa có mô tả."}</small></td>
+                      <td><strong>{plan.name}</strong><br /><small title={plan.description || "Chưa có mô tả."}>{plan.description || "Chưa có mô tả."}</small></td>
                       <td>{formatPrice(plan.price)}</td>
                       <td>{plan.durationMonths} tháng</td>
                       <td>{plan.courseDiscountPercent}%</td>

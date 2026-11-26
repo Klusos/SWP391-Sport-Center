@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { acquireAction, canCheckout, checkoutAccess, checkoutPayload, courseRegistrationDiscountPercent, paymentMessage, positiveId, prepareCheckout, registrationMessage, registrationPayments, shouldPoll, startStatusPolling, validVnpayUrl } from "../src/courseCheckout.js";
+import { acquireAction, canCheckout, checkoutAccess, checkoutPayload, courseRegistrationDiscountPercent, paymentMessage, positiveId, prepareCheckout, registrationMessage, registrationPayments, shouldPoll, startStatusPolling, validOnlinePaymentUrl, validVnpayUrl } from "../src/courseCheckout.js";
 
 const registration = { id: 123, classId: 8, status: "PENDING_PAYMENT", paymentDeadline: "2099-01-01T10:00:00", finalPrice: 500000 };
 const pending = { id: 1, purpose: "COURSE_REGISTRATION", referenceId: 123, method: "COUNTER", status: "PENDING" };
@@ -117,6 +117,16 @@ test("URL policy rejects simulator, alternate hosts, credentials and wrong proto
   const good = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Command=pay&vnp_SecureHash=abc";
   assert.equal(validVnpayUrl(good), true);
   for (const value of [good.replace("https:", "http:"), good.replace("sandbox.vnpayment.vn", "sandbox.vnpayment.vn.evil.test"), good.replace("https://", "https://user@"), "javascript:alert(1)", "http://localhost:8080/api/payments/online/callback", undefined]) assert.equal(validVnpayUrl(value), false);
+});
+test("mock payment redirects are accepted only for the configured loopback callback", () => {
+  const apiBaseUrl = "http://127.0.0.1:18080";
+  const callback = "http://127.0.0.1:18080/api/payments/online/callback?transactionCode=QA-1&success=true&paymentTime=20261125110000&signature=" + "a".repeat(64);
+  assert.equal(validOnlinePaymentUrl(callback, { provider: "mock", apiBaseUrl }), true);
+  assert.equal(validOnlinePaymentUrl(callback, { provider: "vnpay", apiBaseUrl }), false);
+  assert.equal(validOnlinePaymentUrl(callback.replace("127.0.0.1:18080", "evil.example"), { provider: "mock", apiBaseUrl }), false);
+  assert.equal(validOnlinePaymentUrl(callback.replace("/api/payments/online/callback", "/other"), { provider: "mock", apiBaseUrl }), false);
+  assert.equal(validOnlinePaymentUrl(callback + "&transactionCode=other", { provider: "mock", apiBaseUrl }), false);
+  assert.equal(validOnlinePaymentUrl("https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Command=pay&vnp_SecureHash=abc", { provider: "mock", apiBaseUrl }), true);
 });
 test("invalid IDs and unrelated purposes cannot select a registration payment", () => {
   for (const value of [null, "1.2", "-1", "01", "1e2", "9007199254740992"]) assert.equal(positiveId(value), null);

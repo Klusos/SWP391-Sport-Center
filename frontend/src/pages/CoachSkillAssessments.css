@@ -8,18 +8,19 @@
   justify-content: space-between;
   gap: var(--space-4);
   margin-bottom: var(--space-3);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
+  padding: clamp(20px, 2.5vw, 30px);
+  border: 1px solid #d7e7f7;
+  border-radius: 18px;
+  background: linear-gradient(120deg, #edf6ff, #fff 78%);
+  box-shadow: 0 10px 28px rgba(18, 59, 99, .06);
 }
 
 .coach-skill-assessments-page > .coach-assessment-header h1 {
-  margin: 0 0 var(--space-1);
-  color: var(--navy);
-  font-size: clamp(24px, 2.1vw, 30px);
-  font-weight: 800;
-  letter-spacing: -.025em;
+  margin: 0;
+  color: #102a4c;
+  font-size: clamp(24px, 2.4vw, 32px);
+  font-weight: 820;
+  letter-spacing: -.035em;
 }
 
 .coach-skill-assessments-page > .coach-assessment-header .subtitle {
@@ -27,6 +28,7 @@
   color: var(--text-sub);
   line-height: 1.55;
 }
+@media(max-width:700px){.coach-skill-assessments-page > .coach-assessment-header{align-items:flex-start;flex-direction:column}}
 
 .coach-skill-assessments-page .coach-assessment-workspace {
   display: grid;

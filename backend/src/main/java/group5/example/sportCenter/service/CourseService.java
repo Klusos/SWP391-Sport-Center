@@ -20,13 +20,16 @@ public class CourseService {
 
     private final CourseRepository courseRepository;
     private final SportRepository sportRepository;
+    private final AuditLogService auditLogs;
 
     public CourseService(
             CourseRepository courseRepository,
-            SportRepository sportRepository) {
+            SportRepository sportRepository,
+            AuditLogService auditLogs) {
 
         this.courseRepository = courseRepository;
         this.sportRepository = sportRepository;
+        this.auditLogs = auditLogs;
     }
 
     @Transactional
@@ -60,7 +63,9 @@ public class CourseService {
         course.setLearningOutcome(request.getLearningOutcome());
         course.setStatus("ACTIVE");
 
-        return toResponse(courseRepository.save(course));
+        Course saved = courseRepository.save(course);
+        auditLogs.record("CREATE", "COURSE", saved.getId(), "Course created for sportId=" + sport.getId() + ".");
+        return toResponse(saved);
     }
 
     public List<CourseResponse> getAllCourses() {
@@ -127,6 +132,7 @@ public class CourseService {
 
         CourseAgePolicy agePolicy = request.getAgePolicy() == null
                 ? course.getAgePolicy() : request.getAgePolicy();
+        String previousStatus = course.getStatus();
         validateAgeRange(request.getTargetAgeMin(), request.getTargetAgeMax(), agePolicy);
 
         course.setName(request.getName());
@@ -138,7 +144,10 @@ public class CourseService {
         course.setLearningOutcome(request.getLearningOutcome());
         course.setStatus(CatalogValues.status(request.getStatus(), "Course", List.of("ACTIVE", "INACTIVE")));
 
-        return toResponse(courseRepository.save(course));
+        Course saved = courseRepository.save(course);
+        auditLogs.record("UPDATE", "COURSE", saved.getId(),
+                "Course details updated;status=" + previousStatus + "->" + saved.getStatus() + ".");
+        return toResponse(saved);
     }
 
     private void validateAgeRange(

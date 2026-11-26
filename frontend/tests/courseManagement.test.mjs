@@ -112,7 +112,9 @@ test("offering filters keep backend status separate and default to newest start 
 test("Admin labels OPEN/CLOSED as Offering status and explains registration eligibility is separate", async () => {
   const pages = await readFile(new URL("../src/pages/CourseManagementPages.jsx", import.meta.url), "utf8");
   assert.match(pages, /Trạng thái đợt học/);
-  assert.match(pages, /OPEN chỉ cho phép đăng ký khi đang trong thời gian đăng ký và có lớp đủ điều kiện/);
+  assert.match(pages, /Chỉ có thể đăng ký khi đợt học đang mở, còn trong thời gian nhận đăng ký và có lớp đủ điều kiện/);
+  assert.match(pages, /14 ngày trước hạn đăng ký/);
+  assert.doesNotMatch(pages, /máy chủ là nơi thực thi quy tắc/);
   assert.doesNotMatch(pages, /Trạng thái đăng ký/);
 });
 

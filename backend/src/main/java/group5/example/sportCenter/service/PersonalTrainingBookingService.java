@@ -57,6 +57,7 @@ public class PersonalTrainingBookingService {
     private final CoachScheduleConflictService coachScheduleConflicts;
     private final PaymentRepository payments;
     private final NotificationService notifications;
+    private final AuditLogService auditLogs;
     private final Clock clock;
     private final String configuredBasePrice;
 
@@ -70,6 +71,7 @@ public class PersonalTrainingBookingService {
             CoachScheduleConflictService coachScheduleConflicts,
             PaymentRepository payments,
             NotificationService notifications,
+            AuditLogService auditLogs,
             Clock clock,
             @Value("${app.pt.session-base-price:}") String configuredBasePrice) {
         this.bookings = bookings;
@@ -81,6 +83,7 @@ public class PersonalTrainingBookingService {
         this.coachScheduleConflicts = coachScheduleConflicts;
         this.payments = payments;
         this.notifications = notifications;
+        this.auditLogs = auditLogs;
         this.clock = clock;
         this.configuredBasePrice = configuredBasePrice;
     }
@@ -189,6 +192,7 @@ public class PersonalTrainingBookingService {
         booking.setStatus(PersonalTrainingBookingStatus.CANCELLED);
         String moneyMessage = "";
         for (Payment payment : attempts) {
+            PaymentStatus previousPaymentStatus = payment.getStatus();
             if (payment.getStatus() == PaymentStatus.PENDING) {
                 payment.setStatus(PaymentStatus.CANCELLED);
                 payment.setNote("Cancelled with PT booking #" + bookingId);
@@ -198,6 +202,14 @@ public class PersonalTrainingBookingService {
                 moneyMessage = " Khoản thanh toán #" + payment.getId() + " sẽ được hoàn 100%; vui lòng liên hệ lễ tân để nhận tiền.";
             }
             payments.save(payment);
+            if (previousPaymentStatus != payment.getStatus()) {
+                auditLogs.record("CANCEL", "PT_BOOKING_PAYMENT", payment.getId(),
+                        "bookingId=" + bookingId + "; payment=" + previousPaymentStatus + "->"
+                                + payment.getStatus() + "; amount=" + payment.getAmount()
+                                + (payment.getStatus() == PaymentStatus.REFUND_REQUIRED
+                                        ? "; refundAmount=" + payment.getAmount() + " pending disbursement confirmation"
+                                        : ""));
+            }
         }
         String when = booking.getStartTime().format(VN_DATE_TIME);
         notifications.createForUser(memberId, "Buổi PT đã được huỷ",
@@ -208,7 +220,11 @@ public class PersonalTrainingBookingService {
                     "Buổi PT " + booking.getSport().getName() + " lúc " + when + " với hội viên "
                             + booking.getMember().getName() + " đã bị huỷ.");
         }
-        return toResponse(bookings.save(booking));
+        PersonalTrainingBooking saved = bookings.save(booking);
+        auditLogs.record("CANCEL", "PT_BOOKING", saved.getId(),
+                "status=" + (confirmed ? "CONFIRMED" : "PENDING_PAYMENT") + "->CANCELLED"
+                        + "; actorRole=" + role + "; payment and refund transitions are recorded by payment ID");
+        return toResponse(saved);
     }
 
     @Transactional(readOnly = true)
@@ -232,6 +248,17 @@ public class PersonalTrainingBookingService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Inactive coaches cannot view assigned sessions");
         }
         return bookings.findAllForCoach(coach.getId()).stream().map(this::toResponse).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<PersonalTrainingBookingResponse> allForAdmin(Jwt jwt) {
+        Integer userId = currentUserId(jwt);
+        User actor = users.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authenticated user was not found"));
+        if (!"ACTIVE".equalsIgnoreCase(actor.getStatus()) || !"ADMIN".equalsIgnoreCase(actor.getRole())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only active ADMIN accounts can view all PT bookings");
+        }
+        return bookings.findAllForAdmin().stream().map(this::toResponse).toList();
     }
 
     private Membership eligibleMembership(Integer memberId, LocalDate sessionDate) {

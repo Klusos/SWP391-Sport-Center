@@ -3,6 +3,8 @@ package group5.example.sportCenter.service;
 import static group5.example.sportCenter.service.AssessmentAccess.error;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Locale;
 
@@ -74,6 +76,14 @@ public class ConsultationRequestService {
         if (jwt != null) {
             member = access.actor(jwt);
             access.requireMember(member);
+        } else {
+            if (request.dateOfBirth() == null || !request.dateOfBirth().isBefore(LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")))) {
+                throw error(HttpStatus.BAD_REQUEST, "A valid date of birth is required to submit this request");
+            }
+            if (request.email() != null && users.existsByEmailIgnoreCase(request.email())) {
+                throw error(HttpStatus.BAD_REQUEST,
+                        "We could not submit this request with those details. If you already have an account, sign in or contact staff.");
+            }
         }
 
         Sport sport = sports.findById(request.sportId())
@@ -88,7 +98,8 @@ public class ConsultationRequestService {
         consultation.setPhone(request.phone().trim());
         consultation.setEmail(request.email());
         consultation.setSport(sport);
-        consultation.setAge(request.age());
+        consultation.setAge(jwt == null ? null : request.age());
+        consultation.setDateOfBirth(jwt == null ? request.dateOfBirth() : member.getDateOfBirth());
         consultation.setExperience(trimToNull(request.experience()));
         consultation.setNote(trimToNull(request.note()));
         consultation.setStatus(ConsultationStatus.PENDING);
@@ -212,7 +223,8 @@ public class ConsultationRequestService {
         memberRequest.setName(consultation.getName());
         memberRequest.setEmail(consultation.getEmail());
         memberRequest.setPhone(consultation.getPhone());
-        memberRequest.setDateOfBirth(request.dateOfBirth());
+        memberRequest.setDateOfBirth(consultation.getDateOfBirth() != null
+                ? consultation.getDateOfBirth() : request.dateOfBirth());
         memberRequest.setPassword(request.password());
 
         final User created;
@@ -231,6 +243,8 @@ public class ConsultationRequestService {
         } catch (DataIntegrityViolationException exception) {
             throw error(HttpStatus.CONFLICT, "Consultation could not be linked; member creation was rolled back");
         }
+        auditLogs.record("LINK_MEMBER", "CONSULTATION_REQUEST", consultation.getId(),
+                "memberId=" + created.getId() + "; account creation is recorded on USER");
         return response(consultation);
     }
 
@@ -302,11 +316,13 @@ public class ConsultationRequestService {
                 request.getSport().getId(),
                 request.getSport().getName(),
                 request.getAge(),
+                request.getDateOfBirth(),
                 request.getExperience(),
                 request.getNote(),
                 request.getStatus().name(),
                 request.getCreatedAt(),
                 request.getHandledBy() == null ? null : request.getHandledBy().getId(),
+                request.getHandledBy() == null ? null : request.getHandledBy().getName(),
                 request.getHandledAt(),
                 request.getResolutionNote(),
                 request.getCompletedAt(),

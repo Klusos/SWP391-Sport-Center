@@ -34,4 +34,8 @@ public class MembershipResponse {
     private Boolean autoRenew;
     private String status;
     private String cancelReason;
+    /** Authoritative transaction link; null for legacy/manual memberships without a recorded Payment association. */
+    private Integer purchasePaymentId;
+    /** Present for memberships created by Renewal settlement. */
+    private Integer renewalIntentId;
 }

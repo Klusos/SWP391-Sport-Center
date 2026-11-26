@@ -34,10 +34,12 @@ public class MembershipRenewalLifecycleService {
     private final MembershipRenewalIntentService intentService;
     private final NotificationService notifications;
     private final Clock clock;
+    private final AuditLogService auditLogs;
 
     public MembershipRenewalLifecycleService(MembershipRepository memberships,
             MembershipRenewalIntentRepository intents, PaymentRepository payments, UserRepository users,
-            MembershipRenewalIntentService intentService, NotificationService notifications, Clock clock) {
+            MembershipRenewalIntentService intentService, NotificationService notifications, Clock clock,
+            AuditLogService auditLogs) {
         this.memberships = memberships;
         this.intents = intents;
         this.payments = payments;
@@ -45,6 +47,7 @@ public class MembershipRenewalLifecycleService {
         this.intentService = intentService;
         this.notifications = notifications;
         this.clock = clock;
+        this.auditLogs = auditLogs;
     }
 
     /** Catch-up scan: membership end dates from tomorrow through the third day from today. */
@@ -80,6 +83,15 @@ public class MembershipRenewalLifecycleService {
     /** Closes one unsettled source-period Intent and its pending attempts under Member → Intent → Payment locks. */
     @Transactional
     public void closeForAutoRenewDisabled(Integer sourceMembershipId) {
+        closeSourceIntent(sourceMembershipId, RenewalIntentCloseReason.AUTO_RENEW_DISABLED, "AUTO_RENEW_DISABLED");
+    }
+
+    @Transactional
+    public void closeForMembershipCancelled(Integer sourceMembershipId) {
+        closeSourceIntent(sourceMembershipId, RenewalIntentCloseReason.MEMBER_CANCELLED, "SOURCE_MEMBERSHIP_CANCELLED");
+    }
+
+    private void closeSourceIntent(Integer sourceMembershipId, RenewalIntentCloseReason closeReason, String auditReason) {
         Membership source = memberships.findById(sourceMembershipId)
                 .orElseThrow(() -> new ResourceNotFoundException("Membership not found"));
         Integer memberId = source.getMember().getId();
@@ -91,6 +103,7 @@ public class MembershipRenewalLifecycleService {
         boolean collected = false;
         List<Payment> attempts = payments.findByRenewalIntentIdForUpdate(intent.getId());
         for (Payment attempt : attempts) {
+            PaymentStatus previousStatus = attempt.getStatus();
             if (hasCollectionOrAcceptedPayment(attempt)) {
                 if (attempt.getStatus() != PaymentStatus.REFUNDED) collected = true;
                 if (attempt.getRenewalAttemptCloseReason() == null) {
@@ -102,11 +115,14 @@ public class MembershipRenewalLifecycleService {
                 attempt.setRenewalAttemptCloseReason(RenewalAttemptCloseReason.MEMBER_CANCELLED);
             }
             payments.save(attempt);
+            auditPaymentTransition(attempt, previousStatus, "Renewal Intent " + intent.getId() + " closed: " + auditReason);
         }
         intent.setIntentStatus(RenewalIntentStatus.CANCELLED);
         intent.setClosedAt(now);
-        intent.setClosedReason(RenewalIntentCloseReason.AUTO_RENEW_DISABLED);
+        intent.setClosedReason(closeReason);
         intents.saveAndFlush(intent);
+        auditLogs.record("CLOSE", "RENEWAL_INTENT", intent.getId(),
+                "status=OPEN->CANCELLED;sourceMembership=" + sourceMembershipId + ";reason=" + auditReason);
         notifications.createForUserOnce(memberId, "Renewal opted out",
                 "Renewal Intent #" + intent.getId() + " was closed after auto-renewal was turned off.");
         if (collected) {
@@ -132,6 +148,7 @@ public class MembershipRenewalLifecycleService {
         List<Payment> attempts = payments.findByRenewalIntentIdForUpdate(intentId);
         boolean collected = false;
         for (Payment attempt : attempts) {
+            PaymentStatus previousStatus = attempt.getStatus();
             if (hasCollectionOrAcceptedPayment(attempt)) {
                 if (attempt.getStatus() != PaymentStatus.REFUNDED) collected = true;
                 if (attempt.getRenewalAttemptCloseReason() == null) {
@@ -143,11 +160,15 @@ public class MembershipRenewalLifecycleService {
                 attempt.setRenewalAttemptCloseReason(RenewalAttemptCloseReason.INTENT_EXPIRED);
             }
             payments.save(attempt);
+            auditPaymentTransition(attempt, previousStatus, "Renewal Intent " + intentId + " reached its deadline");
         }
         intent.setIntentStatus(RenewalIntentStatus.EXPIRED);
         intent.setClosedAt(now);
         intent.setClosedReason(RenewalIntentCloseReason.DEADLINE_REACHED);
         intents.saveAndFlush(intent);
+        auditLogs.record("EXPIRE", "RENEWAL_INTENT", intentId,
+                "status=OPEN->EXPIRED;sourceMembership=" + intent.getSourceMembership().getId()
+                        + ";reason=DEADLINE_REACHED");
         notifications.createForUserOnce(memberId, "Renewal expired",
                 "Renewal Intent #" + intentId + " expired at its exclusive deadline. No successor was created without accepted payment.");
         if (collected) {
@@ -167,6 +188,15 @@ public class MembershipRenewalLifecycleService {
                 || payment.getStatus() == PaymentStatus.SUCCESS
                 || payment.getStatus() == PaymentStatus.REFUND_REQUIRED
                 || payment.getStatus() == PaymentStatus.REFUNDED;
+    }
+
+    private void auditPaymentTransition(Payment payment, PaymentStatus previousStatus, String context) {
+        if (previousStatus == payment.getStatus()) return;
+        String action = payment.getStatus() == PaymentStatus.REFUND_REQUIRED
+                ? "RECONCILIATION_REQUIRED" : "RENEWAL_ATTEMPT_STATUS";
+        auditLogs.record(action, "PAYMENT", payment.getId(), context + ";status="
+                + previousStatus + "->" + payment.getStatus() + ";amount="
+                + (payment.getAmount() == null ? "unknown" : payment.getAmount().stripTrailingZeros().toPlainString()));
     }
 
     public record RunResult(int intentsCreated, int inactivePlan, int intentsExpired, int remindersCreated) { }

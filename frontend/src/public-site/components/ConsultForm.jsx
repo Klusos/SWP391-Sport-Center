@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import { createPublicConsultationRequestApi, getPublicSportsApi } from "../../api";
 import { CONSULTATION_EMAIL_ERROR, normalizeConsultationEmail } from "../../consultationEmail.js";
 
+const CONSULTATION_TODAY = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const EMPTY_FORM = {
   name: "",
   phone: "",
   email: "",
   sportId: "",
-  age: "",
+  dateOfBirth: "",
   experience: "",
   note: "",
 };
@@ -53,14 +54,16 @@ export default function ConsultForm({ showFieldPlaceholders = true } = {}) {
         phone: form.phone.trim(),
         email,
         sportId: Number(form.sportId),
-        age: form.age ? Number(form.age) : null,
+        dateOfBirth: form.dateOfBirth,
         experience: form.experience.trim() || null,
         note: form.note.trim() || null,
       });
       setForm(EMPTY_FORM);
       setSent(true);
     } catch (requestError) {
-      setError(requestError.message || "Chưa gửi được yêu cầu. Vui lòng thử lại.");
+      setError(requestError.status === 400
+        ? "Không thể gửi yêu cầu với thông tin này. Nếu bạn đã có tài khoản, hãy đăng nhập hoặc liên hệ nhân viên."
+        : requestError.message || "Chưa gửi được yêu cầu. Vui lòng thử lại.");
     } finally {
       setSubmitting(false);
     }
@@ -86,8 +89,8 @@ export default function ConsultForm({ showFieldPlaceholders = true } = {}) {
         {sports.map((sport) => <option key={sport.id} value={sport.id}>{sport.name}</option>)}
       </select>
       </label>
-      <label className="consult-field"><span>Tuổi (không bắt buộc)</span>
-        <input className="form-control" name="age" type="number" min="1" max="120" placeholder={showFieldPlaceholders ? "Tuổi (không bắt buộc)" : undefined} aria-label="Tuổi (không bắt buộc)" value={form.age} onChange={handleChange} />
+      <label className="consult-field"><span>Ngày sinh</span>
+        <input className="form-control" name="dateOfBirth" type="date" max={CONSULTATION_TODAY} aria-label="Ngày sinh" value={form.dateOfBirth} onChange={handleChange} required />
       </label>
       <label className="consult-field"><span>Kinh nghiệm (không bắt buộc)</span>
         <textarea className="form-control" name="experience" placeholder={showFieldPlaceholders ? "Kinh nghiệm (không bắt buộc)" : undefined} aria-label="Kinh nghiệm (không bắt buộc)" value={form.experience} onChange={handleChange} rows="2" />

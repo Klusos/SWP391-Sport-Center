@@ -41,6 +41,7 @@ public class MembershipRenewalIntentService {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
     private final Clock clock;
+    private final AuditLogService auditLogs;
 
     public MembershipRenewalIntentService(
             MembershipRepository membershipRepository,
@@ -49,7 +50,8 @@ public class MembershipRenewalIntentService {
             PaymentRepository paymentRepository,
             UserRepository userRepository,
             Clock clock,
-            NotificationService notificationService) {
+            NotificationService notificationService,
+            AuditLogService auditLogs) {
         this.membershipRepository = membershipRepository;
         this.intentRepository = intentRepository;
         this.planRepository = planRepository;
@@ -57,6 +59,7 @@ public class MembershipRenewalIntentService {
         this.userRepository = userRepository;
         this.clock = clock;
         this.notificationService = notificationService;
+        this.auditLogs = auditLogs;
     }
 
     /**
@@ -169,6 +172,10 @@ public class MembershipRenewalIntentService {
         intent.setAllowOneOnOneSnapshot(plan.getAllowOneOnOneCoaching());
 
         MembershipRenewalIntent saved = intentRepository.saveAndFlush(intent);
+        auditLogs.record("CREATE", "RENEWAL_INTENT", saved.getId(),
+                "status=NONE->OPEN;sourceMembership=" + sourceMembershipId + ";sourcePlan=" + planId
+                        + ";targetPlan=" + plan.getId() + ";amount=" + saved.getQuotedAmount().stripTrailingZeros().toPlainString()
+                        + ";validFrom=" + validFrom + ";validUntil=" + validUntil + ";creationSource=AUTO_RENEW_SCHEDULER");
         if (notificationService != null) {
             notificationService.createForUserOnce(memberId, "Renewal available",
                     "Renewal Intent #" + saved.getId() + " is available for payment until "

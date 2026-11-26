@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getAssignedPtBookingsApi } from "../api";
+import { getAssignedPtBookingsApi, recordPtBookingOutcomeApi } from "../api";
 import Sidebar from "../components/Sidebar";
 import { coachPtStatusSummary } from "../coachPtSummary.js";
 import { formatPtTime, PT_HOLD_MINUTES, ptStatusClass, ptStatusLabel } from "../ptBooking";
@@ -13,6 +13,8 @@ const PT_STATUS_FILTERS = [
   ["CONFIRMED", "Đã xác nhận"],
   ["CANCELLED", "Đã hủy"],
   ["EXPIRED", "Hết hạn"],
+  ["COMPLETED", "Đã hoàn thành"],
+  ["NO_SHOW", "Vắng mặt"],
 ];
 
 const COACH_PT_ICONS = {
@@ -39,6 +41,9 @@ export default function CoachPtSessions({ token, role, onLogout, onNavigate }) {
   const [selectedDay, setSelectedDay] = useState(null);
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [selectedBooking, setSelectedBooking] = useState(null);
+  const [outcomeBusy, setOutcomeBusy] = useState(false);
+  const [outcomeError, setOutcomeError] = useState("");
+  const [currentTime, setCurrentTime] = useState(0);
 
   useEffect(() => {
     if (!selectedBooking) return undefined;
@@ -47,6 +52,13 @@ export default function CoachPtSessions({ token, role, onLogout, onNavigate }) {
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [selectedBooking]);
+
+  useEffect(() => {
+    if (!selectedBooking) return undefined;
+    const initialTimer = window.setTimeout(() => setCurrentTime(Date.now()), 0);
+    const timer = window.setInterval(() => setCurrentTime(Date.now()), 30000);
+    return () => { window.clearTimeout(initialTimer); window.clearInterval(timer); };
   }, [selectedBooking]);
 
   useEffect(() => {
@@ -61,6 +73,27 @@ export default function CoachPtSessions({ token, role, onLogout, onNavigate }) {
   const dayCounts = useMemo(() => coachPtDayCounts(rows, days, statusFilter), [rows, days, statusFilter]);
   const groups = useMemo(() => coachPtSessionGroups(rows, days, selectedDay, statusFilter), [rows, days, selectedDay, statusFilter]);
   const summary = useMemo(() => coachPtStatusSummary(rows), [rows]);
+  const selectedSessionEnded = selectedBooking && currentTime >= new Date(/(?:Z|[+-]\d{2}:?\d{2})$/i.test(selectedBooking.endTime) ? selectedBooking.endTime : `${selectedBooking.endTime}+07:00`).getTime();
+
+  function openBookingDetails(booking) {
+    setOutcomeError("");
+    setSelectedBooking(booking);
+  }
+
+  async function recordOutcome(outcome) {
+    if (!selectedBooking || outcomeBusy) return;
+    setOutcomeBusy(true);
+    setOutcomeError("");
+    try {
+      const updated = await recordPtBookingOutcomeApi(token, selectedBooking.id, outcome);
+      setRows((current) => current.map((row) => row.id === updated.id ? { ...row, status: updated.status } : row));
+      setSelectedBooking((current) => current?.id === updated.id ? { ...current, status: updated.status } : current);
+    } catch (requestError) {
+      setOutcomeError(requestError.message || "Không thể ghi nhận kết quả buổi PT.");
+    } finally {
+      setOutcomeBusy(false);
+    }
+  }
   const weekLabel = days.length ? `${calendarDate(days[0].key, { day: "2-digit", month: "short", year: "numeric" })} – ${calendarDate(days[6].key, { day: "2-digit", month: "short", year: "numeric" })}` : "";
 
   return <div className="layout">
@@ -124,7 +157,7 @@ export default function CoachPtSessions({ token, role, onLogout, onNavigate }) {
                     <span>{formatPtTime(booking.startTime, false)} – {formatPtTime(booking.endTime, false)}</span></div>
                   <div className="pt-history-meta"><span className={`pt-status ${ptStatusClass[booking.status] || ""} ${booking.status === "PENDING_PAYMENT" ? "pending-payment" : ""}`}>{ptStatusLabel[booking.status] || booking.status}</span>
                     <small>{booking.durationMinutes} phút</small></div>
-                  <button type="button" className="coach-pt-detail-button" onClick={() => setSelectedBooking(booking)} aria-haspopup="dialog" aria-label={`Chi tiết buổi PT với ${booking.memberName}`}>
+                  <button type="button" className="coach-pt-detail-button" onClick={() => openBookingDetails(booking)} aria-haspopup="dialog" aria-label={`Chi tiết buổi PT với ${booking.memberName}`}>
                     Chi tiết
                   </button>
                 </article>)}</div>
@@ -143,6 +176,12 @@ export default function CoachPtSessions({ token, role, onLogout, onNavigate }) {
           <div><dt>Thời lượng</dt><dd>{selectedBooking.durationMinutes} phút</dd></div>
           {selectedBooking.paymentExpiresAt && selectedBooking.status === "PENDING_PAYMENT" && <div><dt>Hạn thanh toán</dt><dd>{formatPtTime(selectedBooking.paymentExpiresAt)}</dd></div>}
         </dl>
+        {outcomeError && <p className="pt-alert pt-error" role="alert">{outcomeError}</p>}
+        {selectedBooking.status === "CONFIRMED" && selectedSessionEnded && <div className="coach-pt-outcome-actions" aria-label="Ghi nhận kết quả buổi PT">
+          <p>Ghi nhận kết quả buổi tập. Vắng mặt được tính là buổi đã sử dụng; thao tác này không tự tạo hoặc xử lý hoàn tiền.</p>
+          <button className="sc-button sc-button--success" type="button" disabled={outcomeBusy} aria-busy={outcomeBusy} onClick={() => void recordOutcome("COMPLETED")}>{outcomeBusy ? "Đang lưu…" : "Hoàn thành"}</button>
+          <button className="sc-button sc-button--warning" type="button" disabled={outcomeBusy} aria-busy={outcomeBusy} onClick={() => void recordOutcome("NO_SHOW")}>Vắng mặt</button>
+        </div>}
         <button type="button" onClick={() => setSelectedBooking(null)}>Đóng</button>
       </section>
     </div>}

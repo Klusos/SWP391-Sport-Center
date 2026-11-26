@@ -57,3 +57,19 @@ test("membership quote is a display estimate and preserves cents", () => {
 test("registration deadline is shown in Vietnam-local time", () => {
   assert.match(formatVietnamTime("2026-10-21T09:00:00"), /2026|21/);
 });
+
+test("Receptionist registration opening is 14 days before the Vietnam-local deadline", () => {
+  const member = { id: 8, role: "MEMBER", status: "ACTIVE", dateOfBirth: "1990-01-01" };
+  const course = { level: "BEGINNER" };
+  const atBoundary = { id: 14, startDate: "2027-01-12", registrationDeadline: "2026-12-09T13:19:00" };
+  const beforeBoundary = { ...atBoundary, registrationDeadline: "2026-12-10T13:19:00" };
+  const earlierDeadline = { ...atBoundary, registrationDeadline: "2026-12-08T13:19:00" };
+  const beforeOpening = Date.parse("2026-11-25T06:18:59Z");
+  const openingBoundary = Date.parse("2026-11-25T06:19:00Z");
+  const afterOpening = Date.parse("2026-11-25T06:19:01Z");
+  assert.match(eligibilityIssues(member, course, null, atBoundary, [], "2026-11-25", beforeOpening).find((issue) => /mở từ/.test(issue)), /13:19.*25 thg 11, 2026/);
+  assert.match(eligibilityIssues(member, course, null, beforeBoundary, [], "2026-11-25", beforeOpening).find((issue) => /mở từ/.test(issue)), /13:19.*26 thg 11, 2026/);
+  assert.equal(eligibilityIssues(member, course, null, atBoundary, [], "2026-11-25", openingBoundary).some((issue) => /mở từ/.test(issue)), false);
+  assert.equal(eligibilityIssues(member, course, null, earlierDeadline, [], "2026-11-25", afterOpening).some((issue) => /mở từ/.test(issue)), false);
+  assert.ok(eligibilityIssues(member, course, null, { ...atBoundary, registrationDeadline: "2026-11-24T13:19:00" }, [], "2026-11-25", Date.parse("2026-11-25T06:19:00Z")).some((issue) => /qua hạn/.test(issue)));
+});

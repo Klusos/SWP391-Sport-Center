@@ -95,14 +95,7 @@ public class MembershipPlanService {
                         new ResourceNotFoundException(
                                 "Membership plan not found with id: " + id));
 
-        boolean meaningfulChange = !java.util.Objects.equals(plan.getName(), request.getName())
-                || !java.util.Objects.equals(plan.getDescription(), request.getDescription())
-                || !java.util.Objects.equals(plan.getPrice(), request.getPrice())
-                || !java.util.Objects.equals(plan.getDurationMonths(), request.getDurationMonths())
-                || !java.util.Objects.equals(plan.getCourseDiscountPercent(), request.getCourseDiscountPercent())
-                || !java.util.Objects.equals(plan.getPersonalTrainingDiscountPercent(), request.getPersonalTrainingDiscountPercent())
-                || !java.util.Objects.equals(plan.getAllowPersonalTrainingPlan(), request.getAllowPersonalTrainingPlan())
-                || !java.util.Objects.equals(plan.getAllowOneOnOneCoaching(), request.getAllowOneOnOneCoaching());
+        String beforeAfter = changes(plan, request);
         String previousStatus = plan.getStatus();
         plan.setName(request.getName());
         plan.setDescription(request.getDescription());
@@ -125,10 +118,11 @@ public class MembershipPlanService {
 
         MembershipPlan updatedPlan =
                 membershipPlanRepository.save(plan);
-        if (meaningfulChange) auditLogs.record("UPDATE", "MEMBERSHIP_PLAN", id, "Membership plan details updated.");
-        if (!previousStatus.equalsIgnoreCase(updatedPlan.getStatus())) {
-            auditLogs.record("STATUS_CHANGE", "MEMBERSHIP_PLAN", id, "Membership plan status changed.");
+        String updatedStatus = updatedPlan.getStatus();
+        if (!previousStatus.equalsIgnoreCase(updatedStatus)) {
+            beforeAfter = append(beforeAfter, "status=" + previousStatus + "->" + updatedStatus);
         }
+        if (!beforeAfter.isEmpty()) auditLogs.record("UPDATE", "MEMBERSHIP_PLAN", id, beforeAfter);
 
         return toResponse(updatedPlan);
     }
@@ -142,7 +136,8 @@ public class MembershipPlanService {
         plan.setStatus(normalizeStatus(requestedStatus));
         MembershipPlan saved = membershipPlanRepository.save(plan);
         if (!previousStatus.equalsIgnoreCase(saved.getStatus())) {
-            auditLogs.record("STATUS_CHANGE", "MEMBERSHIP_PLAN", id, "Membership plan status changed.");
+            auditLogs.record("STATUS_CHANGE", "MEMBERSHIP_PLAN", id,
+                    "status=" + previousStatus + "->" + saved.getStatus());
         }
         return toResponse(saved);
     }
@@ -163,8 +158,30 @@ public class MembershipPlanService {
         plan.setStatus("INACTIVE");
         membershipPlanRepository.save(plan);
         if (!previousStatus.equalsIgnoreCase(plan.getStatus())) {
-            auditLogs.record("STATUS_CHANGE", "MEMBERSHIP_PLAN", id, "Membership plan status changed.");
+            auditLogs.record("STATUS_CHANGE", "MEMBERSHIP_PLAN", id,
+                    "status=" + previousStatus + "->" + plan.getStatus());
         }
+    }
+
+    private String changes(MembershipPlan plan, UpdateMembershipPlanRequest request) {
+        String changes = "";
+        changes = changed(changes, "name", plan.getName(), request.getName());
+        changes = changed(changes, "price", plan.getPrice(), request.getPrice());
+        changes = changed(changes, "durationMonths", plan.getDurationMonths(), request.getDurationMonths());
+        changes = changed(changes, "courseDiscountPercent", plan.getCourseDiscountPercent(), request.getCourseDiscountPercent());
+        changes = changed(changes, "ptDiscountPercent", plan.getPersonalTrainingDiscountPercent(), request.getPersonalTrainingDiscountPercent());
+        changes = changed(changes, "allowPtPlan", plan.getAllowPersonalTrainingPlan(), request.getAllowPersonalTrainingPlan());
+        changes = changed(changes, "allowOneOnOne", plan.getAllowOneOnOneCoaching(), request.getAllowOneOnOneCoaching());
+        return changes;
+    }
+
+    private String changed(String current, String field, Object before, Object after) {
+        return java.util.Objects.equals(before, after) ? current
+                : append(current, field + "=" + before + "->" + after);
+    }
+
+    private String append(String current, String next) {
+        return current.isEmpty() ? next : current + ";" + next;
     }
 
     private String normalizeStatus(String status) {

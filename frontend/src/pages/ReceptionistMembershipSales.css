@@ -66,9 +66,16 @@
   padding: 9px 14px;
   border-radius: 10px;
   background: #1767d2;
+  color: #fff;
   box-shadow: 0 4px 11px rgba(23, 103, 210, .12);
   white-space: normal;
 }
+.membership-sales-page .membership-sales-history-row button:hover:not(:disabled),
+.membership-sales-page .membership-sales-actions button:hover:not(:disabled) { background: #0f55b7; color: #fff; }
+.membership-sales-page .membership-sales-history-row button:focus-visible,
+.membership-sales-page .membership-sales-actions button:focus-visible { outline: 3px solid rgba(23,103,210,.3); outline-offset: 2px; }
+.membership-sales-page .membership-sales-history-row button:disabled,
+.membership-sales-page .membership-sales-actions button:disabled { color: #fff; opacity: .58; cursor: not-allowed; }
 .membership-sales-page .membership-sales-history-row .secondary,
 .membership-sales-page .membership-sales-actions .secondary {
   border: 1px solid #d8e1ec;
@@ -144,7 +151,7 @@
   .membership-sales-page .membership-sales-actions > button { width: 100%; }
 }
 .membership-sales-page { max-width:1560px; margin-inline:auto; padding:clamp(18px,2.6vw,34px) clamp(16px,2.8vw,40px) 52px; }
-.membership-sales-page .membership-sales-checkout-layout { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(300px,.85fr); align-items:start; gap:18px; }
+.membership-sales-page .membership-sales-checkout-layout { display:grid; grid-template-columns:minmax(0,1fr); align-items:start; gap:18px; }
 .membership-sales-page .membership-sales-steps { display:grid; min-width:0; gap:14px; }
 .membership-sales-page .membership-sales-steps .membership-sales-card { margin:0; }
 .membership-sales-page .membership-sales-order-summary { position:sticky; top:20px; display:grid; min-width:0; gap:14px; padding:22px; border:1px solid #d7e7f7; border-radius:16px; background:linear-gradient(145deg,#f1f7ff,#fff 70%); box-shadow:0 10px 28px rgba(18,59,99,.065); }
@@ -172,6 +179,19 @@
 @media (max-width:600px) {
   .membership-sales-page .membership-sales-plan-grid { grid-template-columns:minmax(0,1fr); }
 }
+.membership-payment-modal-backdrop { position:fixed; inset:0; z-index:1450; display:grid; place-items:center; overflow:auto; padding:16px; background:rgba(14,31,52,.52); }
+.membership-sales-page .membership-payment-modal { display:grid; width:min(100%,680px); max-height:92vh; overflow:auto; gap:14px; padding:22px; border:1px solid #d8e5f3; border-radius:16px; background:#fff; box-shadow:0 22px 70px rgba(14,34,58,.3); }
+.membership-payment-modal > header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.membership-payment-modal > header h2 { margin:0; color:#123b63; }
+.membership-sales-page .membership-payment-modal-close { min-height:36px; padding:6px 11px; border:1px solid #d5dfeb; border-radius:8px; background:#fff; color:#405872; font:inherit; cursor:pointer; }
+.membership-sales-page .membership-sales-open-payment { justify-self:start; min-height:42px; padding:10px 16px; border:0; border-radius:9px; background:#1767d2; color:#fff; font:inherit; font-weight:700; cursor:pointer; }
+.membership-sales-page .membership-sales-open-payment:disabled { opacity:.55; cursor:not-allowed; }
+.membership-sales-page .membership-sales-membership-actions { display:flex; justify-content:flex-end; }
+.membership-sales-page .membership-sales-membership-actions button { max-width:210px; min-height:36px; padding:7px 10px; white-space:normal; }
+.membership-sales-page .membership-sales-membership-info { display:grid; min-width:0; gap:5px; }
+.membership-sales-page .membership-sales-membership-info strong { color:#183957; overflow-wrap:anywhere; }
+.membership-sales-page .membership-sales-membership-info span,.membership-sales-page .membership-sales-membership-info small { color:#526a86; overflow-wrap:anywhere; }
+.membership-sales-page .membership-sales-history-row:has(.membership-sales-membership-info) { grid-template-columns:minmax(0,1fr) minmax(130px,210px); align-items:start; }
 .membership-sales-page .membership-sales-selected-member { display:flex; min-width:0; align-items:center; gap:11px; padding:12px 14px; border:1px solid #b9d8f3; border-radius:12px; background:#f3f8ff; }
 .membership-sales-page .membership-sales-selected-check { display:grid; width:30px; height:30px; flex:none; place-items:center; border-radius:50%; background:#dceeff; color:#1767d2; font-weight:800; }
 .membership-sales-page .membership-sales-selected-member > div { display:grid; min-width:0; flex:1; gap:3px; }
@@ -211,3 +231,16 @@
 .membership-sales-upgrade-quote > div:last-child { border-bottom: 0; }
 .membership-sales-upgrade-quote dt { color: #687b91; font-size: 12px; }
 .membership-sales-upgrade-quote dd { margin: 0; color: #203d60; font-size: 13px; font-weight: 700; text-align: right; }
+
+.membership-cancel-dialog-backdrop { position:fixed; inset:0; z-index:1200; display:grid; place-items:center; padding:20px; background:rgba(12,29,48,.58); }
+.membership-cancel-dialog { box-sizing:border-box; display:grid; width:min(100%,560px); max-height:min(90vh,720px); gap:14px; overflow:auto; padding:24px; border:1px solid #d8e3ef; border-radius:16px; background:#fff; box-shadow:0 24px 80px rgba(9,30,55,.28); }
+.membership-cancel-dialog h2 { margin:0; color:#123b63; font-size:20px; }
+.membership-cancel-dialog p { margin:0; color:#526a86; line-height:1.55; }
+.membership-cancel-dialog label { color:#25435f; font-weight:700; }
+.membership-cancel-dialog textarea { box-sizing:border-box; width:100%; min-height:120px; resize:vertical; padding:11px 12px; border:1px solid #bdccda; border-radius:8px; color:#17324f; font:inherit; }
+.membership-cancel-dialog textarea[aria-invalid="true"] { border-color:#b42318; }
+.membership-cancel-dialog-actions { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:10px; }
+.membership-cancel-dialog-actions button { min-height:42px; border:0; border-radius:9px; padding:10px 16px; background:#0878bd; color:#fff; font-weight:700; cursor:pointer; }
+.membership-cancel-dialog-actions button.secondary { background:#64778a; }
+.membership-cancel-dialog-actions button:disabled { opacity:.55; cursor:wait; }
+@media(max-width:480px) { .membership-cancel-dialog-backdrop { padding:12px; } .membership-cancel-dialog { padding:18px; } .membership-cancel-dialog-actions { display:grid; grid-template-columns:1fr; } }

@@ -28,6 +28,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,6 +44,7 @@ import group5.example.sportCenter.entity.RenewalIntentCreationSource;
 import group5.example.sportCenter.entity.RenewalIntentStatus;
 import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.repository.MembershipPlanRepository;
+import group5.example.sportCenter.repository.AuditLogRepository;
 import group5.example.sportCenter.repository.MembershipRenewalIntentRepository;
 import group5.example.sportCenter.repository.MembershipRepository;
 import group5.example.sportCenter.repository.PaymentRepository;
@@ -51,7 +53,7 @@ import group5.example.sportCenter.repository.UserRepository;
 @DataJpaTest(properties = "spring.datasource.url=jdbc:h2:mem:renewalSettlementJpa;MODE=MSSQLServer;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=10000")
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("phase1")
-@Import({ MembershipRenewalSettlementService.class, MembershipRenewalSettlementPersistenceTest.FixedClockConfiguration.class })
+@Import({ MembershipRenewalSettlementService.class, AuditLogService.class, MembershipRenewalSettlementPersistenceTest.FixedClockConfiguration.class })
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class MembershipRenewalSettlementPersistenceTest {
     private static final ZoneId VN = ZoneId.of("Asia/Ho_Chi_Minh");
@@ -64,6 +66,8 @@ class MembershipRenewalSettlementPersistenceTest {
     @MockitoSpyBean MembershipRepository memberships;
     @Autowired MembershipRenewalIntentRepository intents;
     @MockitoSpyBean PaymentRepository payments;
+    @MockitoBean NotificationService notifications;
+    @Autowired AuditLogRepository auditLogs;
 
     private User member;
     private MembershipPlan plan;
@@ -145,6 +149,10 @@ class MembershipRenewalSettlementPersistenceTest {
         var result = settlement.settle(evidence);
 
         assertEquals(RenewalSettlementOutcome.ACCEPTED, result.outcome());
+        assertTrue(auditLogs.findAll().stream().anyMatch(entry -> "SETTLE".equals(entry.getAction())
+                && "RENEWAL_PAYMENT".equals(entry.getEntityType())
+                && String.valueOf(payment.getId()).equals(entry.getEntityId())
+                && entry.getDescription().contains("PENDING -> SUCCESS")));
         Payment savedPayment = payments.findById(payment.getId()).orElseThrow();
         MembershipRenewalIntent savedIntent = intents.findById(intent.getId()).orElseThrow();
         Membership savedSuccessor = memberships.findByRenewalIntent_Id(intent.getId()).orElseThrow();

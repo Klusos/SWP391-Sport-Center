@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Sidebar from "../components/Sidebar";
+import { formatAuditDescription } from "../auditDescription.js";
 import AdminTopBar from "../components/AdminTopBar";
-import { getAdminAuditLogsApi } from "../api";
+import { correctAdminPtBookingOutcomeApi, getAdminAuditLogsApi, getAdminPtBookingOutcomeApi } from "../api";
 import "./AdminAuditLogs.css";
 
 const PAGE_SIZE = 20;
@@ -40,6 +41,60 @@ export default function AdminAuditLogs({ token, role, currentUserName, onLogout,
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filterError, setFilterError] = useState("");
+  const [ptBookingId, setPtBookingId] = useState("");
+  const [ptOutcome, setPtOutcome] = useState(null);
+  const [ptCorrection, setPtCorrection] = useState("NO_SHOW");
+  const [ptReason, setPtReason] = useState("");
+  const [ptBusy, setPtBusy] = useState(false);
+  const [ptError, setPtError] = useState("");
+  const [ptNotice, setPtNotice] = useState("");
+
+  async function lookupPtOutcome(event) {
+    event.preventDefault();
+    if (!/^\d+$/.test(ptBookingId) || Number(ptBookingId) <= 0) {
+      setPtError("Nhập ID buổi PT hợp lệ.");
+      return;
+    }
+    setPtBusy(true);
+    setPtError("");
+    setPtNotice("");
+    try {
+      const outcome = await getAdminPtBookingOutcomeApi(token, ptBookingId);
+      setPtOutcome(outcome);
+      setPtCorrection(outcome.status === "COMPLETED" ? "NO_SHOW" : "COMPLETED");
+    } catch (requestError) {
+      setPtOutcome(null);
+      setPtError(requestError.message || "Không thể tải kết quả buổi PT.");
+    } finally {
+      setPtBusy(false);
+    }
+  }
+
+  async function correctPtOutcome(event) {
+    event.preventDefault();
+    if (!ptOutcome || ptReason.trim().length === 0 || ptReason.trim().length > 300) {
+      setPtError("Lý do điều chỉnh là bắt buộc và tối đa 300 ký tự.");
+      return;
+    }
+    setPtBusy(true);
+    setPtError("");
+    setPtNotice("");
+    try {
+      const outcome = await correctAdminPtBookingOutcomeApi(token, ptOutcome.id, ptCorrection, ptReason.trim());
+      setPtOutcome(outcome);
+      setPtReason("");
+      setPtNotice("Đã cập nhật kết quả. Lịch sử điều chỉnh được ghi trong Audit Logs.");
+      setDraft((current) => ({ ...current, entityType: "PT_BOOKING_OUTCOME", entityId: String(outcome.id) }));
+      setFilters((current) => ({ ...current, entityType: "PT_BOOKING_OUTCOME", entityId: String(outcome.id) }));
+      setPageNumber(0);
+      setLoading(true);
+      setReloadKey((value) => value + 1);
+    } catch (requestError) {
+      setPtError(requestError.message || "Không thể điều chỉnh kết quả buổi PT.");
+    } finally {
+      setPtBusy(false);
+    }
+  }
 
   const queryFilters = useMemo(() => filters, [filters]);
   const load = useCallback(async (signal, isCurrent) => {
@@ -148,6 +203,26 @@ export default function AdminAuditLogs({ token, role, currentUserName, onLogout,
           </button>
         </header>
 
+        <section className="admin-audit-filters" aria-labelledby="pt-outcome-correction-title">
+          <h2 id="pt-outcome-correction-title">Điều chỉnh kết quả buổi PT</h2>
+          <form onSubmit={lookupPtOutcome}>
+            <label>ID buổi PT<input inputMode="numeric" value={ptBookingId} onChange={(event) => setPtBookingId(event.target.value)} /></label>
+            <button className="admin-audit-button is-secondary" type="submit" disabled={ptBusy}>Tìm kết quả</button>
+          </form>
+          {ptOutcome && <form onSubmit={correctPtOutcome}>
+            <p>Buổi #{ptOutcome.id} hiện ở trạng thái <strong>{ptOutcome.status}</strong>.</p>
+            {(ptOutcome.status === "COMPLETED" || ptOutcome.status === "NO_SHOW") ? <>
+              <label>Kết quả mới<select value={ptCorrection} onChange={(event) => setPtCorrection(event.target.value)}>
+                <option value="COMPLETED">Hoàn thành</option><option value="NO_SHOW">Vắng mặt (buổi đã sử dụng)</option>
+              </select></label>
+              <label>Lý do điều chỉnh<textarea maxLength={300} required value={ptReason} onChange={(event) => setPtReason(event.target.value)} /></label>
+              <button className="admin-audit-button is-primary" type="submit" disabled={ptBusy || !ptReason.trim()}>Lưu điều chỉnh</button>
+            </> : <p>Chỉ có thể điều chỉnh kết quả COMPLETED hoặc NO_SHOW đã được ghi nhận.</p>}
+          </form>}
+          {ptError && <p className="admin-audit-error" role="alert">{ptError}</p>}
+          {ptNotice && <p role="status">{ptNotice}</p>}
+        </section>
+
         <form className="admin-audit-filters" onSubmit={applyFilters}>
           <div className="admin-audit-filter-grid">
             <label>Actor User ID<input name="actorUserId" inputMode="numeric" value={draft.actorUserId} onChange={changeFilter} placeholder="Ví dụ: 12" /></label>
@@ -175,15 +250,18 @@ export default function AdminAuditLogs({ token, role, currentUserName, onLogout,
               : entries.length === 0 ? <div className="admin-audit-state">Không tìm thấy hoạt động phù hợp.</div>
                 : <div className="admin-audit-table-wrap"><table className="admin-audit-table">
                   <thead><tr><th>Thời gian</th><th>Tác nhân</th><th>Vai trò</th><th>Hành động</th><th>Loại đối tượng</th><th>ID đối tượng</th><th>Mô tả</th></tr></thead>
-                  <tbody>{entries.map((entry) => <tr key={entry?.id}>
-                    <td data-label="Thời gian">{formatUtcAsLocal(entry?.createdAt)}</td>
-                    <td data-label="Tác nhân">{entry?.actorUserId == null ? "Hệ thống / tác nhân nội bộ" : `User #${entry.actorUserId}`}</td>
-                    <td data-label="Vai trò"><span className="admin-audit-role">{displayValue(entry?.actorRole)}</span></td>
-                    <td data-label="Hành động">{displayValue(entry?.action)}</td>
-                    <td data-label="Loại đối tượng">{displayValue(entry?.entityType)}</td>
-                    <td data-label="ID đối tượng">{displayValue(entry?.entityId)}</td>
-                    <td data-label="Mô tả" className="admin-audit-description">{displayValue(entry?.description)}</td>
-                  </tr>)}</tbody>
+                  <tbody>{entries.map((entry) => {
+                    const description = formatAuditDescription(entry);
+                    return <tr key={entry?.id}>
+                      <td data-label="Thời gian">{formatUtcAsLocal(entry?.createdAt)}</td>
+                      <td data-label="Tác nhân" className="admin-audit-actor" title={entry?.actorCurrentDisplayName || undefined}>{entry?.actorUserId == null ? <><span>SYSTEM</span><small>Tác nhân nội bộ</small></> : <><span>{entry.actorCurrentDisplayName || "Tài khoản không còn truy cập được"}</span><small>User #{entry.actorUserId}</small></>}</td>
+                      <td data-label="Vai trò"><span className="admin-audit-role">{displayValue(entry?.actorRole)}</span></td>
+                      <td data-label="Hành động">{displayValue(entry?.action)}</td>
+                      <td data-label="Loại đối tượng">{displayValue(entry?.entityType)}</td>
+                      <td data-label="ID đối tượng">{displayValue(entry?.entityId)}</td>
+                      <td data-label="Mô tả" className="admin-audit-description"><span>{description.text}</span>{description.formatted && <details><summary>Chi tiết kỹ thuật</summary><pre>{description.raw}</pre></details>}</td>
+                    </tr>;
+                  })}</tbody>
                 </table></div>}
           {!loading && !error && totalPages > 1 && <nav className="admin-audit-pagination" aria-label="Phân trang audit logs">
             <button type="button" onClick={() => { setLoading(true); setError(""); setPageNumber((value) => Math.max(0, value - 1)); }} disabled={!hasPrevious || loading}>Trước</button>

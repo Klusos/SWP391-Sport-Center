@@ -96,6 +96,15 @@
 .coach-pt-detail-dialog dt { color: #71869a; font-size: 11px; }
 .coach-pt-detail-dialog dd { margin: 5px 0 0; color: #244766; font-size: 13px; font-weight: 650; overflow-wrap: anywhere; }
 .coach-pt-detail-dialog > button { min-height: 39px; padding: 8px 14px; border: 1px solid #1767d2; border-radius: 9px; background: #1767d2; color: #fff; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.coach-pt-detail-dialog .coach-pt-outcome-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin: 0 0 16px; }
+.coach-pt-detail-dialog .coach-pt-outcome-actions p { flex: 1 0 100%; margin: 0 0 3px; color: #536a80; font-size: 13px; line-height: 1.5; }
+.coach-pt-detail-dialog .coach-pt-outcome-actions button { min-height: 40px; padding: 8px 14px; border: 1px solid transparent; border-radius: 9px; font: inherit; font-size: 13px; font-weight: 750; cursor: pointer; transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease; }
+.coach-pt-detail-dialog .coach-pt-outcome-actions .sc-button--success { border-color: #13834d; background: #168b52; color: #fff; }
+.coach-pt-detail-dialog .coach-pt-outcome-actions .sc-button--success:hover:not(:disabled) { background: #0f7041; }
+.coach-pt-detail-dialog .coach-pt-outcome-actions .sc-button--warning { border-color: #d5a33b; background: #fff7e5; color: #704d00; }
+.coach-pt-detail-dialog .coach-pt-outcome-actions .sc-button--warning:hover:not(:disabled) { border-color: #bb8420; background: #ffefc7; }
+.coach-pt-detail-dialog .coach-pt-outcome-actions button:disabled { opacity: .58; cursor: not-allowed; }
+.coach-pt-detail-dialog .coach-pt-outcome-actions button:focus-visible { outline: 3px solid rgb(23 103 210 / 25%); outline-offset: 2px; }
 @media (max-width: 760px) {
   .coach-pt-calendar-heading,.coach-pt-week-navigation { align-items: flex-start; flex-direction: column; }
   .coach-pt-week-actions { width: 100%; justify-content: space-between; }
@@ -106,9 +115,16 @@
 }
 @media (max-width: 480px) {
   .coach-pt-detail-dialog dl { grid-template-columns: 1fr; }
+  .coach-pt-detail-dialog .coach-pt-outcome-actions button { flex: 1 1 100%; }
   .coach-pt-session-day { padding: 11px; }
   .coach-pt-session-day > h3 { align-items: flex-start; flex-direction: column; }
 }
 @media (prefers-reduced-motion: reduce) {
   .coach-pt-day { transition: none; }
 }
+
+/* Keep the Coach page header aligned with the Consultation page header. */
+.coach-pt-main .pt-header { align-items:center; margin:0; padding:clamp(20px,2.5vw,30px); border:1px solid #d7e7f7; border-radius:18px; background:linear-gradient(120deg,#edf6ff,#fff 78%); box-shadow:0 10px 28px rgba(18,59,99,.06); }
+.coach-pt-main .pt-header h1 { margin:0; color:#102a4c; font-size:clamp(24px,2.4vw,32px); font-weight:820; letter-spacing:-.035em; }
+.coach-pt-main .pt-header .pt-description { max-width:680px; margin:7px 0 0; line-height:1.6; }
+@media(max-width:700px){.coach-pt-main .pt-header{align-items:flex-start}.coach-pt-main .pt-header .pt-description{margin-top:7px}}

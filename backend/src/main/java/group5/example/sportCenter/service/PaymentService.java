@@ -83,6 +83,7 @@ public class PaymentService {
     private final PtBookingPaymentHandler ptBookingHandler;
     private final PaymentGateway paymentGateway;
     private final NotificationService notificationService;
+    private final AuditLogService auditLogs;
     private final Clock clock;
     private final int onlinePaymentExpiryMinutes;
 
@@ -102,6 +103,7 @@ public class PaymentService {
             PtBookingPaymentHandler ptBookingHandler,
             PaymentGateway paymentGateway,
             NotificationService notificationService,
+            AuditLogService auditLogs,
             Clock clock,
             @Value("${app.payment.vnpay.expire-minutes:15}") int onlinePaymentExpiryMinutes) {
         this.paymentRepository = paymentRepository;
@@ -119,6 +121,7 @@ public class PaymentService {
         this.ptBookingHandler = ptBookingHandler;
         this.paymentGateway = paymentGateway;
         this.notificationService = notificationService;
+        this.auditLogs = auditLogs;
         this.clock = clock;
         this.onlinePaymentExpiryMinutes = onlinePaymentExpiryMinutes;
     }
@@ -291,8 +294,14 @@ public class PaymentService {
         }
         requirePending(payment);
         payment.setProcessedBy(actor);
-        return toResponse(finalizePayment(payment, request.getSuccess(), request.getNote(),
-                Boolean.TRUE.equals(request.getSuccess()) ? now() : null), null);
+        PaymentStatus previousStatus = payment.getStatus();
+        Payment settled = finalizePayment(payment, request.getSuccess(), request.getNote(),
+                Boolean.TRUE.equals(request.getSuccess()) ? now() : null);
+        auditLogs.record("COUNTER_CONFIRMATION", "PAYMENT", settled.getId(),
+                "status=" + previousStatus + "->" + settled.getStatus() + ";purpose=" + settled.getPurpose()
+                        + ";amount=" + settled.getAmount().stripTrailingZeros().toPlainString()
+                        + ";method=COUNTER");
+        return toResponse(settled, null);
     }
 
     /** Shared authenticated staff check for the Renewal-specific COUNTER adapter. */
@@ -368,9 +377,12 @@ public class PaymentService {
                     || payment.getPurpose() == PaymentPurpose.UPGRADE;
             LocalDateTime verifiedPaidAt = membershipPayment
                     ? parseVerifiedProviderPaymentTime(callback.verifiedPaymentTime()) : null;
+            PaymentStatus previous = payment.getStatus();
+            Payment reconciled = markRefundRequired(payment, "Payment succeeded after it was cancelled",
+                    verifiedPaidAt, membershipPayment ? callback.verifiedPaymentTime() : null);
+            auditOnlineCallback(reconciled, previous);
             return new OnlineCallbackResult(OnlineCallbackResult.Status.APPLIED,
-                    toResponse(markRefundRequired(payment, "Payment succeeded after it was cancelled",
-                            verifiedPaidAt, membershipPayment ? callback.verifiedPaymentTime() : null), null));
+                    toResponse(reconciled, null));
         }
         if (payment.getStatus() != PaymentStatus.PENDING) {
             // callback lặp lại: bỏ qua (idempotent)
@@ -381,9 +393,11 @@ public class PaymentService {
                 || payment.getPurpose() == PaymentPurpose.UPGRADE;
         LocalDateTime verifiedPaidAt = callback.success() && membershipPayment
                 ? parseVerifiedProviderPaymentTime(callback.verifiedPaymentTime()) : null;
-        return new OnlineCallbackResult(OnlineCallbackResult.Status.APPLIED, toResponse(
-                finalizePayment(payment, callback.success(), callback.success() ? null : failureNote,
-                        verifiedPaidAt), null));
+        PaymentStatus previous = payment.getStatus();
+        Payment settled = finalizePayment(payment, callback.success(), callback.success() ? null : failureNote,
+                verifiedPaidAt);
+        auditOnlineCallback(settled, previous);
+        return new OnlineCallbackResult(OnlineCallbackResult.Status.APPLIED, toResponse(settled, null));
     }
 
     /** Huỷ payment đang PENDING (member huỷ của mình, hoặc staff huỷ). */
@@ -407,7 +421,11 @@ public class PaymentService {
                 ? "Cancelled by " + actor.getRole().toUpperCase(Locale.ROOT)
                 : MembershipAutoRenewalService.NOTE_PREFIX + renewalSourceId
                     + " cancelled by " + actor.getRole().toUpperCase(Locale.ROOT));
-        return toResponse(paymentRepository.save(payment), null);
+        Payment cancelled = paymentRepository.save(payment);
+        auditLogs.record("CANCEL", "PAYMENT", cancelled.getId(),
+                "status=PENDING->CANCELLED;purpose=" + cancelled.getPurpose() + ";amount="
+                        + cancelled.getAmount().stripTrailingZeros().toPlainString());
+        return toResponse(cancelled, null);
     }
 
     /**
@@ -473,12 +491,14 @@ public class PaymentService {
     }
 
     private OnlineCallbackResult settleAutoRenewalCallback(Payment payment, GatewayCallback callback) {
+        PaymentStatus previous = payment.getStatus();
         var settlement = membershipAutoRenewalService.validateVerifiedSettlement(
                 payment, callback.verifiedPaymentTime(), now());
         if (!settlement.eligible()) {
-            return new OnlineCallbackResult(OnlineCallbackResult.Status.APPLIED,
-                    toResponse(markAutoRenewalRefundRequired(payment, settlement.rejectionReason(),
-                            callback.verifiedPaymentTime(), settlement.paidAt()), null));
+            Payment reconciled = markAutoRenewalRefundRequired(payment, settlement.rejectionReason(),
+                    callback.verifiedPaymentTime(), settlement.paidAt());
+            auditOnlineCallback(reconciled, previous);
+            return new OnlineCallbackResult(OnlineCallbackResult.Status.APPLIED, toResponse(reconciled, null));
         }
         // An expiry cleanup may have run before the signed callback arrived. A timely verified
         // payment remains eligible; opt-out/manual cancellations are rejected by the validator.
@@ -486,8 +506,17 @@ public class PaymentService {
         Integer sourceId = MembershipAutoRenewalService.sourceMembershipId(payment);
         String evidence = MembershipAutoRenewalService.NOTE_PREFIX + sourceId
                 + " | VNPay PayDate=" + callback.verifiedPaymentTime();
-        return new OnlineCallbackResult(OnlineCallbackResult.Status.APPLIED,
-                toResponse(finalizePayment(payment, true, evidence, settlement.paidAt()), null));
+        Payment settled = finalizePayment(payment, true, evidence, settlement.paidAt());
+        auditOnlineCallback(settled, previous);
+        return new OnlineCallbackResult(OnlineCallbackResult.Status.APPLIED, toResponse(settled, null));
+    }
+
+    private void auditOnlineCallback(Payment payment, PaymentStatus previousStatus) {
+        if (previousStatus == payment.getStatus()) return;
+        auditLogs.record("ONLINE_CALLBACK", "PAYMENT", payment.getId(),
+                "status=" + previousStatus + "->" + payment.getStatus() + ";purpose=" + payment.getPurpose()
+                        + ";amount=" + payment.getAmount().stripTrailingZeros().toPlainString()
+                        + (payment.getRenewalIntent() == null ? "" : ";renewalIntentId=" + payment.getRenewalIntent().getId()));
     }
 
     private Payment markAutoRenewalRefundRequired(Payment payment, String reason,
@@ -598,7 +627,11 @@ public class PaymentService {
         notificationService.createForUser(payment.getMember().getId(), "Đã hoàn tiền thanh toán #" + payment.getId(),
                 "Trung tâm đã hoàn " + payment.getAmount().stripTrailingZeros().toPlainString()
                         + " VND cho khoản thanh toán #" + payment.getId() + ".");
-        return toResponse(paymentRepository.save(payment), null);
+        Payment saved = paymentRepository.saveAndFlush(payment);
+        auditLogs.record("REFUND_CONFIRMED", "PAYMENT", saved.getId(),
+                "status=REFUND_REQUIRED->REFUNDED;amount=" + saved.getAmount().stripTrailingZeros().toPlainString()
+                        + ";refundTimeRecorded=true;confirmationNote=" + (note != null && !note.isBlank()));
+        return toResponse(saved, null);
     }
 
     /** View Payment History (của chính mình). */

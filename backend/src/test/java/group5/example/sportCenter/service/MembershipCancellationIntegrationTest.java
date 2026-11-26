@@ -2,6 +2,9 @@ package group5.example.sportCenter.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -16,6 +19,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.AfterEach;
@@ -31,6 +35,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.web.FilterChainProxy;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
@@ -41,18 +46,25 @@ import group5.example.sportCenter.dto.CounterPaymentRequest;
 import group5.example.sportCenter.dto.CreatePaymentRequest;
 import group5.example.sportCenter.dto.PaymentResponse;
 import group5.example.sportCenter.entity.Membership;
+import group5.example.sportCenter.entity.AuditLog;
 import group5.example.sportCenter.entity.MembershipCancellationRequest;
 import group5.example.sportCenter.entity.MembershipCancellationRequestStatus;
 import group5.example.sportCenter.entity.MembershipPlan;
+import group5.example.sportCenter.entity.MembershipUpgrade;
 import group5.example.sportCenter.entity.Payment;
 import group5.example.sportCenter.entity.PaymentMethod;
 import group5.example.sportCenter.entity.PaymentPurpose;
 import group5.example.sportCenter.entity.PaymentStatus;
+import group5.example.sportCenter.entity.MembershipRenewalIntent;
+import group5.example.sportCenter.entity.RenewalIntentCreationSource;
+import group5.example.sportCenter.entity.RenewalIntentStatus;
 import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.repository.MembershipCancellationRequestRepository;
+import group5.example.sportCenter.repository.AuditLogRepository;
 import group5.example.sportCenter.repository.MembershipPlanRepository;
 import group5.example.sportCenter.repository.MembershipRepository;
 import group5.example.sportCenter.repository.MembershipUpgradeRepository;
+import group5.example.sportCenter.repository.MembershipRenewalIntentRepository;
 import group5.example.sportCenter.repository.NotificationRepository;
 import group5.example.sportCenter.repository.PaymentRepository;
 import group5.example.sportCenter.repository.UserRepository;
@@ -70,8 +82,10 @@ class MembershipCancellationIntegrationTest {
     @Autowired MembershipAutoRenewalService autoRenewal;
     @Autowired MembershipCancellationRequestService cancellationRequests;
     @Autowired MembershipCancellationRequestRepository requestRows;
+    @MockitoSpyBean AuditLogRepository auditLogs;
     @Autowired PaymentRepository paymentRows;
     @Autowired MembershipUpgradeRepository upgrades;
+    @Autowired MembershipRenewalIntentRepository renewalIntents;
     @Autowired MembershipRepository memberships;
     @Autowired MembershipPlanRepository plans;
     @Autowired NotificationRepository notifications;
@@ -155,8 +169,7 @@ class MembershipCancellationIntegrationTest {
         assertEquals("ACTIVE", memberships.findById(current.getId()).orElseThrow().getStatus());
         assertEquals(1L, jdbc.queryForObject("select count(*) from notification where user_id = ?", Long.class, member.getId()));
         mvc.perform(get(optionsUrl()).header("Authorization", bearer(member)))
-                .andExpect(jsonPath("$.blockedReason").doesNotExist())
-                .andExpect(jsonPath("$.options[0].planName").value("PREMIUM"));
+                .andExpect(jsonPath("$.blockedReason").value("UNKNOWN_PAID_VALUE"));
         mvc.perform(get(REQUESTS_URL + "/me").header("Authorization", bearer(member)))
                 .andExpect(jsonPath("$[0].status").value("APPROVED"));
     }
@@ -270,8 +283,11 @@ class MembershipCancellationIntegrationTest {
         User other = user("MEMBER", "direct-cancel");
         Membership otherUpcoming = memberships.save(copy(other, standard, upcoming.getStartDate().plusDays(10),
                 upcoming.getStartDate().plusDays(40)));
+        attachSuccessfulPayment(otherUpcoming, other, standard.getPrice(), PaymentPurpose.MEMBERSHIP);
         Integer otherRequest = requestCancellation(other, otherUpcoming, null);
-        mvc.perform(patch("/api/memberships/" + otherUpcoming.getId() + "/cancel").header("Authorization", bearer(admin)))
+        mvc.perform(patch("/api/memberships/" + otherUpcoming.getId() + "/cancel")
+                        .header("Authorization", bearer(admin)).contentType("application/json")
+                        .content("{\"reason\":\"Duplicate package issued\"}"))
                 .andExpect(status().isOk());
         MembershipCancellationRequest answered = requestRows.findById(otherRequest).orElseThrow();
         assertEquals(MembershipCancellationRequestStatus.APPROVED, answered.getStatus());
@@ -302,39 +318,416 @@ class MembershipCancellationIntegrationTest {
     }
 
     @Test
-    void adminCancelsARunningMembershipOnlyWithAReasonAndWithoutTouchingThePayment() throws Exception {
+    void adminCancelsARunningMembershipWithFullActualPaidAmountRefundAndAudit() throws Exception {
+        Payment paid = attachSuccessfulPayment(current, member, new BigDecimal("500000.00"), PaymentPurpose.MEMBERSHIP);
         String url = "/api/memberships/" + current.getId() + "/cancel";
         mvc.perform(patch(url).header("Authorization", bearer(admin)).contentType("application/json").content("{}"))
                 .andExpect(status().isBadRequest());
+        assertEquals(0, auditLogs.findAll().stream()
+                .filter(entry -> "MEMBERSHIP".equals(entry.getEntityType())
+                        && String.valueOf(current.getId()).equals(entry.getEntityId())
+                        && "CANCEL".equals(entry.getAction()))
+                .count());
         mvc.perform(patch(url).header("Authorization", bearer(admin)).contentType("application/json")
-                        .content("{\"reason\":\"Medical certificate, refund handled at the desk\"}"))
+                        .content("{\"reason\":\"   \"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(patch(url).header("Authorization", bearer(admin)).contentType("application/json")
+                        .content("{\"reason\":\"" + "x".repeat(251) + "\"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(patch(url).header("Authorization", bearer(admin)).contentType("application/json")
+                        .content("{\"reason\":\"Medical certificate, refund review\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"))
-                .andExpect(jsonPath("$.cancelReason").value("Medical certificate, refund handled at the desk"));
+                .andExpect(jsonPath("$.cancelReason").value("Medical certificate, refund review"));
 
         Membership cancelled = memberships.findById(current.getId()).orElseThrow();
         assertEquals(today.plusDays(20), cancelled.getEndDate());
-        assertNull(cancelled.getPurchasePayment());
+        assertEquals(paid.getId(), cancelled.getPurchasePayment().getId());
+        Payment refundRequired = paymentRows.findById(paid.getId()).orElseThrow();
+        assertEquals(PaymentStatus.REFUND_REQUIRED, refundRequired.getStatus());
+        assertEquals(new BigDecimal("500000.00"), refundRequired.getAmount());
+        assertNull(refundRequired.getRefundedAt());
+        mvc.perform(get("/api/payments/refund-required").header("Authorization", bearer(admin)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[?(@.id == " + paid.getId() + ")]" ).isNotEmpty());
+        var cancellationAudit = auditLogs.findAll().stream()
+                .filter(entry -> "MEMBERSHIP".equals(entry.getEntityType())
+                        && String.valueOf(current.getId()).equals(entry.getEntityId())
+                        && "CANCEL".equals(entry.getAction()))
+                .findFirst().orElseThrow();
+        assertEquals(admin.getId(), cancellationAudit.getActorUserId());
+        assertEquals("ADMIN", cancellationAudit.getActorRole());
+        org.junit.jupiter.api.Assertions.assertTrue(cancellationAudit.getDescription().contains("status=ACTIVE->CANCELLED"));
+        org.junit.jupiter.api.Assertions.assertTrue(cancellationAudit.getDescription().contains("refundAmountDue=500000"));
+        org.junit.jupiter.api.Assertions.assertTrue(cancellationAudit.getDescription().contains("reason=Medical certificate, refund review"));
+        assertEquals(1, auditLogs.findAll().stream()
+                .filter(entry -> "MEMBERSHIP".equals(entry.getEntityType())
+                        && String.valueOf(current.getId()).equals(entry.getEntityId())
+                        && "CANCEL".equals(entry.getAction()))
+                .count());
         mvc.perform(get(optionsUrl()).header("Authorization", bearer(member)))
                 .andExpect(jsonPath("$.blockedReason").value("NO_ACTIVE_MEMBERSHIP"));
     }
 
     @Test
-    void cancellingAMembershipAlsoCancelsItsPendingAutoRenewal() throws Exception {
+    void cancellingAMembershipDoesNotCreateLegacyNoteBasedAutoRenewalPayments() throws Exception {
         User renewing = user("MEMBER", "renewing-cancel");
         Membership upcomingSoon = memberships.save(copy(renewing, standard, today.plusDays(1), today.plusDays(2)));
         upcomingSoon.setAutoRenew(true);
         upcomingSoon = memberships.save(upcomingSoon);
-        Payment renewal = autoRenewal.createIfDue(upcomingSoon).orElseThrow();
+        assertTrue(autoRenewal.createIfDue(upcomingSoon).isEmpty(),
+                "the retired note-based payment flow must remain inactive; renewal intents are the current workflow");
+        assertTrue(paymentRows.findByMemberIdOrderByCreatedAtDesc(renewing.getId()).isEmpty());
 
         // Receptionists only review member requests; direct cancellation is ADMIN-only.
         mvc.perform(patch("/api/memberships/" + upcomingSoon.getId() + "/cancel").header("Authorization", bearer(receptionist)))
                 .andExpect(status().isForbidden());
         assertEquals("ACTIVE", memberships.findById(upcomingSoon.getId()).orElseThrow().getStatus());
-        mvc.perform(patch("/api/memberships/" + upcomingSoon.getId() + "/cancel").header("Authorization", bearer(admin)))
+        attachSuccessfulPayment(upcomingSoon, renewing, standard.getPrice(), PaymentPurpose.MEMBERSHIP);
+        mvc.perform(patch("/api/memberships/" + upcomingSoon.getId() + "/cancel")
+                        .header("Authorization", bearer(admin)).contentType("application/json")
+                        .content("{\"reason\":\"Renewal test cancellation\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.cancelReason").value("Cancelled by ADMIN before it started"));
-        assertEquals(PaymentStatus.CANCELLED, paymentRows.findById(renewal.getId()).orElseThrow().getStatus());
+                .andExpect(jsonPath("$.cancelReason").value("Renewal test cancellation"));
+        assertEquals(PaymentStatus.REFUND_REQUIRED,
+                paymentRows.findByMemberIdOrderByCreatedAtDesc(renewing.getId()).get(0).getStatus());
+    }
+
+    @Test
+    void exceptionalCancellationFailsClosedWhenUpgradeLineageIsMissing() throws Exception {
+        Payment upgradePayment = attachSuccessfulPayment(current, member, new BigDecimal("300000.00"), PaymentPurpose.UPGRADE);
+        mvc.perform(patch("/api/memberships/" + current.getId() + "/cancel")
+                        .header("Authorization", bearer(admin)).contentType("application/json")
+                        .content("{\"reason\":\"Legacy upgrade review\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("chu kỳ Membership hiện tại")));
+        assertEquals("ACTIVE", memberships.findById(current.getId()).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.SUCCESS, paymentRows.findById(upgradePayment.getId()).orElseThrow().getStatus());
+        assertEquals(0, auditLogs.findAll().stream().filter(entry -> "MEMBERSHIP".equals(entry.getEntityType())
+                && String.valueOf(current.getId()).equals(entry.getEntityId()) && "CANCEL".equals(entry.getAction())).count());
+    }
+
+    @Test
+    void exceptionalCancellationRefundsDirectAndUpgradePaymentsInTheCurrentCycle() throws Exception {
+        Payment direct = attachSuccessfulPayment(current, member, new BigDecimal("1000000.00"),
+                PaymentPurpose.MEMBERSHIP);
+        current.setStatus("UPGRADED");
+        memberships.saveAndFlush(current);
+
+        Payment upgradePayment = new Payment();
+        upgradePayment.setMember(member);
+        upgradePayment.setAmount(new BigDecimal("300000.00"));
+        upgradePayment.setMethod(PaymentMethod.COUNTER);
+        upgradePayment.setPurpose(PaymentPurpose.UPGRADE);
+        upgradePayment.setReferenceId(premium.getId());
+        upgradePayment.setStatus(PaymentStatus.SUCCESS);
+        upgradePayment.setTransactionCode("EC-UP-" + UUID.randomUUID().toString().replace("-", "").substring(0, 20));
+        upgradePayment.setCreatedAt(today.atTime(9, 0));
+        upgradePayment.setPaidAt(today.atTime(9, 1));
+        upgradePayment.setProcessedBy(receptionist);
+        upgradePayment = paymentRows.saveAndFlush(upgradePayment);
+        Integer upgradePaymentId = upgradePayment.getId();
+
+        Membership replacement = copy(member, premium, today.minusDays(1), today.plusDays(29));
+        replacement.setPurchasePayment(upgradePayment);
+        replacement = memberships.saveAndFlush(replacement);
+        Integer replacementId = replacement.getId();
+
+        MembershipUpgrade upgrade = completeUpgrade(current, replacement, upgradePayment, premium,
+                new BigDecimal("200000.00"));
+        upgrades.saveAndFlush(upgrade);
+
+        mvc.perform(patch("/api/memberships/" + replacementId + "/cancel")
+                        .header("Authorization", bearer(admin)).contentType("application/json")
+                        .content("{\"reason\":\"Full current cycle review\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        assertEquals(PaymentStatus.REFUND_REQUIRED, paymentRows.findById(direct.getId()).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.REFUND_REQUIRED,
+                paymentRows.findById(upgradePayment.getId()).orElseThrow().getStatus());
+        var summary = auditLogs.findAll().stream().filter(entry -> "MEMBERSHIP".equals(entry.getEntityType())
+                && String.valueOf(replacementId).equals(entry.getEntityId()) && "CANCEL".equals(entry.getAction()))
+                .findFirst().orElseThrow();
+        assertTrue(summary.getDescription().contains("eligiblePaidAmount=1300000"));
+        assertTrue(summary.getDescription().contains("eligiblePaymentCount=2"));
+        assertTrue(summary.getDescription().length() <= 500);
+        assertEquals(2, auditLogs.findAll().stream().filter(entry -> "PAYMENT".equals(entry.getEntityType())
+                && "EXCEPTIONAL_CANCEL_REFUND".equals(entry.getAction())).count());
+        assertTrue(auditLogs.findAll().stream().filter(entry -> "EXCEPTIONAL_CANCEL_REFUND".equals(entry.getAction()))
+                .anyMatch(entry -> direct.getId().toString().equals(entry.getEntityId())
+                        && entry.getDescription().contains("actualPaidAmount=1000000")));
+        assertTrue(auditLogs.findAll().stream().filter(entry -> "EXCEPTIONAL_CANCEL_REFUND".equals(entry.getAction()))
+                .anyMatch(entry -> upgradePaymentId.toString().equals(entry.getEntityId())
+                        && entry.getDescription().contains("actualPaidAmount=300000")));
+        assertEquals(new BigDecimal("200000.00"), upgrades.findByPaymentId(upgradePayment.getId())
+                .orElseThrow().getAppliedCreditAmount());
+        mvc.perform(get("/api/payments/refund-required").header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[?(@.id == " + direct.getId() + ")]" ).isNotEmpty())
+                .andExpect(jsonPath("$.content[?(@.id == " + upgradePayment.getId() + ")]" ).isNotEmpty());
+    }
+
+    @Test
+    void multipleUpgradeChainAndMaximumReasonKeepCompleteAuditEvidenceWithinColumnLimit() throws Exception {
+        Payment direct = attachSuccessfulPayment(current, member, new BigDecimal("1000000.00"),
+                PaymentPurpose.MEMBERSHIP);
+        current.setStatus("UPGRADED");
+        memberships.saveAndFlush(current);
+
+        Membership source = current;
+        List<Payment> lineagePayments = new java.util.ArrayList<>();
+        lineagePayments.add(direct);
+        for (int index = 0; index < 3; index++) {
+            Payment upgradePayment = attachPayment(member, premium, new BigDecimal("300000.00"));
+            Membership result = copy(member, premium, today.minusDays(1), today.plusDays(29));
+            result.setPurchasePayment(upgradePayment);
+            result = memberships.saveAndFlush(result);
+            upgrades.saveAndFlush(completeUpgrade(source, result, upgradePayment, premium,
+                    new BigDecimal("200000.00")));
+            lineagePayments.add(upgradePayment);
+            source = result;
+            if (index < 2) {
+                source.setStatus("UPGRADED");
+                memberships.saveAndFlush(source);
+            }
+        }
+        Integer targetId = source.getId();
+        String reason = "R".repeat(250);
+
+        mvc.perform(patch("/api/memberships/" + targetId + "/cancel")
+                        .header("Authorization", bearer(admin)).contentType("application/json")
+                        .content("{\"reason\":\"" + reason + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        assertEquals("CANCELLED", memberships.findById(targetId).orElseThrow().getStatus());
+        assertEquals(new BigDecimal("1900000.00"), lineagePayments.stream()
+                .map(payment -> paymentRows.findById(payment.getId()).orElseThrow())
+                .map(Payment::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add));
+        assertTrue(lineagePayments.stream().allMatch(payment ->
+                paymentRows.findById(payment.getId()).orElseThrow().getStatus() == PaymentStatus.REFUND_REQUIRED));
+
+        var entries = auditLogs.findAll();
+        var summary = entries.stream().filter(entry -> "MEMBERSHIP".equals(entry.getEntityType())
+                && String.valueOf(targetId).equals(entry.getEntityId()) && "CANCEL".equals(entry.getAction()))
+                .findFirst().orElseThrow();
+        assertEquals(admin.getId(), summary.getActorUserId());
+        assertTrue(summary.getDescription().contains("actorUserId=" + admin.getId() + ";actorRole=ADMIN"));
+        assertTrue(summary.getDescription().contains("cycleRootMembershipId=" + current.getId()));
+        assertTrue(summary.getDescription().contains("eligiblePaidAmount=1900000"));
+        assertTrue(summary.getDescription().contains("refundAmountDue=1900000"));
+        assertTrue(summary.getDescription().contains("reason=" + reason));
+        assertTrue(summary.getDescription().length() <= 500);
+        for (Payment payment : lineagePayments) {
+            var evidence = entries.stream().filter(entry -> "PAYMENT".equals(entry.getEntityType())
+                    && payment.getId().toString().equals(entry.getEntityId())
+                    && "EXCEPTIONAL_CANCEL_REFUND".equals(entry.getAction())).findFirst().orElseThrow();
+            assertTrue(evidence.getDescription().contains("membershipId=" + targetId));
+            assertTrue(evidence.getDescription().contains("status=SUCCESS->REFUND_REQUIRED"));
+            assertTrue(evidence.getDescription().contains("disposition=NEW_REFUND_OBLIGATION_PENDING_DISBURSEMENT"));
+            assertTrue(evidence.getDescription().contains("actualPaidAmount="
+                    + payment.getAmount().stripTrailingZeros().toPlainString()));
+            assertTrue(evidence.getDescription().length() <= 500);
+        }
+        long auditCount = entries.stream().filter(entry -> "CANCEL".equals(entry.getAction())
+                && String.valueOf(targetId).equals(entry.getEntityId())).count()
+                + entries.stream().filter(entry -> "EXCEPTIONAL_CANCEL_REFUND".equals(entry.getAction())).count();
+        long refundRequiredCount = paymentRows.findByMemberIdOrderByCreatedAtDesc(member.getId()).stream()
+                .filter(payment -> payment.getStatus() == PaymentStatus.REFUND_REQUIRED).count();
+        mvc.perform(patch("/api/memberships/" + targetId + "/cancel")
+                        .header("Authorization", bearer(admin)).contentType("application/json")
+                        .content("{\"reason\":\"Repeated request\"}"))
+                .andExpect(status().is4xxClientError());
+        assertEquals(auditCount, auditLogs.findAll().stream().filter(entry -> "CANCEL".equals(entry.getAction())
+                && String.valueOf(targetId).equals(entry.getEntityId())).count()
+                + auditLogs.findAll().stream().filter(entry -> "EXCEPTIONAL_CANCEL_REFUND".equals(entry.getAction())).count());
+        assertEquals(refundRequiredCount, paymentRows.findByMemberIdOrderByCreatedAtDesc(member.getId()).stream()
+                .filter(payment -> payment.getStatus() == PaymentStatus.REFUND_REQUIRED).count());
+    }
+
+    @Test
+    void existingRefundRequiredAndRefundedPaymentsAreAuditedAsPreservedNotNewTransitions() throws Exception {
+        Payment alreadyRequired = attachSuccessfulPayment(current, member, new BigDecimal("500000.00"),
+                PaymentPurpose.MEMBERSHIP);
+        alreadyRequired.setStatus(PaymentStatus.REFUND_REQUIRED);
+        paymentRows.saveAndFlush(alreadyRequired);
+        current.setStatus("UPGRADED");
+        memberships.saveAndFlush(current);
+
+        Payment alreadyRefunded = attachPayment(member, premium, new BigDecimal("300000.00"));
+        alreadyRefunded.setStatus(PaymentStatus.REFUNDED);
+        alreadyRefunded.setRefundedAt(today.atTime(9, 30));
+        paymentRows.saveAndFlush(alreadyRefunded);
+        Membership replacement = copy(member, premium, today.minusDays(1), today.plusDays(29));
+        replacement.setPurchasePayment(alreadyRefunded);
+        replacement = memberships.saveAndFlush(replacement);
+        upgrades.saveAndFlush(completeUpgrade(current, replacement, alreadyRefunded, premium,
+                new BigDecimal("200000.00")));
+        Integer replacementId = replacement.getId();
+
+        mvc.perform(patch("/api/memberships/" + replacementId + "/cancel")
+                        .header("Authorization", bearer(admin)).contentType("application/json")
+                        .content("{\"reason\":\"Preserve existing refund history\"}"))
+                .andExpect(status().isOk());
+
+        assertEquals("CANCELLED", memberships.findById(replacement.getId()).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.REFUND_REQUIRED,
+                paymentRows.findById(alreadyRequired.getId()).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.REFUNDED, paymentRows.findById(alreadyRefunded.getId()).orElseThrow().getStatus());
+        assertEquals(today.atTime(9, 30), paymentRows.findById(alreadyRefunded.getId()).orElseThrow().getRefundedAt());
+        var entries = auditLogs.findAll();
+        var summary = entries.stream().filter(entry -> "MEMBERSHIP".equals(entry.getEntityType())
+                && String.valueOf(replacementId).equals(entry.getEntityId()) && "CANCEL".equals(entry.getAction()))
+                .findFirst().orElseThrow();
+        assertTrue(summary.getDescription().contains("eligiblePaidAmount=800000"));
+        assertTrue(summary.getDescription().contains("refundAmountDue=500000"));
+        assertEquals("ADMIN", summary.getActorRole());
+        assertEquals(1, entries.stream().filter(entry -> "EXCEPTIONAL_CANCEL_PAYMENT_EVIDENCE".equals(entry.getAction())
+                && alreadyRequired.getId().toString().equals(entry.getEntityId())
+                && entry.getDescription().contains("status=REFUND_REQUIRED->REFUND_REQUIRED")
+                && entry.getDescription().contains("EXISTING_REFUND_OBLIGATION_PRESERVED")).count());
+        assertEquals(1, entries.stream().filter(entry -> "EXCEPTIONAL_CANCEL_PAYMENT_EVIDENCE".equals(entry.getAction())
+                && alreadyRefunded.getId().toString().equals(entry.getEntityId())
+                && entry.getDescription().contains("status=REFUNDED->REFUNDED")
+                && entry.getDescription().contains("ALREADY_REFUNDED_NO_DUPLICATE_OBLIGATION")).count());
+        assertEquals(0, entries.stream().filter(entry -> "EXCEPTIONAL_CANCEL_REFUND".equals(entry.getAction())
+                && alreadyRequired.getId().toString().equals(entry.getEntityId())).count());
+        assertEquals(0, entries.stream().filter(entry -> "EXCEPTIONAL_CANCEL_REFUND".equals(entry.getAction())
+                && alreadyRefunded.getId().toString().equals(entry.getEntityId())).count());
+    }
+
+    @Test
+    void refundedPaymentWithoutRefundTimestampIsRejectedWithoutCancellationOrAudit() throws Exception {
+        Payment inconsistent = attachSuccessfulPayment(current, member, new BigDecimal("500000.00"),
+                PaymentPurpose.MEMBERSHIP);
+        inconsistent.setStatus(PaymentStatus.REFUNDED);
+        inconsistent.setRefundedAt(null);
+        paymentRows.saveAndFlush(inconsistent);
+
+        mvc.perform(patch("/api/memberships/" + current.getId() + "/cancel")
+                        .header("Authorization", bearer(admin)).contentType("application/json")
+                        .content("{\"reason\":\"Reject inconsistent financial state\"}"))
+                .andExpect(status().isConflict());
+
+        assertEquals("ACTIVE", memberships.findById(current.getId()).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.REFUNDED, paymentRows.findById(inconsistent.getId()).orElseThrow().getStatus());
+        assertEquals(0, auditLogs.findAll().stream().filter(entry -> "MEMBERSHIP".equals(entry.getEntityType())
+                && current.getId().toString().equals(entry.getEntityId()) && "CANCEL".equals(entry.getAction())).count());
+    }
+
+    private Payment attachPayment(User owner, MembershipPlan target, BigDecimal amount) {
+        Payment payment = new Payment();
+        payment.setMember(owner);
+        payment.setAmount(amount);
+        payment.setMethod(PaymentMethod.COUNTER);
+        payment.setPurpose(PaymentPurpose.UPGRADE);
+        payment.setReferenceId(target.getId());
+        payment.setStatus(PaymentStatus.SUCCESS);
+        payment.setTransactionCode("EC-MU-" + UUID.randomUUID().toString().replace("-", "").substring(0, 20));
+        payment.setCreatedAt(today.atTime(9, 0));
+        payment.setPaidAt(today.atTime(9, 1));
+        payment.setProcessedBy(receptionist);
+        return paymentRows.saveAndFlush(payment);
+    }
+
+    @Test
+    void exceptionalCancellationAtRenewalRootExcludesThePreviousMembershipCycle() throws Exception {
+        Payment previousCyclePayment = attachSuccessfulPayment(current, member,
+                new BigDecimal("500000.00"), PaymentPurpose.MEMBERSHIP);
+        current.setAutoRenew(true);
+        memberships.saveAndFlush(current);
+
+        var now = LocalDate.now(BUSINESS_ZONE).atTime(10, 0);
+        MembershipRenewalIntent intent = new MembershipRenewalIntent();
+        intent.setSourceMembership(current);
+        intent.setTargetPlan(standard);
+        intent.setCreationSource(RenewalIntentCreationSource.AUTO_RENEW_SCHEDULER);
+        intent.setAutoRenewOptInSnapshot(true);
+        intent.setIntentStatus(RenewalIntentStatus.OPEN);
+        intent.setCreatedAt(now.minusDays(2));
+        intent.setValidFrom(current.getEndDate().minusDays(3).atStartOfDay());
+        intent.setValidUntil(current.getEndDate().atStartOfDay());
+        intent.setQuoteCapturedAt(now.minusDays(2));
+        intent.setSourceEndDateSnapshot(current.getEndDate());
+        intent.setSuccessorStartDate(current.getEndDate());
+        intent.setSuccessorEndDate(current.getEndDate().plusMonths(1));
+        intent.setPlanNameSnapshot(standard.getName());
+        intent.setPlanDescriptionSnapshot(standard.getDescription());
+        intent.setPlanPriceSnapshot(standard.getPrice());
+        intent.setQuotedAmount(new BigDecimal("725000.00"));
+        intent.setDurationMonthsSnapshot(1);
+        intent.setCourseDiscountPercentSnapshot(standard.getCourseDiscountPercent());
+        intent.setPtDiscountPercentSnapshot(standard.getPersonalTrainingDiscountPercent());
+        intent.setAllowPtPlanSnapshot(standard.getAllowPersonalTrainingPlan());
+        intent.setAllowOneOnOneSnapshot(standard.getAllowOneOnOneCoaching());
+        intent = renewalIntents.saveAndFlush(intent);
+
+        Payment renewalPayment = new Payment();
+        renewalPayment.setMember(member);
+        renewalPayment.setAmount(new BigDecimal("725000.00"));
+        renewalPayment.setMethod(PaymentMethod.ONLINE);
+        renewalPayment.setPurpose(PaymentPurpose.MEMBERSHIP);
+        renewalPayment.setReferenceId(standard.getId());
+        renewalPayment.setStatus(PaymentStatus.SUCCESS);
+        renewalPayment.setTransactionCode("EC-REN-" + UUID.randomUUID().toString().replace("-", "").substring(0, 20));
+        renewalPayment.setCreatedAt(now.minusDays(1));
+        renewalPayment.setPaidAt(now.minusHours(1));
+        renewalPayment.setRenewalIntent(intent);
+        renewalPayment.setRenewalSettlementAcceptedAt(now.minusMinutes(30));
+        renewalPayment = paymentRows.saveAndFlush(renewalPayment);
+        Integer renewalPaymentId = renewalPayment.getId();
+
+        intent.setIntentStatus(RenewalIntentStatus.SETTLED);
+        intent.setSettledPayment(renewalPayment);
+        intent.setSettledAt(now.minusMinutes(30));
+        renewalIntents.saveAndFlush(intent);
+
+        Membership renewed = copy(member, standard, current.getEndDate(), current.getEndDate().plusMonths(1));
+        renewed.setPurchasePayment(renewalPayment);
+        renewed.setRenewalIntent(intent);
+        renewed = memberships.saveAndFlush(renewed);
+        Integer renewedId = renewed.getId();
+
+        mvc.perform(patch("/api/memberships/" + renewedId + "/cancel")
+                        .header("Authorization", bearer(admin)).contentType("application/json")
+                        .content("{\"reason\":\"Renewal cycle review\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        assertEquals(PaymentStatus.SUCCESS, paymentRows.findById(previousCyclePayment.getId()).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.REFUND_REQUIRED, paymentRows.findById(renewalPayment.getId()).orElseThrow().getStatus());
+        var summary = auditLogs.findAll().stream().filter(entry -> "MEMBERSHIP".equals(entry.getEntityType())
+                && String.valueOf(renewedId).equals(entry.getEntityId()) && "CANCEL".equals(entry.getAction()))
+                .findFirst().orElseThrow();
+        assertTrue(summary.getDescription().contains("eligiblePaidAmount=725000"));
+        assertTrue(summary.getDescription().contains("cycleRootMembershipId=" + renewedId));
+        assertTrue(summary.getDescription().contains("eligiblePaymentCount=1"));
+        assertTrue(auditLogs.findAll().stream().anyMatch(entry -> "PAYMENT".equals(entry.getEntityType())
+                && renewalPaymentId.toString().equals(entry.getEntityId())
+                && "EXCEPTIONAL_CANCEL_REFUND".equals(entry.getAction())));
+        assertTrue(auditLogs.findAll().stream().noneMatch(entry -> "PAYMENT".equals(entry.getEntityType())
+                && previousCyclePayment.getId().toString().equals(entry.getEntityId())
+                && entry.getAction().startsWith("EXCEPTIONAL_CANCEL_")));
+    }
+
+    @Test
+    void failedCancellationAuditRollsBackMembershipAndRefundObligation() throws Exception {
+        Payment paid = attachSuccessfulPayment(current, member, new BigDecimal("500000.00"), PaymentPurpose.MEMBERSHIP);
+        doThrow(new IllegalStateException("audit persistence unavailable"))
+                .when(auditLogs).insert(argThat((AuditLog entry) -> "MEMBERSHIP".equals(entry.getEntityType())
+                        && String.valueOf(current.getId()).equals(entry.getEntityId())
+                        && "CANCEL".equals(entry.getAction())));
+
+        mvc.perform(patch("/api/memberships/" + current.getId() + "/cancel")
+                        .header("Authorization", bearer(admin)).contentType("application/json")
+                        .content("{\"reason\":\"Atomic audit failure test\"}"))
+                .andExpect(status().is5xxServerError());
+
+        assertEquals("ACTIVE", memberships.findById(current.getId()).orElseThrow().getStatus());
+        assertEquals(PaymentStatus.SUCCESS, paymentRows.findById(paid.getId()).orElseThrow().getStatus());
+        assertEquals(0, auditLogs.findAll().stream().filter(entry -> "MEMBERSHIP".equals(entry.getEntityType())
+                && String.valueOf(current.getId()).equals(entry.getEntityId()) && "CANCEL".equals(entry.getAction())).count());
     }
 
     // ---------------------------------------------------------------- helpers
@@ -351,15 +744,74 @@ class MembershipCancellationIntegrationTest {
     }
 
     private Payment buyRenewal() {
-        CreatePaymentRequest request = new CreatePaymentRequest();
-        request.setPurpose(PaymentPurpose.MEMBERSHIP);
-        request.setReferenceId(standard.getId());
-        request.setMethod(PaymentMethod.COUNTER);
-        PaymentResponse created = payments.createPayment(request, jwt(member));
-        CounterPaymentRequest counter = new CounterPaymentRequest();
-        counter.setSuccess(true);
-        payments.processAtCounter(created.getId(), counter, jwt(receptionist));
-        return paymentRows.findById(created.getId()).orElseThrow();
+        // This suite exercises cancellation request and refund transitions, not ordinary
+        // Purchase eligibility. Build the upcoming paid state directly so the fixture can
+        // coexist with the intentionally effective current Membership under current policy.
+        Payment payment = new Payment();
+        payment.setMember(member);
+        payment.setAmount(standard.getPrice());
+        payment.setMethod(PaymentMethod.COUNTER);
+        payment.setPurpose(PaymentPurpose.MEMBERSHIP);
+        payment.setReferenceId(standard.getId());
+        payment.setStatus(PaymentStatus.SUCCESS);
+        payment.setTransactionCode("c-" + UUID.randomUUID());
+        payment.setCreatedAt(today.atTime(10, 0));
+        payment.setPaidAt(today.atTime(10, 0));
+        payment.setProcessedBy(receptionist);
+        Payment savedPayment = paymentRows.saveAndFlush(payment);
+
+        Membership upcoming = copy(member, standard, current.getEndDate().plusDays(1),
+                current.getEndDate().plusMonths(1));
+        upcoming.setPurchasePayment(savedPayment);
+        memberships.saveAndFlush(upcoming);
+        return savedPayment;
+    }
+
+    private Payment attachSuccessfulPayment(Membership membership, User owner, BigDecimal amount, PaymentPurpose purpose) {
+        Payment payment = new Payment();
+        payment.setMember(owner);
+        payment.setAmount(amount);
+        payment.setMethod(PaymentMethod.COUNTER);
+        payment.setPurpose(purpose);
+        payment.setReferenceId(standard.getId());
+        payment.setStatus(PaymentStatus.SUCCESS);
+        payment.setTransactionCode("EC-" + UUID.randomUUID().toString().replace("-", "").substring(0, 24));
+        payment.setCreatedAt(today.atTime(9, 0));
+        payment.setPaidAt(today.atTime(9, 1));
+        payment.setProcessedBy(receptionist);
+        Payment saved = paymentRows.saveAndFlush(payment);
+        membership.setPurchasePayment(saved);
+        memberships.saveAndFlush(membership);
+        return saved;
+    }
+
+    private MembershipUpgrade completeUpgrade(Membership source, Membership result, Payment payment,
+            MembershipPlan targetPlan, BigDecimal appliedCredit) {
+        MembershipUpgrade upgrade = new MembershipUpgrade();
+        upgrade.setPayment(payment);
+        upgrade.setSourceMembership(source);
+        upgrade.setResultMembership(result);
+        upgrade.setTargetPlan(targetPlan);
+        int totalDays = (int) java.time.temporal.ChronoUnit.DAYS.between(source.getStartDate(), source.getEndDate());
+        upgrade.setSourcePeriodStartDate(source.getStartDate());
+        upgrade.setSourcePeriodEndDate(source.getEndDate());
+        upgrade.setCreditValuationDate(source.getEndDate().minusDays(3));
+        upgrade.setSourceTotalDays(totalDays);
+        upgrade.setSourceUnusedDays(3);
+        upgrade.setRemainingDays(3);
+        upgrade.setSourcePaidValueBasisAmount(new BigDecimal("1000000.00"));
+        upgrade.setTargetPlanNameSnapshot(targetPlan.getName());
+        upgrade.setTargetPlanDescriptionSnapshot(targetPlan.getDescription());
+        upgrade.setTargetPlanPriceSnapshot(targetPlan.getPrice());
+        upgrade.setTargetDurationMonthsSnapshot(targetPlan.getDurationMonths());
+        upgrade.setTargetCourseDiscountPercentSnapshot(targetPlan.getCourseDiscountPercent());
+        upgrade.setTargetPtDiscountPercentSnapshot(targetPlan.getPersonalTrainingDiscountPercent());
+        upgrade.setTargetAllowPtPlanSnapshot(targetPlan.getAllowPersonalTrainingPlan());
+        upgrade.setTargetAllowOneOnOneSnapshot(targetPlan.getAllowOneOnOneCoaching());
+        upgrade.setAppliedCreditAmount(appliedCredit);
+        upgrade.setCreatedAt(today.atTime(9, 0));
+        upgrade.setExpiresAt(today.plusDays(1).atTime(9, 0));
+        return upgrade;
     }
 
     private Membership latest() {
@@ -415,6 +867,10 @@ class MembershipCancellationIntegrationTest {
         notifications.deleteAllInBatch();
         requestRows.deleteAllInBatch();
         upgrades.deleteAllInBatch();
+        jdbc.update("UPDATE membership SET renewal_intent_id=NULL");
+        jdbc.update("UPDATE membership_renewal_intent SET settled_payment_id=NULL, settled_at=NULL");
+        jdbc.update("UPDATE payment SET renewal_intent_id=NULL");
+        renewalIntents.deleteAllInBatch();
         memberships.deleteAllInBatch();
         paymentRows.deleteAllInBatch();
         plans.deleteAllInBatch();

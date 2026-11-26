@@ -66,6 +66,8 @@ class ClassSessionServiceTest {
     private PersonalTrainingBookingRepository ptBookingRepository;
     @Mock
     private CourseRegistrationRepository registrations;
+    @Mock
+    private AuditLogService auditLogs;
     private ClassSessionService service;
 
     private CourseClass courseClass;
@@ -76,7 +78,7 @@ class ClassSessionServiceTest {
     void setUp() {
         service = new ClassSessionService(classSessionRepository, courseClassRepository, courseOfferingRepository,
                 facilityRepository, coachRepository, FIXED_CLOCK,
-                new CoachScheduleConflictService(classSessionRepository, ptBookingRepository, FIXED_CLOCK), registrations);
+                new CoachScheduleConflictService(classSessionRepository, ptBookingRepository, FIXED_CLOCK), registrations, auditLogs);
 
         Sport sport = new Sport();
         sport.setId(4);

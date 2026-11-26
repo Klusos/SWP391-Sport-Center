@@ -167,7 +167,7 @@ class ConsultationNotificationEventsIntegrationTest {
 
     private CreateConsultationRequest request(String email, String note) {
         return new CreateConsultationRequest("Visitor", "0900000000", email, sport.getId(), 25,
-                "recreational", note);
+                "recreational", note, java.time.LocalDate.of(1990, 1, 1));
     }
 
     private User user(String role, String status) {

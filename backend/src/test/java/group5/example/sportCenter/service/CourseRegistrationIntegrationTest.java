@@ -66,6 +66,7 @@ import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.ClassSessionRepository;
 import group5.example.sportCenter.repository.AttendanceRepository;
+import group5.example.sportCenter.repository.AuditLogRepository;
 import group5.example.sportCenter.repository.CoachRepository;
 import group5.example.sportCenter.repository.CoachSportRepository;
 import group5.example.sportCenter.repository.CourseClassRepository;
@@ -110,6 +111,7 @@ class CourseRegistrationIntegrationTest {
     @Autowired CourseClassRepository classes;
     @Autowired ClassSessionRepository sessions;
     @Autowired AttendanceRepository attendanceRows;
+    @Autowired AuditLogRepository auditLogs;
     @Autowired CoachRepository coaches;
     @Autowired CoachSportRepository coachSports;
     @Autowired JwtService tokens;
@@ -216,6 +218,13 @@ class CourseRegistrationIntegrationTest {
                 .andExpect(jsonPath("$.finalPrice").value(100.0))
                 .andReturn();
         int registrationId = responseId(created.getResponse().getContentAsString());
+        var staffRegistrationAudit = auditLogs.findAll().stream()
+                .filter(entry -> "COURSE_REGISTRATION".equals(entry.getEntityType())
+                        && String.valueOf(registrationId).equals(entry.getEntityId())
+                        && "STAFF_REGISTER".equals(entry.getAction()))
+                .findFirst().orElseThrow();
+        assertEquals(receptionist.getId(), staffRegistrationAudit.getActorUserId());
+        assertEquals("RECEPTIONIST", staffRegistrationAudit.getActorRole());
 
         mvc.perform(post("/api/course-registrations/staff")
                         .header("Authorization", bearer(member))

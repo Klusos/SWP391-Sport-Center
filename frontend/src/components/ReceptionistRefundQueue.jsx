@@ -7,7 +7,7 @@ import "./ReceptionistRefundQueue.css";
 const API_PAGE_SIZE = 100;
 const DISPLAY_PAGE_SIZE = 10;
 
-export default function ReceptionistRefundQueue({ token, purposes, groups }) {
+export default function ReceptionistRefundQueue({ token, purposes, groups, refreshVersion = 0 }) {
   const [queue, setQueue] = useState({ loading: true, payments: null, error: "", notice: "" });
   const [pages, setPages] = useState({});
   const [busyId, setBusyId] = useState(null);
@@ -28,7 +28,7 @@ export default function ReceptionistRefundQueue({ token, purposes, groups }) {
   useEffect(() => {
     void load();
     return () => { requestId.current += 1; };
-  }, [load]);
+  }, [load, refreshVersion]);
 
   async function confirmRefund(payment) {
     if (busy.current || payment?.status !== "REFUND_REQUIRED") return;

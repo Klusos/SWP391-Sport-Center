@@ -8,7 +8,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 
-@SpringBootTest
+@SpringBootTest(properties = "sportcenter.scheduling.enabled=true")
 @ActiveProfiles("phase1")
 class SportCenterApplicationTests {
 	@Autowired private ApplicationContext context;

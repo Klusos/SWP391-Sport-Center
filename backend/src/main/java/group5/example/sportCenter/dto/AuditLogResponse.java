@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 public record AuditLogResponse(
         Long id,
         Integer actorUserId,
+        String actorCurrentDisplayName,
         String actorRole,
         String action,
         String entityType,

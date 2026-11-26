@@ -30,6 +30,15 @@ test("Coach Dashboard uses coach-scoped class, session and PT APIs with per-sour
   assert.match(dashboard, /errors\.classes/);
   assert.match(dashboard, /errors\.teachingSessions/);
   assert.match(dashboard, /errors\.bookings/);
+  assert.match(dashboard, /showAllClasses \? classes : classes\.slice\(0, 6\)/);
+  assert.match(dashboard, /Xem tất cả \(\$\{classes\.length\}\)/);
+  assert.match(dashboard, /icon: "members"/);
+  assert.match(dashboard, /icon: "clipboardCheck"/);
+  assert.match(dashboard, /icon: "calendarClock"/);
+  assert.match(dashboard, /icon: "dumbbell"/);
+  assert.match(dashboard, /icon: "clipboardList"/);
+  assert.match(dashboard, /coach-dashboard-header/);
+  assert.match(dashboard, /Xem tất cả \(\$\{classes\.length\}\)/);
   assert.match(dashboard, /Lượt đăng ký lớp đã xác nhận/);
   assert.match(dashboard, /Chưa có lớp nào được phân công/);
   assert.match(dashboard, /Không có buổi dạy sắp tới/);
@@ -46,9 +55,11 @@ test("Coach Dashboard includes only pending assessments and presents the assignm
   assert.deepEqual(coachAssessmentSummary(pending[0]), {
     member: "Học viên #7",
     sport: "Bộ môn #1",
-    status: "PENDING",
-    assignment: "Được giao cho Coach #4",
+    status: "Đang chờ",
+    assignment: "Được phân công cho HLV #4",
   });
+  assert.equal(coachAssessmentSummary({ ...pending[0], status: "COMPLETED" }).status, "Đã hoàn tất");
+  assert.equal(coachAssessmentSummary({ ...pending[0], status: "COMPLETED" }).status, "Đã hoàn tất");
   assert.equal(coachAssessmentSummary({ ...pending[0], memberName: "Demo Member" }, [{ id: 1, name: "Badminton" }]).member, "Demo Member");
   assert.equal(coachAssessmentSummary(pending[0], [{ id: 1, name: "Badminton" }]).sport, "Badminton");
   assert.deepEqual(pendingCoachAssessments([]), []);

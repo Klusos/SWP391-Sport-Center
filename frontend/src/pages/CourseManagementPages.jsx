@@ -342,7 +342,7 @@ function CourseDetailPage({ course, offerings, today, offeringSearch, setOfferin
   return <>
     <header className="course-detail-heading"><div><h1>{course.name}</h1><p>Quản lý thông tin khóa học, các đợt học và lớp trực thuộc.</p></div></header>
     <section className="adm-block course-entity-panel course-info-card"><div className="adm-head"><h2>Thông tin khóa học</h2><button type="button" aria-label="Sửa thông tin khóa học" title="Sửa thông tin khóa học" onClick={() => navigate("/staff/courses/" + course.id + "/edit")}><CourseIcon name="edit" /><span>Sửa</span></button></div><dl className="course-entity-facts">
-      <Fact label="Sport" value={course.sportName} /><Fact label="Trình độ" value={course.level} /><Fact label="Độ tuổi" value={`${course.targetAgeMin ?? "—"} – ${course.targetAgeMax ?? "—"}`} /><Fact label="Chính sách độ tuổi" value={course.agePolicy || "—"} /><Fact label="Trạng thái" value={statusPill(course.status)} />
+      <Fact label="Bộ môn" value={course.sportName} /><Fact label="Trình độ" value={course.level} /><Fact label="Độ tuổi" value={`${course.targetAgeMin ?? "—"} – ${course.targetAgeMax ?? "—"}`} /><Fact label="Chính sách độ tuổi" value={course.agePolicy || "—"} /><Fact label="Trạng thái" value={statusPill(course.status)} />
       {course.description && <Fact label="Mô tả" value={course.description} />}{course.learningOutcome && <Fact label="Kết quả đầu ra" value={course.learningOutcome} />}
     </dl></section>
     <section className="adm-block"><div className="adm-head"><div><h2>Đợt học</h2><span className="course-list-total">{offerings.length} kết quả · ngày nghiệp vụ {today}</span></div></div>
@@ -361,7 +361,7 @@ function CourseDetailPage({ course, offerings, today, offeringSearch, setOfferin
         ]}
         onView={(item) => navigate(offeringPathFor(item.id))}
         onSave={async (id, body) => { await saveOfferingApi(token, id, id ? body : { ...body, courseId: course.id }); saveSuccess("Đã lưu đợt học."); }}
-        formHint="OPEN chỉ cho phép đăng ký khi đang trong thời gian đăng ký và có lớp đủ điều kiện. Giá và điều khoản lịch học bị khóa từ thời điểm mở đăng ký dự kiến (14 ngày trước hạn đăng ký); máy chủ là nơi thực thi quy tắc này."
+        formHint="Chỉ có thể đăng ký khi đợt học đang mở, còn trong thời gian nhận đăng ký và có lớp đủ điều kiện. Giá và lịch học không thể chỉnh sửa từ 14 ngày trước hạn đăng ký."
         validate={(form, _payload, original) => validateCourseOffering(form, original === "new" ? null : original)} />
     </section>
   </>;
@@ -373,7 +373,7 @@ function OfferingDetailPage({ course, offering, classes, classSearch, setClassSe
   const timeStatus = offeringTimeStatus(offering, businessDate);
   return <>
     <header className="course-detail-heading"><div><div className="course-title-group"><h1>{offering.name}</h1><span className={`course-time-status time-${String(timeStatus || "unknown").toLowerCase()}`}>{TIME_STATUS_LABEL[timeStatus] || "Chưa xác định"}</span></div><p>Đợt học thuộc khóa {course.name}; quản lý điều kiện và lịch các lớp bên dưới.</p></div></header>
-    <EntityCrud title="Thông tin đợt học" entity={offering} fields={offeringFieldsForEntity(fields, offering)} formHint="OPEN chỉ cho phép đăng ký khi đang trong thời gian đăng ký và có lớp đủ điều kiện. Điều khoản thương mại chỉ sửa được trước thời điểm mở đăng ký dự kiến. Trạng thái và tên mô tả vẫn có thể cập nhật nếu hợp lệ." panelClassName="course-offering-info" editLabel="" editAccessibleName="Sửa thông tin" showPencil details={[
+    <EntityCrud title="Thông tin đợt học" entity={offering} fields={offeringFieldsForEntity(fields, offering)} formHint="Chỉ có thể đăng ký khi đợt học đang mở, còn trong thời gian nhận đăng ký và có lớp đủ điều kiện. Giá và lịch học không thể chỉnh sửa từ 14 ngày trước hạn đăng ký; trạng thái và tên đợt vẫn có thể cập nhật nếu hợp lệ." panelClassName="course-offering-info" editLabel="" editAccessibleName="Sửa thông tin" showPencil details={[
       ["Khóa học", course.name], ["Học phí", `${Number(offering.price || 0).toLocaleString("vi-VN")} ₫`], ["Ngày bắt đầu", offering.startDate], ["Ngày kết thúc", offering.endDate],
       ["Hạn đăng ký", offering.registrationDeadline || "—"], ["Hạn hủy", offering.cancellationDeadline || "—"], ["Số buổi dự kiến", offering.plannedSessions], ["Thời lượng mỗi buổi", offering.sessionDuration ? `${offering.sessionDuration} phút` : "—"],
       ["Trạng thái đợt học", statusPill(offering.status)], ["Thời gian", TIME_STATUS_LABEL[timeStatus] || "Chưa xác định"],

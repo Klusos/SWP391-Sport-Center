@@ -58,6 +58,16 @@ export function paymentPurposePresentation(payment) {
   return paymentPurposes[payment?.purpose] ?? null;
 }
 
+/** Use the persisted Payment FK, never same-member or same-plan heuristics. */
+export function membershipsForPayment(memberships, payment) {
+  if (!payment || !["MEMBERSHIP", "UPGRADE"].includes(payment.purpose)) return [];
+  const paymentId = Number(payment.id);
+  if (!Number.isSafeInteger(paymentId) || paymentId <= 0) return [];
+  return (Array.isArray(memberships) ? memberships : []).filter(
+    (membership) => Number(membership.purchasePaymentId) === paymentId,
+  );
+}
+
 export function paymentStatusPresentation(status) {
   return paymentStatuses[status] ?? {
     tone: "unknown",

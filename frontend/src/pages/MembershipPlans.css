@@ -368,7 +368,26 @@
 .membership-main .membership-plan-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 17px; }
 .membership-main .membership-plan-actions button:first-child { border-color: #1767d2; color: #1767d2; }
 .membership-main .membership-plan-actions button:last-child { background: #f7faff; }
-.membership-main .queue-table { min-width: 1080px; }
+.membership-main .queue-table {
+  width: 100%;
+  min-width: 940px;
+  table-layout: fixed;
+}
+.membership-main .queue-table th,
+.membership-main .queue-table td { min-width: 0; overflow-wrap: anywhere; }
+.membership-main .queue-table th:first-child { width: 19%; }
+.membership-main .queue-table th:nth-child(2) { width: 11%; }
+.membership-main .queue-table th:nth-child(3) { width: 8%; }
+.membership-main .queue-table th:nth-child(4),
+.membership-main .queue-table th:nth-child(5) { width: 9%; }
+.membership-main .queue-table th:nth-child(6),
+.membership-main .queue-table th:nth-child(7) { width: 8%; }
+.membership-main .queue-table th:nth-child(8) { width: 10%; }
+.membership-main .queue-table th:nth-child(9) { width: 18%; }
+.membership-main .queue-table tbody td { padding-top: 8px; padding-bottom: 8px; line-height: 1.35; }
+.membership-main .queue-table tbody td:first-child small { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow-wrap: anywhere; }
+.membership-main .membership-plan-actions { gap: 5px; margin: 0; }
+.membership-main .membership-plan-actions button { min-width: 0; padding: 6px 8px; white-space: normal; line-height: 1.25; }
 .membership-main .membership-empty-state { margin: 0; }
 @media (max-width: 720px) {
   .membership-main .member-list-toolbar { align-items: stretch; }
@@ -381,6 +400,10 @@
   .membership-main .membership-path-form { grid-template-columns: minmax(0, 1fr); }
   .membership-main .membership-path-row { align-items: flex-start; flex-wrap: wrap; }
   .membership-main .membership-path-row > div { flex-basis: 100%; }
+}
+@media (max-width: 1100px) {
+  .membership-main .queue-table { min-width: 940px; }
+  .membership-main .queue-table-wrap { overflow-x: auto; }
 }
 
 /* Form tạo / chỉnh sửa gói hội viên */
@@ -505,6 +528,11 @@
   background: #fff;
   color: #53657d;
 }
+.membership-plan-modal-backdrop { position:fixed; inset:0; z-index:1400; display:grid; place-items:center; overflow:auto; padding:18px; background:rgba(14,31,52,.5); }
+.membership-main .membership-plan-modal { width:min(100%,760px); max-height:92vh; overflow:auto; margin:0; padding:22px; border:1px solid #d9e5f2; border-radius:16px; background:#fff; box-shadow:0 22px 70px rgba(14,34,58,.28); }
+.membership-main .membership-plan-modal h2 { margin:-22px -22px 20px; padding:18px 22px; border-bottom:1px solid #e4ebf3; }
+.membership-main .membership-plan-modal .row.g-3 > .col-md-6:first-child { width:100%; }
+@media (max-width:720px) { .membership-plan-modal-backdrop { padding:10px; } .membership-main .membership-plan-modal { padding:16px; } .membership-main .membership-plan-modal h2 { margin:-16px -16px 16px; padding:16px; } }
 @media (max-width: 720px) {
   .membership-main .form-card { padding: 0 17px 20px; }
   .membership-main .form-card h2 { margin: 0 -17px 20px; padding: 19px 17px; font-size: 18px; }

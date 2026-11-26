@@ -44,6 +44,7 @@ public class ClassSessionService {
     private final CoachScheduleConflictService coachScheduleConflicts;
     private final Clock clock;
     private final CourseRegistrationRepository registrations;
+    private final AuditLogService auditLogs;
 
     @Autowired
     public ClassSessionService(
@@ -54,9 +55,10 @@ public class ClassSessionService {
             CoachRepository coachRepository,
             CoachScheduleConflictService coachScheduleConflicts,
             CourseRegistrationRepository registrations,
+            AuditLogService auditLogs,
             Clock clock) {
         this(classSessionRepository, courseClassRepository, courseOfferingRepository, facilityRepository, coachRepository,
-                clock, coachScheduleConflicts, registrations);
+                clock, coachScheduleConflicts, registrations, auditLogs);
     }
 
     ClassSessionService(
@@ -67,7 +69,8 @@ public class ClassSessionService {
             CoachRepository coachRepository,
             Clock clock,
             CoachScheduleConflictService coachScheduleConflicts,
-            CourseRegistrationRepository registrations) {
+            CourseRegistrationRepository registrations,
+            AuditLogService auditLogs) {
         this.classSessionRepository = classSessionRepository;
         this.courseClassRepository = courseClassRepository;
         this.courseOfferingRepository = courseOfferingRepository;
@@ -76,6 +79,7 @@ public class ClassSessionService {
         this.clock = clock;
         this.registrations = registrations;
         this.coachScheduleConflicts = coachScheduleConflicts;
+        this.auditLogs = auditLogs;
     }
 
     @Transactional(readOnly = true)
@@ -123,7 +127,10 @@ public class ClassSessionService {
         session.setStartTime(request.getStartTime());
         session.setEndTime(request.getEndTime());
         session.setStatus(status);
-        return toResponse(classSessionRepository.save(session));
+        ClassSession saved = classSessionRepository.save(session);
+        auditLogs.record("CREATE", "CLASS_SESSION", saved.getId(),
+                "Class session created;classId=" + courseClass.getId() + ";status=" + status + ".");
+        return toResponse(saved);
     }
 
     public ClassSessionResponse update(Integer id, UpdateClassSessionRequest request) {
@@ -163,11 +170,16 @@ public class ClassSessionService {
         validateFacilityForUpdate(session, facility, request.getStartTime());
         validateConflicts(courseClass, facility, request.getStartTime(), request.getEndTime(), id);
 
+        Integer previousClassId = session.getCourseClass() == null ? null : session.getCourseClass().getId();
         session.setCourseClass(courseClass);
         session.setFacility(facility);
         session.setStartTime(request.getStartTime());
         session.setEndTime(request.getEndTime());
-        return toResponse(classSessionRepository.save(session));
+        ClassSession saved = classSessionRepository.save(session);
+        auditLogs.record("RESCHEDULE", "CLASS_SESSION", saved.getId(),
+                "Schedule updated;classId=" + previousClassId + "->" + courseClass.getId()
+                        + ";start=" + saved.getStartTime() + ";end=" + saved.getEndTime() + ".");
+        return toResponse(saved);
     }
 
     public ClassSessionResponse updateStatus(Integer id, UpdateClassSessionStatusRequest request) {
@@ -196,7 +208,10 @@ public class ClassSessionService {
             throw new IllegalArgumentException("A ClassSession can be cancelled only before its startTime");
         }
         session.setStatus(nextStatus);
-        return toResponse(classSessionRepository.save(session));
+        ClassSession saved = classSessionRepository.save(session);
+        auditLogs.record("STATUS_CHANGE", "CLASS_SESSION", saved.getId(),
+                "status=" + currentStatus + "->" + nextStatus + ";classId=" + saved.getCourseClass().getId() + ".");
+        return toResponse(saved);
     }
 
     private void validateConflicts(

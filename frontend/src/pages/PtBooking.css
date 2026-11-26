@@ -521,6 +521,12 @@
   color: #a52b2b;
 }
 
+.pt-status.no-show {
+  border-color: #edcf82;
+  background: #fff4d5;
+  color: #805b00;
+}
+
 /* ---------- RESPONSIVE ---------- */
 
 @media (max-width: 1050px) {

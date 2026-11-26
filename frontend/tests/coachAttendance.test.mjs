@@ -138,6 +138,10 @@ test("Coach Attendance exposes scoped summaries, search, bulk marking, and per-m
   assert.match(source, /if \(correctionCount > 0 && !window\.confirm/);
   assert.match(source, /savingAll \? "Đang lưu/);
   assert.match(source, /coach-attendance-stats/);
+  assert.match(source, /Thống kê tính theo lựa chọn hiện tại/);
+  assert.match(source, /Thống kê phản ánh điểm danh đã lưu/);
+  assert.match(source, /Thống kê tính theo lựa chọn hiện tại/);
+  assert.match(source, /Thống kê phản ánh điểm danh đã lưu/);
   assert.match(source, /Quay lại danh sách/);
   assert.match(source, /sessionPageData\.items\.map/);
   assert.match(css, /coach-attendance-session-pagination/);

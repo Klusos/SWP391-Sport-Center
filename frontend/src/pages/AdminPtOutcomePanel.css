@@ -1,0 +1,49 @@
+.admin-pt-outcomes { min-width: 0; margin-top: 22px; }
+.admin-pt-search { display: grid; gap: 6px; max-width: 540px; margin: 0 0 14px; color: #52677b; font-size: 12px; font-weight: 700; }
+.admin-pt-search input, .admin-pt-correction input { min-width: 0; min-height: 38px; padding: 8px 10px; border: 1px solid #cad7e4; border-radius: 8px; font: inherit; }
+.admin-pt-actions { min-width: 240px; }
+.admin-pt-correction { display: grid; gap: 6px; margin-top: 8px; }
+.admin-pt-correction label { color: #657b8f; font-size: 11px; font-weight: 650; }
+.admin-pt-correction button { justify-self: start; }
+.admin-pt-detail { display: grid; gap: 5px; padding-top: 8px; color: #52677b; font-size: 12px; overflow-wrap: anywhere; }
+.admin-pt-detail a { color: #1767b2; font-weight: 700; }
+@media (max-width: 700px) {
+  .admin-pt-actions { min-width: 190px; }
+  .admin-pt-outcomes .coach-attendance-table { min-width: 820px; }
+}
+.admin-pt-filters { display: grid; grid-template-columns: minmax(240px, 1fr) minmax(190px, 260px); align-items: end; gap: 12px; margin: 14px 0; }
+.admin-pt-filters label { display: grid; gap: 6px; color: #344b66; font-size: 13px; font-weight: 650; }
+.admin-pt-filters input, .admin-pt-filters select { width: 100%; min-width: 0; min-height: 40px; padding: 8px 10px; border: 1px solid #bdccda; border-radius: 8px; background: #fff; color: #17324f; font: inherit; }
+.admin-pt-table-wrap { overflow-x: auto; }
+.admin-pt-table { min-width: 820px; }
+.admin-pt-table th, .admin-pt-table td { padding-top: 8px; padding-bottom: 8px; }
+.admin-pt-actions { white-space: nowrap; }
+.admin-pt-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 12px; color: #60758c; font-size: 13px; }
+.admin-pt-pagination > div { display: flex; gap: 8px; }
+.admin-pt-pagination button, .admin-pt-dialog footer button { min-height: 36px; padding: 7px 12px; border: 1px solid #1767d2; border-radius: 8px; background: #1767d2; color: #fff; font: inherit; font-weight: 650; cursor: pointer; }
+.admin-pt-pagination button:disabled, .admin-pt-dialog button:disabled { opacity: .55; cursor: not-allowed; }
+.admin-pt-dialog-backdrop { position: fixed; inset: 0; z-index: 1200; display: grid; place-items: center; overflow: auto; padding: 20px; background: rgba(13, 29, 48, .48); }
+.admin-pt-dialog { width: min(100%, 560px); max-height: min(90vh, 760px); overflow: auto; padding: 22px; border: 1px solid #d8e4f1; border-radius: 16px; background: #fff; box-shadow: 0 22px 70px rgba(14, 34, 58, .28); }
+.admin-pt-dialog > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.admin-pt-dialog h3 { margin: 0 0 4px; color: #153e67; }
+.admin-pt-dialog header p { margin: 0; color: #60758c; overflow-wrap: anywhere; }
+.admin-pt-dialog dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 18px 0; }
+.admin-pt-dialog dl div { min-width: 0; padding: 10px; border-radius: 9px; background: #f5f8fc; }
+.admin-pt-dialog dt { color: #60758c; font-size: 12px; }
+.admin-pt-dialog dd { margin: 4px 0 0; color: #183653; overflow-wrap: anywhere; }
+.admin-pt-correction { display: grid; gap: 10px; padding-top: 14px; border-top: 1px solid #e5edf5; }
+.admin-pt-correction label { display: grid; gap: 6px; color: #344b66; font-weight: 650; }
+.admin-pt-correction textarea { min-height: 90px; padding: 10px; border: 1px solid #bdccda; border-radius: 8px; font: inherit; resize: vertical; }
+.admin-pt-correction p { margin: 0; color: #60758c; font-size: 13px; }
+.admin-pt-transition { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:12px; border:1px solid #dce8f5; border-radius:10px; background:#f5f9ff; }
+.admin-pt-transition .coach-attendance-badge { font-size:14px; padding:7px 11px; }
+.admin-pt-transition-arrow { color:#1767d2; font-size:24px; font-weight:800; }
+.admin-pt-correction footer { display: flex; justify-content: flex-end; gap: 8px; }
+.admin-pt-correction footer button:first-child { border-color: #cbd8e6; background: #fff; color: #425872; }
+.admin-pt-correction footer button:focus-visible, .admin-pt-pagination button:focus-visible { outline: 3px solid rgba(23,103,210,.28); outline-offset: 2px; }
+@media (max-width: 640px) {
+  .admin-pt-filters { grid-template-columns: minmax(0, 1fr); }
+  .admin-pt-pagination { align-items: flex-start; flex-direction: column; }
+  .admin-pt-dialog { padding: 16px; }
+  .admin-pt-dialog dl { grid-template-columns: minmax(0, 1fr); }
+}

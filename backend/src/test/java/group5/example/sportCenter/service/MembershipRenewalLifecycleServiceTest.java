@@ -45,12 +45,13 @@ class MembershipRenewalLifecycleServiceTest {
     @Mock UserRepository users;
     @Mock MembershipRenewalIntentService intentService;
     @Mock NotificationService notifications;
+    @Mock AuditLogService auditLogs;
     private MembershipRenewalLifecycleService service;
 
     @BeforeEach
     void setUp() {
         service = new MembershipRenewalLifecycleService(memberships, intents, payments, users, intentService,
-                notifications, Clock.fixed(NOW.atZone(VN).toInstant(), VN));
+                notifications, Clock.fixed(NOW.atZone(VN).toInstant(), VN), auditLogs);
     }
 
     @Test

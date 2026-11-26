@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { findOwnedPayment, findOwnedPtBooking } from "../src/paymentReturn.js";
-import { paymentPurposePresentation, paymentServiceLabel, paymentStatusPresentation, serviceStatusLabel } from "../src/paymentResult.js";
+import { membershipsForPayment, paymentPurposePresentation, paymentServiceLabel, paymentStatusPresentation, serviceStatusLabel } from "../src/paymentResult.js";
 import { startStatusPolling } from "../src/courseCheckout.js";
 
 const payments = [
@@ -15,6 +15,25 @@ test("return resolves only an exact positive ID found in authenticated owner pay
   assert.equal(findOwnedPayment(payments, "10"), payments[0]);
   for (const invalid of [null, "", "0", "1.2", "-1", "1e2", "9007199254740992"]) assert.equal(findOwnedPayment(payments, invalid), null);
   assert.equal(findOwnedPayment(payments, "999"), null, "another owner's payment is absent from the authenticated history response");
+});
+
+test("membership payment result follows the persisted payment association, not member or plan matches", () => {
+  const memberships = [
+    { id: 1, planId: 3, status: "UPGRADED", purchasePaymentId: 9001 },
+    { id: 5017, planId: 3, status: "ACTIVE", purchasePaymentId: 11052 },
+    { id: 5018, planId: 3, status: "ACTIVE", purchasePaymentId: 11053 },
+    { id: 5019, planId: 4, status: "ACTIVE", purchasePaymentId: 11054, renewalIntentId: 800 },
+  ];
+  assert.deepEqual(membershipsForPayment(memberships, { id: 11052, purpose: "MEMBERSHIP", referenceId: 3 }), [memberships[1]]);
+  assert.deepEqual(membershipsForPayment(memberships, { id: 11053, purpose: "UPGRADE", referenceId: 3 }), [memberships[2]]);
+  assert.deepEqual(membershipsForPayment(memberships, { id: 11054, purpose: "MEMBERSHIP", referenceId: 4 }), [memberships[3]]);
+  assert.deepEqual(membershipsForPayment(memberships, { id: 99999, purpose: "MEMBERSHIP", referenceId: 3 }), []);
+});
+
+test("successful Upgrade without a direct Membership association is not presented as granted entitlement", async () => {
+  const component = await readFile(new URL("../src/components/PaymentResultCard.jsx", import.meta.url), "utf8");
+  assert.match(component, /chưa tìm thấy Membership thay thế được liên kết trực tiếp; entitlement chưa được xác nhận/);
+  assert.match(component, /Membership thay thế được liên kết ở trên/);
 });
 
 test("URL paymentStatus cannot override the status on the authenticated payment", () => {

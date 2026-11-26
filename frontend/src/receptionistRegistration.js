@@ -37,7 +37,7 @@ export function membershipDiscount(memberMemberships, plans, sportDate = new Dat
     .map((membership) => planDiscounts.get(Number(membership.planId)) || 0));
 }
 
-export function eligibilityIssues(member, course, level, offering, registrations = [], businessDate) {
+export function eligibilityIssues(member, course, level, offering, registrations = [], businessDate, now = Date.now()) {
   const issues = [];
   if (member?.status !== "ACTIVE" || member?.role !== "MEMBER") issues.push("Tài khoản không phải MEMBER đang hoạt động.");
   const required = String(course?.level || "BEGINNER").toUpperCase();
@@ -53,12 +53,15 @@ export function eligibilityIssues(member, course, level, offering, registrations
     }
   }
   if (offering?.startDate) {
-    const opens = new Date(`${offering.startDate}T00:00:00Z`);
-    opens.setUTCDate(opens.getUTCDate() - 30);
-    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-    if (today < opens.toISOString().slice(0, 10)) issues.push(`Đợt đăng ký mở từ ${opens.toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}.`);
+    const deadline = vietnamTime(offering.registrationDeadline);
+    if (!Number.isFinite(deadline)) {
+      issues.push("Đợt học chưa có thời hạn đăng ký hợp lệ.");
+    } else {
+      const opens = deadline - 14 * 24 * 60 * 60 * 1000;
+      if (now < opens) issues.push(`Đợt đăng ký mở từ ${formatVietnamTime(new Date(opens).toISOString())}.`);
+    }
   }
-  if (offering?.registrationDeadline && vietnamTime(offering.registrationDeadline) <= Date.now()) {
+  if (offering?.registrationDeadline && vietnamTime(offering.registrationDeadline) <= now) {
     issues.push("Đợt đăng ký đã qua hạn.");
   }
   if (offering && registrations.some((registration) => Number(registration.memberId) === Number(member?.id)
