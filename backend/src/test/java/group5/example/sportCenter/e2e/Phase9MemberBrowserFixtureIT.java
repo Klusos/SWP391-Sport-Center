@@ -298,7 +298,20 @@ class Phase9MemberBrowserFixtureIT {
         jdbc.update("DELETE FROM dbo.notification WHERE user_id IN (?,?)", upgradeMember, renewalMember);
         jdbc.update("DELETE FROM dbo.membership_upgrade WHERE payment_id IN (SELECT id FROM dbo.payment WHERE member_id IN (?,?))",
                 upgradeMember, renewalMember);
-        jdbc.update("UPDATE dbo.membership_renewal_intent SET settled_payment_id=NULL WHERE source_membership_id=?", renewalSourceId);
+        // The successor references the Intent's accepted Payment as a composite FK, so remove
+        // only this fixture-owned successor before clearing the settled pointer.
+        jdbc.update("DELETE FROM dbo.membership WHERE member_id=? AND renewal_intent_id IN "
+                + "(SELECT id FROM dbo.membership_renewal_intent WHERE source_membership_id=?)",
+                renewalMember, renewalSourceId);
+        // Keep the settlement-state check valid while breaking the Intent/Payment reference cycle.
+        jdbc.update("UPDATE dbo.membership_renewal_intent SET intent_status='CANCELLED', settled_payment_id=NULL, "
+                + "settled_at=NULL, closed_at=SYSUTCDATETIME(), closed_reason='AUTO_RENEW_DISABLED' "
+                + "WHERE source_membership_id=?", renewalSourceId);
+        // Payment attempts also reference the Intent; delete only these fixture-owned descendants
+        // before deleting the Intent, retaining its source Membership until afterward.
+        jdbc.update("DELETE FROM dbo.payment WHERE member_id=? AND renewal_intent_id IN "
+                + "(SELECT id FROM dbo.membership_renewal_intent WHERE source_membership_id=?)",
+                renewalMember, renewalSourceId);
         jdbc.update("DELETE FROM dbo.membership_renewal_intent WHERE source_membership_id=?", renewalSourceId);
         jdbc.update("DELETE FROM dbo.membership WHERE member_id IN (?,?) AND plan_id IN (?,?,?)",
                 upgradeMember, renewalMember, sourcePlan, targetPlan, renewalPlan);

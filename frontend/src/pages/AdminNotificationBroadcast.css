@@ -34,6 +34,10 @@
   gap: 24px;
   margin-bottom: 24px;
 }
+.notification-broadcast-main .nb-header.admin-page-header { min-height:104px; align-items:center; padding:clamp(20px,2.5vw,30px); border:1px solid #d7e7f7; border-radius:18px; background:linear-gradient(120deg,#edf6ff,#fff 78%); box-shadow:0 10px 28px rgba(18,59,99,.06); }
+.notification-broadcast-main .nb-header.admin-page-header h1 { margin:0; color:#102a4c; font-size:clamp(24px,2.4vw,32px); font-weight:820; letter-spacing:-.035em; }
+.notification-broadcast-main .nb-header.admin-page-header { min-height:104px; align-items:center; padding:clamp(20px,2.5vw,30px); border:1px solid #d7e7f7; border-radius:18px; background:linear-gradient(120deg,#edf6ff,#fff 78%); box-shadow:0 10px 28px rgba(18,59,99,.06); }
+.notification-broadcast-main .nb-header.admin-page-header h1 { margin:0; color:#102a4c; font-size:clamp(24px,2.4vw,32px); font-weight:820; letter-spacing:-.035em; }
 
 .notification-broadcast-main .nb-header-content {
   flex: 1;
@@ -633,3 +637,6 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+.notification-broadcast-main .nb-header.admin-page-header { min-height:104px; align-items:center; padding:clamp(20px,2.5vw,30px); border:1px solid #d7e7f7; border-radius:18px; background:linear-gradient(120deg,#edf6ff,#fff 78%); box-shadow:0 10px 28px rgba(18,59,99,.06); }
+.notification-broadcast-main .nb-header.admin-page-header h1 { margin:0; color:#102a4c; font-size:clamp(24px,2.4vw,32px); font-weight:820; letter-spacing:-.035em; }

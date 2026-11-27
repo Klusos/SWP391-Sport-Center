@@ -32,6 +32,17 @@ test("Member course cards display only catalog-provided level and target-age bad
   assert.equal(formatTargetAgeRange(null, undefined), "");
 });
 
+test("Member course registrations paginate both tabs independently and honor a sport filter link", async () => {
+  const courses = await read("../src/pages/MemberCourses.jsx");
+  const assessments = await read("../src/pages/MemberLevelsAssessments.jsx");
+  assert.match(courses, /registrationSections\.current\.slice\(\(safeCurrentPage - 1\) \* 5, safeCurrentPage \* 5\)/);
+  assert.match(courses, /registrationSections\.history\.slice\(\(safeHistoryPage - 1\) \* 5, safeHistoryPage \* 5\)/);
+  assert.match(courses, /useSearchParams\(\)/);
+  assert.match(courses, /requestedSportId/);
+  assert.match(assessments, /navigate\(`\/member\/courses\?sportId=/);
+  assert.match(assessments, /Xem khóa học \{selectedSport\.name\}/);
+});
+
 test("catalog registration badges reuse loaded member history and stay hidden while unavailable", async () => {
   const courses = await read("../src/pages/MemberCourses.jsx");
   const css = await read("../src/pages/MemberCourses.css");
@@ -64,7 +75,7 @@ test("Member course detail selects real offerings and classes and displays autho
   assert.match(detail, /formatPrice\(selectedOffering\.price\)/);
   assert.match(detail, /classes\.map\(\(item\)/);
   assert.match(detail, /checked=\{selectedClassId === String\(item\.id\)\}/);
-  assert.match(detail, /item\.coachName && <span><b>Coach<\/b> \{item\.coachName\}<\/span>/);
+  assert.match(detail, /item\.coachName && <span><b>Huấn luyện viên<\/b> \{item\.coachName\}<\/span>/);
   assert.match(detail, /item\.capacity \?\?/);
   assert.match(detail, /selectedOffering\.registrationDeadline/);
   assert.doesNotMatch(detail, /remainingSeats|capacity\s*-\s*.*registration/);

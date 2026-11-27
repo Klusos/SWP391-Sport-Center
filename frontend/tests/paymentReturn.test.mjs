@@ -51,7 +51,7 @@ test("PT return resolves the booking only from PT purpose and its backend refere
 });
 
 test("each Payment purpose has only its own primary destination", () => {
-  assert.deepEqual(paymentPurposePresentation({ purpose: "PT_BOOKING" }), { label: "Thanh toán buổi tập cá nhân", action: "Xem lịch PT", path: "/member/pt-booking" });
+  assert.deepEqual(paymentPurposePresentation({ purpose: "PT_BOOKING" }), { label: "Thanh toán buổi tập cá nhân", action: "Xem lịch huấn luyện cá nhân", path: "/member/pt-booking" });
   assert.deepEqual(paymentPurposePresentation({ purpose: "MEMBERSHIP" }), { label: "Thanh toán gói hội viên", action: "Xem gói hội viên", path: "/member/membership" });
   assert.equal(paymentPurposePresentation({ purpose: "UPGRADE" }).path, "/member/membership");
   assert.deepEqual(paymentPurposePresentation({ purpose: "COURSE_REGISTRATION" }), { label: "Thanh toán khóa học", action: "Xem khóa học của tôi", path: "/member/courses" });

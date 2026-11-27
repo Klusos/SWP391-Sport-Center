@@ -47,8 +47,17 @@ test("dashboard requests separate paginated status totals and links each panel t
   assert.match(queue, /setSearchParams\(value \? \{ status: value \} : \{\}\)/);
   assert.match(source, /onNavigate\("membership-sales"\)/);
   assert.match(source, /onNavigate\("members"\)/);
+  assert.match(source, /<header className="rc-head receptionist-page-header">/);
   assert.match(source, /role="status"/);
   assert.match(source, /role="alert"/);
   assert.match(css, /@media \(max-width: 1100px\)/);
   assert.match(css, /@media \(max-width: 640px\)/);
+});
+
+test("Receptionist member list header uses the framed portal treatment", async () => {
+  const source = await readFile(new URL("../src/pages/MemberList.jsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../src/pages/MemberList.css", import.meta.url), "utf8");
+  assert.match(source, /className=\{`main member-list-main\$\{isAdmin \? " is-admin" : " is-receptionist"\}`\}/);
+  assert.match(source, /className=\{`member-list-heading\$\{isAdmin \? " admin-page-header" : ""\}`\}/);
+  assert.match(css, /\.member-list-main\.is-receptionist \.member-list-heading\s*\{[^}]*background:\s*linear-gradient/);
 });

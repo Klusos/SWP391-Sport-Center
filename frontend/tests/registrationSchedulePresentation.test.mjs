@@ -136,7 +136,7 @@ test("Member confirmation keeps schedule details expandable and preserves regist
   assert.match(source, /summary\.weeks\.map\(\(week\) =>/);
   assert.match(source, /selectedClass\.coachName/);
   assert.match(source, /Học phí tham khảo: \{formatPrice\(selectedOffering\.price\)\}/);
-  assert.match(source, /PENDING_PAYMENT[\s\S]*?không xác nhận thanh toán/);
+assert.match(source, /tạm giữ chỗ trong thời hạn thanh toán[\s\S]*?chưa xác nhận thanh toán/);
   assert.match(source, /onClick=\{\(\) => void confirmRegistration\(\)\}/);
   assert.doesNotMatch(source, /classSchedules\[selectedClass\.id\]\.sort/);
 });

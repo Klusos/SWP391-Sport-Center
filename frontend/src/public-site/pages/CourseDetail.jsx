@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import Sidebar from "../../components/Sidebar.jsx";
+import { statusLabel } from "../../uiPresentation.js";
 import CourseConsultationModal from "../../components/CourseConsultationModal.jsx";
 import { formatClassScheduleSummary, toggleExpandedClass } from "../../memberCoursePresentation.js";
 import { activeOfferingRegistration, courseRegistrationStatusLabel } from "../../memberCourseRegistration.js";
@@ -30,7 +31,7 @@ import {
   getPublicCourseApi,
 } from "../../api.js";
 
-const INSUFFICIENT_LEVEL_MESSAGE = "Verified sport level is insufficient. Request a consultation and COACH assessment before registering.";
+const INSUFFICIENT_LEVEL_MESSAGE = "Trình độ bộ môn hiện tại chưa đáp ứng yêu cầu. Vui lòng gửi yêu cầu tư vấn và hoàn tất đánh giá với huấn luyện viên trước khi đăng ký.";
 const BUSINESS_ZONE = "Asia/Ho_Chi_Minh";
 
 function isOfferingOpenNow(offering) { return offeringVisibility(offering) === "REGISTRABLE"; }
@@ -317,7 +318,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
             {consultationAvailable && <div className="member-course-level-help">
               <p><strong>Khóa học yêu cầu:</strong> {course.level || "—"}</p>
               {levelsError ? <p role="status">Không tải được trình độ hiện tại.</p>
-                : levels ? <p><strong>Trình độ hiện tại:</strong> {currentLevel}{hasVerifiedLevel ? ` (Coach #${level.verifiedByCoachId} xác minh)` : " (Beginner mặc định; chưa được Coach xác minh)"}</p>
+                : levels ? <p><strong>Trình độ hiện tại:</strong> {currentLevel}{hasVerifiedLevel ? ` (Huấn luyện viên #${level.verifiedByCoachId} xác minh)` : " (Mức cơ bản mặc định; chưa được huấn luyện viên xác minh)"}</p>
                   : <p role="status">Đang tải trình độ hiện tại…</p>}
               <p>Yêu cầu tư vấn không tự thay đổi trình độ và không tạo đăng ký.</p>
             </div>}
@@ -343,7 +344,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
                   className={String(item.id) === selectedOfferingId ? "selected" : ""} key={item.id}
                   onClick={() => { setSelectedOfferingId(String(item.id)); setRegistrationError(""); setRegistration(null); setExpandedScheduleClassId(null); setConfirmingRegistration(false); }}>
                   <strong>{item.name || `Đợt #${item.id}`}</strong><span>{item.startDate || "—"} – {item.endDate || "—"}</span>
-                  <span>{formatPrice(item.price)} · {item.status || "Chưa rõ trạng thái"}</span>
+                  <span>{formatPrice(item.price)} · {statusLabel(item.status, "offering")}</span>
                   <small className="member-offering-visibility REGISTRABLE">Đang nhận đăng ký</small>
                 </button>)}
               </div>
@@ -353,7 +354,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
                 <span>Hạn đăng ký: <b>{formatDate(selectedOffering.registrationDeadline)}</b></span>
                 <span>Số buổi dự kiến: <b>{selectedOffering.plannedSessions ?? "—"}</b></span>
                 <span>Thời lượng mỗi buổi: <b>{selectedOffering.sessionDuration != null ? `${selectedOffering.sessionDuration} phút` : "—"}</b></span>
-                <span>Trạng thái: <b>{selectedOffering.status || "—"}</b></span>
+                <span>Trạng thái: <b>{statusLabel(selectedOffering.status, "offering")}</b></span>
               </div>}
               {existingOfferingRegistration && <div className={`member-course-registration-card ${String(existingOfferingRegistration.status).toUpperCase() === "PENDING_PAYMENT" ? "is-pending" : "is-confirmed"}`} role="status" aria-label={`Trạng thái đăng ký: ${courseRegistrationStatusLabel(String(existingOfferingRegistration.status).toUpperCase())}`}>
                 <div className="member-course-registration-card-heading">
@@ -395,9 +396,9 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
                           <span className="member-class-card-content">
                             <strong>{item.name || `Lớp #${item.id}`}</strong>
                             <span className="member-class-card-summary">
-                              {item.coachName && <span><b>Coach</b> {item.coachName}</span>}
-                              <span><b>Sức chứa tối đa</b> {item.capacity ?? "—"} người</span>
-                              <span><b>Trạng thái</b> {item.status || "—"}</span>
+                              {item.coachName && <span><b>Huấn luyện viên</b> {item.coachName}</span>}
+                              <span><b>Sĩ số tối đa</b> {item.capacity ?? "—"} học viên</span>
+                              <span><b>Trạng thái</b> {statusLabel(item.status, "courseClass")}</span>
                               <span><b>Lịch</b> {formatClassScheduleSummary(schedule, formatLocalDateTime)}</span>
                             </span>
                             {!classAvailable && <small className="member-class-eligibility-note">Lớp hoặc đợt học hiện chưa nhận đăng ký.</small>}
@@ -412,14 +413,14 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
                         <div className="member-class-schedule-details" id={scheduleId} hidden={!expanded}>
                           {schedule.length ? <ul>{schedule.map((session) => <li key={session.id}>
                             <time>{formatLocalDateTime(session.startTime)} – {formatLocalDateTime(session.endTime)}</time>
-                            <span>{session.status || "—"}</span>
+                            <span>{statusLabel(session.status, "classSession")}</span>
                           </li>)}</ul> : <p>Lịch chưa được công bố.</p>}
                         </div>
                       </div>;
                     })}
                   </div>}
               {scheduleError && <p className="member-muted" role="status">{scheduleError} Thông tin lịch có thể chưa được công bố.</p>}
-              <p className="member-muted">Sức chứa là sức chứa tối đa do hệ thống cung cấp; số chỗ còn lại không được API hiện tại cung cấp. Học phí hiển thị chỉ để tham khảo; máy chủ tính giá và ưu đãi khi đăng ký.</p>
+              <p className="member-muted">Số chỗ còn lại hiện chưa được hiển thị.</p>
               <p className="member-course-age-policy"><strong>{courseAgePolicyLabel(course)}:</strong> {course.targetAgeMin ?? "Không giới hạn"} – {course.targetAgeMax ?? "Không giới hạn"} tuổi.</p>
               {profileError && <p className="member-course-age-blocked" role="alert">Không xác minh được ngày sinh nên chưa thể đăng ký. Hãy kiểm tra hồ sơ hoặc thử tải lại.</p>}
               {!profileError && !profileLoaded && <p className="member-course-age-blocked" role="status">Đang xác minh ngày sinh để kiểm tra điều kiện độ tuổi…</p>}
@@ -436,7 +437,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
                 <p>Lớp: {selectedClass.name} · Coach {selectedClass.coachName || `#${selectedClass.coachId}`}</p>
                 <RegistrationSchedule key={selectedClass.id} classId={selectedClass.id} sessions={classSchedules[selectedClass.id] || []} />
                 <p>Học phí tham khảo: {formatPrice(selectedOffering.price)}</p>
-                <p className="member-muted">Đăng ký sẽ tạm giữ một chỗ ở trạng thái PENDING_PAYMENT. Hạn thanh toán do máy chủ trả về; thao tác này không xác nhận thanh toán.</p>
+                <p className="member-muted">Đăng ký sẽ tạm giữ chỗ trong thời hạn thanh toán được thông báo. Thao tác này chưa xác nhận thanh toán.</p>
                 <div className="course-consult-actions">
                   <button type="button" className="btn btn-cyan" onClick={() => void confirmRegistration()} disabled={registering}>{registering ? "Đang gửi…" : "Xác nhận đăng ký"}</button>
                   <button type="button" className="btn btn-outline-secondary" onClick={() => setConfirmingRegistration(false)} disabled={registering}>Quay lại</button>
@@ -444,18 +445,18 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
               </section>}
             </>}
             {registration && <div className="course-registration-success" role="status">
-              <strong>Đăng ký thành công — {registration.status}.</strong>
+              <strong>Yêu cầu đăng ký đã được ghi nhận — {statusLabel(registration.status, "registration")}.</strong>
               <p>Mã đăng ký #{registration.id} · {registration.courseName} · {registration.courseOfferingName} · {registration.className}</p>
               <p>Giá gốc {formatPrice(registration.originalPrice)} · Ưu đãi {formatPrice(registration.membershipDiscount)} · Thành tiền {formatPrice(registration.finalPrice)}</p>
               {registration.status === "PENDING_PAYMENT" && <p role="status">Đăng ký đang chờ thanh toán. Hạn thanh toán và trạng thái mới nhất được hiển thị tại trang thanh toán.</p>}
-              {registration.status === "CONFIRMED" && <p role="status">Payment confirmed and registration active.</p>}
-              {registration.status === "EXPIRED" && <p role="status">The payment deadline passed; this registration no longer reserves a seat.</p>}
+              {registration.status === "CONFIRMED" && <p role="status">Thanh toán đã được xác nhận và bạn đã đăng ký thành công.</p>}
+              {registration.status === "EXPIRED" && <p role="status">Đã hết hạn thanh toán; đăng ký này không còn giữ chỗ.</p>}
               <Link to="/member/schedule">Đi đến lịch học</Link>
             </div>}
             {!memberRoute && consultationAvailable && <div className="course-level-help">
               <p><strong>Khóa học yêu cầu:</strong> {course.level || "—"}</p>
               {levelsError ? <p role="status">Không tải được trình độ hiện tại.</p>
-                : levels ? <p><strong>Trình độ hiện tại:</strong> {currentLevel}{hasVerifiedLevel ? ` (Coach #${level.verifiedByCoachId} xác minh)` : " (Beginner mặc định; chưa được Coach xác minh)"}</p>
+                : levels ? <p><strong>Trình độ hiện tại:</strong> {currentLevel}{hasVerifiedLevel ? ` (Huấn luyện viên #${level.verifiedByCoachId} xác minh)` : " (Mức cơ bản mặc định; chưa được huấn luyện viên xác minh)"}</p>
                   : <p role="status">Đang tải trình độ hiện tại…</p>}
               <p>Yêu cầu tư vấn không tự thay đổi trình độ và không tạo đăng ký.</p>
               <button type="button" className="btn btn-cyan" onClick={openConsultation}>Yêu cầu tư vấn / đánh giá trình độ</button>
@@ -480,7 +481,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
                 <button type="button" className="btn btn-outline-secondary" onClick={() => setConsultationOpen(false)} disabled={consultationSubmitting}>Đóng</button>
               </div>
             </form>}
-          </section> : auth ? <p className="course-registration-panel">Đăng ký khóa học chỉ dành cho tài khoản Member.</p> : null}
+          </section> : auth ? <p className="course-registration-panel">Đăng ký khóa học chỉ dành cho hội viên.</p> : null}
           {memberRoute && consultationOpen && <CourseConsultationModal
             course={course}
             values={consultation}

@@ -9,7 +9,7 @@ test("shared Portal Top Bar uses the authenticated role labels and page routes",
   assert.deepEqual(PORTAL_ROLE_PRESENTATION, {
     RECEPTIONIST: { breadcrumb: "LỄ TÂN", account: "Lễ tân" },
     COACH: { breadcrumb: "HUẤN LUYỆN VIÊN", account: "Huấn luyện viên" },
-    MEMBER: { breadcrumb: "THÀNH VIÊN", account: "Thành viên" },
+    MEMBER: { breadcrumb: "HỘI VIÊN", account: "Hội viên" },
   });
   assert.equal(getPortalPageLabel("/staff/consultations"), "YÊU CẦU TƯ VẤN");
   assert.equal(getPortalPageLabel("/receptionist/course-payments"), "THANH TOÁN KHÓA HỌC");

@@ -23,7 +23,7 @@ test("public consultation form requires email and preserves fields after client 
   assert.match(handler, /email,/);
   assert.ok(handler.indexOf("await createPublicConsultationRequestApi") < handler.indexOf("setForm(EMPTY_FORM)"));
   assert.ok(handler.indexOf("await createPublicConsultationRequestApi") < handler.indexOf("setSent(true)"));
-  assert.match(component, /Đã có tài khoản Member\?[\s\S]*href="\/login"[\s\S]*để yêu cầu được gắn đúng tài khoản/);
+  assert.match(component, /Đã có tài khoản hội viên\?[\s\S]*href="\/login"[\s\S]*để yêu cầu được gắn đúng tài khoản/);
 });
 
 test("Receptionist cannot manually link a Guest request to an existing Member", async () => {

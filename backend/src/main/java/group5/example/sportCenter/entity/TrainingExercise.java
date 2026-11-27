@@ -31,6 +31,10 @@ public class TrainingExercise {
     @JoinColumn(name = "planId", nullable = false)
     private TrainingPlan plan;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "week_id")
+    private TrainingPlanWeek week;
+
     @Nationalized
     @Column(nullable = false, length = 150)
     private String name;

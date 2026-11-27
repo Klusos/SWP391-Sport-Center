@@ -26,6 +26,9 @@ public interface ClassSessionRepository extends JpaRepository<ClassSession, Inte
     @Query("select s from ClassSession s where s.id = :id")
     Optional<ClassSession> findByIdForAttendanceUpdate(@Param("id") Integer id);
 
+    @Query("select s.id from ClassSession s where upper(s.status) = 'SCHEDULED' and s.endTime <= :now order by s.endTime, s.id")
+    List<Integer> findElapsedScheduledIds(@Param("now") LocalDateTime now);
+
     @EntityGraph(attributePaths = { "courseClass", "courseClass.coach", "courseClass.courseOffering",
             "courseClass.courseOffering.course", "courseClass.courseOffering.course.sport" })
     List<ClassSession> findAllByOrderByStartTimeAscIdAsc();

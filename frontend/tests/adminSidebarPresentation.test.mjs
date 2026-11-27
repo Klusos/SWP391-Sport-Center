@@ -37,7 +37,8 @@ test("Admin group indicators are state-aware chevrons and retain disclosure sema
   assert.match(sidebar, /expanded \? "bi-chevron-down" : "bi-chevron-right"/);
   assert.doesNotMatch(sidebar, /expanded \? "[+−-]"/);
   assert.match(sidebar, /id=\{`admin-nav-\$\{group\.id\}`\}[\s\S]*?hidden=\{!expanded\}/);
-  assert.match(styles, /\.layout \.sidebar nav\[aria-label="ADMIN navigation"\] \.admin-nav-icon/);
+  assert.match(sidebar, /className=\{role === "ADMIN" \? "admin-navigation" : undefined\}/);
+  assert.match(styles, /\.layout \.sidebar nav\.admin-navigation \.admin-nav-icon/);
   assert.match(styles, /\.layout \.sidebar \.admin-nav-chevron\s*\{[^}]*width: 16px;[^}]*flex: 0 0 16px;[^}]*place-items: center;/);
   assert.match(styles, /\.layout \.sidebar button:focus-visible/);
 });
@@ -53,8 +54,8 @@ test("Admin Dashboard navigation is text-only and matches the group heading typo
   const item = sidebar.match(/function Item\([\s\S]*?\n\}/)?.[0] || "";
   assert.doesNotMatch(item, /admin-dashboard-icon|iconAfter/);
   assert.match(item, /aria-current=\{activePage === page \? "page" : undefined\}/);
-  assert.match(styles, /nav\[aria-label="ADMIN navigation"\] > \.nav-button\s*\{[^}]*font-size: 11px;[^}]*font-weight: 750;[^}]*letter-spacing: \.08em;[^}]*text-transform: uppercase;/);
-  assert.match(styles, /nav\[aria-label="ADMIN navigation"\] > \.nav-button\.active[\s\S]*?background: rgba\(255, 255, 255, \.08\);/);
+  assert.match(styles, /nav\.admin-navigation > \.nav-button\s*\{[^}]*font-size: 11px;[^}]*font-weight: 750;[^}]*letter-spacing: \.08em;[^}]*text-transform: uppercase;/);
+  assert.match(styles, /nav\.admin-navigation > \.nav-button\.active[\s\S]*?background: rgba\(255, 255, 255, \.08\);/);
   assert.match(styles, /\.admin-nav-group-toggle\s*\{[^}]*font-size: 11px;[^}]*font-weight: 750;[^}]*letter-spacing: \.08em;[^}]*text-transform: uppercase;/);
   assert.match(app, /path="\/staff\/dashboard"\s+element=\{<Dashboard \{\.\.\.staff\} \/>\}/);
 });
@@ -64,7 +65,7 @@ test("Bootstrap icon presentation is restricted to Admin navigation", async () =
     read("../src/styles.css"),
   ]);
   assert.match(sidebar, /links\.map\(\(\[page, text\]\) => \([\s\S]*?<Item key=\{page\} page=\{page\} activePage=\{activePage\} onNavigate=\{onNavigate\}>/);
-  assert.match(styles, /\.layout \.sidebar nav\[aria-label="ADMIN navigation"\] \.admin-nav-item/);
+  assert.match(styles, /\.layout \.sidebar nav\.admin-navigation \.admin-nav-item/);
   assert.doesNotMatch(styles, /admin-dashboard-nav-item|admin-dashboard-icon/);
   assert.doesNotMatch(styles, /\.layout \.sidebar \.nav-item\s*\{[^}]*admin-nav-icon/);
 });

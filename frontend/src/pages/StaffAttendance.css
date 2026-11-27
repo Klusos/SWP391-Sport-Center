@@ -45,7 +45,7 @@
 .staff-attendance-filters input, .staff-attendance-filters select { min-height: 40px; border: 1px solid #bdccda; border-radius: 8px; padding: 8px 10px; background: #fff; color: var(--text-main); }
 .staff-attendance-roster-toolbar { display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin: 12px 0; }
 .staff-attendance-roster-toolbar label { display: grid; gap: 5px; color: var(--text-sub); font-size: 12px; }
-.staff-attendance-roster-toolbar select { min-height: 40px; border: 1px solid #bdccda; border-radius: 8px; padding: 8px 10px; background: #fff; color: var(--text-main); }
+.staff-attendance-roster-toolbar select { box-sizing: border-box; width: 100%; height: 44px; min-height: 44px; border: 1px solid #bdccda; border-radius: 8px; padding: 8px 10px; background: #fff; color: var(--text-main); }
 .staff-attendance-pager { display: flex; align-items: center; gap: 9px; }
 .staff-attendance-pager button { min-height: 36px; padding: 6px 12px; border: 1px solid #bdccda; border-radius: 8px; background: #fff; color: var(--text-main); font: inherit; cursor: pointer; }
 .staff-attendance-pager button:disabled { opacity: .5; cursor: not-allowed; }
@@ -57,3 +57,18 @@
 .staff-attendance-session-pager button:focus-visible { outline:3px solid rgb(23 103 210 / 28%); outline-offset:2px; }
 @media (max-width: 760px) { .staff-attendance-filters { grid-template-columns: 1fr; } .staff-attendance-roster-toolbar { align-items: stretch; } }
 @media (max-width: 1000px) { .staff-attendance-filters { grid-template-columns: minmax(0, 1fr); } }
+.staff-attendance-admin-navigation .staff-attendance-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.staff-attendance-admin-navigation .staff-attendance-filters input[type="date"] { max-width: none; }
+@media (max-width: 1100px) { .staff-attendance-admin-navigation .staff-attendance-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px) { .staff-attendance-admin-navigation .staff-attendance-filters { grid-template-columns: minmax(0, 1fr); } }
+
+.staff-attendance-admin-navigation .staff-attendance-filters.is-course-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.staff-attendance-admin-navigation .staff-attendance-filters.is-class-filters { grid-template-columns: minmax(0,2fr) repeat(2,minmax(0,1fr)); }
+@media (max-width:1100px) { .staff-attendance-admin-navigation .staff-attendance-filters.is-class-filters { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:620px) { .staff-attendance-admin-navigation .staff-attendance-filters.is-course-filters, .staff-attendance-admin-navigation .staff-attendance-filters.is-class-filters { grid-template-columns:minmax(0,1fr); } }
+.staff-attendance-admin-navigation .staff-attendance-filters label { min-width:0; }
+.staff-attendance-admin-navigation .staff-attendance-filters input,
+.staff-attendance-admin-navigation .staff-attendance-filters select { box-sizing:border-box; width:100%; max-width:none; min-width:0; }
+.staff-attendance-admin-navigation .staff-attendance-filters input,
+.staff-attendance-admin-navigation .staff-attendance-filters select { height:44px; }
+.staff-attendance-admin-navigation .coach-attendance-section-heading > div > p { display:grid; gap:4px; }

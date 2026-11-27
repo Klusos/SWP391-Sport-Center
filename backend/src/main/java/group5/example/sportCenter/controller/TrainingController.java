@@ -20,6 +20,7 @@ import group5.example.sportCenter.dto.MemberTrainingClassResponse;
 import group5.example.sportCenter.dto.ProgressEvaluationRequest;
 import group5.example.sportCenter.dto.ProgressEvaluationResponse;
 import group5.example.sportCenter.dto.RecordTrainingResultRequest;
+import group5.example.sportCenter.dto.SaveWeeklyTrainingPlanRequest;
 import group5.example.sportCenter.dto.TrainingClassResponse;
 import group5.example.sportCenter.dto.TrainingExerciseRequest;
 import group5.example.sportCenter.dto.TrainingExerciseResponse;
@@ -61,6 +62,12 @@ public class TrainingController {
     public TrainingPlanResponse upsertPlan(@PathVariable Integer classId,
             @Valid @RequestBody UpsertTrainingPlanRequest request, @AuthenticationPrincipal Jwt jwt) {
         return trainingService.upsertPlan(classId, request, jwt);
+    }
+
+    @PutMapping("/classes/{classId}/plan/weekly")
+    public TrainingPlanResponse saveWeeklyPlan(@PathVariable Integer classId,
+            @Valid @RequestBody SaveWeeklyTrainingPlanRequest request, @AuthenticationPrincipal Jwt jwt) {
+        return trainingService.saveWeeklyPlan(classId, request, jwt);
     }
 
     @PostMapping("/classes/{classId}/plan/exercises")

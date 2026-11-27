@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import AdminTopBar from "../components/AdminTopBar";
+import { statusLabel } from "../uiPresentation.js";
 import "./ConsultationQueue.css";
 import {
   completeConsultationRequestApi,
@@ -346,7 +347,7 @@ export default function ConsultationQueue({ token, role, currentUserName, onLogo
           <div><h1>{"Y\u00eau c\u1ea7u t\u01b0 v\u1ea5n"}</h1><p className="subtitle">{"Ti\u1ebfp nh\u1eadn v\u00e0 theo d\u00f5i c\u00e1c y\u00eau c\u1ea7u t\u01b0 v\u1ea5n c\u1ee7a kh\u00e1ch h\u00e0ng."}</p></div>
           <div className="consultation-summary" aria-live="polite"><strong>{result ? result.totalElements : "\u2014"}</strong><span>{status ? STATUS_LABELS[status] : "Y\u00eau c\u1ea7u theo b\u1ed9 l\u1ecdc"}</span></div>
         </header>
-        {!allowedRole && <div className="banner error" role="alert">Only Receptionist and Admin accounts can access this queue.</div>}
+        {!allowedRole && <div className="banner error" role="alert">Chỉ tài khoản Lễ tân hoặc Quản trị viên mới có thể xem danh sách này.</div>}
         {notice && <div className="banner success" role="status">{notice}</div>}
         {error && <div className="banner error" role="alert">{error}</div>}
         <div className="queue-toolbar">
@@ -443,12 +444,12 @@ export default function ConsultationQueue({ token, role, currentUserName, onLogo
                 {memberInfoError && <p className="banner error" role="alert">{memberInfoError}</p>}
                 {(() => {
                   const level = memberLevels.find((item) => Number(item.sportId) === Number(detail.sportId));
-                  if (!level) return <p><strong>Trình độ {detail.sportName}:</strong> Beginner (mặc định; chưa có mức đã xác minh cho bộ môn này).</p>;
+                  if (!level) return <p><strong>Trình độ {detail.sportName}:</strong> Cơ bản (mặc định; chưa có mức đã xác minh cho bộ môn này).</p>;
                   return <div className="consultation-level-result">
                     <p><strong>Trình độ {detail.sportName}:</strong> {level.level}
                       {level.verifiedByCoachId != null
-                        ? " · Đã xác minh bởi Coach #" + level.verifiedByCoachId
-                        : " · Chưa có thông tin xác minh Coach"}</p>
+                        ? " · Đã xác minh bởi huấn luyện viên #" + level.verifiedByCoachId
+                        : " · Chưa có thông tin xác minh của huấn luyện viên"}</p>
                     {level.verifiedAt && <p><strong>Thời điểm xác minh:</strong> {formatDate(level.verifiedAt)}</p>}
                   </div>;
                 })()}
@@ -457,38 +458,38 @@ export default function ConsultationQueue({ token, role, currentUserName, onLogo
 
             {canManageAssessment && <section className="consultation-assessment-section" aria-labelledby="assessment-assignment-title">
               <h3 id="assessment-assignment-title">Đánh giá trình độ</h3>
-              <p>Coach đánh giá và hoàn tất assessment mới xác định trình độ đã xác minh. Hoàn tất cuộc tư vấn không tự xác nhận trình độ và việc phân công không thay đổi MemberSportLevel.</p>
+              <p>Huấn luyện viên cần hoàn tất đánh giá để xác nhận trình độ. Hoàn tất yêu cầu tư vấn không tự xác nhận trình độ.</p>
               {assessmentNotice && <p className="banner success" role="status">{assessmentNotice}</p>}
-              {assessmentLookupLoading ? <p role="status">Đang kiểm tra assessment đã liên kết…</p>
+              {assessmentLookupLoading ? <p role="status">Đang kiểm tra lượt đánh giá đã liên kết…</p>
                 : assessmentLookupError ? <p className="banner error" role="alert">{assessmentLookupError} Để tránh phân công trùng, thao tác đang bị khóa.</p>
                   : consultationAssessments.length > 0 ? <div className="consultation-assessment-existing">
-                    <p>Đã có {consultationAssessments.length} assessment gắn với consultation này:</p>
+                    <p>Đã có {consultationAssessments.length} lượt đánh giá gắn với yêu cầu tư vấn này:</p>
                     {consultationAssessments.map((assessment) => <p key={assessment.id}>
-                      Assessment #{assessment.id} · {assessment.status} · Coach #{assessment.assignedCoachId}
+                      Lượt đánh giá #{assessment.id} · {statusLabel(assessment.status, "assessment")} · Huấn luyện viên #{assessment.assignedCoachId}
                       {assessment.assessedLevel ? ` · ${assessment.assessedLevel}` : ""}
                     </p>)}
                   </div>
                     : memberInfoLoading ? <p role="status">Đang xác minh trạng thái tài khoản MEMBER…</p>
-                      : memberIdentity?.status !== "ACTIVE" ? <p className="banner error" role="alert">Chỉ MEMBER có tài khoản ACTIVE mới đủ điều kiện được phân công đánh giá.</p>
+                      : memberIdentity?.status !== "ACTIVE" ? <p className="banner error" role="alert">Chỉ hội viên có tài khoản đang hoạt động mới đủ điều kiện được phân công đánh giá.</p>
                         : !assessmentFormOpen ? <button type="button" onClick={openAssessmentAssignment}
                           disabled={loadingEligibleCoaches || !canManageAssessment}>
                           Phân công đánh giá
                         </button>
                           : <form className="consultation-assessment-form" onSubmit={handleAssignAssessment}>
                             <p>Yêu cầu #{detail.id} · Member #{detail.memberId} · {detail.sportName}</p>
-                            {loadingEligibleCoaches ? <p role="status">Đang tải Coach ACTIVE có chuyên môn phù hợp…</p>
+                            {loadingEligibleCoaches ? <p role="status">Đang tải huấn luyện viên đang hoạt động có chuyên môn phù hợp…</p>
                               : eligibleCoachError ? <p className="banner error" role="alert">{eligibleCoachError}</p>
-                                : eligibleCoaches.length === 0 ? <p>Không tìm thấy Coach ACTIVE được phân công cho bộ môn này.</p>
+                                : eligibleCoaches.length === 0 ? <p>Không tìm thấy huấn luyện viên đang hoạt động được phân công cho bộ môn này.</p>
                                   : <>
-                                    <label htmlFor="assessmentCoach">Coach phụ trách</label>
+                                    <label htmlFor="assessmentCoach">Huấn luyện viên phụ trách</label>
                                     <select id="assessmentCoach" required value={selectedCoachId}
                                       onChange={(event) => setSelectedCoachId(event.target.value)} disabled={assigningAssessment}>
-                                      <option value="">Chọn Coach</option>
+                                      <option value="">Chọn huấn luyện viên</option>
                                       {eligibleCoaches.map((coach) => <option key={coach.id} value={coach.id}>
-                                        Coach #{coach.id} · {coach.userName || "(chưa có tên)"}
+                                        Huấn luyện viên #{coach.id} · {coach.userName || "(chưa có tên)"}
                                       </option>)}
                                     </select>
-                                    <label htmlFor="assessmentNotes">Ghi chú cho Coach (không bắt buộc)</label>
+                                    <label htmlFor="assessmentNotes">Ghi chú cho huấn luyện viên (không bắt buộc)</label>
                                     <textarea id="assessmentNotes" maxLength={1000} value={assessmentNotes}
                                       onChange={(event) => setAssessmentNotes(event.target.value)} disabled={assigningAssessment} />
                                     {assessmentError && <p className="banner error" role="alert">{assessmentError}</p>}

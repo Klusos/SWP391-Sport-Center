@@ -63,6 +63,6 @@ test("Training API helpers match the backend route and method contract", async (
 test("Training API surfaces authorization and validation errors", async () => {
   const old = globalThis.fetch;
   globalThis.fetch = async () => new Response(JSON.stringify({ message: "Forbidden" }), { status: 403 });
-  try { await assert.rejects(getMyTrainingApi("token"), (error) => error.status === 403 && error.message === "Forbidden"); }
+  try { await assert.rejects(getMyTrainingApi("token"), (error) => error.status === 403 && error.message === "Bạn không có quyền thực hiện thao tác này."); }
   finally { globalThis.fetch = old; }
 });

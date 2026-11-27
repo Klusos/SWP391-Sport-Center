@@ -104,6 +104,13 @@ public class SupportTicketService {
         if (ticket.getStatus() == SupportTicketStatus.CLOSED) {
             throw AssessmentAccess.error(HttpStatus.CONFLICT, "Closed tickets are read-only");
         }
+        if ("RECEPTIONIST".equalsIgnoreCase(actor.getRole())
+                && (ticket.getAssignedStaff() == null || !ticket.getAssignedStaff().getId().equals(actor.getId()))) {
+            throw AssessmentAccess.error(HttpStatus.CONFLICT, "Claim this ticket before replying");
+        }
+        if ("ADMIN".equalsIgnoreCase(actor.getRole()) && ticket.getAssignedStaff() == null) {
+            throw AssessmentAccess.error(HttpStatus.CONFLICT, "An unassigned ticket must be claimed before staff can reply");
+        }
         if (ticket.getStatus() == SupportTicketStatus.RESOLVED) {
             ticket.setStatus(SupportTicketStatus.OPEN);
             ticket.setResolvedAt(null);
@@ -126,6 +133,14 @@ public class SupportTicketService {
         SupportTicket ticket = locked(id);
         SupportTicketStatus current = ticket.getStatus();
         SupportTicketStatus next = request.status();
+        if ("RECEPTIONIST".equalsIgnoreCase(actor.getRole())
+                && (ticket.getAssignedStaff() == null || !ticket.getAssignedStaff().getId().equals(actor.getId()))) {
+            throw AssessmentAccess.error(HttpStatus.CONFLICT, "Claim this ticket before changing its status");
+        }
+        if ("RECEPTIONIST".equalsIgnoreCase(actor.getRole())
+                && current == SupportTicketStatus.OPEN && next == SupportTicketStatus.IN_PROGRESS) {
+            throw AssessmentAccess.error(HttpStatus.CONFLICT, "Use claim-and-start for an open ticket");
+        }
         boolean valid = switch (current) {
             case OPEN -> next == SupportTicketStatus.IN_PROGRESS || next == SupportTicketStatus.RESOLVED;
             case IN_PROGRESS -> next == SupportTicketStatus.RESOLVED;
@@ -158,11 +173,16 @@ public class SupportTicketService {
             throw AssessmentAccess.error(HttpStatus.CONFLICT, "Ticket is assigned to another staff member");
         }
         Integer previousAssigneeId = ticket.getAssignedStaff() == null ? null : ticket.getAssignedStaff().getId();
+        SupportTicketStatus previousStatus = ticket.getStatus();
         ticket.setAssignedStaff(actor);
+        if (previousStatus == SupportTicketStatus.OPEN) ticket.setStatus(SupportTicketStatus.IN_PROGRESS);
         SupportTicket saved = tickets.saveAndFlush(ticket);
-        if (!java.util.Objects.equals(previousAssigneeId, actor.getId())) {
-            auditLogs.record("ASSIGN", "SUPPORT_TICKET", saved.getId(),
-                    "assignedStaffId=" + previousAssigneeId + "->" + actor.getId() + ".");
+        boolean assignmentChanged = !java.util.Objects.equals(previousAssigneeId, actor.getId());
+        boolean statusChanged = previousStatus != saved.getStatus();
+        if (assignmentChanged || statusChanged) {
+            auditLogs.record(statusChanged ? "CLAIM_AND_START" : "ASSIGN", "SUPPORT_TICKET", saved.getId(),
+                    "assignedStaffId=" + previousAssigneeId + "->" + actor.getId()
+                            + ";status=" + previousStatus + "->" + saved.getStatus() + ".");
         }
         return detail(saved);
     }

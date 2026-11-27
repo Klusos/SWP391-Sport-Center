@@ -39,6 +39,9 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Integer>
     List<Attendance> findByClassSessionId(Integer classSessionId);
 
     @EntityGraph(attributePaths = { "member", "markedBy", "classSession", "classSession.courseClass" })
+    List<Attendance> findByClassSessionIdIn(List<Integer> classSessionIds);
+
+    @EntityGraph(attributePaths = { "member", "markedBy", "classSession", "classSession.courseClass" })
     Optional<Attendance> findByClassSessionIdAndMemberId(Integer classSessionId, Integer memberId);
 
     @EntityGraph(attributePaths = { "member", "markedBy", "classSession", "classSession.courseClass",

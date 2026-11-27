@@ -28,7 +28,7 @@ test("Reports uses the shared Admin context bar and current authenticated identi
 
 test("Reports keeps icon-only Refresh and Print in the filter panel header, with Update beneath filters", async () => {
   const source = await reportSource();
-  const introStart = source.indexOf('<div className="page-intro">');
+  const introStart = source.indexOf('<div className="page-intro admin-page-header">');
   const filterStart = source.indexOf('<form className="panel revenue-filters"');
   const formEnd = source.indexOf("</form>", filterStart);
   assert.ok(introStart >= 0 && filterStart > introStart && formEnd > filterStart);

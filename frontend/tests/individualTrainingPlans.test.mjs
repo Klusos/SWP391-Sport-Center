@@ -7,6 +7,8 @@ import {
   individualPlanEligibilityMessage,
   savePlanAndRefreshOpenHistory,
   toIndividualTrainingPlanPayload,
+  nextAvailableWeekNumber,
+  validatePlanDraft,
 } from "../src/components/individualTrainingPlanHelpers.js";
 import { readFile } from "node:fs/promises";
 
@@ -16,29 +18,38 @@ const week = (weekNumber, exercise = `Week ${weekNumber}`) => ({
   }],
 });
 
-test("adding after removing a middle week assigns a unique number and builds a sorted API payload", () => {
+test("adding after removing a middle week suggests the next ordinal and payload remains sorted", () => {
   const threeWeeks = [week(1), week(2), week(3)];
   const afterRemoval = threeWeeks.filter((item) => item.weekNumber !== 2);
   const afterAdd = addWeekWithUnusedNumber(afterRemoval);
 
-  assert.deepEqual(afterAdd.map((item) => item.weekNumber), [1, 2, 3]);
+  assert.deepEqual(afterAdd.map((item) => item.weekNumber), [1, 3, 4]);
   assert.equal(new Set(afterAdd.map((item) => item.weekNumber)).size, afterAdd.length);
   assert.deepEqual(toIndividualTrainingPlanPayload({ goal: "Strength", description: "", weeks: afterAdd }), {
     goal: "Strength",
     description: null,
-    weeks: [1, 2, 3].map((number) => ({
+    weeks: [1, 3, 4].map((number) => ({
       weekNumber: number,
-      title: number === 2 ? null : `Week ${number}`,
+      title: number === 4 ? null : `Week ${number}`,
       description: null,
-      exercises: number === 2 ? [] : [{ name: `Week ${number}`, sets: 3, reps: 10, durationMinutes: null, notes: null, sortOrder: 0 }],
+      exercises: number === 4 ? [] : [{ name: `Week ${number}`, sets: 3, reps: 10, durationMinutes: null, notes: null, sortOrder: 0 }],
     })),
   });
 });
 
-test("week allocation fills the lowest gap and does not exceed the backend 52-week limit", () => {
-  assert.deepEqual(addWeekWithUnusedNumber([week(1), week(3)]).map((item) => item.weekNumber), [1, 2, 3]);
+test("week allocation appends after the highest ordinal and preserves the Individual 52-week limit", () => {
+  assert.deepEqual(addWeekWithUnusedNumber([week(1), week(3)]).map((item) => item.weekNumber), [1, 3, 4]);
+  assert.equal(nextAvailableWeekNumber([week(2), week(7)]), 8);
   const allWeeks = Array.from({ length: 52 }, (_, index) => week(index + 1));
   assert.equal(addWeekWithUnusedNumber(allWeeks), allWeeks);
+});
+
+test("draft validation allows nonconsecutive general weeks and rejects duplicate or invalid numbers", () => {
+  const valid = { goal: "Goal", weeks: [week(2), week(12)] };
+  assert.equal(validatePlanDraft(valid, { maxWeekNumber: null }), null);
+  assert.equal(validatePlanDraft({ ...valid, weeks: [week(2), week(2)] }, { maxWeekNumber: null }).weekIndex, 1);
+  assert.equal(validatePlanDraft({ ...valid, weeks: [{ ...week(1), weekNumber: 0 }] }, { maxWeekNumber: null }).field, "weekNumber");
+  assert.equal(validatePlanDraft({ ...valid, weeks: [{ ...week(1), weekNumber: 53 }] }, { maxWeekNumber: 52 }).field, "weekNumber");
 });
 
 test("saving an edit refreshes open history and keeps older revisions visible", async () => {

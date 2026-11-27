@@ -11,7 +11,7 @@ test("Notification Bell remains keyboard accessible and above dashboard content"
   assert.doesNotMatch(source, /className="bi bi-bell"/);
   assert.match(source, /aria-expanded=\{open\}/);
   assert.match(source, /event\.key !== "Escape"/);
-  assert.match(css, /\.notification-widget\s*\{[^}]*position: fixed;[^}]*z-index: 1200/);
+  assert.match(css, /\.notification-widget\s*\{[^}]*position: fixed;[^}]*z-index: var\(--sc-layer-notification,\s*1200\)/);
   assert.match(css, /\.notification-panel\s*\{[^}]*width: min\(390px, calc\(100vw - 24px\)\)/);
   assert.match(css, /\.notification-item:focus-visible/);
   assert.match(css, /\.notification-bell-icon\s*\{[^}]*stroke: currentColor;[^}]*stroke-linecap: round;/);

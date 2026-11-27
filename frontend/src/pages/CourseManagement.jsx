@@ -189,7 +189,7 @@ export default function CourseManagement({ token, role, onLogout, onNavigate }) 
         <button type="button" className="adm-back" onClick={() => navigate("/staff/courses")}>← Danh sách khóa học</button>
         <h1>{course ? course.name : "Đang tải khóa học…"}</h1>
         {course && <section className="adm-block course-detail-summary">
-          <div><span className="subtitle">Sport</span><strong>{course.sportName || "—"}</strong></div>
+          <div><span className="subtitle">Bộ môn</span><strong>{course.sportName || "—"}</strong></div>
           <div><span className="subtitle">Trình độ</span><strong>{course.level || "—"}</strong></div>
           <div><span className="subtitle">Độ tuổi</span><strong>{course.targetAgeMin ?? "—"} – {course.targetAgeMax ?? "—"}</strong></div>
           <div><span className="subtitle">Trạng thái</span>{pill(course.status)}</div>

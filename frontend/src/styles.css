@@ -34,11 +34,32 @@
   --focus-ring: 0 0 0 3px rgba(23, 105, 210, 0.22);
   --shadow-card: 0 8px 24px rgba(21, 50, 82, 0.07);
   --shadow-menu: 0 14px 34px rgba(4, 22, 43, 0.16);
+  --sc-layer-notification: 1200;
+  --sc-layer-modal: 1500;
 }
 
 * {
   box-sizing: border-box;
 }
+
+.admin-page-header {
+  display:flex;
+  min-width:0;
+  min-height:104px;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  margin:0 0 24px;
+  padding:clamp(20px,2.5vw,30px);
+  border:1px solid #d7e7f7;
+  border-radius:18px;
+  background:linear-gradient(120deg,#edf6ff,#fff 78%);
+  box-shadow:0 10px 28px rgba(18,59,99,.06);
+}
+.admin-page-header h1 { margin:0; color:#102a4c; font-size:clamp(24px,2.4vw,32px); font-weight:820; letter-spacing:-.035em; line-height:1.25; }
+.admin-page-header p { max-width:760px; margin:7px 0 0; color:#60758c; line-height:1.6; }
+.admin-page-header > button { flex:0 0 auto; }
+@media (max-width:700px) { .admin-page-header { align-items:flex-start; flex-direction:column; } }
 
 body {
   margin: 0;
@@ -655,14 +676,14 @@ body {
   box-shadow: 0 5px 14px rgba(23, 105, 210, .32);
 }
 
-.layout .sidebar nav[aria-label="ADMIN navigation"] .admin-nav-item {
+.layout .sidebar nav.admin-navigation .admin-nav-item {
   display: flex;
   min-width: 0;
   align-items: flex-start;
   gap: 10px;
 }
 
-.layout .sidebar nav[aria-label="ADMIN navigation"] .admin-nav-icon {
+.layout .sidebar nav.admin-navigation .admin-nav-icon {
   width: 16px;
   flex: 0 0 16px;
   margin-top: 1px;
@@ -671,7 +692,7 @@ body {
   text-align: center;
 }
 
-.layout .sidebar nav[aria-label="ADMIN navigation"] .admin-nav-label {
+.layout .sidebar nav.admin-navigation .admin-nav-label {
   min-width: 0;
   overflow-wrap: break-word;
 }
@@ -739,7 +760,7 @@ body {
   font-size: 13px;
 }
 
-.layout .sidebar nav[aria-label="ADMIN navigation"] > .nav-button {
+.layout .sidebar nav.admin-navigation > .nav-button {
   min-height: 40px;
   padding: 8px 16px;
   border-left: 3px solid transparent;
@@ -752,8 +773,8 @@ body {
   text-transform: uppercase;
 }
 
-.layout .sidebar nav[aria-label="ADMIN navigation"] > .nav-button.active,
-.layout .sidebar nav[aria-label="ADMIN navigation"] > .nav-button.active:hover {
+.layout .sidebar nav.admin-navigation > .nav-button.active,
+.layout .sidebar nav.admin-navigation > .nav-button.active:hover {
   border-left-color: #4b9bf0;
   background: rgba(255, 255, 255, .08);
   color: #fff;

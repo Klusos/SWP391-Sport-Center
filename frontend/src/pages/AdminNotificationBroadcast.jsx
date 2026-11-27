@@ -81,7 +81,7 @@ export default function AdminNotificationBroadcast({
         />
         <div className="nb-page">
           {/* Page header */}
-          <header className="nb-header">
+          <header className="nb-header admin-page-header">
             <div className="nb-header-content">
               <h1>Gửi thông báo toàn trung tâm</h1>
 

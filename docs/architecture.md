@@ -36,6 +36,14 @@ The diagram reflects source defaults and code boundaries. Environment overrides 
 - Local entity images use `LocalImageStorageService` and a filesystem directory (default `uploads` relative to the backend working directory); public image reads use `/api/public/images/**`. This is separate from SQL Server blob storage.
 - Payment code supports a mock/simulator path and a VNPay sandbox configuration. Do not infer that a live provider is enabled or production-ready from source defaults.
 
+### Training plan persistence
+
+- A class has one general `training_plan`; `training_plan_week` contains its ordered-by-number curriculum sections. `training_exercise.plan_id` remains authoritative, while nullable `week_id` places an exercise in a week. A null week is preserved legacy content, not implicitly Week 1.
+- A Coach's whole-plan weekly save is atomic and is protected by the class write lock. Admin reads class training plans but does not edit them. Member reads remain subject to the existing confirmed-registration and ownership/benefit eligibility checks.
+- General curriculum date ranges are derived from the CourseOffering start/end dates: ordinal week 1 begins on `startDate`, each ordinal advances seven days, and the last in-range week is clamped to `endDate`. Week content outside a shortened Offering remains stored and visible with a warning; no ClassSession relationship or stored derived dates are used.
+- Individual Training Plan revision/week/exercise persistence is separate and unchanged. General plans do not have a Draft/Published lifecycle or reconstructable revision history; successfully saved content is immediately visible to eligible Members.
+- The additive SQL Server change is recorded in `backend/docs/sql/proposals/phase-training-plan-weekly.sql`. Applying it to a database is a separate, target-guarded operation; application startup remains Hibernate `validate`.
+
 ## Persistence and schema management
 
 - `backend/src/main/resources/application.properties` defaults to SQL Server at `127.0.0.1:1433`, database `SportCenterDemo`; username/password are externalized. It imports an optional local `.env` file. Verify effective settings and target identity before any database-backed task.

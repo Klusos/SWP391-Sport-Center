@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import {
   createMemberConsultationRequestApi,
@@ -12,11 +13,12 @@ import {
 } from "../api";
 import { getMemberRelevantSports } from "../memberSportEligibility";
 import { CONSULTATION_EMAIL_ERROR, normalizeConsultationEmail } from "../consultationEmail.js";
+import { memberLevelLabel } from "../memberDashboard.js";
 import "./Membertheme.css";
 import "./MemberLevelsAssessments.css";
 
 const ASSESSMENT_STATUS = {
-  PENDING: "Đang chờ Coach đánh giá",
+  PENDING: "Đang chờ huấn luyện viên đánh giá",
   COMPLETED: "Đã hoàn tất",
   CANCELLED: "Đã hủy",
 };
@@ -68,6 +70,8 @@ function normalizeLevel(rawLevel) {
   if (upper.includes("INT") || upper.includes("TRUNG CẤP")) return "INTERMEDIATE";
   return "BEGINNER";
 }
+
+const levelLabel = (value) => memberLevelLabel(normalizeLevel(value));
 
 function levelRank(rawLevel) {
   const norm = normalizeLevel(rawLevel);
@@ -143,6 +147,7 @@ function getSportTheme(sportName = "", index = 0) {
 }
 
 export default function MemberLevelsAssessments({ token, role, onLogout, onNavigate }) {
+  const navigate = useNavigate();
   const [sports, setSports] = useState([]);
   const [levels, setLevels] = useState([]);
   const [assessments, setAssessments] = useState([]);
@@ -159,6 +164,8 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
   const [statusFilter, setStatusFilter] = useState("ALL"); // ALL | VERIFIED | UNVERIFIED
   const [searchQuery, setSearchQuery] = useState("");
   const [consultationScope, setConsultationScope] = useState("SPORT"); // SPORT | ALL
+  const [assessmentPage, setAssessmentPage] = useState(1);
+  const [consultationPage, setConsultationPage] = useState(1);
 
   // Modal gửi yêu cầu tư vấn / đăng ký đánh giá mới
   const [modalOpen, setModalOpen] = useState(false);
@@ -348,6 +355,11 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
     );
   }, [selectedSport, consultationScope, consultations, relevantSports, searchQuery]);
 
+  const assessmentPages = Math.max(1, Math.ceil(sportAssessments.length / 3));
+  const consultationPages = Math.max(1, Math.ceil(displayedConsultations.length / 3));
+  const shownAssessments = sportAssessments.slice((Math.min(assessmentPage, assessmentPages) - 1) * 3, Math.min(assessmentPage, assessmentPages) * 3);
+  const shownConsultations = displayedConsultations.slice((Math.min(consultationPage, consultationPages) - 1) * 3, Math.min(consultationPage, consultationPages) * 3);
+
   function handleSelectSport(sportId) {
     setPickedSportId(String(sportId));
     setConsultationScope("SPORT");
@@ -378,6 +390,10 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
   async function handleSubmitConsultation(event) {
     event.preventDefault();
     if (modalSubmitting || submitLockRef.current) return;
+    if (!profile?.name?.trim() || !profile?.phone?.trim() || !profile?.email?.trim()) {
+      setModalError("Thông tin liên hệ trong tài khoản chưa đầy đủ. Vui lòng liên hệ lễ tân để được hỗ trợ cập nhật.");
+      return;
+    }
     if (!consultForm.name.trim() || !consultForm.phone.trim() || !consultForm.sportId) {
       setModalError("Vui lòng điền đầy đủ Họ tên, Số điện thoại và chọn Bộ môn.");
       return;
@@ -416,17 +432,6 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
     }
   }
 
-  const latestCompletedAssessment = useMemo(() => {
-    if (!selectedSport) return null;
-    return (
-      selectedSport.sportAssessments.find(
-        (item) => String(item.status).toUpperCase() === "COMPLETED"
-      ) ||
-      selectedSport.sportAssessments[0] ||
-      null
-    );
-  }, [selectedSport]);
-
   return (
     <div className="layout">
       <Sidebar
@@ -443,7 +448,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
               <h1>{"Tr\u00ecnh \u0111\u1ed9 & l\u1ecbch s\u1eed \u0111\u00e1nh gi\u00e1"}</h1>
               <p>{"Theo d\u00f5i tr\u00ecnh \u0111\u1ed9 hi\u1ec7n t\u1ea1i, l\u1ecbch s\u1eed \u0111\u00e1nh gi\u00e1 v\u00e0 y\u00eau c\u1ea7u t\u01b0 v\u1ea5n."}</p>
             </div>
-          <div className="mla-content-tools">
+          {!selectedSport && <div className="mla-content-tools">
             <div className="mla-search-box">
               <svg className="mla-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                 <circle cx="11" cy="11" r="8" />
@@ -451,15 +456,15 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
               </svg>
               <input type="search" className="mla-search-input" value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder={"T\u00ecm b\u1ed9 m\u00f4n ho\u1eb7c Coach..."} aria-label={"T\u00ecm b\u1ed9 m\u00f4n ho\u1eb7c Coach"} />
+                placeholder={"T\u00ecm b\u1ed9 m\u00f4n ho\u1eb7c hu\u1ea5n luy\u1ec7n vi\u00ean..."} aria-label={"T\u00ecm b\u1ed9 m\u00f4n ho\u1eb7c hu\u1ea5n luy\u1ec7n vi\u00ean"} />
             </div>
-            <button type="button" className="mla-primary-pill-btn" onClick={() => openRequestModal(selectedSport?.id)}>
+            <button type="button" className="mla-primary-pill-btn" onClick={() => openRequestModal()}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
               </svg>
-              <span>{"\u0110\u0103ng k\u00fd \u0111\u00e1nh gi\u00e1 m\u1edbi"}</span>
+              <span>Tạo yêu cầu đánh giá</span>
             </button>
-          </div>
+          </div>}
           </header>
           {modalSuccess && (
             <div className="banner success mla-banner-success" role="status">
@@ -481,7 +486,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
             </p>
           )}
           {(errors.registrations || errors.assessments) && (
-            <p className="banner error" role="alert">{"Kh\u00f4ng th\u1ec3 x\u00e1c minh \u0111\u1ea7y \u0111\u1ee7 c\u00e1c m\u00f4n \u0111ang h\u1ecdc ho\u1eb7c \u0111\u00e1nh gi\u00e1 c\u1ee7a Coach. H\u00e3y t\u1ea3i l\u1ea1i trang \u0111\u1ec3 th\u1eed l\u1ea1i."}</p>
+            <p className="banner error" role="alert">{"Kh\u00f4ng th\u1ec3 x\u00e1c minh \u0111\u1ea7y \u0111\u1ee7 c\u00e1c m\u00f4n \u0111ang h\u1ecdc ho\u1eb7c \u0111\u00e1nh gi\u00e1 c\u1ee7a hu\u1ea5n luy\u1ec7n vi\u00ean. H\u00e3y t\u1ea3i l\u1ea1i trang \u0111\u1ec3 th\u1eed l\u1ea1i."}</p>
           )}
           {errors.levels && (
             <p className="banner error" role="alert">
@@ -502,7 +507,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
           )}
 
           {!loading && eligibilityAvailable && relevantSports.length === 0 && (
-            <p className="queue-state">{"B\u1ed9 m\u00f4n s\u1ebd hi\u1ec3n sau khi b\u1ea1n tham gia m\u1ed9t l\u1edbp h\u1ecdc ho\u1eb7c \u0111\u01b0\u1ee3c Coach \u0111\u00e1nh gi\u00e1."}</p>
+            <p className="queue-state">{"B\u1ed9 m\u00f4n s\u1ebd hi\u1ec3n sau khi b\u1ea1n tham gia m\u1ed9t l\u1edbp h\u1ecdc ho\u1eb7c \u0111\u01b0\u1ee3c hu\u1ea5n luy\u1ec7n vi\u00ean \u0111\u00e1nh gi\u00e1."}</p>
           )}
 
           {/* =====================================================================
@@ -563,7 +568,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                   </div>
                   <span className="mla-kpi-tag green">
                     <span className="mla-dot" />
-                    Coach xác nhận
+                              Huấn luyện viên xác nhận
                   </span>
                 </div>
 
@@ -675,7 +680,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                                       d="M5 13l4 4L19 7"
                                     />
                                   </svg>
-                                  Coach đã xác minh
+                                  Huấn luyện viên đã xác minh
                                 </span>
                               ) : (
                                 <span className="mla-verify-chip unverified">
@@ -694,7 +699,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                               <div className="mla-sport-level-head">
                                 <span>TRÌNH ĐỘ HIỆN TẠI</span>
                                 <strong className={`mla-level-pill ${levelClass}`}>
-                                  {sport.currentLevel}
+                                  {levelLabel(sport.currentLevel)}
                                 </strong>
                               </div>
 
@@ -755,7 +760,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                                         d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
                                       />
                                     </svg>
-                                    <span>Chưa có bản ghi đánh giá của Coach</span>
+                                    <span>Chưa có bản ghi đánh giá của huấn luyện viên</span>
                                   </>
                                 )}
                               </div>
@@ -815,7 +820,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                                         d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                                       />
                                     </svg>
-                                    <span>Sẵn sàng đặt lịch hẹn Coach</span>
+                                    <span>Sẵn sàng đặt lịch hẹn với huấn luyện viên</span>
                                   </>
                                 )}
                               </div>
@@ -852,31 +857,6 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                 )}
               </section>
 
-              {/* 4. HELPER INFO BANNER */}
-              <div className="mla-info-banner" role="note">
-                <svg
-                  className="mla-info-banner-icon"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  aria-hidden="true"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-                <p>
-                  <strong>Lưu ý về quy chuẩn xác minh trình độ:</strong> Trình độ mặc định ban đầu
-                  của hội viên là <strong>BEGINNER</strong>. Chỉ khi Huấn luyện viên (Coach) hoàn
-                  thành buổi kiểm tra năng lực và gửi đánh giá chính thức, trình độ mới được cập
-                  nhật sang <strong className="green-highlight">Coach đã xác minh</strong>. Chọn
-                  bất kỳ bộ môn nào để xem chi tiết biểu đồ kỹ năng và lịch sử yêu cầu tư vấn tại
-                  Bước 2.
-                </p>
-              </div>
             </div>
           )}
 
@@ -910,7 +890,6 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                   </button>
 
                   <div className="mla-step2-breadcrumb">
-                    <span className="mla-step2-badge">Bước 2: Chi tiết hồ sơ</span>
                     <span>Trình độ &amp; lịch sử đánh giá</span>
                     <span>/</span>
                     <strong>{selectedSport.name}</strong>
@@ -927,7 +906,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                   >
                     {relevantSports.map((sport) => (
                       <option key={sport.id} value={String(sport.id)}>
-                        {sport.name} · Đổi bộ môn nhanh
+                        {sport.name}
                       </option>
                     ))}
                   </select>
@@ -967,7 +946,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                               clipRule="evenodd"
                             />
                           </svg>
-                          Coach đã xác minh
+                          Huấn luyện viên đã xác minh
                         </span>
                       ) : (
                         <span className="mla-hero-verify-pill unverified">
@@ -979,7 +958,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                     <div className="mla-hero-title-block">
                       <div className="mla-hero-level-row">
                         <strong className="member-level-value mla-hero-level-text">
-                          {selectedSport.currentLevel}
+                          {levelLabel(selectedSport.currentLevel)}
                         </strong>
                         <span className="mla-hero-tier-badge">
                           Bậc {selectedSport.rank} / 3
@@ -999,8 +978,8 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                         </p>
                       ) : (
                         <p className="mla-hero-desc">
-                          Beginner (mặc định; chưa có bản ghi trình độ đã xác minh cho bộ môn
-                          này). Bạn có thể đăng ký kiểm tra đánh giá đầu vào cùng Coach để cập nhật
+                          Cơ bản (mặc định; chưa có bản ghi trình độ đã xác minh cho bộ môn
+                          này). Bạn có thể đăng ký kiểm tra đánh giá đầu vào cùng huấn luyện viên để cập nhật
                           hồ sơ năng lực.
                         </p>
                       )}
@@ -1018,7 +997,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                           }`}
                         >
                           {selectedSport.rank > 1 ? "✓ " : "● "}
-                          1. BEGINNER ({selectedSport.rank > 1 ? "Đạt" : "Hiện tại"})
+                          1. Cơ bản ({selectedSport.rank > 1 ? "Đạt" : "Hiện tại"})
                         </span>
 
                         <span
@@ -1072,13 +1051,13 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
 
                       <div className="mla-roadmap-captions">
                         <span className={selectedSport.rank === 1 ? "is-bright" : ""}>
-                          {selectedSport.meta.stage1}
+                          {levelLabel(selectedSport.meta.stage1)}
                         </span>
                         <span className={selectedSport.rank === 2 ? "is-bright" : ""}>
-                          {selectedSport.meta.stage2}
+                          {levelLabel(selectedSport.meta.stage2)}
                         </span>
                         <span className={selectedSport.rank === 3 ? "is-bright" : ""}>
-                          {selectedSport.meta.stage3}
+                          {levelLabel(selectedSport.meta.stage3)}
                         </span>
                       </div>
                     </div>
@@ -1119,15 +1098,12 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
 
                     <dl className="mla-glass-meta">
                       <div>
-                        <dt>Coach xác minh:</dt>
+                        <dt>Huấn luyện viên xác minh:</dt>
                         <dd>
                           {selectedSport.isVerified ? (
-                            <span className="mla-coach-pill">
-                              <span>#{selectedSport.levelRecord.verifiedByCoachId}</span>
-                              Coach #{selectedSport.levelRecord.verifiedByCoachId}
-                            </span>
+                            <span className="mla-coach-pill">{selectedSport.levelRecord.verifiedByCoachName || "Huấn luyện viên đã xác minh"}</span>
                           ) : (
-                            "Chưa có Coach xác minh"
+                            "Chưa có huấn luyện viên xác minh"
                           )}
                         </dd>
                       </div>
@@ -1137,14 +1113,6 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                           {selectedSport.isVerified
                             ? formatDate(selectedSport.levelRecord.verifiedAt)
                             : "Chưa xác minh"}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Mã biên bản đánh giá:</dt>
-                        <dd className="mono">
-                          {latestCompletedAssessment
-                            ? `#EVAL-${selectedSport.id}-${latestCompletedAssessment.id}`
-                            : "—"}
                         </dd>
                       </div>
                       <div>
@@ -1158,9 +1126,9 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                     <button
                       type="button"
                       className="mla-glass-cta"
-                      onClick={() => onNavigate?.("member-courses")}
+                      onClick={() => navigate(`/member/courses?sportId=${encodeURIComponent(selectedSport.id)}`)}
                     >
-                      <span>Xem khóa học {selectedSport.name} phù hợp</span>
+                      <span>Xem khóa học {selectedSport.name}</span>
                       <svg
                         viewBox="0 0 24 24"
                         fill="none"
@@ -1226,20 +1194,18 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
 
                   {sportAssessments.length > 0 && (
                     <div className="member-history-list mla-card-stack">
-                      {sportAssessments.map((item) => (
+                      {shownAssessments.map((item) => (
                         <article
                           className="member-history-card mla-record-card"
                           key={item.id}
                         >
                           <div className="member-history-heading mla-record-head">
                             <div className="mla-record-title-group">
-                              <span className="mla-record-id-box blue">#{item.id}</span>
                               <div>
-                                <strong>Đánh giá #{item.id}</strong>
+                                <strong>Đánh giá kỹ năng</strong>
                                 <span>
                                   {sportNames.get(Number(item.sportId)) ||
                                     `Bộ môn #${item.sportId}`}{" "}
-                                  · Mã đợt: #EVAL-{item.id}
                                 </span>
                               </div>
                             </div>
@@ -1258,10 +1224,10 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                               <dd>{formatDate(item.createdAt)}</dd>
                             </div>
                             <div>
-                              <dt>Coach phụ trách</dt>
+                              <dt>Huấn luyện viên phụ trách</dt>
                               <dd>
                                 {item.assignedCoachId != null
-                                  ? `Coach #${item.assignedCoachId}`
+                                  ? item.assignedCoachName || "Huấn luyện viên phụ trách"
                                   : "Đang phân công"}
                               </dd>
                             </div>
@@ -1269,7 +1235,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                               <dt>Trình độ đánh giá</dt>
                               <dd className="highlight-blue">
                                 {item.status === "COMPLETED"
-                                  ? item.assessedLevel || "—"
+                                  ? levelLabel(item.assessedLevel)
                                   : "—"}
                               </dd>
                             </div>
@@ -1287,7 +1253,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
 
                           {item.status === "PENDING" && (
                             <p className="mla-pending-hint">
-                              Đánh giá đang chờ Coach thực hiện.
+                              Đánh giá đang chờ huấn luyện viên thực hiện.
                             </p>
                           )}
 
@@ -1295,7 +1261,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                             <div className="member-history-notes mla-note-callout blue">
                               <div className="mla-note-header">
                                 <strong>
-                                  Ghi chú chuyên môn của Coach
+                                  Ghi chú chuyên môn của huấn luyện viên
                                   {item.assignedCoachId != null
                                     ? ` #${item.assignedCoachId}`
                                     : ""}
@@ -1310,20 +1276,8 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                       ))}
                     </div>
                   )}
+                  {sportAssessments.length > 3 && <nav className="mla-history-pager" aria-label="Phân trang lịch sử đánh giá"><span>{sportAssessments.length} bản ghi · Trang {Math.min(assessmentPage, assessmentPages)}/{assessmentPages}</span><button type="button" disabled={assessmentPage <= 1} onClick={() => setAssessmentPage((page) => Math.max(1, page - 1))}>Trước</button><button type="button" disabled={assessmentPage >= assessmentPages} onClick={() => setAssessmentPage((page) => Math.min(assessmentPages, page + 1))}>Sau</button></nav>}
 
-                  <div className="mla-panel-helper">
-                    <span>
-                      Đánh giá tiếp theo có thể thực hiện khi bạn đăng ký kiểm tra nâng bậc cùng
-                      Huấn luyện viên.
-                    </span>
-                    <button
-                      type="button"
-                      className="mla-inline-link"
-                      onClick={() => openRequestModal(selectedSport.id)}
-                    >
-                      Đăng ký đánh giá →
-                    </button>
-                  </div>
                 </section>
 
                 {/* CỘT PHẢI: LỊCH SỬ YÊU CẦU TƯ VẤN */}
@@ -1403,16 +1357,15 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
 
                   {displayedConsultations.length > 0 && (
                     <div className="member-history-list mla-card-stack">
-                      {displayedConsultations.map((item) => (
+                      {shownConsultations.map((item) => (
                         <article
                           className="member-history-card mla-record-card"
                           key={item.id}
                         >
                           <div className="member-history-heading mla-record-head">
                             <div className="mla-record-title-group">
-                              <span className="mla-record-id-box amber">#{item.id}</span>
                               <div>
-                                <strong>Yêu cầu tư vấn #{item.id}</strong>
+                                <strong>Yêu cầu tư vấn</strong>
                                 <span>
                                   {item.sportName ||
                                     sportNames.get(Number(item.sportId)) ||
@@ -1438,7 +1391,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                               <dt>Nhân viên tiếp nhận</dt>
                               <dd>
                                 {item.handledBy != null
-                                  ? `Lễ tân #${item.handledBy}`
+                                  ? item.handledByName || "Nhân viên tiếp nhận"
                                   : "Đang chờ tiếp nhận"}
                               </dd>
                             </div>
@@ -1452,18 +1405,13 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                             )}
                           </dl>
 
-                          {(item.note || item.resolutionNote) && (
-                            <div className="member-history-notes mla-note-callout amber">
-                              <div className="mla-note-header">
-                                <strong>Nội dung tư vấn &amp; Giải pháp:</strong>
-                              </div>
-                              <p>{item.resolutionNote || item.note}</p>
-                            </div>
-                          )}
+                          {item.note && <div className="member-history-notes mla-note-callout amber"><div className="mla-note-header"><strong>Nội dung yêu cầu</strong></div><p>{item.note}</p></div>}
+                          {item.resolutionNote && <div className="member-history-notes mla-note-callout amber"><div className="mla-note-header"><strong>Nội dung tư vấn</strong></div><p>{item.resolutionNote}</p></div>}
                         </article>
                       ))}
                     </div>
                   )}
+                  {displayedConsultations.length > 3 && <nav className="mla-history-pager" aria-label="Phân trang yêu cầu tư vấn"><span>{displayedConsultations.length} bản ghi · Trang {Math.min(consultationPage, consultationPages)}/{consultationPages}</span><button type="button" disabled={consultationPage <= 1} onClick={() => setConsultationPage((page) => Math.max(1, page - 1))}>Trước</button><button type="button" disabled={consultationPage >= consultationPages} onClick={() => setConsultationPage((page) => Math.min(consultationPages, page + 1))}>Sau</button></nav>}
 
                   {/* CTA GỬI YÊU CẦU TƯ VẤN MỚI */}
                   <div className="mla-consult-cta-box">
@@ -1484,7 +1432,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                     <h4>Cần hỗ trợ tư vấn về môn {selectedSport.name}?</h4>
                     <p>
                       Gửi yêu cầu để nhận phản hồi từ bộ phận chuyên môn và sắp xếp lịch kiểm tra
-                      trình độ cùng Coach.
+                      trình độ cùng huấn luyện viên.
                     </p>
                     <button
                       type="button"
@@ -1512,7 +1460,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                   </button>
                   <span>•</span>
                   <button type="button" onClick={() => onNavigate?.("member-pt-booking")}>
-                    Đặt lịch Coach PT
+                    Đặt lịch huấn luyện cá nhân
                   </button>
                   <span>•</span>
                   <button type="button" onClick={() => onNavigate?.("support-tickets")}>
@@ -1588,10 +1536,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                       required
                       maxLength={100}
                       value={consultForm.name}
-                      onChange={(e) =>
-                        setConsultForm((prev) => ({ ...prev, name: e.target.value }))
-                      }
-                      placeholder="Nhập họ và tên"
+                      readOnly
                     />
                   </label>
 
@@ -1602,10 +1547,7 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                       required
                       maxLength={20}
                       value={consultForm.phone}
-                      onChange={(e) =>
-                        setConsultForm((prev) => ({ ...prev, phone: e.target.value }))
-                      }
-                      placeholder="Nhập số điện thoại"
+                      readOnly
                     />
                   </label>
 
@@ -1616,13 +1558,11 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
                       required
                       maxLength={150}
                       value={consultForm.email}
+                      readOnly
                       onInvalid={(event) => { event.preventDefault(); setModalError(CONSULTATION_EMAIL_ERROR); }}
-                      onChange={(e) =>
-                        setConsultForm((prev) => ({ ...prev, email: e.target.value }))
-                      }
-                      placeholder="Email bắt buộc"
                     />
                   </label>
+                  <p className="mla-modal-identity-note wide">Thông tin liên hệ lấy từ tài khoản hội viên.</p>
 
                   <label className="wide">
                     <span>Kinh nghiệm hiện tại</span>

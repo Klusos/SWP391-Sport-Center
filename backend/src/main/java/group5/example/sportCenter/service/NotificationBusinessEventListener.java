@@ -46,6 +46,13 @@ public class NotificationBusinessEventListener {
                 () -> delivery.courseCoachAssigned(event.referenceId(), event.coachId()));
     }
 
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void attendanceChanged(NotificationBusinessEvents.AttendanceChanged event) {
+        safely("attendance-changed", event.referenceId(),
+                () -> delivery.attendanceChanged(event.memberId(), event.className(), event.sessionStart(),
+                        event.previousStatus(), event.newStatus()));
+    }
+
     private void safely(String eventName, Integer referenceId, Runnable action) {
         try {
             action.run();

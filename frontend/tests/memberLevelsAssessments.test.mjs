@@ -99,6 +99,15 @@ test("consultation form retains full public catalog and decorative sport icons s
   assert.doesNotMatch(component, /sport\.meta\.icon|mla-sport-icon|mla-hero-watermark/);
 });
 
+test("Member identity is read-only in consultation requests and the backend contract carries only request details", async () => {
+  const component = await readFile(new URL("../src/pages/MemberLevelsAssessments.jsx", import.meta.url), "utf8");
+  assert.match(component, /value=\{consultForm\.name\}[\s\S]{0,60}readOnly/);
+  assert.match(component, /value=\{consultForm\.phone\}[\s\S]{0,60}readOnly/);
+  assert.match(component, /value=\{consultForm\.email\}[\s\S]{0,60}readOnly/);
+  assert.match(component, /Thông tin liên hệ lấy từ tài khoản hội viên/);
+  assert.match(component, /!profile\?\.name\?\.trim\(\) \|\| !profile\?\.phone\?\.trim\(\) \|\| !profile\?\.email\?\.trim\(\)/);
+});
+
 test("shared Portal Top Bar stays the only top bar and page tools remain in the content area", async () => {
   const [component, styles] = await Promise.all([
     readFile(new URL("../src/pages/MemberLevelsAssessments.jsx", import.meta.url), "utf8"),
@@ -109,9 +118,9 @@ test("shared Portal Top Bar stays the only top bar and page tools remain in the 
   assert.match(component, /mla-content-header-copy">\s*<h1>/);
   assert.doesNotMatch(component, /className="page-header mla-step1-header">[\s\S]*?<h1>/);
   assert.match(component, /value=\{searchQuery\}[\s\S]*?setSearchQuery/);
-  assert.match(component, /onClick=\{\(\) => openRequestModal\(selectedSport\?\.id\)\}/);
-  assert.match(component, /className="mla-primary-pill-btn" onClick=\{\(\) => openRequestModal\(selectedSport\?\.id\)\}/);
-  assert.match(component, /\\u0110\\u0103ng k\\u00fd/);
+  assert.match(component, /!selectedSport && <div className="mla-content-tools">/);
+  assert.match(component, /onClick=\{\(\) => openRequestModal\(\)\}/);
+  assert.match(component, /Tạo yêu cầu đánh giá/);
   assert.match(styles, /\.mla-content-tools\s*\{[^}]*flex-wrap: wrap/);
 });
 

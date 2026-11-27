@@ -3,6 +3,7 @@ import Sidebar from "../components/Sidebar";
 import { formatAuditDescription } from "../auditDescription.js";
 import AdminTopBar from "../components/AdminTopBar";
 import { correctAdminPtBookingOutcomeApi, getAdminAuditLogsApi, getAdminPtBookingOutcomeApi } from "../api";
+import { statusLabel } from "../uiPresentation.js";
 import "./AdminAuditLogs.css";
 
 const PAGE_SIZE = 20;
@@ -83,7 +84,7 @@ export default function AdminAuditLogs({ token, role, currentUserName, onLogout,
       const outcome = await correctAdminPtBookingOutcomeApi(token, ptOutcome.id, ptCorrection, ptReason.trim());
       setPtOutcome(outcome);
       setPtReason("");
-      setPtNotice("Đã cập nhật kết quả. Lịch sử điều chỉnh được ghi trong Audit Logs.");
+      setPtNotice("Đã cập nhật kết quả. Lịch sử điều chỉnh đã được ghi vào nhật ký hoạt động.");
       setDraft((current) => ({ ...current, entityType: "PT_BOOKING_OUTCOME", entityId: String(outcome.id) }));
       setFilters((current) => ({ ...current, entityType: "PT_BOOKING_OUTCOME", entityId: String(outcome.id) }));
       setPageNumber(0);
@@ -193,9 +194,9 @@ export default function AdminAuditLogs({ token, role, currentUserName, onLogout,
       <main className="main admin-audit-main">
         <AdminTopBar pageLabel={"NH\u1eacT K\u00dd"} displayName={currentUserName} avatarName={currentUserName} />
         <div className="admin-audit-content">
-        <header className="admin-audit-header">
+        <header className="admin-audit-header admin-page-header">
           <div>
-            <h1>Audit Logs</h1>
+            <h1>Nhật ký hoạt động</h1>
             <p className="subtitle">Nhật ký các thao tác quản trị và nghiệp vụ đã được ghi nhận.</p>
           </div>
           <button className="admin-audit-button is-secondary" type="button" onClick={refresh} disabled={loading}>
@@ -210,14 +211,14 @@ export default function AdminAuditLogs({ token, role, currentUserName, onLogout,
             <button className="admin-audit-button is-secondary" type="submit" disabled={ptBusy}>Tìm kết quả</button>
           </form>
           {ptOutcome && <form onSubmit={correctPtOutcome}>
-            <p>Buổi #{ptOutcome.id} hiện ở trạng thái <strong>{ptOutcome.status}</strong>.</p>
+            <p>Buổi #{ptOutcome.id} hiện ở trạng thái <strong>{statusLabel(ptOutcome.status, "ptBooking")}</strong>.</p>
             {(ptOutcome.status === "COMPLETED" || ptOutcome.status === "NO_SHOW") ? <>
               <label>Kết quả mới<select value={ptCorrection} onChange={(event) => setPtCorrection(event.target.value)}>
                 <option value="COMPLETED">Hoàn thành</option><option value="NO_SHOW">Vắng mặt (buổi đã sử dụng)</option>
               </select></label>
               <label>Lý do điều chỉnh<textarea maxLength={300} required value={ptReason} onChange={(event) => setPtReason(event.target.value)} /></label>
               <button className="admin-audit-button is-primary" type="submit" disabled={ptBusy || !ptReason.trim()}>Lưu điều chỉnh</button>
-            </> : <p>Chỉ có thể điều chỉnh kết quả COMPLETED hoặc NO_SHOW đã được ghi nhận.</p>}
+            </> : <p>Chỉ có thể điều chỉnh buổi đã được ghi nhận là hoàn thành hoặc vắng mặt.</p>}
           </form>}
           {ptError && <p className="admin-audit-error" role="alert">{ptError}</p>}
           {ptNotice && <p role="status">{ptNotice}</p>}
@@ -226,9 +227,9 @@ export default function AdminAuditLogs({ token, role, currentUserName, onLogout,
         <form className="admin-audit-filters" onSubmit={applyFilters}>
           <div className="admin-audit-filter-grid">
             <label>Actor User ID<input name="actorUserId" inputMode="numeric" value={draft.actorUserId} onChange={changeFilter} placeholder="Ví dụ: 12" /></label>
-            <label>Action<input name="action" value={draft.action} onChange={changeFilter} placeholder="Ví dụ: STATUS_CHANGE" /></label>
-            <label>Entity Type<input name="entityType" value={draft.entityType} onChange={changeFilter} placeholder="Ví dụ: USER" /></label>
-            <label>Entity ID<input name="entityId" value={draft.entityId} onChange={changeFilter} placeholder="ID đối tượng" /></label>
+            <label>Từ khóa thao tác<input name="action" value={draft.action} onChange={changeFilter} placeholder="Nhập từ khóa" /></label>
+            <label>Loại đối tượng<input name="entityType" value={draft.entityType} onChange={changeFilter} placeholder="Nhập loại đối tượng" /></label>
+            <label>Mã đối tượng<input name="entityId" value={draft.entityId} onChange={changeFilter} placeholder="Nhập mã đối tượng" /></label>
             <label>Từ thời điểm<input type="datetime-local" name="from" value={draft.from} onChange={changeFilter} /></label>
             <label>Đến thời điểm (không bao gồm)<input type="datetime-local" name="to" value={draft.to} onChange={changeFilter} /></label>
           </div>
@@ -240,7 +241,7 @@ export default function AdminAuditLogs({ token, role, currentUserName, onLogout,
           </div>
         </form>
 
-        <section className="admin-audit-results" aria-label="Audit log results">
+        <section className="admin-audit-results" aria-label="Kết quả nhật ký hoạt động">
           <div className="admin-audit-results-heading">
             <h2>Hoạt động</h2>
             {!loading && !error && <span>{totalElements.toLocaleString()} bản ghi</span>}
@@ -263,7 +264,7 @@ export default function AdminAuditLogs({ token, role, currentUserName, onLogout,
                     </tr>;
                   })}</tbody>
                 </table></div>}
-          {!loading && !error && totalPages > 1 && <nav className="admin-audit-pagination" aria-label="Phân trang audit logs">
+          {!loading && !error && totalPages > 1 && <nav className="admin-audit-pagination" aria-label="Phân trang nhật ký hoạt động">
             <button type="button" onClick={() => { setLoading(true); setError(""); setPageNumber((value) => Math.max(0, value - 1)); }} disabled={!hasPrevious || loading}>Trước</button>
             <span>Trang {currentPage + 1} / {totalPages}</span>
             <button type="button" onClick={() => { setLoading(true); setError(""); setPageNumber((value) => value + 1); }} disabled={!hasNext || loading}>Sau</button>

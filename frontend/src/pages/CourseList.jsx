@@ -4,6 +4,7 @@ import Sidebar from "../components/Sidebar";
 import AdminTopBar from "../components/AdminTopBar";
 import { getCoursesApi, getSportsApi } from "../api";
 import { filterCourses } from "../courseManagementModel";
+import { statusLabel } from "../uiPresentation.js";
 import "./Portal.css";
 import "./Admin.css";
 import "./CourseManagement.css";
@@ -46,7 +47,7 @@ export default function CourseList({ token, role, currentUserName, onLogout, onN
       <main className="main course-list-main">
         <AdminTopBar pageLabel="QUẢN LÝ KHÓA HỌC" displayName={currentUserName} avatarName={currentUserName} breadcrumbItems={[{ label: "Khóa học", current: true }]} />
         <div className="course-list-content">
-        <header className="course-list-heading">
+        <header className="course-list-heading admin-page-header">
           <div><h1>Quản lý khóa học</h1><p className="subtitle">Danh sách khóa học theo tất cả bộ môn.</p></div>
           <button type="button" className="adm-primary course-create-button" onClick={() => navigate("/staff/courses/new")}>＋ Tạo khóa học</button>
         </header>
@@ -54,13 +55,13 @@ export default function CourseList({ token, role, currentUserName, onLogout, onN
         <section className="adm-block">
           <div className="course-filters">
             <label>Tìm theo tên<input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Nhập tên khóa học" /></label>
-            <label>Sport<select value={sportId} onChange={(e) => setSportId(e.target.value)}><option value="">Tất cả Sport</option>{sports.map((sport) => <option key={sport.id} value={sport.id}>{sport.name}</option>)}</select></label>
-            <label>Trạng thái<select value={status} onChange={(e) => setStatus(e.target.value)}><option value="">Tất cả trạng thái</option><option value="ACTIVE">ACTIVE</option><option value="INACTIVE">INACTIVE</option></select></label>
+            <label>Bộ môn<select value={sportId} onChange={(e) => setSportId(e.target.value)}><option value="">Tất cả bộ môn</option>{sports.map((sport) => <option key={sport.id} value={sport.id}>{sport.name}</option>)}</select></label>
+            <label>Trạng thái<select value={status} onChange={(e) => setStatus(e.target.value)}><option value="">Tất cả trạng thái</option><option value="ACTIVE">{statusLabel("ACTIVE", "course")}</option><option value="INACTIVE">{statusLabel("INACTIVE", "course")}</option></select></label>
           </div>
           {loading ? <p role="status">Đang tải khóa học…</p> : filtered.length === 0 ? <p className="dash-empty">Không tìm thấy khóa học phù hợp.</p> : (
             <div className="queue-table-wrap">
               <table className="queue-table">
-                <thead><tr><th>Khóa học</th><th>Sport</th><th>Trình độ</th><th>Độ tuổi</th><th>Trạng thái</th><th aria-label="Thao tác" /></tr></thead>
+                <thead><tr><th>Khóa học</th><th>Bộ môn</th><th>Trình độ</th><th>Độ tuổi</th><th>Trạng thái</th><th aria-label="Thao tác" /></tr></thead>
                 <tbody>{filtered.map((course) => <tr key={course.id}>
                   <td><strong>{course.name}</strong></td><td>{course.sportName || "—"}</td><td>{course.level || "—"}</td>
                   <td>{course.targetAgeMin ?? "—"} – {course.targetAgeMax ?? "—"}</td><td><span className={"status-pill status-" + String(course.status || "").toLowerCase()}>{course.status || "—"}</span></td>

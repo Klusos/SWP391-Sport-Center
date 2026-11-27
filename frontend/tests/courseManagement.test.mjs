@@ -360,7 +360,7 @@ test("Course list and form retain their established styles outside the redesigne
   const css = await readFile(new URL("../src/pages/CourseManagement.css", import.meta.url), "utf8");
   const list = await readFile(new URL("../src/pages/CourseList.jsx", import.meta.url), "utf8");
   const form = await readFile(new URL("../src/pages/CourseForm.jsx", import.meta.url), "utf8");
-  assert.match(list, /className="course-list-heading"/);
+  assert.match(list, /className="course-list-heading admin-page-header"/);
   assert.match(css, /\.main \.course-list-heading\s*\{/);
   assert.match(css, /\.main \.course-filters\s*\{/);
   assert.match(form, /className="adm-form course-form adm-block"/);

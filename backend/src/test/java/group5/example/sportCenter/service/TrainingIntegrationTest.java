@@ -2,6 +2,7 @@ package group5.example.sportCenter.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -16,6 +17,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,6 +56,7 @@ import group5.example.sportCenter.entity.Sport;
 import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.repository.AttendanceHistoryRepository;
 import group5.example.sportCenter.repository.AttendanceRepository;
+import group5.example.sportCenter.repository.AuditLogRepository;
 import group5.example.sportCenter.repository.ClassSessionRepository;
 import group5.example.sportCenter.repository.CoachRepository;
 import group5.example.sportCenter.repository.CourseClassRepository;
@@ -60,6 +67,7 @@ import group5.example.sportCenter.repository.ProgressEvaluationRepository;
 import group5.example.sportCenter.repository.SportRepository;
 import group5.example.sportCenter.repository.TrainingExerciseRepository;
 import group5.example.sportCenter.repository.TrainingPlanRepository;
+import group5.example.sportCenter.repository.TrainingPlanWeekRepository;
 import group5.example.sportCenter.repository.TrainingResultRepository;
 import group5.example.sportCenter.repository.UserRepository;
 import group5.example.sportCenter.security.JwtService;
@@ -95,7 +103,9 @@ class TrainingIntegrationTest {
     @Autowired CourseRegistrationRepository registrations;
     @Autowired AttendanceRepository attendance;
     @Autowired AttendanceHistoryRepository attendanceHistories;
+    @Autowired AuditLogRepository auditLogs;
     @Autowired TrainingPlanRepository plans;
+    @Autowired TrainingPlanWeekRepository planWeeks;
     @Autowired TrainingExerciseRepository exercises;
     @Autowired TrainingResultRepository results;
     @Autowired ProgressEvaluationRepository evaluations;
@@ -117,6 +127,7 @@ class TrainingIntegrationTest {
         results.deleteAllInBatch();
         evaluations.deleteAllInBatch();
         exercises.deleteAllInBatch();
+        planWeeks.deleteAllInBatch();
         plans.deleteAllInBatch();
         attendanceHistories.deleteAllInBatch();
         attendance.deleteAllInBatch();
@@ -192,6 +203,81 @@ class TrainingIntegrationTest {
     }
 
     @Test
+    void weeklyGeneralPlanSavePreservesLegacyExerciseIdentityAndEnforcesPlanOwnership() throws Exception {
+        String planUrl = "/api/training/classes/" + coachClass.getId() + "/plan";
+        mvc.perform(put(planUrl).header("Authorization", bearer(coachUser)).contentType("application/json")
+                .content("{\"goal\":\"Overall goal\"}")).andExpect(status().isOk());
+        String legacyKept = mvc.perform(post(planUrl + "/exercises").header("Authorization", bearer(coachUser))
+                .contentType("application/json").content("{\"name\":\"Legacy unassigned\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        Integer legacyKeptId = Integer.valueOf(legacyKept.replaceAll(".*\"id\":(\\d+).*", "$1"));
+        String legacyMoved = mvc.perform(post(planUrl + "/exercises").header("Authorization", bearer(coachUser))
+                .contentType("application/json").content("{\"name\":\"Move into week\",\"reps\":12}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        Integer legacyMovedId = Integer.valueOf(legacyMoved.replaceAll(".*\"id\":(\\d+).*", "$1"));
+        String planBeforeSave = mvc.perform(get(planUrl).header("Authorization", bearer(coachUser)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        String expectedUpdatedAt = planBeforeSave.replaceAll(".*\"updatedAt\":\"([^\"]+)\".*", "$1");
+
+        String body = "{\"expectedUpdatedAt\":\"" + expectedUpdatedAt + "\",\"goal\":\"Serve fundamentals\",\"description\":\"Complete weekly plan\","
+                + "\"unassignedExerciseIds\":[" + legacyKeptId + "],\"weeks\":["
+                + "{\"id\":null,\"weekNumber\":20,\"title\":\"Contact\",\"goal\":\"Consistent contact\","
+                + "\"description\":\"Technique\",\"exercises\":[{\"id\":" + legacyMovedId
+                + ",\"name\":\"Move into week\",\"sets\":2,\"reps\":12}]},"
+                + "{\"id\":null,\"weekNumber\":2,\"title\":\"Footwork\",\"goal\":null,\"description\":null,\"exercises\":["
+                + "{\"id\":null,\"name\":\"Split step\",\"sets\":3,\"reps\":8}]}]}";
+        String saved = mvc.perform(put(planUrl + "/weekly").header("Authorization", bearer(coachUser))
+                .contentType("application/json").content(body))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.weeks.length()").value(2))
+                .andExpect(jsonPath("$.weeks[0].weekNumber").value(2))
+                .andExpect(jsonPath("$.weeks[1].weekNumber").value(20))
+                .andExpect(jsonPath("$.weeks[1].goal").value("Consistent contact"))
+                .andExpect(jsonPath("$.weeks[1].exercises[0].id").value(legacyMovedId))
+                .andExpect(jsonPath("$.exercises.length()").value(1))
+                .andExpect(jsonPath("$.exercises[0].id").value(legacyKeptId))
+                .andReturn().getResponse().getContentAsString();
+        Integer weekTwoId = Integer.valueOf(saved.replaceAll(".*\"weeks\":\\[\\{\"id\":(\\d+).*", "$1"));
+        String savedUpdatedAt = saved.replaceAll(".*\"updatedAt\":\"([^\"]+)\".*", "$1");
+
+        String stale = body.replace(expectedUpdatedAt, "2020-01-01T00:00:00");
+        mvc.perform(put(planUrl + "/weekly").header("Authorization", bearer(coachUser))
+                .contentType("application/json").content(stale)).andExpect(status().isConflict());
+        assertEquals("Serve fundamentals", plans.findByCourseClassId(coachClass.getId()).orElseThrow().getGoal());
+
+        mvc.perform(get(planUrl).header("Authorization", bearer(member)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.weeks.length()").value(2))
+                .andExpect(jsonPath("$.weeks[0].startDate").isNotEmpty())
+                .andExpect(jsonPath("$.weeks[1].outsideOffering").value(true));
+
+        String duplicate = body.replace(expectedUpdatedAt, savedUpdatedAt)
+                .replace("\"weekNumber\":20", "\"weekNumber\":2");
+        mvc.perform(put(planUrl + "/weekly").header("Authorization", bearer(coachUser))
+                .contentType("application/json").content(duplicate)).andExpect(status().isBadRequest());
+        assertEquals(2, planWeeks.count());
+        assertEquals(3, exercises.count());
+        assertEquals(legacyMovedId, exercises.findByPlanIdOrderBySortOrderAscIdAsc(
+                plans.findByCourseClassId(coachClass.getId()).orElseThrow().getId()).stream()
+                .filter(exercise -> exercise.getWeek() != null).findFirst().orElseThrow().getId());
+
+        CourseClass otherClass = courseClass(coaches.findByUserId(otherCoachUser.getId()).orElseThrow());
+        String otherPlanUrl = "/api/training/classes/" + otherClass.getId() + "/plan";
+        mvc.perform(put(otherPlanUrl).header("Authorization", bearer(otherCoachUser)).contentType("application/json")
+                .content("{\"goal\":\"Other class\"}")).andExpect(status().isOk());
+        String otherExercise = mvc.perform(post(otherPlanUrl + "/exercises").header("Authorization", bearer(otherCoachUser))
+                .contentType("application/json").content("{\"name\":\"Other plan exercise\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        Integer otherExerciseId = Integer.valueOf(otherExercise.replaceAll(".*\"id\":(\\d+).*", "$1"));
+        mvc.perform(put(planUrl + "/weekly").header("Authorization", bearer(coachUser)).contentType("application/json")
+                .content("{\"expectedUpdatedAt\":\"" + savedUpdatedAt + "\",\"goal\":\"Must rollback\",\"unassignedExerciseIds\":[" + legacyKeptId + "],"
+                        + "\"weeks\":[{\"id\":" + weekTwoId + ",\"weekNumber\":2,\"exercises\":[{\"id\":"
+                        + otherExerciseId + ",\"name\":\"Foreign reference\"}]}]}"))
+                .andExpect(status().isBadRequest());
+        assertEquals("Serve fundamentals", plans.findByCourseClassId(coachClass.getId()).orElseThrow().getGoal());
+        mvc.perform(put(planUrl + "/weekly").header("Authorization", bearer(admin)).contentType("application/json")
+                .content(body)).andExpect(status().isForbidden());
+    }
+
+    @Test
     void coachCompletesOnlyEndedSessionsAndCompletionIsIdempotent() throws Exception {
         mvc.perform(post("/api/training/sessions/" + futureSession.getId() + "/complete")
                 .header("Authorization", bearer(coachUser))).andExpect(status().isConflict());
@@ -238,6 +324,28 @@ class TrainingIntegrationTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.score").value(8));
         assertEquals(1, results.count());
 
+        Attendance present = attendance.findByClassSessionIdAndMemberId(endedSession.getId(), member.getId()).orElseThrow();
+        int historyBeforeRejectedCorrection = attendanceHistories
+                .findByAttendanceIdOrderByChangedAtAscIdAsc(present.getId()).size();
+        long auditBeforeRejectedCorrection = auditLogs.count();
+        for (String statusValue : new String[] { "ABSENT", "EXCUSED" }) {
+            mvc.perform(put("/api/attendance/sessions/" + endedSession.getId() + "/members/" + member.getId())
+                    .header("Authorization", bearer(coachUser)).contentType("application/json")
+                    .content("{\"status\":\"" + statusValue + "\",\"reason\":\"Owner-approved correction\"}"))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.message").value(
+                            "Học viên đã có kết quả tập luyện cho buổi học này. Không thể chuyển trạng thái điểm danh sang vắng mặt hoặc vắng có phép."));
+        }
+        mvc.perform(put("/api/attendance/sessions/" + endedSession.getId() + "/members/" + member.getId())
+                .header("Authorization", bearer(admin)).contentType("application/json")
+                .content("{\"status\":\"ABSENT\",\"reason\":\"Admin correction\"}"))
+                .andExpect(status().isConflict());
+        assertEquals(AttendanceStatus.PRESENT, attendance.findById(present.getId()).orElseThrow().getStatus());
+        assertEquals(1, results.count());
+        assertEquals(historyBeforeRejectedCorrection,
+                attendanceHistories.findByAttendanceIdOrderByChangedAtAscIdAsc(present.getId()).size());
+        assertEquals(auditBeforeRejectedCorrection, auditLogs.count());
+
         mvc.perform(put("/api/training/sessions/" + futureSession.getId() + "/results/" + member.getId())
                 .header("Authorization", bearer(coachUser)).contentType("application/json").content("{\"score\":5}"))
                 .andExpect(status().isConflict());
@@ -252,6 +360,45 @@ class TrainingIntegrationTest {
                 .andExpect(jsonPath("$.members[0].notes").value("Better footwork"));
         mvc.perform(get("/api/training/sessions/" + endedSession.getId() + "/results").header("Authorization", bearer(member)))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void sharedSessionLockPreventsConcurrentAbsentCorrectionAndResultCreationFromCommittingInconsistentState() throws Exception {
+        markAttendance(endedSession, member, AttendanceStatus.PRESENT);
+
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<Integer> correction = pool.submit(() -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("start gate timed out");
+                return mvc.perform(put("/api/attendance/sessions/" + endedSession.getId() + "/members/" + member.getId())
+                        .header("Authorization", bearer(coachUser)).contentType("application/json")
+                        .content("{\"status\":\"ABSENT\",\"reason\":\"Concurrent consistency test\"}"))
+                        .andReturn().getResponse().getStatus();
+            });
+            Future<Integer> result = pool.submit(() -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("start gate timed out");
+                return mvc.perform(put("/api/training/sessions/" + endedSession.getId() + "/results/" + member.getId())
+                        .header("Authorization", bearer(coachUser)).contentType("application/json")
+                        .content("{\"score\":7,\"notes\":\"Concurrent consistency test\"}"))
+                        .andReturn().getResponse().getStatus();
+            });
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            int correctionStatus = correction.get(10, TimeUnit.SECONDS);
+            int resultStatus = result.get(10, TimeUnit.SECONDS);
+            assertTrue((correctionStatus == 200 && resultStatus == 409)
+                    || (correctionStatus == 409 && resultStatus == 200));
+            AttendanceStatus finalStatus = attendance.findByClassSessionIdAndMemberId(endedSession.getId(), member.getId())
+                    .orElseThrow().getStatus();
+            assertEquals(finalStatus == AttendanceStatus.PRESENT, results.existsByClassSessionIdAndMemberId(
+                    endedSession.getId(), member.getId()));
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     @Test
@@ -337,12 +484,12 @@ class TrainingIntegrationTest {
                 + "/members/" + member.getId();
         mvc.perform(put(secondAttendanceUrl).header("Authorization", bearer(coachUser)).contentType("application/json")
                         .content("{\"status\":\"EXCUSED\",\"reason\":\"Correction\"}"))
-                .andExpect(status().isOk());
+                .andExpect(status().isBadRequest());
         mvc.perform(get(progressUrl).header("Authorization", bearer(coachUser)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].hasQualifyingCompletedAttendance").value(false))
+                .andExpect(jsonPath("$[0].hasQualifyingCompletedAttendance").value(true))
                 .andExpect(jsonPath("$[0].sessionsMarked").value(3))
-                .andExpect(jsonPath("$[0].sessionsPresent").value(1));
+                .andExpect(jsonPath("$[0].sessionsPresent").value(2));
     }
 
     @Test
@@ -547,6 +694,7 @@ class TrainingIntegrationTest {
         result.setMember(forMember);
         result.setCourseClass(courseClass);
         result.setStatus(CourseRegistrationStatus.CONFIRMED);
+        result.setRegisteredAt(now.minusYears(1));
         result.setOriginalPrice(new BigDecimal("100.00"));
         result.setMembershipDiscount(new BigDecimal("0.00"));
         result.setFinalPrice(new BigDecimal("100.00"));

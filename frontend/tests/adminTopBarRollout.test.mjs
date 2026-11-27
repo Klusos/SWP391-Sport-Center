@@ -12,7 +12,7 @@ test("Audit Logs reuses AdminTopBar and preserves its content and local layout",
   assert.match(page, /import AdminTopBar from "\.\.\/components\/AdminTopBar"/);
   assert.match(page, /<AdminTopBar pageLabel=\{"NH\\u1eacT K\\u00dd"\} displayName=\{currentUserName\} avatarName=\{currentUserName\} \/>/);
   assert.match(page, /activePage="audit-logs"/);
-  assert.match(page, /className="admin-audit-header"[\s\S]*?<h1>Audit Logs<\/h1>/);
+  assert.match(page, /className="admin-audit-header admin-page-header"[\s\S]*?<h1>Nhật ký hoạt động<\/h1>/);
   assert.doesNotMatch(page, /admin-audit-eyebrow|SPORTCENTER \/ ADMIN/);
   assert.match(page, /admin-audit-filters[\s\S]*?admin-audit-results/);
   assert.doesNotMatch(page, /NotificationBell/);
@@ -52,4 +52,29 @@ test("the rollout keeps the accepted Dashboard and Reports integrations and prin
   assert.match(app, /<NotificationBell\s+key=\{notificationIdentityKey\(auth\)\}/);
   assert.equal([...app.matchAll(/<NotificationBell\b/g)].length, 1);
   assert.doesNotMatch(dashboard + reports, /<NotificationBell/);
+});
+
+test("Admin management routes use the framed header pattern while dashboards remain specialized", async () => {
+  const app = await read("../src/App.jsx");
+  const routes = [
+    ["../src/pages/StaffAttendance.jsx", /coach-attendance-header/],
+    ["../src/pages/CourseList.jsx", /admin-page-header/],
+    ["../src/pages/CourseForm.jsx", /admin-page-header/],
+    ["../src/pages/CourseManagementPages.jsx", /course-detail-heading admin-page-header/],
+    ["../src/pages/MembershipPlans.jsx", /admin-page-header/],
+    ["../src/pages/MemberList.jsx", /admin-page-header/],
+    ["../src/pages/StaffManagement.jsx", /admin-page-header/],
+    ["../src/pages/AdminAuditLogs.jsx", /admin-audit-header admin-page-header/],
+    ["../src/pages/AdminNotificationBroadcast.jsx", /nb-header admin-page-header/],
+    ["../src/pages/ReportPage.jsx", /page-intro admin-page-header/],
+    ["../src/pages/ReceptionistMembershipSales.jsx", /membership-sales-header[^\n]*admin-page-header/],
+    ["../src/pages/ReceptionistCoursePayments.jsx", /cp-hero-header[^\n]*admin-page-header/],
+    ["../src/pages/ReceptionistPtPayments.jsx", /cp-hero-header[^\n]*admin-page-header/],
+    ["../src/pages/RegisterMember.jsx", /register-member-header[^\n]*admin-page-header/],
+  ];
+  for (const [path, pattern] of routes) assert.match(await read(path), pattern, path);
+  assert.match(await read("../src/pages/SportManagement.jsx"), /AdminSectionHeader/);
+  assert.match(await read("../src/pages/FacilityManagement.jsx"), /AdminSectionHeader/);
+  assert.match(await read("../src/pages/SupportTickets.css"), /\.support-admin-content \.support-heading[^{]*\{[^}]*background:linear-gradient/);
+  assert.match(app, /path="\/admin\/attendance"[\s\S]*?path="\/staff\/staff"[\s\S]*?path="\/staff\/sports"[\s\S]*?path="\/staff\/facilities"[\s\S]*?path="\/staff\/courses"[\s\S]*?path="\/admin\/notifications\/broadcast"[\s\S]*?path="\/admin\/audit-logs"[\s\S]*?path="\/admin\/reports"/);
 });

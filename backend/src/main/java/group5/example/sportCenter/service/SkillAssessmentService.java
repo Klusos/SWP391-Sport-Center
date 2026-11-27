@@ -174,7 +174,7 @@ public class SkillAssessmentService {
     }
     private SkillAssessmentResponse response(SkillAssessment a) {
         return new SkillAssessmentResponse(a.getId(), a.getMember().getId(), a.getSport().getId(),
-                a.getAssignedCoach().getId(), a.getRequestedByUser().getId(), a.getStatus().name(),
+                a.getAssignedCoach().getId(), a.getAssignedCoach().getUser().getName(), a.getRequestedByUser().getId(), a.getStatus().name(),
                 a.getAssessedLevel() == null ? null : a.getAssessedLevel().name(), a.getNotes(),
                 a.getCreatedAt(), a.getAssessedAt(), a.getCancelledAt(),
                 a.getConsultationRequest() == null ? null : a.getConsultationRequest().getId());

@@ -1,4 +1,4 @@
-.course-consult-modal-backdrop { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: 18px; background: rgb(7 27 48 / 68%); }
+.course-consult-modal-backdrop { position: fixed; inset: 0; z-index: var(--sc-layer-modal, 1500); display: grid; place-items: center; padding: 18px; background: rgb(7 27 48 / 68%); }
 .course-consult-modal { display: flex; width: min(680px, 100%); max-height: min(92vh, 820px); max-height: min(92dvh, 820px); flex-direction: column; overflow: hidden; border: 1px solid #d9e4ee; border-radius: 18px; background: #fff; color: #173653; box-shadow: 0 24px 70px rgb(4 24 44 / 30%); }
 .course-consult-modal:focus { outline: none; }
 .course-consult-modal-header { display: flex; flex: 0 0 auto; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 24px 26px 17px; border-bottom: 1px solid #e6edf4; }

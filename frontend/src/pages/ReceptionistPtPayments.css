@@ -3,3 +3,5 @@
   margin-left: 6px;
   vertical-align: middle;
 }
+ .pt-payment-queue:not(.pt-payment-queue--admin) .cp-hero-header { min-height:104px; align-items:center; padding:clamp(20px,2.5vw,30px); border:1px solid #d7e7f7; border-radius:18px; background:linear-gradient(120deg,#edf6ff,#fff 78%); box-shadow:0 10px 28px rgba(18,59,99,.06); }
+.pt-payment-queue--admin .cp-hero-header.admin-page-header { min-height:104px; align-items:center; padding:clamp(20px,2.5vw,30px); border:1px solid #d7e7f7; border-radius:18px; background:linear-gradient(120deg,#edf6ff,#fff 78%); box-shadow:0 10px 28px rgba(18,59,99,.06); }

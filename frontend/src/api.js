@@ -1,3 +1,5 @@
+import { apiErrorMessage } from "./apiErrorPresentation.js";
+
 export const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || "http://localhost:8080";
 const API_BASE = API_BASE_URL.replace(/\/$/, "");
 let unauthorizedHandler = null;
@@ -44,7 +46,7 @@ async function request(path, options = {}, controls = {}) {
     if (response.status === 401 && requestToken && controls.notifyUnauthorized !== false) {
       unauthorizedHandler?.(requestToken);
     }
-    const error = new Error(data.message || data.detail || ("Request failed (" + response.status + ")"));
+    const error = new Error(apiErrorMessage(data.message || data.detail, response.status, path));
     error.status = response.status;
     throw error;
   }
@@ -280,6 +282,9 @@ export function cancelPtBookingApi(token, bookingId) {
 export function getMyAttendanceApi(token) {
   return request("/api/attendance/me", { headers: authenticatedHeaders(token) });
 }
+export function getMyAttendanceOverviewApi(token) {
+  return request("/api/attendance/me/overview", { headers: authenticatedHeaders(token) });
+}
 export function getStaffAttendanceSessionsApi(token) {
   return request("/api/attendance/sessions", { headers: authenticatedHeaders(token) });
 }
@@ -298,6 +303,14 @@ export function markAttendanceApi(token, sessionId, memberId, payload) {
     method: "PUT",
     headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+  });
+}
+
+export function submitInitialAttendanceApi(token, sessionId, members) {
+  return request("/api/attendance/sessions/" + encodeURIComponent(sessionId) + "/submit", {
+    method: "POST",
+    headers: { ...authenticatedHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ members }),
   });
 }
 
@@ -946,6 +959,10 @@ export function getTrainingPlanApi(token, classId) {
 
 export function saveTrainingPlanApi(token, classId, payload) {
   return request(`/api/training/classes/${encodeURIComponent(classId)}/plan`, trainingJson(token, "PUT", payload));
+}
+
+export function saveWeeklyTrainingPlanApi(token, classId, payload) {
+  return request(`/api/training/classes/${encodeURIComponent(classId)}/plan/weekly`, trainingJson(token, "PUT", payload));
 }
 
 export function addTrainingExerciseApi(token, classId, payload) {

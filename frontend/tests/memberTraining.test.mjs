@@ -37,6 +37,8 @@ test("Member Training class list navigates by stable Class ID to a separate resu
 
 test("Detail restores the original result layout and scopes every section to the selected class", async () => {
   const source = await memberPage();
+  const css = await readFile(new URL("../src/pages/MemberTraining.css", import.meta.url), "utf8");
+  assert.match(css, /\.member-training-header \{ display: flex; align-items: center; justify-content: space-between/);
   assert.match(source, /className="dash-card training-member-class"/);
   assert.match(source, /sessionsPresent/);
   assert.match(source, /averageScore/);
@@ -59,9 +61,17 @@ test("Class cards keep distinguishing metadata and compact session progress", as
   assert.match(source, /info\.courseName/);
   assert.match(source, /info\.sportName/);
   assert.match(source, /info\.coachName/);
-  assert.match(source, /Mã lớp \{id\}/);
+  assert.match(source, /className="member-training-class-id">Lớp học/);
+  assert.doesNotMatch(source, /Mã lớp \{id\}/);
   assert.match(source, /completedSessions \?\? 0\}\/\{info\.totalSessions \?\? 0/);
   assert.match(source, /info\.courseOfferingName/);
+});
+
+test("Member Training formats Offering date-only values with the shared Vietnamese date formatter", async () => {
+  const source = await memberPage();
+  assert.match(source, /import \{ formatDateVN \} from "\.\.\/uiPresentation\.js"/);
+  assert.match(source, /formatDateVN\(info\.startDate\)[\s\S]*?formatDateVN\(info\.endDate\)/);
+  assert.doesNotMatch(source, /\$\{info\.startDate \|\| "—"\} → \$\{info\.endDate/);
 });
 
 test("Detail refresh remains separate for results and class-scoped Individual Plans", async () => {

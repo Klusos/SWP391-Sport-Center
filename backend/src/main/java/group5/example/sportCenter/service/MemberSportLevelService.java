@@ -32,6 +32,8 @@ public class MemberSportLevelService {
     private List<MemberSportLevelResponse> read(Integer memberId) {
         return levels.findByMemberIdOrderBySportIdAsc(memberId).stream().map(l -> new MemberSportLevelResponse(
                 l.getId(), l.getMember().getId(), l.getSport().getId(), l.getLevel().name(),
-                l.getVerifiedByCoach() == null ? null : l.getVerifiedByCoach().getId(), l.getVerifiedAt(), l.getUpdatedAt())).toList();
+                l.getVerifiedByCoach() == null ? null : l.getVerifiedByCoach().getId(),
+                l.getVerifiedByCoach() == null ? null : l.getVerifiedByCoach().getUser().getName(),
+                l.getVerifiedAt(), l.getUpdatedAt())).toList();
     }
 }

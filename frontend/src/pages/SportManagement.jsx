@@ -196,7 +196,6 @@ export default function SportManagement({ token, role, currentUserName, onLogout
       <AdminSectionHeader
         title="Quản lý bộ môn"
         description="Tạo, cập nhật trạng thái và hình ảnh bộ môn. Bộ môn ACTIVE được hiển thị trên trang công khai."
-        icon={<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M3.5 9h4l2-3 3 1 1 4 4 1 2.5-2M8 18l2-2 4 1 2-3" /></svg>}
         summary={<span className="admin-section-chip"><strong>{sports.length}</strong> bộ môn</span>}
         actions={selectedSport && <button type="button" className="btn-secondary sport-admin-cancel" onClick={beginCreate} disabled={saving || uploading}>Hủy chỉnh sửa</button>}
       />
@@ -239,7 +238,7 @@ export default function SportManagement({ token, role, currentUserName, onLogout
             {selectedSport && <>
               <label htmlFor="sport-status">Trạng thái</label>
               <select id="sport-status" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })} disabled={saving || uploading}>
-                <option value="ACTIVE">ACTIVE</option><option value="INACTIVE">INACTIVE</option>
+                <option value="ACTIVE">Đang hoạt động</option><option value="INACTIVE">Ngừng hoạt động</option>
               </select>
             </>}
             <label htmlFor="sport-image">Ảnh (JPEG, PNG hoặc WebP; tối đa 5 MB)</label>

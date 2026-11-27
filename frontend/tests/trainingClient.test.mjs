@@ -83,7 +83,7 @@ test("training helpers reject with the backend status and message", async () => 
   await captureFetch(forbidden, async () => {
     await assert.rejects(saveTrainingPlanApi("t", 4, { goal: "x" }), (error) => {
       assert.equal(error.status, 403);
-      assert.match(error.message, /assigned Coach/);
+      assert.match(error.message, /huấn luyện viên được phân công/);
       return true;
     });
   });

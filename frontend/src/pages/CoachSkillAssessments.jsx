@@ -218,7 +218,7 @@ export default function CoachSkillAssessments({ token, role, onLogout, onNavigat
         {activeTab === "pending" && <section className="coach-assessment-group"><h2>Đang chờ đánh giá</h2>
         {visiblePending.length === 0 ? <p className="queue-state">Không có đánh giá đang chờ phù hợp với bộ lọc.</p> : <div className="coach-assessment-list">{visiblePending.map(renderAssessment)}</div>}
         </section>}
-        {activeTab === "history" && <section className="coach-assessment-group"><h2>Lịch sử assessment</h2>
+        {activeTab === "history" && <section className="coach-assessment-group"><h2>Lịch sử đánh giá</h2>
           {visibleHistory.length === 0 ? <p className="queue-state">Chưa có đánh giá nào trong lịch sử phù hợp với bộ lọc.</p> : <div className="coach-assessment-list">{visibleHistory.map(renderAssessment)}</div>}
         </section>}
       </>}
@@ -240,7 +240,7 @@ export default function CoachSkillAssessments({ token, role, onLogout, onNavigat
           : levelError ? <p className="banner error" role="alert">{levelError}</p>
             : <section className="coach-current-level" aria-label="Trình độ hiện tại">
               <strong>Trình độ hiện tại: {levelRecord.level}</strong>
-              {levelRecord.defaultLevel === true ? <p>Beginner (mặc định; chưa có MemberSportLevel cho bộ môn này).</p>
+              {levelRecord.defaultLevel === true ? <p>Mức ban đầu; học viên chưa có kết quả đánh giá trình độ ở bộ môn này.</p>
                 : <p>{levelRecord.verifiedByCoachId != null
                   ? `Đã xác minh bởi Coach #${levelRecord.verifiedByCoachId}${levelRecord.verifiedAt ? ` · ${formatDate(levelRecord.verifiedAt)}` : ""}`
                   : "Bản ghi hiện tại chưa có thông tin Coach xác minh"}</p>}
@@ -260,17 +260,17 @@ export default function CoachSkillAssessments({ token, role, onLogout, onNavigat
           <label htmlFor="assessmentResultNotes">Ghi chú / kết quả đánh giá (tối đa 1000 ký tự){isDowngrade ? " · bắt buộc khi giảm cấp" : " · không bắt buộc"}</label>
           <textarea id="assessmentResultNotes" maxLength={1000} value={notes} onChange={(event) => setNotes(event.target.value)} disabled={submitting} />
           {isDowngrade && <label className="coach-downgrade-confirm"><input type="checkbox" checked={confirmDowngrade}
-            onChange={(event) => setConfirmDowngrade(event.target.checked)} disabled={submitting} /> Tôi xác nhận đã trao đổi với Member và đồng ý ghi nhận mức giảm trình độ.</label>}
+            onChange={(event) => setConfirmDowngrade(event.target.checked)} disabled={submitting} /> Tôi xác nhận đã trao đổi với hội viên và đồng ý ghi nhận mức giảm trình độ.</label>}
           {submitError && <p className="banner error" role="alert">{submitError}</p>}
           <button type="submit" className="btn-primary" disabled={submitting || levelLoading || Boolean(levelError) || !levelRecord || !assessedLevel || (isDowngrade && (!confirmDowngrade || !notes.trim()))}>
             {submitting ? "Đang lưu kết quả…" : "Hoàn tất assessment"}
           </button>
           {levelError && <p className="coach-assessment-blocked">Không thể hoàn tất khi chưa xác minh được trình độ hiện tại.</p>}
         </form> : <div className="coach-assessment-readonly">
-          <h3>Kết quả assessment</h3>
+          <h3>Kết quả đánh giá</h3>
           <p><strong>Trình độ đánh giá:</strong> {selected.assessedLevel || "—"}</p>
           {selected.notes && <p><strong>Ghi chú:</strong> {selected.notes}</p>}
-          <p>Kết quả đã hoàn tất chỉ đọc; lịch sử assessment được giữ nguyên.</p>
+          <p>Kết quả đã hoàn tất chỉ đọc; lịch sử đánh giá được giữ nguyên.</p>
         </div>}
       </section>}
       {!selected && <aside className="coach-assessment-selection-empty" aria-live="polite">

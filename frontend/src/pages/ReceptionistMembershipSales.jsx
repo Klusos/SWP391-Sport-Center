@@ -17,6 +17,7 @@ import {
   startReceptionistRenewalCounterAttemptApi,
 } from "../api";
 import { cancellationRequestErrorMessage, formatDate, formatDateTime, paymentStatusLabel } from "../membershipCancellation";
+import { statusLabel } from "../uiPresentation.js";
 import { todayInVietnam } from "../membershipDates";
 import { activeMembershipChain, cancellableMembershipId, cancelMembershipErrorMessage, isAutoRenewalPayment } from "../membershipRenewal";
 import { isMembershipPayment, upgradeErrorMessage } from "../membershipUpgrade";
@@ -354,7 +355,7 @@ export default function ReceptionistMembershipSales({ token, role, currentUserNa
     <main className={`main membership-sales-page${isAdmin ? " membership-sales-page--admin" : ""}`}>
       {isAdmin && <AdminTopBar pageLabel="QUẢN LÝ GÓI THÀNH VIÊN" displayName={currentUserName} avatarName={currentUserName} />}
       <div className={isAdmin ? "membership-sales-content" : "membership-sales-receptionist-content"}>
-      <header className="membership-sales-header">
+      <header className={`membership-sales-header${isAdmin ? " admin-page-header" : ""}`}>
         <div><h1>Hỗ trợ mua gói hội viên</h1>
           <p>Tạo thanh toán tại quầy cho thành viên. Gói chỉ được kích hoạt hoặc gia hạn sau khi xác nhận thanh toán thành công.</p></div>
         <button type="button" onClick={() => { void load(); void loadQueue(); void loadReviewQueues(); setHistoryVersion((value) => value + 1); setRefundRefreshVersion((value) => value + 1); }} disabled={loading || saving || queueLoading}>Làm mới</button>
@@ -405,7 +406,7 @@ export default function ReceptionistMembershipSales({ token, role, currentUserNa
           <label>Tìm theo tên hoặc mã thành viên<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nhập tên hoặc mã…" /></label>
           <label>Thành viên<select value={memberId} disabled={saving} onChange={(event) => { setMemberId(event.target.value); setMembershipData(null); setPaymentData(null); setPendingPayment(null); setPaymentDialogOpen(false); setHistoryPage(0); setNotice(""); setError(""); }}>
             {pendingPayment && !selectedMember && <option value={memberId}>#{memberId} · {pendingPayment.memberName}</option>}
-            <option value="">Chọn thành viên ACTIVE</option>{visibleMembers.map((member) => <option key={member.id} value={member.id}>#{member.id} · {member.name || "Thành viên"}</option>)}
+            <option value="">Chọn hội viên đang hoạt động</option>{visibleMembers.map((member) => <option key={member.id} value={member.id}>#{member.id} · {member.name || "Hội viên"}</option>)}
           </select></label>
           {selectedMember && <div className="membership-sales-selected-member" aria-label="Thành viên đang chọn">
             <span className="membership-sales-selected-check" aria-hidden="true">✓</span>
@@ -437,10 +438,10 @@ export default function ReceptionistMembershipSales({ token, role, currentUserNa
             {paymentData.rows.length > 0 && <div className="membership-sales-actions"><span>{paymentData.rows.length} giao dịch · Trang {historyPage + 1}/{Math.max(1,Math.ceil(paymentData.rows.length / 10))}</span><button type="button" onClick={() => setHistoryPage((p) => Math.max(0,p-1))} disabled={historyPage === 0}>Trang trước</button><button type="button" onClick={() => setHistoryPage((p) => Math.min(Math.ceil(paymentData.rows.length/10)-1,p+1))} disabled={historyPage + 1 >= Math.ceil(paymentData.rows.length / 10)}>Trang sau</button></div>}
           </div>}
         </section>
-        {selectedMember && <section className="membership-sales-card" aria-label="Renewal của thành viên">
-          <h2>Gia hạn Membership</h2>
-          {renewalData?.memberId !== memberId ? <p role="status">Đang tải Renewal…</p>
-            : renewalData.rows.length === 0 ? <p>Thành viên chưa có Renewal Intent do hệ thống tạo.</p>
+        {selectedMember && <section className="membership-sales-card" aria-label="Yêu cầu gia hạn của hội viên">
+          <h2>Gia hạn gói hội viên</h2>
+          {renewalData?.memberId !== memberId ? <p role="status">Đang tải yêu cầu gia hạn…</p>
+            : renewalData.rows.length === 0 ? <p>Hội viên chưa có yêu cầu gia hạn do hệ thống tạo.</p>
               : renewalData.rows.map((intent) => {
                 const needsReview = intent.latestResult === "REFUND_REQUIRED"
                   || intent.attempts?.some((attempt) => attempt.manualReconciliationRequired);
@@ -448,25 +449,25 @@ export default function ReceptionistMembershipSales({ token, role, currentUserNa
                   && !deadlinePassed(attempt.deadline));
                 const open = intent.status === "OPEN" && !needsReview && !intent.successorMembershipId;
                 return <div key={intent.intentId} className="membership-sales-history-row">
-                  <strong>Intent #{intent.intentId} · {intent.planName}</strong>
+                  <strong>Yêu cầu gia hạn #{intent.intentId} · {intent.planName}</strong>
                   <span>Báo giá đã chốt: {money(intent.quotedAmount)} · {intent.durationMonths} tháng</span>
-                  <small>Snapshot quyền lợi: khóa học {intent.courseDiscountPercent}% · PT {intent.personalTrainingDiscountPercent}% · ITP {intent.allowPersonalTrainingPlan ? "có" : "không"} · 1:1 {intent.allowOneOnOneCoaching ? "có" : "không"}</small>
-                  <small>Hạn Intent: {formatDateTime(intent.validUntil)} · Kỳ kế tiếp: {formatDate(intent.successorStartDate)} – {formatDate(intent.successorEndDate)} (ngày kết thúc độc quyền)</small>
-                  <small>Trạng thái: {intent.status} · Kết quả: {intent.latestResult}</small>
+                  <small>Quyền lợi gói: giảm học phí {intent.courseDiscountPercent}% · giảm phí huấn luyện cá nhân {intent.personalTrainingDiscountPercent}% · giáo án cá nhân {intent.allowPersonalTrainingPlan ? "có" : "không"} · huấn luyện 1:1 {intent.allowOneOnOneCoaching ? "có" : "không"}</small>
+                  <small>Hạn yêu cầu: {formatDateTime(intent.validUntil)} · Kỳ tiếp theo: {formatDate(intent.successorStartDate)} – {formatDate(intent.successorEndDate)}</small>
+                  <small>Trạng thái: {statusLabel(intent.status, "renewalIntent")} · Kết quả: {intent.latestResult ? paymentStatusLabel[intent.latestResult] || statusLabel(intent.latestResult, "payment") : "Chưa có kết quả thanh toán"}</small>
                   {intent.attempts?.map((attempt) => <div key={attempt.paymentId}>
-                    <small>Payment #{attempt.paymentId}: {attempt.method} · {attempt.status} · {money(attempt.amount)} · hạn {formatDateTime(attempt.deadline)}</small>
-                    {attempt.manualReconciliationRequired && <p role="alert">Cần đối soát thủ công. REFUND_REQUIRED không có nghĩa là tiền đã được hoàn.</p>}
+                    <small>Thanh toán #{attempt.paymentId}: {attempt.method === "ONLINE" ? "VNPay" : attempt.method === "COUNTER" ? "Tại quầy" : "Chưa xác định"} · {paymentStatusLabel[attempt.status] || "Chưa xác định"} · {money(attempt.amount)} · hạn {formatDateTime(attempt.deadline)}</small>
+                    {attempt.manualReconciliationRequired && <p role="alert">Cần đối soát thủ công. Trạng thái cần xử lý hoàn tiền không có nghĩa là tiền đã được trả lại.</p>}
                     {attempt.status === "PENDING" && attempt.method === "ONLINE" && !deadlinePassed(attempt.deadline)
-                      && <small>Đang chờ thanh toán ONLINE qua IPN đã xác thực.</small>}
+                      && <small>Đang chờ VNPay xác nhận thanh toán.</small>}
                     {attempt.status === "PENDING" && attempt.method === "COUNTER" && !deadlinePassed(attempt.deadline)
                       && <button type="button" disabled={saving} onClick={() => void confirmRenewalCounter(intent, attempt)}>
                         Xác nhận đã nhận tiền tại quầy
                       </button>}
                   </div>)}
-                  {intent.successorMembershipId && <small>Membership kế tiếp: #{intent.successorMembershipId}</small>}
+                  {intent.successorMembershipId && <small>Gói hội viên kế tiếp: #{intent.successorMembershipId}</small>}
                   {open && !livePending && <button type="button" disabled={saving}
                     onClick={() => void createRenewalCounterAttempt(intent)}>
-                    Tạo lượt thanh toán Renewal tại quầy
+                    Tạo lượt thanh toán gia hạn tại quầy
                   </button>}
                   {open && livePending && <small>Đã có lượt thanh toán còn hạn; không tạo lượt thứ hai.</small>}
                   {needsReview && <p role="alert">Có khoản thu cần đối soát thủ công; không tạo lượt thanh toán mới.</p>}
@@ -475,7 +476,7 @@ export default function ReceptionistMembershipSales({ token, role, currentUserNa
         </section>}
         <section className="membership-sales-card">
           <h2>2. Chọn gói</h2>
-          {plans.length === 0 ? <p>Hiện không có gói ACTIVE để bán.</p> : <fieldset className="membership-sales-plan-options" disabled={Boolean(pendingPayment)}>
+          {plans.length === 0 ? <p>Hiện không có gói đang mở bán.</p> : <fieldset className="membership-sales-plan-options" disabled={Boolean(pendingPayment)}>
             <legend className="visually-hidden">Chọn gói hội viên</legend>
             <div className="membership-sales-plan-grid">{plans.map((plan) => <label key={plan.id} className={`membership-sales-plan-choice${String(plan.id) === String(planId) ? " is-selected" : ""}`}>
               <input type="radio" name="membershipPlan" value={plan.id} checked={String(plan.id) === String(planId)} onChange={() => setPlanId(String(plan.id))} />
@@ -487,7 +488,7 @@ export default function ReceptionistMembershipSales({ token, role, currentUserNa
               </span>
             </label>)}</div>
           </fieldset>}
-          {selectedPlan && <div className="membership-sales-plan"><strong>{selectedPlan.name}</strong><small>Giá được backend xác định từ MembershipPlan; biểu mẫu không gửi số tiền.</small></div>}
+          {selectedPlan && <div className="membership-sales-plan"><strong>{selectedPlan.name}</strong></div>}
           {!pendingPayment && <button type="button" className="membership-sales-open-payment" onClick={() => { setPaymentDialogOpen(true); setError(""); }} disabled={!selectedMember || !selectedPlan || memberMemberships === null || purchaseBlockedByMembership || saving}>Xem lại và tạo thanh toán</button>}
         </section>
         </div>
@@ -505,20 +506,20 @@ export default function ReceptionistMembershipSales({ token, role, currentUserNa
           {pendingPayment && <div className="membership-sales-order-row"><span>Trạng thái hiện tại</span><strong>{paymentStatusLabel[pendingPayment.status] || pendingPayment.status}</strong></div>}
           <div className="membership-sales-order-amount"><span>{pendingPayment ? "Số tiền thanh toán" : "Giá niêm yết của gói"}</span>
             <strong>{pendingPayment ? money(pendingPayment.amount) : selectedPlan ? money(selectedPlan.price) : "Chưa xác định"}</strong></div>
-          {!pendingPayment && <p className="membership-sales-order-note">Chưa tạo Payment. Số tiền và trạng thái chính thức được xác nhận từ phản hồi API sau khi bạn chọn tạo thanh toán.</p>}
+          {!pendingPayment && <p className="membership-sales-order-note">Chưa tạo thanh toán. Chọn “Tạo thanh toán tại quầy” để tiếp tục.</p>}
           {!pendingPayment && <form onSubmit={createPendingPayment} className="membership-sales-actions">
             <button type="submit" disabled={saving || !selectedMember || !selectedPlan || memberMemberships === null || purchaseBlockedByMembership}>{saving ? "Đang tạo…" : "Tạo thanh toán tại quầy"}</button>
             <button type="button" className="secondary" disabled={saving} onClick={() => setPaymentDialogOpen(false)}>Quay lại</button>
           </form>}
           {pendingPayment && <section className="membership-sales-payment" aria-live="polite">
                     {pendingPayment.purpose === "UPGRADE" && pendingPayment.upgradeQuote && <dl className="membership-sales-upgrade-quote">
-            <div><dt>Membership nguồn</dt><dd>#{pendingPayment.upgradeQuote.sourceMembershipId} · {pendingPayment.upgradeQuote.sourceStartDate}–{pendingPayment.upgradeQuote.sourceEndDate}</dd></div>
+            <div><dt>Gói hội viên được nâng cấp</dt><dd>#{pendingPayment.upgradeQuote.sourceMembershipId} · {pendingPayment.upgradeQuote.sourceStartDate}–{pendingPayment.upgradeQuote.sourceEndDate}</dd></div>
             <div><dt>Giá gói đích</dt><dd>{money(pendingPayment.upgradeQuote.targetPrice)}</dd></div>
             <div><dt>Credit</dt><dd>−{money(pendingPayment.upgradeQuote.appliedCredit)}</dd></div>
             <div><dt>Thời hạn</dt><dd>{pendingPayment.upgradeQuote.targetDurationMonths} tháng</dd></div>
             <div><dt>Ưu đãi khóa học / PT</dt><dd>{pendingPayment.upgradeQuote.courseDiscountPercent}% / {pendingPayment.upgradeQuote.personalTrainingDiscountPercent}%</dd></div>
           </dl>}
-          {pendingPayment.purpose === "UPGRADE" && !pendingPayment.upgradeQuote && <p className="membership-sales-note" role="note">Báo giá Upgrade cũ chưa có snapshot đầy đủ; không xác nhận thanh toán theo giá Plan hiện tại.</p>}{pendingPayment.status === "PENDING" && pendingPayment.method === "COUNTER" ? <div className="membership-sales-actions">
+          {pendingPayment.purpose === "UPGRADE" && !pendingPayment.upgradeQuote && <p className="membership-sales-note" role="note">Thông tin báo giá nâng cấp chưa đầy đủ; vui lòng liên hệ quản trị viên để được kiểm tra trước khi thanh toán.</p>}{pendingPayment.status === "PENDING" && pendingPayment.method === "COUNTER" ? <div className="membership-sales-actions">
             <button type="button" disabled={saving} onClick={() => void processPayment(true)}>{saving ? "Đang xử lý…" : "Xác nhận đã nhận thanh toán"}</button>
             <button type="button" className="secondary" disabled={saving} onClick={() => void processPayment(false)}>Hủy thanh toán (chưa nhận tiền)</button>
           </div> : <button type="button" onClick={startAnother}>Tạo giao dịch khác</button>}
@@ -529,9 +530,9 @@ export default function ReceptionistMembershipSales({ token, role, currentUserNa
     </main>
     {cancelDialogMembership && <div className="membership-cancel-dialog-backdrop">
       <form className="membership-cancel-dialog" role="dialog" aria-modal="true" aria-labelledby="membership-cancel-title" onSubmit={submitExceptionalCancellation}>
-        <h2 id="membership-cancel-title">Hủy đặc biệt Membership #{cancelDialogMembership.id}</h2>
-        <p>Yêu cầu hoàn tiền gồm 100% khoản thực tế đã thanh toán đủ điều kiện trong chu kỳ Membership hiện tại, bao gồm các khoản nâng cấp của chu kỳ này; các chu kỳ Gia hạn trước không được tính. Đây là yêu cầu hoàn tiền, chưa xác nhận tiền đã được trả lại.</p>
-        <p>Quyền sử dụng Membership sẽ kết thúc khi hủy. Hệ thống yêu cầu hoàn 100% khoản thực tế đã thanh toán đủ điều kiện theo Payment liên kết; số tiền lấy từ Payment, không phải giá Plan hiện tại. Yêu cầu được đưa vào hàng đợi xử lý. Hủy Membership không xác nhận tiền đã được hoàn.</p>
+        <h2 id="membership-cancel-title">Hủy đặc biệt gói hội viên #{cancelDialogMembership.id}</h2>
+        <p>Yêu cầu hoàn tiền gồm 100% khoản thực tế đã thanh toán đủ điều kiện trong chu kỳ gói hiện tại, bao gồm các khoản nâng cấp của chu kỳ này; các chu kỳ gia hạn trước không được tính. Đây là yêu cầu hoàn tiền, chưa xác nhận tiền đã được trả lại.</p>
+        <p>Quyền sử dụng gói hội viên sẽ kết thúc khi hủy. Hệ thống yêu cầu hoàn 100% khoản thực tế đã thanh toán đủ điều kiện theo giao dịch liên kết. Yêu cầu được đưa vào hàng đợi xử lý; thao tác hủy không xác nhận tiền đã được trả lại.</p>
         <label htmlFor="membership-cancel-reason">Lý do hủy (bắt buộc)</label>
         <textarea id="membership-cancel-reason" value={cancelReason} maxLength={250} onChange={(event) => { setCancelReason(event.target.value); if (cancelDialogError) setCancelDialogError(""); }} aria-invalid={Boolean(cancelDialogError)} aria-describedby={cancelDialogError ? "membership-cancel-error" : undefined} autoFocus />
         {cancelDialogError && <p id="membership-cancel-error" className="membership-sales-alert error" role="alert">{cancelDialogError}</p>}

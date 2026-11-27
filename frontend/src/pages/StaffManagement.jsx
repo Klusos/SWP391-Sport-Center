@@ -180,7 +180,7 @@ export default function StaffManagement({ token, role, currentUserName, onLogout
         setSpecializations((Array.isArray(rows) ? rows : []).map((row) => ({ ...row, existing: true })));
       } catch (requestError) {
         setSpecializations([]);
-        setError(requestError.message || "Không tải được môn chuyên môn của Coach.");
+        setError(requestError.message || "Không tải được bộ môn chuyên môn của huấn luyện viên.");
       }
     } else {
       setSpecializations([]);
@@ -224,9 +224,9 @@ export default function StaffManagement({ token, role, currentUserName, onLogout
       const updated = await updateCoachProfileApi(token, selected.coach.id, { bio: form.bio.trim() || null });
       setSelected((current) => ({ ...current, coach: { ...current.coach, ...updated } }));
       await load();
-      setNotice("Đã cập nhật tiểu sử Coach.");
+      setNotice("Đã cập nhật tiểu sử huấn luyện viên.");
     } catch (requestError) {
-      setError(requestError.message || "Không thể cập nhật tiểu sử Coach.");
+      setError(requestError.message || "Không thể cập nhật tiểu sử huấn luyện viên.");
     } finally {
       setBioSaving(false);
     }
@@ -243,9 +243,9 @@ export default function StaffManagement({ token, role, currentUserName, onLogout
       setDetailImage(null);
       setDetailImagePreview("");
       await load();
-      setNotice("Đã cập nhật ảnh Coach.");
+      setNotice("Đã cập nhật ảnh huấn luyện viên.");
     } catch (requestError) {
-      setError(requestError.message || "Không thể tải ảnh Coach lên.");
+      setError(requestError.message || "Không thể tải ảnh huấn luyện viên lên.");
     } finally {
       setImageSaving(false);
     }
@@ -328,7 +328,7 @@ export default function StaffManagement({ token, role, currentUserName, onLogout
         }
       }
       await openDetail(selected);
-      setNotice("Đã lưu các chuyên môn Coach.");
+      setNotice("Đã lưu các bộ môn chuyên môn của huấn luyện viên.");
     } catch (requestError) {
       setError(requestError.message || "Không thể lưu chuyên môn. Một số thay đổi trước đó có thể đã được lưu.");
       await load();
@@ -403,8 +403,8 @@ export default function StaffManagement({ token, role, currentUserName, onLogout
       <main className="main admin-staff-main">
         <AdminTopBar pageLabel={"NH\u00c2N S\u1ef0"} displayName={currentUserName} avatarName={currentUserName} />
         <div className="admin-staff-content"><div className="staff-page staff-management-page">
-        <h1>Quản lý nhân sự</h1>
-        <p className="subtitle">Quản lý tài khoản COACH, RECEPTIONIST và chuyên môn Coach.</p>
+        <header className="admin-page-header"><div><h1>Quản lý nhân sự</h1>
+        <p className="subtitle">Quản lý tài khoản huấn luyện viên, lễ tân và bộ môn chuyên môn.</p></div></header>
         {notice && <div className="banner success" role="status">{notice}</div>}
         {error && <div className="banner error" role="alert">{error}</div>}
         <div className="staff-toolbar">
@@ -421,7 +421,7 @@ export default function StaffManagement({ token, role, currentUserName, onLogout
         {loading ? <div className="queue-state" role="status">Đang tải danh sách nhân sự…</div>
           : filtered.length === 0 ? <div className="queue-state">Chưa có nhân sự phù hợp.</div>
             : <div className="queue-table-wrap"><table className="queue-table">
-              <thead><tr><th>ID</th><th>Họ tên</th><th>Email</th><th>Vai trò</th><th>Tài khoản</th><th>Trạng thái Coach</th><th></th></tr></thead>
+              <thead><tr><th>ID</th><th>Họ tên</th><th>Email</th><th>Vai trò</th><th>Tài khoản</th><th>Trạng thái huấn luyện viên</th><th></th></tr></thead>
               <tbody>{filtered.map((item) => <tr key={item.id}>
                 <td>#{item.id}</td><td>{item.name}</td><td>{item.email}</td><td>{item.role}</td>
                 <td><span className={"status-pill status-" + String(item.status).toLowerCase()}>{item.status === "ACTIVE" ? "Ho\u1ea1t \u0111\u1ed9ng" : "Ng\u1eebng ho\u1ea1t \u0111\u1ed9ng"}</span></td><td>{item.coach?.status ? <span className={"status-pill status-" + String(item.coach.status).toLowerCase()}>{item.coach.status === "ACTIVE" ? "Ho\u1ea1t \u0111\u1ed9ng" : "Ng\u1eebng ho\u1ea1t \u0111\u1ed9ng"}</span> : "\u2014"}</td>
@@ -450,11 +450,11 @@ export default function StaffManagement({ token, role, currentUserName, onLogout
           </form>}
 
           {selected.role === "COACH" && selected.coach && <section className="form-card coach-profile-editor">
-            <h3>Hồ sơ công khai Coach</h3>
+            <h3>Hồ sơ công khai huấn luyện viên</h3>
             <Img src={detailImagePreview || selected.coach.imageUrl} alt={selected.name} label={selected.name} className="coach-image-preview" />
             <label htmlFor="editCoachImage">Thay ảnh (JPEG, PNG hoặc WebP; tối đa 5 MB)</label>
             <input id="editCoachImage" type="file" accept="image/jpeg,image/png,image/webp" disabled={imageSaving} onChange={(event) => chooseCoachImage(event, setDetailImage, setDetailImagePreview)} />
-            <button type="button" onClick={uploadDetailImage} disabled={!detailImage || imageSaving}>{imageSaving ? "Đang tải ảnh…" : "Lưu ảnh Coach"}</button>
+            <button type="button" onClick={uploadDetailImage} disabled={!detailImage || imageSaving}>{imageSaving ? "Đang tải ảnh…" : "Lưu ảnh huấn luyện viên"}</button>
             <form onSubmit={saveCoachBio}>
               <label>Tiểu sử công khai<textarea maxLength={1000} rows={4} value={form.bio} onChange={(event) => updateForm("bio", event.target.value)} /></label>
               <button type="submit" disabled={bioSaving}>{bioSaving ? "Đang lưu…" : "Lưu tiểu sử"}</button>
@@ -462,7 +462,7 @@ export default function StaffManagement({ token, role, currentUserName, onLogout
           </section>}
 
           {selected.role === "COACH" && selected.coach && <form className="form-card" onSubmit={saveSpecializations}>
-            <h3>Chuyên môn Coach</h3>
+            <h3>Bộ môn chuyên môn của huấn luyện viên</h3>
             {specializations.map((row, index) => <div className="grid-2" key={row.id || `new-${index}`}>
               <label>Môn<select required disabled={row.existing} value={row.sportId} onChange={(event) => updateSpecialization(index, "sportId", event.target.value)}>
                 <option value="">Chọn môn</option>{sports.map((sport) => <option key={sport.id} value={sport.id}>{sport.name}{sport.status !== "ACTIVE" ? " (INACTIVE)" : ""}</option>)}
@@ -502,7 +502,7 @@ export default function StaffManagement({ token, role, currentUserName, onLogout
             <div className="field field-narrow">
               <label htmlFor="staffType">Lo&#7841;i t&#224;i kho&#7843;n</label>
               <select id="staffType" value={createRole} onChange={(event) => setCreateRole(event.target.value)}>
-                <option value="RECEPTIONIST">RECEPTIONIST</option><option value="COACH">COACH</option>
+                <option value="RECEPTIONIST">Lễ tân</option><option value="COACH">Huấn luyện viên</option>
               </select>
             </div>
             <div className="grid-2">

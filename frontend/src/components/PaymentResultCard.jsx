@@ -1,19 +1,16 @@
 import { Link } from "react-router-dom";
 import { membershipsForPayment, paymentPurposePresentation, paymentServiceLabel, paymentStatusPresentation, serviceStatusLabel } from "../paymentResult";
+import { formatDateTimeVN, formatDateVN, formatVnd } from "../uiPresentation.js";
 import "./PaymentResultCard.css";
 
-const money = (value) => Number.isFinite(Number(value))
-  ? Number(value).toLocaleString("vi-VN", { style: "currency", currency: "VND" })
-  : "Chưa có dữ liệu";
+const money = formatVnd;
 
 function formatVietnamDateTime(value) {
   if (!value) return "Chưa có dữ liệu";
   const timezoneLess = /^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d+)?)?$/.test(value);
   const date = new Date(timezoneLess ? `${value}+07:00` : value);
   if (Number.isNaN(date.getTime())) return "Chưa có dữ liệu";
-  return new Intl.DateTimeFormat("vi-VN", {
-    dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Ho_Chi_Minh",
-  }).format(date);
+  return formatDateTimeVN(date.toISOString());
 }
 
 function Detail({ label, children }) {
@@ -27,7 +24,7 @@ function ServiceDetails({ payment, ptBooking, membershipRecords, registration })
         <Detail label="Mã lịch tập">#{ptBooking.id}</Detail>
         <Detail label="Môn thể thao / Huấn luyện viên">{ptBooking.sportName || "Chưa có dữ liệu"} · {ptBooking.coachName || "Chưa có dữ liệu"}</Detail>
         <Detail label="Lịch hẹn">{formatVietnamDateTime(ptBooking.startTime)} – {formatVietnamDateTime(ptBooking.endTime)} (giờ Việt Nam)</Detail>
-        <Detail label="Trạng thái buổi tập"><span className={`payment-result-resource-status status-${String(ptBooking.status || "unknown").toLowerCase()}`}>{serviceStatusLabel(ptBooking.status)}</span></Detail>
+        <Detail label="Trạng thái buổi tập"><span className={`payment-result-resource-status status-${String(ptBooking.status || "unknown").toLowerCase()}`}>{serviceStatusLabel(ptBooking.status, "ptBooking")}</span></Detail>
       </> : <Detail label="Trạng thái buổi tập"><span role="alert">Chưa tìm thấy buổi tập trong lịch sử của tài khoản. Trạng thái chưa được xác nhận.</span></Detail>;
     case "MEMBERSHIP":
       return <>
@@ -36,18 +33,18 @@ function ServiceDetails({ payment, ptBooking, membershipRecords, registration })
           {membership.renewalIntentId != null && <Detail label="Loại entitlement">Gia hạn · Intent #{membership.renewalIntentId}</Detail>}
           <Detail label="Mã kỳ hội viên">#{membership.id}</Detail>
           <Detail label="Gói hội viên">{membership.planName || `Gói #${membership.planId}`}</Detail>
-          <Detail label="Trạng thái hội viên"><span className={`payment-result-resource-status status-${String(membership.status || "unknown").toLowerCase()}`}>{serviceStatusLabel(membership.status)}</span></Detail>
-          <Detail label="Thời hạn">{membership.startDate || "—"} – {membership.endDate || "—"}</Detail>
+          <Detail label="Trạng thái hội viên"><span className={`payment-result-resource-status status-${String(membership.status || "unknown").toLowerCase()}`}>{serviceStatusLabel(membership.status, "membership")}</span></Detail>
+          <Detail label="Thời hạn">{formatDateVN(membership.startDate)} – {formatDateVN(membership.endDate)}</Detail>
         </div>) : <Detail label="Gói hội viên">{payment.status === "PENDING" ? "Gói sẽ được cập nhật sau khi máy chủ xác nhận thanh toán." : "Chưa tìm thấy bản ghi gói hội viên tương ứng trong dữ liệu tài khoản."}</Detail>}
       </>;
     case "UPGRADE":
       return <>
         {membershipRecords.map((membership) => <div className="payment-result-membership" key={membership.id}>
-          {payment.upgradeQuote?.sourceMembershipId != null && <Detail label="Membership nguồn">#{payment.upgradeQuote.sourceMembershipId}</Detail>}
-          <Detail label="Membership thay thế">#{membership.id}</Detail>
+          {payment.upgradeQuote?.sourceMembershipId != null && <Detail label="Gói hội viên trước khi nâng cấp">#{payment.upgradeQuote.sourceMembershipId}</Detail>}
+          <Detail label="Gói hội viên sau khi nâng cấp">#{membership.id}</Detail>
           <Detail label="Gói hội viên">{membership.planName || `Gói #${membership.planId}`}</Detail>
-          <Detail label="Trạng thái Membership"><span className={`payment-result-resource-status status-${String(membership.status || "unknown").toLowerCase()}`}>{serviceStatusLabel(membership.status)}</span></Detail>
-          <Detail label="Thời hạn">{membership.startDate || "—"} – {membership.endDate || "—"}</Detail>
+          <Detail label="Trạng thái gói hội viên"><span className={`payment-result-resource-status status-${String(membership.status || "unknown").toLowerCase()}`}>{serviceStatusLabel(membership.status, "membership")}</span></Detail>
+          <Detail label="Thời hạn">{formatDateVN(membership.startDate)} – {formatDateVN(membership.endDate)}</Detail>
         </div>)}
         <Detail label="Mã gói đích">#{payment.referenceId}</Detail>
         <Detail label="Trạng thái nâng cấp">{membershipRecords.length
@@ -59,7 +56,7 @@ function ServiceDetails({ payment, ptBooking, membershipRecords, registration })
         <Detail label="Mã đăng ký">#{registration.id}</Detail>
         <Detail label="Khóa học">{registration.courseName || "Chưa có dữ liệu"}</Detail>
         <Detail label="Lớp học">{registration.className || registration.courseOfferingName || "Chưa có dữ liệu"}</Detail>
-        <Detail label="Trạng thái đăng ký"><span className={`payment-result-resource-status status-${String(registration.status || "unknown").toLowerCase()}`}>{serviceStatusLabel(registration.status)}</span></Detail>
+        <Detail label="Trạng thái đăng ký"><span className={`payment-result-resource-status status-${String(registration.status || "unknown").toLowerCase()}`}>{serviceStatusLabel(registration.status, "registration")}</span></Detail>
       </> : <Detail label="Trạng thái đăng ký"><span role="alert">Chưa tìm thấy đăng ký trong lịch sử của tài khoản.</span></Detail>;
     default:
       return <Detail label="Trạng thái dịch vụ">Không nhận diện được loại dịch vụ của giao dịch.</Detail>;
@@ -102,7 +99,7 @@ export default function PaymentResultCard({
     {payment && <>
       <div className="payment-result-status-row">
         <span className="payment-result-status-label">Trạng thái thanh toán</span>
-        <span className={`payment-result-badge tone-${status.tone}`}>{serviceStatusLabel(payment.status)}</span>
+        <span className={`payment-result-badge tone-${status.tone}`}>{serviceStatusLabel(payment.status, "payment")}</span>
       </div>
       <dl className="payment-result-details">
         <Detail label="Mã thanh toán">#{payment.id}</Detail>

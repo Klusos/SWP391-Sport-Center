@@ -111,7 +111,7 @@ test("Pending Upgrade payments render persisted quote values instead of mutable 
   assert.match(salesSource, /upgradeQuote\?\.targetPlanName/);
   assert.match(salesSource, /pendingPayment\.upgradeQuote\.appliedCredit/);
   assert.match(salesSource, /paymentTargetName\(payment, plans\)/);
-  assert.match(salesSource, /Báo giá Upgrade cũ chưa có snapshot đầy đủ/);
+  assert.match(salesSource, /Thông tin báo giá nâng cấp chưa đầy đủ/);
 });
 test("upgrade dialog supports Escape, focus containment, cancel and duplicate-submit protection", async () => {
   const source = await readFile(new URL("../src/pages/MemberMembership.jsx", import.meta.url), "utf8");

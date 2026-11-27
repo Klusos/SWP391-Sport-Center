@@ -6,13 +6,11 @@ import {
   markNotificationReadApi,
 } from "../api";
 import { shouldShowNotificationPagination } from "../notificationPagination.js";
+import { notificationPresentation } from "../notificationPresentation.js";
+import { formatDateTimeVN } from "../uiPresentation.js";
 import "./NotificationBell.css";
 
-const formatDate = (value) => {
-  if (!value) return "";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : date.toLocaleString("vi-VN");
-};
+const formatDate = (value) => value ? formatDateTimeVN(value) : "";
 
 export default function NotificationBell({ token, role }) {
   const [unreadCount, setUnreadCount] = useState(0);
@@ -146,13 +144,14 @@ export default function NotificationBell({ token, role }) {
             <p className="notification-state">Bạn chưa có thông báo nào.</p>
           ) : (
             <div className="notification-list">
-              {page.content.map((item) => (
-                <button type="button" key={item.id} className={`notification-item${item.isRead ? " is-read" : " is-unread"}`} onClick={() => markOneRead(item)} disabled={saving || item.isRead} aria-label={`${item.isRead ? "Đã đọc" : "Chưa đọc"}: ${item.title}`}>
-                  <span className="notification-item-title">{item.title || "Thông báo"}</span>
-                  <span className="notification-item-message">{item.message || ""}</span>
+              {page.content.map((item) => {
+                const presentation = notificationPresentation(item);
+                return <button type="button" key={item.id} className={`notification-item${item.isRead ? " is-read" : " is-unread"}`} onClick={() => markOneRead(item)} disabled={saving || item.isRead} aria-label={`${item.isRead ? "Đã đọc" : "Chưa đọc"}: ${presentation.title}`}>
+                  <span className="notification-item-title">{presentation.title}</span>
+                  <span className="notification-item-message">{presentation.message}</span>
                   <time>{formatDate(item.createdAt)}</time>
-                </button>
-              ))}
+                </button>;
+              })}
             </div>
           )}
           {shouldShowNotificationPagination(page) && <footer className="notification-pagination">

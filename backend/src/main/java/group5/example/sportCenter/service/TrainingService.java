@@ -1,6 +1,8 @@
 package group5.example.sportCenter.service;
 
 import java.time.Clock;
+import java.time.DateTimeException;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -23,10 +25,13 @@ import group5.example.sportCenter.dto.MemberTrainingClassResponse;
 import group5.example.sportCenter.dto.ProgressEvaluationRequest;
 import group5.example.sportCenter.dto.ProgressEvaluationResponse;
 import group5.example.sportCenter.dto.RecordTrainingResultRequest;
+import group5.example.sportCenter.dto.SaveWeeklyTrainingPlanRequest;
 import group5.example.sportCenter.dto.TrainingClassResponse;
 import group5.example.sportCenter.dto.TrainingExerciseRequest;
 import group5.example.sportCenter.dto.TrainingExerciseResponse;
 import group5.example.sportCenter.dto.TrainingPlanResponse;
+import group5.example.sportCenter.dto.TrainingPlanWeekRequest;
+import group5.example.sportCenter.dto.TrainingPlanWeekResponse;
 import group5.example.sportCenter.dto.TrainingResultResponse;
 import group5.example.sportCenter.dto.TrainingResultRowResponse;
 import group5.example.sportCenter.dto.TrainingResultSheetResponse;
@@ -41,6 +46,7 @@ import group5.example.sportCenter.entity.CourseRegistrationStatus;
 import group5.example.sportCenter.entity.ProgressEvaluation;
 import group5.example.sportCenter.entity.TrainingExercise;
 import group5.example.sportCenter.entity.TrainingPlan;
+import group5.example.sportCenter.entity.TrainingPlanWeek;
 import group5.example.sportCenter.entity.TrainingResult;
 import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
@@ -51,12 +57,13 @@ import group5.example.sportCenter.repository.CourseRegistrationRepository;
 import group5.example.sportCenter.repository.ProgressEvaluationRepository;
 import group5.example.sportCenter.repository.TrainingExerciseRepository;
 import group5.example.sportCenter.repository.TrainingPlanRepository;
+import group5.example.sportCenter.repository.TrainingPlanWeekRepository;
 import group5.example.sportCenter.repository.TrainingResultRepository;
 
 /**
  * Flow 4 (training and attendance): training plans, goals and exercises per CourseClass,
  * session completion, per-session training results and progress evaluations.
- * Writes are limited to the class's assigned Coach or ADMIN; reads also allow staff and
+ * Writes are limited to the class's assigned Coach; reads also allow staff and
  * members with a CONFIRMED registration in the class (members read through {@link #mine}).
  */
 @Service
@@ -68,6 +75,7 @@ public class TrainingService {
     private static final String CANCELLED = "CANCELLED";
 
     private final TrainingPlanRepository plans;
+    private final TrainingPlanWeekRepository planWeeks;
     private final TrainingExerciseRepository exercises;
     private final TrainingResultRepository results;
     private final ProgressEvaluationRepository evaluations;
@@ -81,6 +89,7 @@ public class TrainingService {
 
     public TrainingService(
             TrainingPlanRepository plans,
+            TrainingPlanWeekRepository planWeeks,
             TrainingExerciseRepository exercises,
             TrainingResultRepository results,
             ProgressEvaluationRepository evaluations,
@@ -92,6 +101,7 @@ public class TrainingService {
             Clock clock,
             AuditLogService auditLogs) {
         this.plans = plans;
+        this.planWeeks = planWeeks;
         this.exercises = exercises;
         this.results = results;
         this.evaluations = evaluations;
@@ -129,7 +139,7 @@ public class TrainingService {
     @Transactional
     public TrainingPlanResponse upsertPlan(Integer classId, UpsertTrainingPlanRequest request, Jwt jwt) {
         User actor = access.actor(jwt);
-        CourseClass courseClass = findClass(classId);
+        CourseClass courseClass = findLockedTrainingClass(classId);
         authorizeClassWrite(actor, courseClass);
         LocalDateTime now = LocalDateTime.now(clock);
         TrainingPlan plan = plans.findByCourseClassId(classId).orElse(null);
@@ -150,9 +160,139 @@ public class TrainingService {
     }
 
     @Transactional
+    public TrainingPlanResponse saveWeeklyPlan(Integer classId, SaveWeeklyTrainingPlanRequest request, Jwt jwt) {
+        User actor = access.actor(jwt);
+        CourseClass courseClass = findLockedTrainingClass(classId);
+        authorizeClassWrite(actor, courseClass);
+        Set<Integer> weekNumbers = new HashSet<>();
+        Set<Integer> weekIds = new HashSet<>();
+        Set<Integer> exerciseIds = new HashSet<>();
+        for (TrainingPlanWeekRequest week : request.weeks()) {
+            if (week.weekNumber() == null || week.weekNumber() < 1 || !weekNumbers.add(week.weekNumber())) {
+                throw error(HttpStatus.BAD_REQUEST, "Week numbers must be positive and unique within the plan");
+            }
+            if (week.id() != null && !weekIds.add(week.id())) {
+                throw error(HttpStatus.BAD_REQUEST, "A week cannot be included more than once");
+            }
+            for (var exercise : week.exercises()) {
+                if (exercise.id() != null && !exerciseIds.add(exercise.id())) {
+                    throw error(HttpStatus.BAD_REQUEST, "An exercise cannot be included more than once");
+                }
+            }
+        }
+        for (Integer id : request.unassignedExerciseIds()) {
+            if (!exerciseIds.add(id)) throw error(HttpStatus.BAD_REQUEST, "An exercise cannot be included more than once");
+        }
+
+        TrainingPlan plan = plans.findByCourseClassId(classId).orElse(null);
+        boolean created = plan == null;
+        if (created && request.expectedUpdatedAt() != null) {
+            throw error(HttpStatus.CONFLICT, "The training plan changed. Reload it before saving.");
+        }
+        if (!created && (request.expectedUpdatedAt() == null
+                || !request.expectedUpdatedAt().equals(plan.getUpdatedAt()))) {
+            throw error(HttpStatus.CONFLICT, "The training plan changed. Reload it before saving.");
+        }
+        LocalDateTime now = nextTrainingPlanUpdateAt(plan);
+        if (created) {
+            plan = new TrainingPlan();
+            plan.setCourseClass(courseClass);
+            plan.setCreatedAt(now);
+        }
+        plan.setGoal(request.goal().trim());
+        plan.setDescription(trimToNull(request.description()));
+        plan.setUpdatedBy(actor);
+        plan.setUpdatedAt(now);
+        plan = plans.saveAndFlush(plan);
+
+        List<TrainingExercise> currentExercises = exercises.findByPlanId(plan.getId());
+        Map<Integer, TrainingExercise> exercisesById = currentExercises.stream()
+                .collect(Collectors.toMap(TrainingExercise::getId, value -> value));
+        for (Integer id : exerciseIds) {
+            if (!exercisesById.containsKey(id)) {
+                throw error(HttpStatus.BAD_REQUEST, "An exercise does not belong to the selected plan");
+            }
+        }
+        List<TrainingPlanWeek> currentWeeks = planWeeks.findByPlanIdOrderByWeekNumberAscIdAsc(plan.getId());
+        Map<Integer, TrainingPlanWeek> weeksById = currentWeeks.stream()
+                .collect(Collectors.toMap(TrainingPlanWeek::getId, value -> value));
+        for (Integer id : weekIds) {
+            if (!weeksById.containsKey(id)) throw error(HttpStatus.BAD_REQUEST, "A week does not belong to the selected plan");
+        }
+
+        // Reserve temporary positive week numbers so a valid renumber/swap does not collide
+        // with the plan's unique (plan_id, week_number) key during flush.
+        Set<Integer> blockedWeekNumbers = new HashSet<>(weekNumbers);
+        currentWeeks.stream().map(TrainingPlanWeek::getWeekNumber).forEach(blockedWeekNumbers::add);
+        int temporary = 1;
+        for (TrainingPlanWeek week : currentWeeks) {
+            while (blockedWeekNumbers.contains(temporary)) temporary++;
+            week.setWeekNumber(temporary);
+            blockedWeekNumbers.add(temporary++);
+        }
+        planWeeks.flush();
+
+        List<TrainingPlanWeek> retainedWeeks = new ArrayList<>();
+        for (TrainingPlanWeekRequest incoming : request.weeks()) {
+            TrainingPlanWeek week = incoming.id() == null ? new TrainingPlanWeek() : weeksById.get(incoming.id());
+            if (incoming.id() == null) {
+                week.setPlan(plan);
+                week.setCreatedBy(actor);
+                week.setCreatedAt(now);
+            }
+            week.setWeekNumber(incoming.weekNumber());
+            week.setTitle(trimToNull(incoming.title()));
+            week.setGoal(trimToNull(incoming.goal()));
+            week.setDescription(trimToNull(incoming.description()));
+            week.setUpdatedBy(actor);
+            week.setUpdatedAt(now);
+            retainedWeeks.add(week);
+        }
+        planWeeks.saveAllAndFlush(retainedWeeks);
+        Set<Integer> retainedWeekIds = retainedWeeks.stream().map(TrainingPlanWeek::getId).collect(Collectors.toSet());
+        List<TrainingPlanWeek> removedWeeks = currentWeeks.stream().filter(week -> !retainedWeekIds.contains(week.getId())).toList();
+
+        List<TrainingExercise> removedExercises = currentExercises.stream().filter(exercise -> !exerciseIds.contains(exercise.getId())).toList();
+        if (!removedExercises.isEmpty()) exercises.deleteAllInBatch(removedExercises);
+        exercises.flush();
+        List<TrainingExercise> savedExercises = new ArrayList<>();
+        for (Integer id : request.unassignedExerciseIds()) {
+            TrainingExercise exercise = exercisesById.get(id);
+            exercise.setPlan(plan);
+            exercise.setWeek(null);
+            exercise.setSortOrder(request.unassignedExerciseIds().indexOf(id));
+            savedExercises.add(exercise);
+        }
+        for (int i = 0; i < request.weeks().size(); i++) {
+            TrainingPlanWeekRequest incoming = request.weeks().get(i);
+            TrainingPlanWeek week = retainedWeeks.get(i);
+            for (int order = 0; order < incoming.exercises().size(); order++) {
+                var submitted = incoming.exercises().get(order);
+                TrainingExercise exercise = submitted.id() == null ? new TrainingExercise() : exercisesById.get(submitted.id());
+                exercise.setPlan(plan);
+                exercise.setWeek(week);
+                exercise.setName(submitted.name().trim());
+                exercise.setSets(submitted.sets());
+                exercise.setReps(submitted.reps());
+                exercise.setDurationMinutes(submitted.durationMinutes());
+                exercise.setNotes(trimToNull(submitted.notes()));
+                exercise.setSortOrder(order);
+                savedExercises.add(exercise);
+            }
+        }
+        exercises.saveAllAndFlush(savedExercises);
+        if (!removedWeeks.isEmpty()) planWeeks.deleteAllInBatch(removedWeeks);
+        planWeeks.flush();
+        auditLogs.record(created ? "CREATE" : "UPDATE", "TRAINING_PLAN", plan.getId(),
+                "Weekly training plan " + (created ? "created" : "updated") + " for class " + classId
+                        + "; weeks=" + retainedWeeks.size() + ", exercises=" + exerciseIds.size() + ".");
+        return planResponse(plan);
+    }
+
+    @Transactional
     public TrainingExerciseResponse addExercise(Integer classId, TrainingExerciseRequest request, Jwt jwt) {
         User actor = access.actor(jwt);
-        CourseClass courseClass = findClass(classId);
+        CourseClass courseClass = findLockedTrainingClass(classId);
         authorizeClassWrite(actor, courseClass);
         TrainingPlan plan = plans.findByCourseClassId(classId)
                 .orElseThrow(() -> error(HttpStatus.CONFLICT, "Create the training plan and goal before adding exercises"));
@@ -174,7 +314,9 @@ public class TrainingService {
     public TrainingExerciseResponse updateExercise(Integer exerciseId, TrainingExerciseRequest request, Jwt jwt) {
         User actor = access.actor(jwt);
         TrainingExercise exercise = findExercise(exerciseId);
-        authorizeClassWrite(actor, exercise.getPlan().getCourseClass());
+        CourseClass courseClass = findLockedTrainingClass(exercise.getPlan().getCourseClass().getId());
+        authorizeClassWrite(actor, courseClass);
+        exercise = findExercise(exerciseId);
         applyExercise(exercise, request);
         TrainingExercise saved = exercises.saveAndFlush(exercise);
         touchPlan(exercise.getPlan(), actor);
@@ -186,7 +328,9 @@ public class TrainingService {
     public void deleteExercise(Integer exerciseId, Jwt jwt) {
         User actor = access.actor(jwt);
         TrainingExercise exercise = findExercise(exerciseId);
-        authorizeClassWrite(actor, exercise.getPlan().getCourseClass());
+        CourseClass courseClass = findLockedTrainingClass(exercise.getPlan().getCourseClass().getId());
+        authorizeClassWrite(actor, courseClass);
+        exercise = findExercise(exerciseId);
         TrainingPlan plan = exercise.getPlan();
         exercises.delete(exercise);
         exercises.flush();
@@ -461,6 +605,11 @@ public class TrainingService {
                 .orElseThrow(() -> new ResourceNotFoundException("CourseClass not found with id: " + id));
     }
 
+    private CourseClass findLockedTrainingClass(Integer id) {
+        return classes.findByIdForTrainingPlanUpdate(id)
+                .orElseThrow(() -> new ResourceNotFoundException("CourseClass not found with id: " + id));
+    }
+
     private ClassSession findSession(Integer id) {
         return sessions.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("ClassSession not found with id: " + id));
@@ -489,10 +638,35 @@ public class TrainingService {
     }
 
     private TrainingPlanResponse planResponse(TrainingPlan plan) {
+        List<TrainingExercise> all = exercises.findByPlanIdOrderBySortOrderAscIdAsc(plan.getId());
+        Map<Integer, List<TrainingExercise>> byWeek = all.stream().filter(exercise -> exercise.getWeek() != null)
+                .collect(Collectors.groupingBy(exercise -> exercise.getWeek().getId()));
+        List<TrainingPlanWeekResponse> weekResponses = planWeeks.findByPlanIdOrderByWeekNumberAscIdAsc(plan.getId()).stream()
+                .map(week -> weekResponse(week, byWeek.getOrDefault(week.getId(), List.of()))).toList();
         return new TrainingPlanResponse(plan.getId(), plan.getCourseClass().getId(), plan.getGoal(),
                 plan.getDescription(), plan.getUpdatedBy().getId(), plan.getUpdatedBy().getName(),
                 plan.getCreatedAt(), plan.getUpdatedAt(),
-                exercises.findByPlanIdOrderBySortOrderAscIdAsc(plan.getId()).stream().map(this::exerciseResponse).toList());
+                all.stream().filter(exercise -> exercise.getWeek() == null).map(this::exerciseResponse).toList(),
+                weekResponses);
+    }
+
+    private TrainingPlanWeekResponse weekResponse(TrainingPlanWeek week, List<TrainingExercise> weekExercises) {
+        LocalDate offeringStart = week.getPlan().getCourseClass().getCourseOffering().getStartDate();
+        LocalDate offeringEnd = week.getPlan().getCourseClass().getCourseOffering().getEndDate();
+        LocalDate weekStart = null;
+        LocalDate weekEnd = null;
+        boolean outside = true;
+        try {
+            weekStart = offeringStart.plusDays(Math.multiplyExact((long) week.getWeekNumber() - 1L, 7L));
+            outside = weekStart.isAfter(offeringEnd);
+            if (!outside) weekEnd = weekStart.plusDays(6).isAfter(offeringEnd) ? offeringEnd : weekStart.plusDays(6);
+        } catch (DateTimeException | ArithmeticException ignored) {
+            // Keep retained out-of-range content readable if an unusually large ordinal cannot map to LocalDate.
+        }
+        return new TrainingPlanWeekResponse(week.getId(), week.getWeekNumber(), week.getTitle(), week.getGoal(),
+                week.getDescription(), weekStart, weekEnd, outside,
+                weekExercises.stream().sorted(Comparator.comparing(TrainingExercise::getSortOrder)
+                        .thenComparing(TrainingExercise::getId)).map(this::exerciseResponse).toList());
     }
 
     private TrainingExerciseResponse exerciseResponse(TrainingExercise exercise) {
@@ -529,6 +703,17 @@ public class TrainingService {
     private static String trimToNull(String value) {
         if (value == null || value.isBlank()) return null;
         return value.trim();
+    }
+
+    private LocalDateTime nextTrainingPlanUpdateAt(TrainingPlan plan) {
+        LocalDateTime now = LocalDateTime.now(clock);
+        // SQL Server datetime2(7) stores 100 ns precision. Normalize before returning the
+        // timestamp as the editor's next optimistic-concurrency token.
+        now = now.withNano((now.getNano() / 100) * 100);
+        if (plan != null && !now.isAfter(plan.getUpdatedAt())) {
+            now = plan.getUpdatedAt().plusNanos(100);
+        }
+        return now;
     }
 
     private static ResponseStatusException error(HttpStatus status, String message) {

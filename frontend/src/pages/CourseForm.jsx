@@ -4,6 +4,7 @@ import Sidebar from "../components/Sidebar";
 import AdminTopBar from "../components/AdminTopBar";
 import { getCourseApi, getSportsApi, saveCourseApi } from "../api";
 import { buildCoursePayload } from "../courseManagementModel";
+import { statusLabel } from "../uiPresentation.js";
 import "./Portal.css";
 import "./Admin.css";
 import "./CourseManagement.css";
@@ -64,23 +65,23 @@ export default function CourseForm({ token, role, currentUserName, onLogout, onN
         <AdminTopBar pageLabel="QUẢN LÝ KHÓA HỌC" displayName={currentUserName} avatarName={currentUserName} />
         <div className="course-form-content">
         <button type="button" className="adm-back" onClick={() => navigate(editing ? "/staff/courses/" + courseId : "/staff/courses")}>← Quay lại</button>
-        <h1>{editing ? "Chỉnh sửa khóa học" : "Tạo khóa học"}</h1>
-        <p className="subtitle">Chọn rõ Sport trước khi lưu để tránh gán khóa học nhầm bộ môn.</p>
+        <header className="admin-page-header"><div><h1>{editing ? "Chỉnh sửa khóa học" : "Tạo khóa học"}</h1>
+        <p className="subtitle">Chọn bộ môn trước khi lưu để tránh gán khóa học nhầm bộ môn.</p></div></header>
         {error && <div className="banner error" role="alert">{error}</div>}
         {loading ? <p role="status">Đang tải biểu mẫu…</p> : (
           <form className="adm-form course-form adm-block" onSubmit={submit}>
             <div className="grid-2">
               <div className="field course-sport-field">
-                <label htmlFor="course-sport">Sport <span aria-hidden="true">*</span></label>
+                <label htmlFor="course-sport">Bộ môn <span aria-hidden="true">*</span></label>
                 <select id="course-sport" name="sportId" value={form.sportId} onChange={change} required disabled={editing}>
-                  <option value="" disabled>Chọn Sport</option>
+                  <option value="" disabled>Chọn bộ môn</option>
                   {sports.map((sport) => <option key={sport.id} value={sport.id}>{sport.name}</option>)}
                 </select>
-                {editing && <small>Sport hiện tại được đọc từ khóa học đã lưu. API cập nhật hiện tại không hỗ trợ đổi Sport.</small>}
+                {editing && <small>Bộ môn hiện tại được giữ nguyên khi cập nhật khóa học.</small>}
               </div>
               <div className="field"><label htmlFor="course-name">Tên khóa học *</label><input id="course-name" name="name" value={form.name} onChange={change} required maxLength={255} /></div>
               <div className="field"><label htmlFor="course-level">Trình độ *</label><select id="course-level" name="level" value={form.level} onChange={change} required><option value="" disabled>Chọn trình độ</option>{["BEGINNER", "INTERMEDIATE", "ADVANCED"].map((level) => <option key={level}>{level}</option>)}</select></div>
-              <div className="field"><label htmlFor="course-status">Trạng thái</label><select id="course-status" name="status" value={form.status} onChange={change} disabled={!editing}><option value="ACTIVE">ACTIVE</option><option value="INACTIVE">INACTIVE</option></select></div>
+              <div className="field"><label htmlFor="course-status">Trạng thái</label><select id="course-status" name="status" value={form.status} onChange={change} disabled={!editing}><option value="ACTIVE">{statusLabel("ACTIVE", "course")}</option><option value="INACTIVE">{statusLabel("INACTIVE", "course")}</option></select></div>
               <div className="field"><label htmlFor="course-age-policy">Chính sách độ tuổi</label><select id="course-age-policy" name="agePolicy" value={form.agePolicy} onChange={change}><option value="RECOMMENDED">Độ tuổi khuyến nghị</option><option value="REQUIRED">Độ tuổi bắt buộc</option></select></div>
               <div className="field"><label htmlFor="course-age-min">Tuổi tối thiểu{form.agePolicy === "REQUIRED" && " *"}</label><input id="course-age-min" name="targetAgeMin" type="number" min="0" step="1" value={form.targetAgeMin} onChange={change} required={form.agePolicy === "REQUIRED"} aria-invalid={ageRangeInvalid} /></div>
               <div className="field"><label htmlFor="course-age-max">Tuổi tối đa{form.agePolicy === "REQUIRED" && " *"}</label><input id="course-age-max" name="targetAgeMax" type="number" min="0" step="1" value={form.targetAgeMax} onChange={change} required={form.agePolicy === "REQUIRED"} aria-invalid={ageRangeInvalid} /></div>

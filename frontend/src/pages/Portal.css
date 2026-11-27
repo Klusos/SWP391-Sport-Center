@@ -27,7 +27,7 @@
 .pf-weekbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
 .pf-weekbar strong { margin-left: 8px; color: var(--navy); }
 .pf-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
-.pf-day { min-height: 180px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: #fff; }
+.pf-day { min-height: 180px; max-height: 420px; overflow-y: auto; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: #fff; }
 .pf-day.today { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(23, 105, 210, .14); }
 .pf-day h2 { display: grid; gap: 2px; margin: 0 0 10px; font-size: 13px; }
 .pf-day h2 small { color: var(--text-sub); font-weight: 400; }

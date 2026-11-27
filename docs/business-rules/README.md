@@ -41,6 +41,37 @@ These are explicit in `backend/AGENTS.md`; no separate product-owner approval re
 | PT price | `application.properties` currently defaults `APP_PT_SESSION_BASE_PRICE` to 500000. | `backend/src/main/resources/application.properties`; `PersonalTrainingBookingService.java`; PT booking tests | **Requires owner confirmation** for currency, price, tax/discount treatment, and whether this default is suitable outside local development. |
 | Notifications | ADMIN broadcast sends title/message; the service selects ACTIVE recipients. Automatic business-event notifications also exist. | `AdminNotificationController.java`; `NotificationService.java`; `NotificationBusinessEventListener.java`; notification tests | Recipient definition, message rules, and event coverage require owner confirmation before they are treated as approved policy. |
 
+## Product-owner decisions recorded 2026-11-26
+
+The current owner instruction in the 2026-11-26 Coach/Member QA task explicitly approves these rules:
+
+- **Renewal cancellation:** retain the strict 72-hour ordinary upcoming-Membership cancellation policy; do not add a Renewal-specific exception. Disabling Renewal before payment closes an applicable open Intent under current lifecycle rules. A successfully paid successor remains subject to ordinary cancellation eligibility.
+- **Attendance and TrainingResult:** reject changing attendance away from PRESENT when a TrainingResult exists for that session and Member. Do not delete, invalidate, or rewrite the result. Enforce the invariant inside the shared ClassSession lock used by attendance and training writes.
+
+These decisions supersede earlier unresolved questions only for these exact scopes. They do not approve changes to other Renewal, cancellation, settlement, or attendance policies.
+
+The owner further approved on 2026-11-27 that:
+
+- **Official attendance submission:** the server determines the eligible roster; the first submission must include one explicit PRESENT or ABSENT outcome for every eligible learner and commits atomically. Individual writes cannot create initial attendance. A partially recorded historical roster can be completed without rewriting unchanged rows. EXCUSED remains readable historical evidence and counts as recorded non-participation, but cannot be newly selected or used in a correction.
+- **Attendance completeness and Member statistics:** derive NOT_RECORDED, PARTIAL, COMPLETE, and NOT_APPLICABLE from eligible learners and persisted attendance, independently of session lifecycle. A Member rate is PRESENT / recorded eligible outcomes; historical EXCUSED is in the denominator. Unrecorded elapsed sessions are disclosed and make the rate provisional; zero recorded outcomes has no percentage.
+- **Attendance notifications:** after commit, notify only the affected Member for a newly recorded ABSENT or a genuine status correction. Unchanged retries, unsaved selections, failed transactions, and historical rows produce no notification.
+- **Support participation:** an unassigned request must be claimed before Admin or Receptionist reply. A Receptionist may reply only when assigned; Admin may participate after assignment without taking ownership. Members may reply only to their own request within existing lifecycle rules.
+
+The owner approved the following General and Individual Training Plan rules on 2026-11-27 in the Training Plan Redesign task:
+
+- **Week numbering:** General plan week numbers are positive and unique within the class plan, may be nonconsecutive, and display in ascending order. The number is a curriculum ordinal, not an exercise duration. New weeks suggest the number after the current maximum; deletion does not renumber. Individual Training Plan keeps its existing 1–52 validation and revision behavior.
+- **General curriculum dates:** Week 1 begins on the CourseOffering `startDate`; ordinal weeks advance in consecutive seven-day blocks and the final displayed in-range date is clamped to `endDate`. These dates are derived, never stored. ClassSession cancellation/rescheduling does not renumber content. Reanchoring or shortening an Offering preserves all week content; retained out-of-range weeks remain visible with a nonblocking warning.
+- **Visibility and access:** one General plan remains associated with a class; Individual plans remain per eligible Member/class. Assigned Coaches may edit; Admin supervision is read-only. Eligible Members can see all saved General weeks, including future weeks. There is no persisted draft/publish state: unsaved editor changes remain client-local and saved changes are immediately visible. General plan revision/rollback tables are not introduced; existing audit writes do not constitute reconstructable version history.
+- **Weekly General Plan persistence:** the approved additive model adds `training_plan_week` with a positive week number and unique `(plan_id, week_number)`, and nullable `training_exercise.week_id` while preserving `plan_id`. Ownership-safe constraints prevent cross-plan assignment. Existing exercises remain unassigned (`week_id IS NULL`) until an authorized Coach explicitly moves them; the move preserves exercise identity/content. Omitted content in the whole-plan Coach save is an explicit deletion, and the save is atomic. Offering edits never delete plan content.
+- **Migration boundary:** the owner authorized the additive migration for QA clone DB12 (`LAPTOP-416VBDLK / SportCenterDemo_PTOutcome_8CF1 / DBID 12`) only in this task. No DB5 deployment was authorized. SQL preflight, backup, migration, verification, rollback guidance, and later DB5 procedure are recorded in `backend/docs/sql/proposals/` and the acceptance report.
+
+## Product-owner decisions recorded 2026-11-27
+
+The current owner instruction in the 2026-11-27 Final Owner QA task explicitly approves:
+
+- **Elapsed class sessions:** a `SCHEDULED` class session becomes `COMPLETED` when its persisted end time is reached, using Vietnam business time. A startup catch-up and five-minute recurring job may perform this status transition; repeated execution is idempotent and audited as `SYSTEM`. This does not create attendance, results, assessments, or financial effects. The existing manual completion API remains available.
+- **Support claim-and-start:** an authorized staff member claiming an unassigned `OPEN` support ticket is assigned and moves it to `IN_PROGRESS` in one transaction. An unassigned legacy `IN_PROGRESS` ticket remains claimable without a status change. A competing claim must not overwrite the committed assignee. Existing Admin oversight and other ticket lifecycle behavior remain in scope only as previously authorized.
+
 ## Unresolved questions requiring owner confirmation
 
 Every item below is unresolved; do not decide from current code, labels, seeded data, or old phase documentation:

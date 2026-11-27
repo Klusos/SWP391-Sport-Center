@@ -13,7 +13,7 @@ test("Levels & Assessments removes only the process indicator and retains assess
   assert.doesNotMatch(css, /mla-stepper|mla-step-tag-row|mla-step1-header|mla-stepper-pill/);
   assert.match(page, /mla-content-header-copy[\s\S]*?<h1>/);
   assert.match(page, /value=\{searchQuery\}[\s\S]*?setSearchQuery/);
-  assert.match(page, /openRequestModal\(selectedSport\?\.id\)/);
+  assert.match(page, /openRequestModal\(selectedSport\.id\)/);
   assert.match(page, /handleSelectSport\(sport\.id\)/);
   assert.match(page, /mla-filter-tab/);
   assert.match(page, /mla-kpi-grid/);
@@ -27,13 +27,48 @@ test("Member Training list and result detail use the available content width wit
   assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.member-training-class-list \{ grid-template-columns: minmax\(0, 1fr\); \}/);
 });
 
-test("Member Attendance page uses the padded content width without changing its filtering states", async () => {
+test("Member Attendance page uses a full-width paged class overview and class detail", async () => {
   const [css, page] = await Promise.all([read("pages/MemberAttendance.css"), read("pages/MemberAttendance.jsx")]);
   assert.match(css, /\.member-attendance-main \{ min-width: 0; padding: 0; \}/);
   assert.match(css, /\.member-attendance-page\s*\{ width: 100%; max-width: none; margin: 0; padding: 28px clamp\(20px, 3vw, 36px\) 56px;/);
-  assert.match(page, /value=\{statusFilter\}[\s\S]*?setStatusFilter/);
+  assert.match(page, /value=\{yearFilter\}[\s\S]*?setYearFilter/);
+  assert.match(page, /value=\{sportFilter\}[\s\S]*?setSportFilter/);
+  assert.match(page, /paginateAttendance\(filteredClasses, classPage, 6\)/);
+  assert.match(page, /paginateAttendance\(selectedClass\?\.sessions \|\| \[\], sessionPage, 10\)/);
+  assert.doesNotMatch(page, /statusFilter|setStatusFilter/);
   assert.match(page, /member-attendance-empty/);
-  assert.match(page, /getMyAttendanceApi\(token\)/);
+  assert.match(page, /getMyAttendanceOverviewApi\(token\)/);
+  assert.match(page, /<strong>Huấn luyện viên:<\/strong>/);
+  assert.match(css, /member-attendance-page \.member-attendance-status\.status-absent \{ background:#f8d7da; color:#842029; \}/);
+  assert.match(css, /member-attendance-page \.member-attendance-status\.status-excused \{ background:#fff0bf; color:#795900; \}/);
+});
+
+test("Member Dashboard uses flexible horizontal skill cards and compact recent-attendance rows", async () => {
+  const css = await read("pages/Membertheme.css");
+  const dashboardCss = await read("pages/Dashboard.css");
+  const dashboard = await read("pages/Dashboard.jsx");
+  assert.match(css, /\.md-levels \{ display:flex; flex-wrap:wrap;/);
+  assert.match(css, /\.md-levels div \{ display:flex; flex:0 0 auto; align-items:center;/);
+  assert.match(css, /\.md-levels b \{ flex:0 0 auto;[^}]*white-space:nowrap/);
+  assert.match(dashboardCss, /\.md-attendance-list \{ display:grid;/);
+  assert.match(dashboardCss, /\.md-attendance-row \{ display:grid;[^}]*grid-template-columns:58px minmax\(0,1fr\) auto/);
+  assert.match(dashboardCss, /\.coach-class-pager button \{ display:flex; align-items:center; justify-content:center;[^}]*width:34px; height:34px/);
+  assert.match(dashboardCss, /\.coach-class-pager-icon \{ display:block; width:16px; height:16px/);
+  assert.match(dashboard, /className="md-attendance-row"/);
+  assert.match(dashboard, /className="md-attendance-info"/);
+  assert.match(dashboard, /className="md-link" onClick=\{\(\) => onNavigate\("member-attendance"\)\}/);
+  assert.doesNotMatch(dashboard, /md-attendance-table-wrap|md-attendance-content \.md-wide/);
+});
+
+test("Member routes share the bounded desktop shell and blue-white header rhythm", async () => {
+  const css = await read("pages/Membertheme.css");
+  assert.match(css, /\.layout:has\(> \.portal-topbar--member\) > \.main\s*\{[^}]*max-width: 1680px/);
+  assert.match(css, /\.member-membership-header, \.member-attendance-header, \.schedule-page-header/);
+  assert.match(css, /background: linear-gradient\(120deg, #edf6ff, #fff 78%\)/);
+  assert.match(css, /\.pt-booking-layout \.pt-header/);
+  assert.match(css, /\.support-member-content \.support-heading/);
+  assert.match(css, /\.mp-header/);
+  assert.match(css, /\.member-course-page-header/);
 });
 
 test("Member PT Booking uses full content width and Vietnamese copy without changing API values", async () => {

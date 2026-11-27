@@ -100,6 +100,8 @@
 .coach-attendance-table td { min-width: 120px; }
 .coach-attendance-table td:first-child { min-width: 150px; }
 .coach-attendance-table td:last-child { min-width: 145px; }
+.coach-attendance-table th:last-child, .coach-attendance-table td:last-child { text-align: right; white-space: nowrap; }
+.coach-attendance-error-row td { padding: 7px 12px 12px !important; background: #fff8f7 !important; text-align: left !important; white-space: normal !important; }
 .coach-attendance-table td strong,
 .coach-attendance-table td small { display: block; }
 .coach-attendance-table td small { margin-top: 5px; color: var(--text-sub); }
@@ -120,6 +122,8 @@
 .coach-attendance-reason { display: block; margin-top: 8px; font-size: 12px; }
 .coach-attendance-reason b { color: #a33131; }
 .coach-attendance-history-button { display: block; margin-top: 7px; min-height: 34px; }
+.coach-attendance-row-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 7px; }
+.coach-attendance-row-actions > button { box-sizing: border-box; width: 100%; min-height: 40px; max-width: 100%; margin: 0; padding: 8px 10px; }
 .coach-attendance-history-unavailable { max-width: 160px; }
 .coach-attendance-row-error { color: #842029 !important; }
 .coach-attendance-alert,
@@ -250,10 +254,10 @@
 .coach-attendance-main .coach-attendance-save:hover:not(:disabled),
 .coach-attendance-main .coach-attendance-save-all:hover:not(:disabled) { border-color: #0e4fae; background: #0e4fae; color: #fff; }
 .coach-attendance-main .coach-attendance-save:disabled,
-.coach-attendance-main .coach-attendance-save-all:disabled { color: #fff; }
+.coach-attendance-main .coach-attendance-save-all:disabled { color: #294862; background: #e6edf5; border-color: #cbd8e6; opacity: 1; }
 .coach-attendance-main .coach-attendance-save:focus-visible,
 .coach-attendance-main .coach-attendance-save-all:focus-visible { outline: 3px solid rgb(23 103 210 / 32%); outline-offset: 3px; }
-.coach-attendance-main .coach-attendance-history-button { min-height: 36px; border-radius: 9px; }
+.coach-attendance-main .coach-attendance-history-button { min-height: 40px; border-radius: 9px; }
 .coach-attendance-main .coach-attendance-alert,
 .coach-attendance-main .coach-attendance-empty { border: 1px solid transparent; line-height: 1.55; }
 .coach-attendance-main .coach-attendance-empty { border-color: #e2eaf3; background: #f7faff; }
@@ -283,9 +287,13 @@
 .stat-pending { background: #fff8dd; color: #a86a00; }
 .coach-attendance-toolbar { display: grid; grid-template-columns: minmax(160px, 1fr) auto; align-items: end; gap: 12px; margin-bottom: 12px; }
 .coach-attendance-search-label { display: grid; gap: 5px; color: var(--text-sub); font-size: 12px; font-weight: 650; }
+.coach-attendance-search { box-sizing: border-box; width: 100%; height: 44px; min-height: 44px; }
 .coach-attendance-toolbar-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.coach-attendance-save-all { min-height: 40px; padding: 8px 14px; border: 1px solid #1767d2; border-radius: 8px; background: #1767d2; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
-.coach-attendance-save-all:disabled { cursor: not-allowed; opacity: .55; }
+.coach-attendance-toolbar-actions { align-items:center; align-self:end; }
+.coach-attendance-toolbar-actions > button,
+.coach-attendance-main .coach-attendance-toolbar-actions > .coach-attendance-save-all { box-sizing:border-box; display:inline-flex; width:auto; height:44px; min-height:44px; margin:0; align-items:center; justify-content:center; padding:0 14px; line-height:20px; vertical-align:middle; }
+.coach-attendance-save-all { height:44px; min-height:44px; padding:0 14px; border: 1px solid #1767d2; border-radius: 8px; background: #1767d2; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.coach-attendance-save-all:disabled { cursor: not-allowed; opacity: 1; color:#294862; background:#e6edf5; border-color:#cbd8e6; }
 .coach-attendance-main :is(button, input, select, textarea):focus-visible { outline: 3px solid rgb(23 103 210 / 28%); outline-offset: 2px; }
 @media (max-width: 1000px) {
   .coach-attendance-session { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
@@ -295,3 +303,4 @@
   .coach-attendance-toolbar { grid-template-columns: minmax(0, 1fr); }
   .coach-attendance-toolbar-actions > button { flex: 1 1 auto; }
 }
+.coach-attendance-work-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}.coach-attendance-work-summary>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border:1px solid #d9e4f2;border-radius:12px;background:#f8fbff}.coach-attendance-work-summary strong{font-size:1.35rem;color:#173f73}.coach-attendance-work-action{color:#1459a6;font-weight:700;white-space:nowrap}.coach-attendance-work-queue .coach-attendance-session{align-items:center}.coach-attendance-provisional{margin:12px 0;padding:12px 14px;border-left:3px solid #d6a300;background:#fff8df;color:#594500;border-radius:0 8px 8px 0}

@@ -7,6 +7,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -15,6 +16,8 @@ import group5.example.sportCenter.dto.AttendanceHistoryResponse;
 import group5.example.sportCenter.dto.AttendanceResponse;
 import group5.example.sportCenter.dto.AttendanceRosterResponse;
 import group5.example.sportCenter.dto.AttendanceSessionResponse;
+import group5.example.sportCenter.dto.AttendanceSubmissionRequest;
+import group5.example.sportCenter.dto.MemberAttendanceOverviewResponse;
 import group5.example.sportCenter.dto.MarkAttendanceRequest;
 import group5.example.sportCenter.dto.MemberAttendanceResponse;
 import group5.example.sportCenter.service.AttendanceService;
@@ -56,6 +59,14 @@ public class AttendanceController {
         return attendanceService.mark(sessionId, memberId, request, jwt);
     }
 
+    @PostMapping("/sessions/{sessionId}/submit")
+    public AttendanceRosterResponse submitInitial(
+            @PathVariable Integer sessionId,
+            @Valid @RequestBody AttendanceSubmissionRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        return attendanceService.submitInitial(sessionId, request, jwt);
+    }
+
     @GetMapping("/{attendanceId}/history")
     public List<AttendanceHistoryResponse> history(
             @PathVariable Integer attendanceId,
@@ -66,5 +77,10 @@ public class AttendanceController {
     @GetMapping("/me")
     public List<MemberAttendanceResponse> mine(@AuthenticationPrincipal Jwt jwt) {
         return attendanceService.mine(jwt);
+    }
+
+    @GetMapping("/me/overview")
+    public List<MemberAttendanceOverviewResponse> memberOverview(@AuthenticationPrincipal Jwt jwt) {
+        return attendanceService.memberOverview(jwt);
     }
 }

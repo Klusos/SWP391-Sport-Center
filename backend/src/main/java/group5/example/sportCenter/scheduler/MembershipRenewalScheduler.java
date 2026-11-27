@@ -23,7 +23,7 @@ public class MembershipRenewalScheduler {
         lifecycle.runDueLifecycle();
     }
 
-    @Scheduled(cron = "0 */15 * * * *", zone = "Asia/Ho_Chi_Minh")
+    @Scheduled(cron = "${sportcenter.renewal.scheduler.cron}", zone = "${sportcenter.renewal.scheduler.time-zone}")
     public void catchUpPeriodically() {
         lifecycle.runDueLifecycle();
     }

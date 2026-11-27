@@ -375,6 +375,7 @@ Writes are limited to the class's assigned COACH or ADMIN (403 otherwise). Staff
 |---|---|---|
 | GET | `/api/training/classes` | COACH: assigned classes; staff: all classes. Includes member/session counts and plan goal. |
 | GET / PUT | `/api/training/classes/{classId}/plan` | Read (404 until created) or create/update the training plan `{goal, description}`. |
+| PUT | `/api/training/classes/{classId}/plan/weekly` | Assigned COACH atomically saves `{expectedUpdatedAt, goal, description, weeks[], unassignedExerciseIds[]}`. `expectedUpdatedAt` is null only when creating a plan; edits must send the timestamp from the latest GET/save or receive 409 if another save changed the plan. Each week has optional `id`, positive unique `weekNumber`, `title`, `goal`, `description`, and ordered `exercises[]`; each exercise may carry an existing `id` or omit it to create. Omitted weeks/exercises are deleted by this explicit whole-plan save. Existing legacy exercises stay unassigned unless explicitly listed in a week; `unassignedExerciseIds` retains them at plan level. Admin is read-only. |
 | POST | `/api/training/classes/{classId}/plan/exercises` | Add `{name, sets?, reps?, durationMinutes?, notes?, sortOrder?}`; 409 before the plan exists. |
 | PUT / DELETE | `/api/training/exercises/{exerciseId}` | Modify or remove an exercise. |
 | GET | `/api/training/classes/{classId}/sessions` | Sessions with PRESENT/result counts, `canComplete`, `canRecordResults`. |
@@ -385,7 +386,7 @@ Writes are limited to the class's assigned COACH or ADMIN (403 otherwise). Staff
 | POST | `/api/training/classes/{classId}/members/{memberId}/evaluations` | Append `{rating 1–5, comment}`; 409 without a CONFIRMED registration. |
 | GET | `/api/training/me` | MEMBER: plan, attendance summary, session results and evaluations for each CONFIRMED class. |
 
-Plan, exercise, result, evaluation and session-completion writes create AuditLog entries. Apply `docs/sql/phase10-1-flow4-training.sql` before starting the backend with `ddl-auto=validate`.
+Plan, weekly-plan, exercise, result, evaluation and session-completion writes create AuditLog entries. Weekly plan responses preserve the legacy top-level `exercises` collection (only exercises with no week) and add `weeks[]`, ordered by week number, each with its own ordered exercises and Offering-derived `startDate`, `endDate`, and `outsideOffering` presentation fields. Week ranges are derived from Offering dates and are not persisted. `PUT .../plan/weekly` is transactional; callers must submit the complete intended state. Existing general exercises are never auto-assigned to a week. The approved additive SQL Server migration is `docs/sql/proposals/phase-training-plan-weekly.sql`; inspect its target guard and backup requirements before applying it to any database. This migration is not part of application startup.
 
 ## Module coverage note
 
@@ -561,6 +562,8 @@ Registration remains separate from payment creation/collection. A member or staf
 
 
 # Personal Training (PT 1-on-1)
+
+PT booking creation and cancellation are the currently supported booking mutations. Editing or rescheduling an existing PT booking and reassigning its Coach are not supported operations; no endpoint is provided for them. Coach training writes remain limited to the Coach assigned to the class.
 
 PT bookings are individual 90-minute sessions priced at 500,000 VND. The default is `app.pt.session-base-price=500000`; set `APP_PT_SESSION_BASE_PRICE` in the environment to override it. A MEMBER with an ACTIVE membership valid on the requested session date (`startDate <= date < endDate`) may book when the membership plan has `allowOneOnOneCoaching=true`. The plan's `personalTrainingDiscountPercent` is applied to the PT price. `MembershipPlan.price` is unrelated.
 

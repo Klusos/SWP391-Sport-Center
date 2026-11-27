@@ -17,10 +17,10 @@ class SchedulingEnabledIntegrationTest {
     @Autowired private ApplicationContext context;
 
     @Test
-    void explicitTrueRegistersAllThreeProjectJobs() {
+    void explicitTrueRegistersAllFourProjectJobs() {
         var processors = context.getBeansOfType(ScheduledAnnotationBeanPostProcessor.class);
         assertEquals(1, processors.size());
-        assertEquals(3, processors.values().iterator().next().getScheduledTasks().size());
+        assertEquals(4, processors.values().iterator().next().getScheduledTasks().size());
         assertFalse(context.getBeansOfType(SchedulingConfiguration.class).isEmpty());
     }
 }

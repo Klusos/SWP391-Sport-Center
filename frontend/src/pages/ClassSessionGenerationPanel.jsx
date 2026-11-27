@@ -91,7 +91,7 @@ export default function ClassSessionGenerationPanel({ token, courseClass, offeri
       <span>Thời lượng: <b>{offering.sessionDuration} phút/buổi</b></span>
       <span>Chỉ tiêu: <b>{planned}</b> · Đã có: <b>{occupied}</b> · Còn: <b>{remaining}</b></span>
     </div>
-    {remaining === 0 && <p className="session-generation-warning" role="note">Lớp đã đủ hoặc vượt số buổi dự kiến. Buổi CANCELLED không tính vào chỉ tiêu.</p>}
+    {remaining === 0 && <p className="session-generation-warning" role="note">Lớp đã đủ hoặc vượt số buổi dự kiến. Buổi đã hủy không tính vào chỉ tiêu.</p>}
     {error && <p className="session-generation-error" role="alert">{error}</p>}
     {notice && <p className="session-generation-success" role="status">{notice}</p>}
     <form onSubmit={requestPreview}>

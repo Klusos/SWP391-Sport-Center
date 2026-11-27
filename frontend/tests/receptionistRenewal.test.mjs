@@ -14,13 +14,13 @@ test("Receptionist Renewal APIs are scoped to a selected member and create COUNT
 });
 
 test("Receptionist page presents frozen Renewal quote and deadline, and uses existing COUNTER confirmation", () => {
-  assert.match(page, /Gia hạn Membership/);
+assert.match(page, /Gia hạn gói hội viên/);
   assert.match(page, /quotedAmount/);
   assert.match(page, /validUntil/);
   assert.match(page, /successorStartDate/);
   assert.match(page, /startReceptionistRenewalCounterAttemptApi/);
   assert.match(page, /processCounterPaymentApi\(token, attempt\.paymentId, true/);
-  assert.match(page, /REFUND_REQUIRED không có nghĩa là tiền đã được hoàn/);
+  assert.match(page, /Trạng thái cần xử lý hoàn tiền không có nghĩa là tiền đã được trả lại/);
 });
 
 test("Receptionist page blocks duplicate live attempts and manual-reconciliation retries", () => {

@@ -86,6 +86,29 @@ public class NotificationEventDeliveryService {
         }
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void attendanceChanged(Integer memberId, String className, java.time.LocalDateTime sessionStart,
+            String previousStatus, String newStatus) {
+        String title = previousStatus == null ? "Thông báo điểm danh" : "Cập nhật điểm danh";
+        String sessionDate = sessionStart == null ? "chưa xác định thời gian"
+                : sessionStart.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy"));
+        String newLabel = attendanceLabel(newStatus);
+        String message = previousStatus == null
+                ? "Buổi học " + className + " lúc " + sessionDate + " đã ghi nhận: " + newLabel + "."
+                : "Buổi học " + className + " lúc " + sessionDate + " đã cập nhật từ "
+                        + attendanceLabel(previousStatus) + " sang " + newLabel + ".";
+        notifyActiveRole(memberId, "MEMBER", title, message);
+    }
+
+    private String attendanceLabel(String status) {
+        return switch (status == null ? "" : status) {
+            case "PRESENT" -> "Có mặt";
+            case "ABSENT" -> "Vắng mặt";
+            case "EXCUSED" -> "Vắng có phép";
+            default -> "trạng thái chưa xác định";
+        };
+    }
+
     private void notifyActiveRole(Integer userId, String role, String title, String message) {
         if (userId == null) {
             return;

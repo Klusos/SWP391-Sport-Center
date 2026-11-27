@@ -1,7 +1,9 @@
+import { statusLabel } from "./uiPresentation.js";
+
 const paymentPurposes = {
   PT_BOOKING: {
     label: "Thanh toán buổi tập cá nhân",
-    action: "Xem lịch PT",
+    action: "Xem lịch huấn luyện cá nhân",
     path: "/member/pt-booking",
   },
   MEMBERSHIP: {
@@ -87,18 +89,6 @@ export function paymentServiceLabel(purpose) {
   }
 }
 
-export function serviceStatusLabel(status) {
-  const labels = {
-    SUCCESS: "Thành công",
-    PENDING: "Đang chờ xác nhận",
-    FAILED: "Thất bại",
-    CONFIRMED: "Đã xác nhận",
-    PENDING_PAYMENT: "Chờ thanh toán",
-    ACTIVE: "Đang hoạt động",
-    EXPIRED: "Đã hết hạn",
-    CANCELLED: "Đã hủy",
-    COMPLETED: "Đã hoàn thành",
-    REFUND_REQUIRED: "Cần xử lý hoàn tiền",
-  };
-  return labels[status] ?? status ?? "Chưa có dữ liệu";
+export function serviceStatusLabel(status, context = "generic") {
+  return statusLabel(status, context);
 }

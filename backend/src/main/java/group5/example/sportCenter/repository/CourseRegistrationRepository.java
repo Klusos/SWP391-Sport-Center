@@ -20,6 +20,13 @@ public interface CourseRegistrationRepository extends JpaRepository<CourseRegist
     List<CourseRegistration> findByCourseClassIdAndStatus(Integer classId, CourseRegistrationStatus status);
 
     @EntityGraph(attributePaths = "member")
+    List<CourseRegistration> findByCourseClassIdAndStatusIn(Integer classId, List<CourseRegistrationStatus> statuses);
+
+    @EntityGraph(attributePaths = "member")
+    List<CourseRegistration> findByCourseClassIdInAndStatusIn(List<Integer> classIds,
+            List<CourseRegistrationStatus> statuses);
+
+    @EntityGraph(attributePaths = "member")
     Optional<CourseRegistration> findByMemberIdAndCourseClassIdAndStatus(
             Integer memberId, Integer classId, CourseRegistrationStatus status);
 

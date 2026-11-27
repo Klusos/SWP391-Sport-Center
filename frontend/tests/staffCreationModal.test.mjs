@@ -47,7 +47,7 @@ test("Audit Logs removes only the duplicate local eyebrow and retains its page c
 
   assert.doesNotMatch(page, /admin-audit-eyebrow|SPORTCENTER \/ ADMIN/);
   assert.match(page, /<AdminTopBar[\s\S]*?pageLabel=/);
-  assert.match(page, /<h1>Audit Logs<\/h1>/);
+  assert.match(page, /<h1>Nhật ký hoạt động<\/h1>/);
   assert.match(page, /<p className="subtitle">/);
   assert.match(page, /onClick=\{refresh\}/);
   assert.match(page, /className="admin-audit-filters"/);

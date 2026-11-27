@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import WeeklyPlanEditor from "./WeeklyPlanEditor.jsx";
 import {
   createIndividualTrainingPlanApi,
   getClassIndividualTrainingPlansApi,
@@ -9,29 +10,12 @@ import {
   updateIndividualTrainingPlanApi,
 } from "../api";
 import {
-  addWeekWithUnusedNumber,
   canCreateIndividualPlan,
   createLatestRequestGuard,
   individualPlanEligibilityMessage,
   savePlanAndRefreshOpenHistory,
   toIndividualTrainingPlanPayload,
 } from "./individualTrainingPlanHelpers";
-
-const blankWeek = (weekNumber = 1) => ({ weekNumber, title: "", description: "", exercises: [] });
-const blankExercise = () => ({ name: "", sets: "", reps: "", durationMinutes: "", notes: "" });
-const toForm = (revision) => ({
-  goal: revision?.goal || "",
-  description: revision?.description || "",
-  weeks: revision?.weeks?.length ? revision.weeks.map((week) => ({
-    weekNumber: week.weekNumber,
-    title: week.title || "",
-    description: week.description || "",
-    exercises: (week.exercises || []).map((exercise) => ({
-      name: exercise.name || "", sets: exercise.sets ?? "", reps: exercise.reps ?? "",
-      durationMinutes: exercise.durationMinutes ?? "", notes: exercise.notes || "",
-    })),
-  })) : [blankWeek()],
-});
 
 function messageFor(error, fallback) {
   if (error?.status === 401) return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
@@ -59,6 +43,7 @@ export default function IndividualTrainingPlans({ token, mode, classId, canManag
   const [busy, setBusy] = useState(false);
   const [creatingFor, setCreatingFor] = useState(null);
   const [editing, setEditing] = useState(false);
+  const [editorDirty, setEditorDirty] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [historyRequests] = useState(() => createLatestRequestGuard());
@@ -136,7 +121,14 @@ export default function IndividualTrainingPlans({ token, mode, classId, canManag
 
   const planByMember = useMemo(() => new Map(plans.map((plan) => [plan.memberId, plan])), [plans]);
 
+  function mayLeaveEditor() {
+    if (editorDirty && !window.confirm("Bạn có thay đổi chưa lưu. Tiếp tục và bỏ các thay đổi này?")) return false;
+    setEditorDirty(false);
+    return true;
+  }
+
   async function openPlan(plan) {
+    if (!mayLeaveEditor()) return;
     if (isClassView && selectedClassKey !== null && String(plan.classId) !== selectedClassKey) return;
     const requestId = detailRequests.start();
     historyRequests.invalidate();
@@ -208,6 +200,7 @@ export default function IndividualTrainingPlans({ token, mode, classId, canManag
       setCreatingFor(null);
       if (planId == null) clearHistory();
       setEditing(false);
+      setEditorDirty(false);
       setSelected(saved);
       await load();
     } catch (requestError) {
@@ -255,14 +248,14 @@ export default function IndividualTrainingPlans({ token, mode, classId, canManag
                 {plan ? <button type="button" className="secondary" onClick={() => void openPlan(plan)}>Mở giáo án</button>
                   : <>
                     <button type="button" disabled={!canCreate} title={eligibilityHint || undefined}
-                      onClick={() => { clearHistory(); setCreatingFor(member.memberId); setSelected(null); }}>Tạo giáo án</button>
+                      onClick={() => { if (!mayLeaveEditor()) return; clearHistory(); setCreatingFor(member.memberId); setSelected(null); }}>Tạo giáo án</button>
                     {!canCreate && <small className="training-muted">{eligibilityHint}</small>}
                   </>}
               </div>
             </article>;
           })}
         </div>}
-        {creatingFor != null && <PlanEditor key={`create-${creatingFor}`} busy={busy} onCancel={() => setCreatingFor(null)}
+        {creatingFor != null && <WeeklyPlanEditor key={`create-${creatingFor}`} busy={busy} onDirtyChange={setEditorDirty} onCancel={() => { setEditorDirty(false); setCreatingFor(null); }}
           onSubmit={(form) => submit(creatingFor, form)} />}
       </> : visiblePlans.length === 0 ? <p className="dash-empty">{selectedClassKey !== null
           ? "Lớp đang chọn chưa có giáo án cá nhân. Giáo án sẽ xuất hiện khi huấn luyện viên tạo cho bạn."
@@ -279,12 +272,12 @@ export default function IndividualTrainingPlans({ token, mode, classId, canManag
           <p className="training-muted">Phiên bản {visibleSelected.currentRevision?.revisionNumber ?? "—"} · cập nhật {formatDate(visibleSelected.updatedAt)}</p></div>
         {canManageTraining && <button type="button" onClick={() => setEditing(true)}>Chỉnh sửa</button>}
       </div>
-      {editing && canManageTraining ? <PlanEditor key={`edit-${visibleSelected.id}-${visibleSelected.currentRevision?.id}`} initial={visibleSelected.currentRevision}
-        busy={busy} onCancel={() => setEditing(false)} onSubmit={(form) => submit(visibleSelected.memberId, form, visibleSelected.id)} />
+      {editing && canManageTraining ? <WeeklyPlanEditor key={`edit-${visibleSelected.id}-${visibleSelected.currentRevision?.id}`} initial={visibleSelected.currentRevision}
+        busy={busy} onDirtyChange={setEditorDirty} onCancel={() => { setEditorDirty(false); setEditing(false); }} onSubmit={(form) => submit(visibleSelected.memberId, form, visibleSelected.id)} />
         : <PlanRevision revision={visibleSelected.currentRevision} />}
       <div className="training-actions">
         <button type="button" className="secondary" onClick={() => void showHistory(visibleSelected.id)}>Lịch sử phiên bản</button>
-        {canManageTraining && <button type="button" className="secondary" onClick={() => { clearHistory(); setSelected(null); }}>Đóng chi tiết</button>}
+        {canManageTraining && <button type="button" className="secondary" onClick={() => { if (!mayLeaveEditor()) return; clearHistory(); setSelected(null); }}>Đóng chi tiết</button>}
       </div>
       {historyPlanId === visibleSelected.id && history && <div className="individual-plan-history"><h4>Lịch sử chỉnh sửa</h4>
         {history.length === 0 ? <p className="training-muted">Chưa có lịch sử phiên bản.</p> : history.map((revision) => <details key={revision.id}>
@@ -295,45 +288,6 @@ export default function IndividualTrainingPlans({ token, mode, classId, canManag
       {loadingHistory && <p role="status">Đang tải lịch sử phiên bản…</p>}
     </section>}
   </section>;
-}
-
-function PlanEditor({ initial, busy, onCancel, onSubmit }) {
-  const [form, setForm] = useState(() => toForm(initial));
-  function updateWeek(index, patch) {
-    setForm((current) => ({ ...current, weeks: current.weeks.map((week, i) => i === index ? { ...week, ...patch } : week) }));
-  }
-  function updateExercise(weekIndex, exerciseIndex, patch) {
-    setForm((current) => ({ ...current, weeks: current.weeks.map((week, i) => i !== weekIndex ? week : {
-      ...week, exercises: week.exercises.map((exercise, j) => j === exerciseIndex ? { ...exercise, ...patch } : exercise),
-    }) }));
-  }
-  return <form className="individual-plan-editor" onSubmit={(event) => { event.preventDefault(); void onSubmit(form); }}>
-    <label>Mục tiêu *<input required maxLength={500} value={form.goal} onChange={(event) => setForm({ ...form, goal: event.target.value })} /></label>
-    <label>Mô tả<textarea maxLength={2000} rows={3} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
-    <div className="individual-plan-weeks-heading"><h4>Nội dung theo tuần</h4>
-      <button type="button" className="secondary" disabled={form.weeks.length >= 52} onClick={() => setForm((current) => ({ ...current, weeks: addWeekWithUnusedNumber(current.weeks) }))}>Thêm tuần</button></div>
-    {form.weeks.map((week, weekIndex) => <fieldset className="individual-plan-week" key={weekIndex}>
-      <legend>Tuần {week.weekNumber}</legend>
-      <div className="individual-plan-editor-grid">
-        <label>Số tuần<input required type="number" min="1" max="52" value={week.weekNumber} onChange={(event) => updateWeek(weekIndex, { weekNumber: event.target.value })} /></label>
-        <label>Tiêu đề<input maxLength={150} value={week.title} onChange={(event) => updateWeek(weekIndex, { title: event.target.value })} /></label>
-        <label className="wide">Mô tả tuần<textarea maxLength={1000} rows={2} value={week.description} onChange={(event) => updateWeek(weekIndex, { description: event.target.value })} /></label>
-      </div>
-      {week.exercises.map((exercise, exerciseIndex) => <div className="individual-plan-exercise" key={exerciseIndex}>
-        <label>Bài tập *<input required maxLength={150} value={exercise.name} onChange={(event) => updateExercise(weekIndex, exerciseIndex, { name: event.target.value })} /></label>
-        <label>Hiệp<input type="number" min="1" max="100" value={exercise.sets} onChange={(event) => updateExercise(weekIndex, exerciseIndex, { sets: event.target.value })} /></label>
-        <label>Lần<input type="number" min="1" max="1000" value={exercise.reps} onChange={(event) => updateExercise(weekIndex, exerciseIndex, { reps: event.target.value })} /></label>
-        <label>Phút<input type="number" min="1" max="240" value={exercise.durationMinutes} onChange={(event) => updateExercise(weekIndex, exerciseIndex, { durationMinutes: event.target.value })} /></label>
-        <label className="wide">Ghi chú<input maxLength={500} value={exercise.notes} onChange={(event) => updateExercise(weekIndex, exerciseIndex, { notes: event.target.value })} /></label>
-        <button type="button" className="training-link-button danger" onClick={() => updateWeek(weekIndex, { exercises: week.exercises.filter((_, i) => i !== exerciseIndex) })}>Xóa bài tập</button>
-      </div>)}
-      <button type="button" className="training-link-button" disabled={week.exercises.length >= 30}
-        onClick={() => updateWeek(weekIndex, { exercises: [...week.exercises, blankExercise()] })}>Thêm bài tập</button>
-      {form.weeks.length > 1 && <button type="button" className="training-link-button danger" onClick={() => setForm({ ...form, weeks: form.weeks.filter((_, i) => i !== weekIndex) })}>Xóa tuần</button>}
-    </fieldset>)}
-    <div className="training-actions"><button type="submit" disabled={busy}>{busy ? "Đang lưu…" : "Lưu giáo án"}</button>
-      <button type="button" className="secondary" disabled={busy} onClick={onCancel}>Hủy</button></div>
-  </form>;
 }
 
 function PlanRevision({ revision }) {

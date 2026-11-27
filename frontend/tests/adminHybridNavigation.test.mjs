@@ -53,7 +53,7 @@ test("Admin operational support additions do not alter Receptionist, Coach, or M
 
 test("Admin overview matches the group heading typography while retaining grouped item sizing", async () => {
   const styles = await read("styles.css");
-  const overviewRule = styles.match(/\.layout \.sidebar nav\[aria-label="ADMIN navigation"\] > \.nav-button\s*\{([^}]*)\}/)?.[1];
+  const overviewRule = styles.match(/\.layout \.sidebar nav\.admin-navigation > \.nav-button\s*\{([^}]*)\}/)?.[1];
   const groupedRule = styles.match(/\.layout \.sidebar \.admin-nav-group-items \.nav-button\s*\{([^}]*)\}/)?.[1];
   const groupHeadingRule = styles.match(/\.layout \.sidebar \.admin-nav-group-toggle\s*\{([^}]*)\}/)?.[1];
   assert.ok(overviewRule, "only the direct Admin navigation item receives the sizing override");

@@ -61,7 +61,7 @@ export default function RegisterMember({ token, role, currentUserName, onLogout,
           avatarName={currentUserName}
         />
         <div className="register-member-content">
-        <header className="register-member-header">
+        <header className={`register-member-header${role === "ADMIN" ? " admin-page-header" : ""}`}>
           <div>
             <h1>Đăng ký thành viên</h1>
             <p className="subtitle">Tạo tài khoản thành viên mới trong hệ thống SportCenter.</p>

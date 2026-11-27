@@ -340,7 +340,7 @@ export default function CourseManagementPages({ token, role, currentUserName, on
 
 function CourseDetailPage({ course, offerings, today, offeringSearch, setOfferingSearch, timeFilter, setTimeFilter, offeringStatusFilter, setOfferingStatusFilter, offeringSort, setOfferingSort, offeringFields, refresh, saveSuccess, token, navigate, offeringPathFor }) {
   return <>
-    <header className="course-detail-heading"><div><h1>{course.name}</h1><p>Quản lý thông tin khóa học, các đợt học và lớp trực thuộc.</p></div></header>
+    <header className="course-detail-heading admin-page-header"><div><h1>{course.name}</h1><p>Quản lý thông tin khóa học, các đợt học và lớp trực thuộc.</p></div></header>
     <section className="adm-block course-entity-panel course-info-card"><div className="adm-head"><h2>Thông tin khóa học</h2><button type="button" aria-label="Sửa thông tin khóa học" title="Sửa thông tin khóa học" onClick={() => navigate("/staff/courses/" + course.id + "/edit")}><CourseIcon name="edit" /><span>Sửa</span></button></div><dl className="course-entity-facts">
       <Fact label="Bộ môn" value={course.sportName} /><Fact label="Trình độ" value={course.level} /><Fact label="Độ tuổi" value={`${course.targetAgeMin ?? "—"} – ${course.targetAgeMax ?? "—"}`} /><Fact label="Chính sách độ tuổi" value={course.agePolicy || "—"} /><Fact label="Trạng thái" value={statusPill(course.status)} />
       {course.description && <Fact label="Mô tả" value={course.description} />}{course.learningOutcome && <Fact label="Kết quả đầu ra" value={course.learningOutcome} />}
@@ -372,14 +372,14 @@ function OfferingDetailPage({ course, offering, classes, classSearch, setClassSe
   const businessDate = vietnamBusinessDate();
   const timeStatus = offeringTimeStatus(offering, businessDate);
   return <>
-    <header className="course-detail-heading"><div><div className="course-title-group"><h1>{offering.name}</h1><span className={`course-time-status time-${String(timeStatus || "unknown").toLowerCase()}`}>{TIME_STATUS_LABEL[timeStatus] || "Chưa xác định"}</span></div><p>Đợt học thuộc khóa {course.name}; quản lý điều kiện và lịch các lớp bên dưới.</p></div></header>
+    <header className="course-detail-heading admin-page-header"><div><div className="course-title-group"><h1>{offering.name}</h1><span className={`course-time-status time-${String(timeStatus || "unknown").toLowerCase()}`}>{TIME_STATUS_LABEL[timeStatus] || "Chưa xác định"}</span></div><p>Đợt học thuộc khóa {course.name}; quản lý điều kiện và lịch các lớp bên dưới.</p></div></header>
     <EntityCrud title="Thông tin đợt học" entity={offering} fields={offeringFieldsForEntity(fields, offering)} formHint="Chỉ có thể đăng ký khi đợt học đang mở, còn trong thời gian nhận đăng ký và có lớp đủ điều kiện. Giá và lịch học không thể chỉnh sửa từ 14 ngày trước hạn đăng ký; trạng thái và tên đợt vẫn có thể cập nhật nếu hợp lệ." panelClassName="course-offering-info" editLabel="" editAccessibleName="Sửa thông tin" showPencil details={[
       ["Khóa học", course.name], ["Học phí", `${Number(offering.price || 0).toLocaleString("vi-VN")} ₫`], ["Ngày bắt đầu", offering.startDate], ["Ngày kết thúc", offering.endDate],
       ["Hạn đăng ký", offering.registrationDeadline || "—"], ["Hạn hủy", offering.cancellationDeadline || "—"], ["Số buổi dự kiến", offering.plannedSessions], ["Thời lượng mỗi buổi", offering.sessionDuration ? `${offering.sessionDuration} phút` : "—"],
       ["Trạng thái đợt học", statusPill(offering.status)], ["Thời gian", TIME_STATUS_LABEL[timeStatus] || "Chưa xác định"],
     ]} validate={(form, _body, original) => validateCourseOffering(form, original)} onSave={async (body) => { await saveOfferingApi(token, offering.id, body); saveSuccess("Đã cập nhật đợt học."); }} />
     <section className="adm-block"><div className="adm-head"><div><h2>Lớp trong đợt học</h2><span className="course-list-total">{classes.length} lớp</span></div></div>
-      <div className="course-hierarchy-filters course-two-filters"><label>Tìm tên lớp<input type="search" value={classSearch} onChange={(event) => setClassSearch(event.target.value)} /></label><label>Trạng thái<select value={classStatusFilter} onChange={(event) => setClassStatusFilter(event.target.value)}><option value="">Tất cả</option><option value="ACTIVE">ACTIVE</option><option value="INACTIVE">INACTIVE</option></select></label></div>
+      <div className="course-hierarchy-filters course-two-filters"><label>Tìm tên lớp<input type="search" value={classSearch} onChange={(event) => setClassSearch(event.target.value)} /></label><label>Trạng thái<select value={classStatusFilter} onChange={(event) => setClassStatusFilter(event.target.value)}><option value="">Tất cả</option><option value="ACTIVE">Đang hoạt động</option><option value="INACTIVE">Ngừng hoạt động</option></select></label></div>
       <p className="subtitle" role="status">{coachQualificationHint}</p>
       <Crud title="Danh sách lớp" items={classes} fields={classFields} formHint={coachQualificationHint} onRefresh={refresh}
         columns={[{ key: "name", label: "Lớp" }, { key: "coachName", label: "Huấn luyện viên" }, { key: "capacity", label: "Sức chứa" }, { label: "Trạng thái", render: (item) => courseClassStatusPill(item.status) }]}
@@ -405,7 +405,7 @@ function ClassDetailPage({ course, offering, courseClass, sessions, allSessions,
     ? "HLV hiện được phân công không còn ACTIVE hoặc chưa được xác minh đủ chuyên môn. Phân công hiện tại được giữ nguyên; máy chủ sẽ kiểm tra mọi thay đổi."
     : ""].filter(Boolean).join(" ");
   return <>
-    <header className="course-detail-heading"><div><div className="course-title-group"><h1>{courseClass.name}</h1>{courseClassStatusPill(courseClass.status)}</div><p>{course.name} · {offering.name} · Lịch học và buổi học</p></div></header>
+    <header className="course-detail-heading admin-page-header"><div><div className="course-title-group"><h1>{courseClass.name}</h1>{courseClassStatusPill(courseClass.status)}</div><p>{course.name} · {offering.name} · Lịch học và buổi học</p></div></header>
     <EntityCrud title="Thông tin lớp" entity={courseClass} fields={classFields} formHint={classCoachHint} panelClassName="course-class-info" editLabel="" editAccessibleName="Sửa thông tin" showPencil details={[
       ["Khóa học", course.name], ["Đợt học", offering.name], ["Huấn luyện viên", courseClass.coachName || "—"], ["Sức chứa", courseClass.capacity], ["Trạng thái", courseClassStatusPill(courseClass.status)],
     ]} onSave={async (body) => { await saveClassApi(token, courseClass.id, body); saveSuccess("Đã cập nhật lớp."); }} />

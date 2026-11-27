@@ -110,13 +110,15 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/course-registrations").hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers("/api/course-registrations", "/api/course-registrations/**").denyAll()
 
-                .requestMatchers(HttpMethod.GET, "/api/attendance/me").hasRole("MEMBER")
+                .requestMatchers(HttpMethod.GET, "/api/attendance/me", "/api/attendance/me/overview").hasRole("MEMBER")
                 .requestMatchers(HttpMethod.GET, "/api/attendance/coach/sessions").hasRole("COACH")
                 .requestMatchers(HttpMethod.GET, "/api/attendance/sessions")
                     .hasAnyRole("ADMIN", "RECEPTIONIST")
                 .requestMatchers(HttpMethod.GET, "/api/attendance/sessions/*/roster")
                     .hasAnyRole("ADMIN", "RECEPTIONIST", "COACH")
                 .requestMatchers(HttpMethod.PUT, "/api/attendance/sessions/*/members/*")
+                    .hasAnyRole("ADMIN", "COACH")
+                .requestMatchers(HttpMethod.POST, "/api/attendance/sessions/*/submit")
                     .hasAnyRole("ADMIN", "COACH")
                 .requestMatchers(HttpMethod.GET, "/api/attendance/*/history").authenticated()
                 .requestMatchers("/api/attendance", "/api/attendance/**").denyAll()
@@ -128,7 +130,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/training/classes", "/api/training/classes/*/sessions",
                         "/api/training/classes/*/progress", "/api/training/sessions/*/results")
                     .hasAnyRole("ADMIN", "RECEPTIONIST", "COACH")
-                .requestMatchers(HttpMethod.PUT, "/api/training/classes/*/plan", "/api/training/exercises/*",
+                .requestMatchers(HttpMethod.PUT, "/api/training/classes/*/plan", "/api/training/classes/*/plan/weekly", "/api/training/exercises/*",
                         "/api/training/sessions/*/results/*")
                     .hasRole("COACH")
                 .requestMatchers(HttpMethod.POST, "/api/training/classes/*/plan/exercises",

@@ -64,12 +64,13 @@
 .main .md-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, .26); color: #fff; border-color: #fff; }
 
 .md-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin-bottom: 22px; }
-.md-stat { display: grid; gap: 8px; align-content: space-between; min-height: 150px; padding: 20px 22px; border: 1px solid #e3ebf5; border-radius: 18px; background: #fff; box-shadow: 0 6px 20px rgba(21, 50, 82, .06); }
-.md-stat header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; color: var(--text-sub); font-size: 15px; }
-.md-stat header i { display: grid; place-items: center; flex: none; width: 42px; height: 42px; border-radius: 50%; background: #e8f1ff; color: #1769d2; }
-.md-stat strong { font-size: 40px; font-weight: 800; line-height: 1; color: var(--navy); }
+.md-stat { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 42px; grid-template-areas: "label icon" "value value" "sub sub"; gap: 8px; align-content: start; min-height: 150px; padding: 20px 22px; border: 1px solid #e3ebf5; border-radius: 18px; background: #fff; box-shadow: 0 6px 20px rgba(21, 50, 82, .06); }
+.md-stat header { display: contents; }
+.md-stat header span { grid-area: label; min-width: 0; color: var(--text-sub); font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; }
+.md-stat header i { position: static; grid-area: icon; justify-self: end; align-self: start; display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: #e8f1ff; color: #1769d2; transform: translate(5px, -5px); }
+.md-stat strong { grid-area: value; min-width: 0; font-size: 40px; font-weight: 800; line-height: 1; color: var(--navy); overflow-wrap:anywhere; }
 .md-stat strong em { font-style: normal; font-size: 18px; font-weight: 500; color: var(--text-sub); }
-.md-stat small { color: var(--text-sub); font-size: 13px; }
+.md-stat small, .md-stat > .md-link { grid-area: sub; min-width:0; color: var(--text-sub); font-size: 13px; }
 .md-stat.green header i { background: #e6f8f0; color: #16a870; }
 .md-stat.purple header i { background: #f1eafd; color: #7c3aed; }
 .md-stat.orange { border-color: #f6d9ae; background: #fff6e8; }
@@ -115,10 +116,74 @@
 .md-empty { display: grid; justify-items: center; gap: 10px; padding: 26px 12px; border: 1px dashed #cfdceb; border-radius: 14px; background: #f8fbfe; color: var(--text-sub); text-align: center; }
 .md-empty svg { color: #8aa3bf; }
 .md-empty p { margin: 0; }
+.md-empty-actions { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
+.main .md-empty-actions .md-ghost { min-height:46px; border:1px solid #1769d2; background:#fff; color:#1559aa; box-shadow:none; }
+.main .md-empty-actions .md-ghost:hover:not(:disabled) { border-color:#1258b2; background:#edf6ff; color:#104c96; }
+.main .md-empty-actions .md-ghost:focus-visible { outline:3px solid #91bce7; outline-offset:2px; }
+.main .md-empty-actions .md-ghost:disabled { border-color:#aab9c8; background:#f0f3f6; color:#6f7d8b; cursor:not-allowed; }
 
-.md-levels { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
-.md-levels div { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid #e3ebf5; border-radius: 12px; background: #f8fbfe; }
-.md-levels b { padding: 4px 10px; border-radius: 999px; background: #e3efff; color: #1769d2; font-size: 12px; }
+.md-levels { display:flex; flex-wrap:wrap; align-items:stretch; gap:12px; }
+.md-levels div { display:flex; flex:0 0 auto; align-items:center; gap:12px; min-width:0; max-width:100%; padding:12px 14px; border:1px solid #e3ebf5; border-radius:12px; background:#f8fbfe; }
+.md-levels div > span { min-width:0; overflow-wrap:anywhere; }
+.md-levels b { flex:0 0 auto; padding:5px 11px; border:1px solid #c8dcf5; border-radius:999px; background:#e3efff; color:#1769d2; font-size:12px; line-height:1.25; white-space:nowrap; }
+
+/* Shared Member desktop content width and page-header surface. */
+.layout:has(> .portal-topbar--member) > .main {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1680px;
+  min-width: 0;
+  margin-inline: auto;
+  padding: clamp(22px, 2vw, 32px) clamp(24px, 2.6vw, 48px) 52px;
+}
+.layout:has(> .portal-topbar--member) > .main :is(
+  .member-membership-header, .member-attendance-header, .schedule-page-header,
+  .mla-content-header, .member-training-header, .training-header.member-training-detail-header,
+  .pt-booking-layout .pt-header, .support-member-content .support-heading, .mp-header,
+  .member-course-page-header
+) {
+  box-sizing: border-box;
+  min-height: 112px;
+  margin: 0 0 22px;
+  padding: 22px clamp(20px, 2.5vw, 30px);
+  border: 1px solid #d7e7f7;
+  border-radius: 18px;
+  background: linear-gradient(120deg, #edf6ff, #fff 78%);
+  box-shadow: 0 10px 28px rgba(18, 59, 99, .06);
+}
+.layout:has(> .portal-topbar--member) > .main :is(
+  .member-membership-header h1, .member-attendance-header h1, .schedule-page-header h1,
+  .mla-content-header h1, .member-training-header h1, .training-header.member-training-detail-header h1,
+  .pt-booking-layout .pt-header h1, .support-member-content .support-heading h1, .mp-header h1,
+  .member-course-page-header h1
+) {
+  margin-top: 0;
+  color: #102a4c;
+  font-size: clamp(24px, 2.4vw, 32px);
+  font-weight: 820;
+  letter-spacing: -.035em;
+  line-height: 1.2;
+}
+.layout:has(> .portal-topbar--member) > .main :is(
+  .member-membership-header .subtitle, .member-attendance-header p, .schedule-page-header .subtitle,
+  .mla-content-header p, .member-training-header p, .training-header.member-training-detail-header .training-class-meta,
+  .pt-booking-layout .pt-header p:not(.pt-eyebrow), .support-member-content .support-heading .subtitle,
+  .mp-header > div:first-child > p, .member-course-page-header .subtitle
+) { color: #60758c; line-height: 1.6; }
+.layout:has(> .portal-topbar--member) > .main .member-courses-hero {
+  border-color: #d7e7f7;
+  border-radius: 18px;
+  background: linear-gradient(120deg, #edf6ff, #fff 78%);
+  box-shadow: 0 10px 28px rgba(18, 59, 99, .06);
+}
+@media (max-width: 760px) {
+  .layout:has(> .portal-topbar--member) > .main { padding: 20px 18px 40px; }
+  .layout:has(> .portal-topbar--member) > .main :is(
+    .member-membership-header, .member-attendance-header, .schedule-page-header, .mla-content-header,
+    .member-training-header, .training-header.member-training-detail-header, .pt-booking-layout .pt-header,
+    .support-member-content .support-heading, .mp-header, .member-course-page-header
+  ) { align-items: flex-start; gap: 14px; }
+}
 
 @media (max-width: 1180px) { .md-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .md-grid { grid-template-columns: 1fr; } }
 @media (max-width: 700px) {

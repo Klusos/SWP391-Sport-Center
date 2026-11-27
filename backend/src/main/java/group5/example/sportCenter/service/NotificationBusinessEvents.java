@@ -1,5 +1,7 @@
 package group5.example.sportCenter.service;
 
+import java.time.LocalDateTime;
+
 /** Internal, ID-only events published from successful transactional state changes. */
 public final class NotificationBusinessEvents {
     private NotificationBusinessEvents() {
@@ -22,5 +24,9 @@ public final class NotificationBusinessEvents {
     }
 
     public record CourseCoachAssigned(Integer referenceId, Integer coachId) implements BusinessEvent {
+    }
+
+    public record AttendanceChanged(Integer referenceId, Integer memberId, String className,
+            LocalDateTime sessionStart, String previousStatus, String newStatus) implements BusinessEvent {
     }
 }

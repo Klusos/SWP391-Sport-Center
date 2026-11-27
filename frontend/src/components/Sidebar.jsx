@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import AdminTopBar from "./AdminTopBar.jsx";
 import { usePortalIdentity } from "./PortalIdentityContext.jsx";
 import { getPortalPageLabel, PORTAL_ROLE_PRESENTATION } from "./portalTopBarConfig.js";
+import { roleLabel } from "../uiPresentation.js";
 
 function Item({ page, activePage, onNavigate, children, icon }) {
   return (
@@ -44,7 +45,7 @@ const adminGroups = [
       ["consultations", "Yêu cầu tư vấn"],
       ["support-tickets", "Yêu cầu hỗ trợ"],
       ["course-registration", "Đăng ký khóa học tại quầy"],
-      ["admin-membership-sales", "Quản lý gói thành viên"],
+      ["admin-membership-sales", "Quản lý gói hội viên"],
       ["course-payments", "Thanh to\u00e1n kh\u00f3a h\u1ecdc & PT"],
       ["attendance", "Điểm danh lớp học"],
       ["admin-training", "Giám sát huấn luyện"],
@@ -64,10 +65,10 @@ const adminGroups = [
     id: "administration",
     title: "Quản trị hệ thống & báo cáo",
     pages: [
-      ["members", "Thành viên"],
+      ["members", "Hội viên"],
       ["staff", "Quản lý nhân sự"],
       ["reports", "Báo cáo và thống kê"],
-      ["audit-logs", "Audit Logs"],
+      ["audit-logs", "Nhật ký hoạt động"],
       ["notification-broadcast", "Gửi thông báo"],
     ],
   },
@@ -126,7 +127,7 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
   const memberLinks = [
     ["dashboard", "Tổng quan"],
     ["member-courses", "Khóa học"],
-    ["member-membership", "Gói thành viên"],
+    ["member-membership", "Gói hội viên"],
     ["member-schedule", "Lịch trình"],
     ["member-levels", "Trình độ & đánh giá"],
     ["member-training", "K\u1ebft qu\u1ea3 t\u1eadp luy\u1ec7n"],
@@ -145,7 +146,7 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
   ];
   const receptionistLinks = [
     ["dashboard", "Tổng quan"],
-    ["members", "Thành viên"],
+    ["members", "Hội viên"],
     ["membership-sales", "Bán gói hội viên"],
     ["course-registration", "Đăng ký khóa học tại quầy"],
     ["course-payments", "Thanh to\u00e1n kh\u00f3a h\u1ecdc & PT"],
@@ -154,7 +155,7 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
   ];
   const adminLinks = [
     ["dashboard", "Tổng quan"],
-    ["members", "Thành viên"],
+    ["members", "Hội viên"],
     ["membership-plans", "Gói hội viên"],
     ["course-payments", "Thanh toán khóa học"],
     ["pt-payments", "Thanh toán PT"],
@@ -165,8 +166,8 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
     ["courses", "Quản lý khóa học"],
     ["facilities", "Quản lý cơ sở vật chất"],
     ["notification-broadcast", "Gửi thông báo"],
-    ["admin-membership-sales", "Quản lý gói thành viên"],
-    ["audit-logs", "Audit Logs"],
+    ["admin-membership-sales", "Quản lý gói hội viên"],
+    ["audit-logs", "Nhật ký hoạt động"],
   ];
   const links = role === "MEMBER"
     ? memberLinks
@@ -175,13 +176,7 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
       : role === "RECEPTIONIST"
         ? receptionistLinks
         : adminLinks;
-  const label = role === "ADMIN"
-    ? "Quản trị viên"
-    : role === "RECEPTIONIST"
-      ? "Lễ tân"
-      : role === "COACH"
-        ? "Huấn luyện viên"
-        : "Thành viên";
+  const label = roleLabel(role);
 
   return (
     <>
@@ -195,7 +190,7 @@ export default function Sidebar({ onLogout, onNavigate, activePage, role }) {
     />}
     <aside className="sidebar">
       <div className="brand"><strong>SPORTS CENTER</strong><span>{label}</span></div>
-      <nav aria-label={`${role} navigation`}>
+      <nav className={role === "ADMIN" ? "admin-navigation" : undefined} aria-label={`Điều hướng ${label}`}>
         {role === "ADMIN" ? (
           <AdminNavigation
             key={activePage}

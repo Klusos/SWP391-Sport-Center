@@ -10,7 +10,14 @@ import group5.example.sportCenter.entity.TrainingExercise;
 
 public interface TrainingExerciseRepository extends JpaRepository<TrainingExercise, Integer> {
 
+    @EntityGraph(attributePaths = "week")
     List<TrainingExercise> findByPlanIdOrderBySortOrderAscIdAsc(Integer planId);
+
+    List<TrainingExercise> findByPlanIdAndWeekIsNullOrderBySortOrderAscIdAsc(Integer planId);
+
+    List<TrainingExercise> findByWeekIdOrderBySortOrderAscIdAsc(Integer weekId);
+
+    List<TrainingExercise> findByPlanId(Integer planId);
 
     @EntityGraph(attributePaths = { "plan", "plan.courseClass", "plan.courseClass.coach" })
     Optional<TrainingExercise> findWithPlanById(Integer id);

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import PaymentResultCard from "../components/PaymentResultCard";
+import { statusLabel } from "../uiPresentation.js";
 import { createPaymentApi, getCurrentUserApi, getMembershipsByMemberApi, getMyPaymentsApi, getMyPtBookingsApi, getMyRegistrationsApi, cancelPaymentApi } from "../api";
 import { acquireAction, canCheckout, checkoutAccess, courseRegistrationDiscountPercent, paymentMessage, pendingCounter, positiveId, prepareCheckout, registrationMessage, registrationPayments, shouldPoll, startStatusPolling, validVnpayUrl, vietnamDate } from "../courseCheckout";
 import { findOwnedPayment, findOwnedPtBooking } from "../paymentReturn";
@@ -200,16 +201,16 @@ export default function CourseCheckout({ auth, onLogout, onNavigate }) {
           <section><h2>Đăng ký #{registration.id}</h2><p>{registration.courseName} · {registration.courseOfferingName} · {registration.className}</p>
             <table className="course-price-breakdown" aria-label="Chi tiết giá đăng ký"><caption>Chi tiết giá đăng ký</caption><tbody>
               <tr><th scope="row">Giá gốc</th><td>{money(registration.originalPrice)}</td></tr>
-              <tr><th scope="row">Ưu đãi Membership</th><td>{Number(registration.membershipDiscount) > 0 ? "−" : ""}{money(registration.membershipDiscount)}</td></tr>
+              <tr><th scope="row">Ưu đãi gói hội viên</th><td>{Number(registration.membershipDiscount) > 0 ? "−" : ""}{money(registration.membershipDiscount)}</td></tr>
               {discountPercent != null && <tr><th scope="row">Tỷ lệ ưu đãi theo giá đã lưu</th><td>{new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 6 }).format(discountPercent)}%</td></tr>}
               <tr className="course-price-total"><th scope="row">Tổng thanh toán</th><td>{money(registration.finalPrice)}</td></tr>
             </tbody></table>
-            <dl><dt>Trạng thái đăng ký</dt><dd>{registration.status}</dd><dt>Hạn thanh toán (giờ Việt Nam)</dt><dd>{deadline(registration.paymentDeadline)}</dd></dl>
+            <dl><dt>Trạng thái đăng ký</dt><dd>{statusLabel(registration.status, "registration")}</dd><dt>Hạn thanh toán (giờ Việt Nam)</dt><dd>{deadline(registration.paymentDeadline)}</dd></dl>
             <p role="status">{registrationMessage(registration)}</p>
             {registration.status === "CONFIRMED" && <Link to="/member/schedule">Xem lịch học</Link>}
           </section>
           <section><h2>Lịch sử thanh toán của đăng ký</h2>{payments.length === 0 ? <p>Chưa có giao dịch được máy chủ ghi nhận.</p> : payments.map((payment) => <article key={payment.id}>
-            <h3>Thanh toán #{payment.id} · {payment.method}</h3><p>{money(payment.amount)} · {payment.status}</p><p role="status">{paymentMessage(payment)}</p>
+            <h3>Thanh toán #{payment.id} · {payment.method === "ONLINE" ? "VNPay" : payment.method === "COUNTER" ? "Tại quầy" : "Chưa xác định"}</h3><p>{money(payment.amount)} · {statusLabel(payment.status, "payment")}</p><p role="status">{paymentMessage(payment)}</p>
             {payment.method === "COUNTER" && payment.status === "PENDING" && <><p>Đến lễ tân trước {deadline(registration.paymentDeadline)}. Hội viên không thể tự xác nhận đã nhận tiền.</p><button type="button" disabled={busy} onClick={() => void cancelPendingPayment(payment)}>Hủy yêu cầu tại quầy</button></>}
             {payment.method === "ONLINE" && payment.status === "PENDING" && <><p>Liên kết VNPay có hiệu lực khoảng 15 phút và không thể khôi phục từ lịch sử. Không thể xác định giao dịch đang xử lý hay liên kết đã hết hạn. Không trả tiền lần nữa nếu đã bị trừ tiền; hãy liên hệ lễ tân.</p><button type="button" disabled={busy} onClick={() => void cancelPendingPayment(payment)}>Hủy thanh toán đang chờ</button></>}
           </article>)}</section>

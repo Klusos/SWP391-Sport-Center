@@ -94,10 +94,10 @@ export default function ReportPage({ token, currentUserName }) {
           {visibleLoading ? "Báo cáo đang được tải." : visibleError || "Không có dữ liệu báo cáo để in."}
         </p>
       )}
-      <div className="page-intro">
+      <div className="page-intro admin-page-header">
         <div>
           <h1>Báo cáo doanh thu</h1>
-          <p>Doanh thu được tính từ giao dịch SUCCESS theo thời điểm xác nhận thanh toán.</p>
+          <p>Doanh thu được tính từ các giao dịch đã thanh toán thành công theo thời điểm xác nhận.</p>
         </div>
       </div>
 
@@ -178,13 +178,13 @@ export default function ReportPage({ token, currentUserName }) {
               </article>
             ))}
           </section>
-          <p className="report-print-note">Doanh thu ghi nhận từ các giao dịch thanh toán đã xác nhận thành công (SUCCESS).</p>
+          <p className="report-print-note">Doanh thu ghi nhận từ các giao dịch thanh toán đã xác nhận thành công.</p>
 
           <section className="panel revenue-chart-panel">
             <div className="panel-head">
               <div>
                 <h2>Doanh thu theo thời gian</h2>
-                <p>Đơn vị: VND · Múi giờ: Asia/Ho_Chi_Minh · Chỉ tính trạng thái SUCCESS</p>
+                <p>Đơn vị: đồng Việt Nam · Múi giờ: Việt Nam · Chỉ tính giao dịch đã thanh toán thành công</p>
               </div>
               <span className="status info">Theo {applied.groupBy === "DAY" ? "ngày" : applied.groupBy === "YEAR" ? "năm" : "tháng"}</span>
             </div>
@@ -194,10 +194,10 @@ export default function ReportPage({ token, currentUserName }) {
               <div className="revenue-state">Không có kỳ doanh thu trong khoảng đã chọn.</div>
             )}
             {Number(report.totalRevenue || 0) === 0 && (
-              <p className="revenue-empty-note">Không có giao dịch SUCCESS trong khoảng ngày đã chọn.</p>
+              <p className="revenue-empty-note">Không có giao dịch thanh toán thành công trong khoảng ngày đã chọn.</p>
             )}
           </section>
-          <p className="revenue-footnote">PENDING, CANCELLED và REFUND_REQUIRED không được tính là doanh thu. REFUND_REQUIRED cần được xử lý riêng; báo cáo này không khẳng định khoản tiền đã được hoàn.</p>
+          <p className="revenue-footnote">Giao dịch đang chờ, đã hủy hoặc cần xử lý hoàn tiền không được tính là doanh thu. Yêu cầu hoàn tiền cần được xử lý riêng; báo cáo này không khẳng định khoản tiền đã được trả lại.</p>
         </>
       ) : null}
       </div>

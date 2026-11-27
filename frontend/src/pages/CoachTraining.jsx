@@ -2,33 +2,28 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import AdminTopBar from "../components/AdminTopBar";
 import IndividualTrainingPlans from "../components/IndividualTrainingPlans";
+import GeneralTrainingPlanTab from "../components/GeneralTrainingPlanTab.jsx";
 import AdminPtOutcomePanel from "./AdminPtOutcomePanel.jsx";
 import { acquireAction } from "../courseCheckout";
 import { canManageTrainingForRole } from "../trainingCapabilities";
+import { progressLevelLabel } from "../trainingPresentation.js";
 import {
-  addTrainingExerciseApi,
   completeTrainingSessionApi,
-  deleteTrainingExerciseApi,
   evaluateProgressApi,
   getTrainingClassesApi,
-  getTrainingPlanApi,
   getTrainingProgressApi,
   getTrainingResultSheetApi,
   getTrainingSessionsApi,
   recordTrainingResultApi,
-  saveTrainingPlanApi,
-  updateTrainingExerciseApi,
 } from "../api";
 import "./Training.css";
 
 const SESSION_STATUS = { SCHEDULED: "Đã lên lịch", COMPLETED: "Đã hoàn thành", CANCELLED: "Đã hủy" };
 const ATTENDANCE = { NOT_MARKED: "Chưa điểm danh", PRESENT: "Có mặt", ABSENT: "Vắng", EXCUSED: "Có phép" };
-const EMPTY_EXERCISE = { name: "", sets: "", reps: "", durationMinutes: "", notes: "" };
 
 const formatDateTime = (value) => value
   ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(value))
   : "—";
-const numberOrNull = (value) => value === "" || value == null ? null : Number(value);
 const errorText = (error, fallback) => error?.status === 403
   ? "Bạn không có quyền thao tác trên lớp này."
   : error?.message || fallback;
@@ -38,7 +33,15 @@ export default function CoachTraining({ token, role, currentUserName, onLogout, 
   const isAdmin = role === "ADMIN";
   const [classes, setClasses] = useState([]);
   const [classId, setClassId] = useState("");
+  const [selectedCourseId, setSelectedCourseId] = useState("");
+  const [selectionQuery, setSelectionQuery] = useState("");
+  const [selectionSport, setSelectionSport] = useState("");
+  const [selectionFrom, setSelectionFrom] = useState("");
+  const [selectionTo, setSelectionTo] = useState("");
+  const [courseSelectionPage, setCourseSelectionPage] = useState(1);
+  const [classSelectionPage, setClassSelectionPage] = useState(1);
   const [tab, setTab] = useState("plan");
+  const [trainingDraftDirty, setTrainingDraftDirty] = useState(false);
   const [adminTrainingView, setAdminTrainingView] = useState("class");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -49,7 +52,7 @@ export default function CoachTraining({ token, role, currentUserName, onLogout, 
     try {
       const rows = await getTrainingClassesApi(token);
       setClasses(Array.isArray(rows) ? rows : []);
-      setClassId((current) => current || (rows?.[0]?.classId ? String(rows[0].classId) : ""));
+      setClassId((current) => rows?.some((row) => String(row.classId) === current) ? current : "");
     } catch (requestError) {
       setError(errorText(requestError, "Không tải được danh sách lớp."));
     } finally {
@@ -64,6 +67,28 @@ export default function CoachTraining({ token, role, currentUserName, onLogout, 
   }, [loadClasses]);
 
   const selected = classes.find((item) => String(item.classId) === classId);
+  function mayLeaveTrainingDraft() {
+    if (trainingDraftDirty && !window.confirm("Bạn có thay đổi giáo án chưa lưu. Tiếp tục và bỏ các thay đổi này?")) return false;
+    setTrainingDraftDirty(false);
+    return true;
+  }
+  function changeWorkspaceTab(nextTab) {
+    if (!mayLeaveTrainingDraft()) return;
+    setTab(nextTab);
+  }
+  const selectionPage = selectedCourseId ? classSelectionPage : courseSelectionPage;
+  const setSelectionPage = (update) => selectedCourseId ? setClassSelectionPage(update) : setCourseSelectionPage(update);
+  const courses = [...new Map(classes.map((item) => [String(item.courseId), item])).values()];
+  const sports = [...new Map(classes.map((item) => [String(item.sportId), item])).values()];
+  const term = selectionQuery.trim().toLocaleLowerCase("vi");
+  const visibleCourses = courses.filter((item) => (!term || `${item.courseName} ${item.courseId}`.toLocaleLowerCase("vi").includes(term))
+    && (!selectionSport || String(item.sportId) === selectionSport));
+  const visibleClasses = classes.filter((item) => String(item.courseId) === selectedCourseId
+    && (!term || `${item.className} ${item.classId}`.toLocaleLowerCase("vi").includes(term))
+    && (!selectionFrom || !item.endDate || item.endDate >= selectionFrom)
+    && (!selectionTo || !item.startDate || item.startDate <= selectionTo));
+  const selectionPages = Math.max(1, Math.ceil((selectedCourseId ? visibleClasses.length : visibleCourses.length) / 10));
+  const pageRows = (selectedCourseId ? visibleClasses : visibleCourses).slice((Math.min(selectionPage, selectionPages) - 1) * 10, Math.min(selectionPage, selectionPages) * 10);
   const flash = (message) => { setError(""); setNotice(message); };
   const fail = (requestError, fallback) => { setNotice(""); setError(errorText(requestError, fallback)); };
 
@@ -77,14 +102,6 @@ export default function CoachTraining({ token, role, currentUserName, onLogout, 
           <h1>Giáo án &amp; kết quả</h1>
           <p className="subtitle">{canManageTraining ? "Lập giáo án, mục tiêu và bài tập cho lớp được giao; hoàn thành buổi học, ghi kết quả và đánh giá tiến độ." : "Chế độ chỉ xem: theo dõi giáo án, buổi học, kết quả và tiến độ của lớp."}</p>
         </div>
-        <label className="training-class-picker">Lớp
-          <select value={classId} onChange={(event) => { setClassId(event.target.value); setNotice(""); setError(""); }} disabled={loading || !classes.length}>
-            {!classes.length && <option value="">Chưa có lớp được giao</option>}
-            {classes.map((item) => <option key={item.classId} value={item.classId}>
-              {item.className} · {item.courseName}
-            </option>)}
-          </select>
-        </label>
       </header>
       {isAdmin && <nav className="training-admin-view-tabs" role="tablist" aria-label="Khu vực giám sát huấn luyện">
         <button type="button" role="tab" aria-selected={adminTrainingView === "class"} className={adminTrainingView === "class" ? "active" : ""} onClick={() => setAdminTrainingView("class")}>Giáo án &amp; kết quả lớp học</button>
@@ -97,7 +114,24 @@ export default function CoachTraining({ token, role, currentUserName, onLogout, 
         <AdminPtOutcomePanel token={token} />
       </section> : null}
 
-      {(!isAdmin || adminTrainingView === "class") && (loading ? <p role="status">Đang tải…</p> : !selected ? <p className="dash-empty">Bạn chưa được giao lớp nào.</p> : <>
+      {(!isAdmin || adminTrainingView === "class") && (loading ? <p role="status">Đang tải…</p> : !selected ? <section className="training-selection training-content-frame">
+        <div className="training-selection-heading"><div>
+          <h2>{selectedCourseId ? "Chọn lớp học" : "Chọn khóa học"}</h2>
+          <p>{selectedCourseId ? `Khóa học: ${courses.find((item) => String(item.courseId) === selectedCourseId)?.courseName || "Khóa học đã chọn"}` : "Chọn khóa học để xem danh sách lớp học."}</p>
+        </div><span>{selectedCourseId ? `${visibleClasses.length} lớp học` : `${visibleCourses.length} khóa học`}</span></div>
+        {selectedCourseId && <div className="training-selection-back-row"><button type="button" className="secondary" onClick={() => setSelectedCourseId("")}>Quay lại khóa học</button></div>}
+        <div className={`training-selection-filters${selectedCourseId ? " has-class-filters" : " has-course-filters"}`}>
+          <label>{selectedCourseId ? "Tìm lớp học" : "Tìm khóa học"}<input value={selectionQuery} onChange={(event) => { setSelectionQuery(event.target.value); setSelectionPage(1); }} /></label>
+          {!selectedCourseId && <label>Bộ môn<select value={selectionSport} onChange={(event) => { setSelectionSport(event.target.value); setSelectionPage(1); }}><option value="">Tất cả bộ môn</option>{sports.map((item) => <option key={item.sportId} value={item.sportId}>{item.sportName}</option>)}</select></label>}
+          {selectedCourseId && <><label>Từ ngày<input type="date" value={selectionFrom} onChange={(event) => { setSelectionFrom(event.target.value); setSelectionPage(1); }} /></label><label>Đến ngày<input type="date" value={selectionTo} onChange={(event) => { setSelectionTo(event.target.value); setSelectionPage(1); }} /></label></>}
+        </div>
+        {pageRows.length === 0 ? <p className="dash-empty">Không tìm thấy dữ liệu phù hợp.</p> : <div className="training-selection-list">{pageRows.map((item) => <button type="button" key={selectedCourseId ? item.classId : item.courseId} onClick={() => { if (selectedCourseId) { setClassId(String(item.classId)); setTab("plan"); } else { setSelectedCourseId(String(item.courseId)); setClassSelectionPage(1); } }}>
+          <strong>{selectedCourseId ? item.className : item.courseName}</strong><span>{item.sportName} · {selectedCourseId ? `${item.courseOfferingName || "Đợt học"} · ${item.confirmedMembers} học viên` : `${classes.filter((row) => String(row.courseId) === String(item.courseId)).length} lớp học`}</span>
+        </button>)}</div>}
+        <nav className="training-selection-pager"><span>{selectedCourseId ? visibleClasses.length : visibleCourses.length} mục · Trang {Math.min(selectionPage, selectionPages)}/{selectionPages}</span><button type="button" disabled={selectionPage <= 1} onClick={() => setSelectionPage((page) => Math.max(1, page - 1))}>Trước</button><button type="button" disabled={selectionPage >= selectionPages} onClick={() => setSelectionPage((page) => Math.min(selectionPages, page + 1))}>Sau</button></nav>
+      </section> : <section className="training-workspace-frame training-content-frame">
+        <div className="training-workspace-heading"><div><h2>{selected.className}</h2><p><strong>Khóa học:</strong> {selected.courseName} <span>·</span> <strong>Lớp:</strong> {selected.className}</p></div></div>
+        <div className="training-workspace-back-row"><button type="button" className="secondary" onClick={() => { if (mayLeaveTrainingDraft()) setClassId(""); }}>Quay lại danh sách lớp</button></div>
         <section className="training-summary">
           <span><b>{selected.sportName}</b> · {selected.courseOfferingName}</span>
           <span>{selected.confirmedMembers} học viên</span>
@@ -106,161 +140,19 @@ export default function CoachTraining({ token, role, currentUserName, onLogout, 
         </section>
         <nav className="training-tabs" role="tablist">
           {[["plan", "1. Giáo án & bài tập"], ["sessions", "2. Buổi học & kết quả"], ["progress", "3. Đánh giá tiến độ"], ["individual", "4. Giáo án cá nhân"]].map(([key, label]) =>
-            <button key={key} type="button" role="tab" aria-selected={tab === key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>{label}</button>)}
+            <button key={key} type="button" role="tab" aria-selected={tab === key} className={tab === key ? "active" : ""} onClick={() => changeWorkspaceTab(key)}>{label}</button>)}
         </nav>
-        {tab === "plan" && <PlanTab key={classId} token={token} classId={classId} canManageTraining={canManageTraining} onSaved={loadClasses} flash={flash} fail={fail} />}
+        {tab === "plan" && <PlanTab key={classId} token={token} classId={classId} classInfo={selected} canManageTraining={canManageTraining} onSaved={loadClasses} flash={flash} fail={fail} onDraftDirtyChange={setTrainingDraftDirty} />}
         {tab === "sessions" && <SessionsTab key={classId} token={token} classId={classId} canManageTraining={canManageTraining} onChanged={loadClasses} flash={flash} fail={fail} />}
         {tab === "progress" && <ProgressTab key={classId} token={token} classId={classId} canManageTraining={canManageTraining} flash={flash} fail={fail} />}
         {tab === "individual" && <IndividualTrainingPlans key={classId} mode={canManageTraining ? "coach" : "admin-readonly"} canManageTraining={canManageTraining} token={token} classId={classId} />}
-      </>)}
+      </section>)}
       </div>
     </main>
   </div>;
 }
 
-function PlanTab({ token, classId, canManageTraining, onSaved, flash, fail }) {
-  const [plan, setPlan] = useState(null);
-  const [form, setForm] = useState({ goal: "", description: "" });
-  const [exercise, setExercise] = useState(EMPTY_EXERCISE);
-  const [editingId, setEditingId] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const actionLock = useRef(false);
-  const [loaded, setLoaded] = useState(false);
-
-  const load = useCallback(async () => {
-    try {
-      const data = await getTrainingPlanApi(token, classId);
-      setPlan(data);
-      setForm({ goal: data.goal || "", description: data.description || "" });
-    } catch (requestError) {
-      if (requestError.status === 404) { setPlan(null); setForm({ goal: "", description: "" }); }
-      else fail(requestError, "Không tải được giáo án.");
-    } finally {
-      setLoaded(true);
-    }
-  }, [token, classId, fail]);
-
-  useEffect(() => {
-    let active = true;
-    Promise.resolve().then(() => active && load());
-    return () => { active = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, classId]);
-
-  async function savePlan(event) {
-    event.preventDefault();
-    if (!canManageTraining) return;
-    if (!acquireAction(actionLock)) return;
-    setBusy(true);
-    try {
-      const saved = await saveTrainingPlanApi(token, classId, { goal: form.goal, description: form.description || null });
-      setPlan(saved);
-      flash(plan ? "Đã cập nhật giáo án." : "Đã tạo giáo án. Bạn có thể thêm bài tập.");
-      onSaved();
-    } catch (requestError) { fail(requestError, "Không lưu được giáo án."); }
-    finally { actionLock.current = false; setBusy(false); }
-  }
-
-  async function saveExercise(event) {
-    event.preventDefault();
-    if (!canManageTraining) return;
-    if (!acquireAction(actionLock)) return;
-    setBusy(true);
-    const payload = {
-      name: exercise.name,
-      sets: numberOrNull(exercise.sets),
-      reps: numberOrNull(exercise.reps),
-      durationMinutes: numberOrNull(exercise.durationMinutes),
-      notes: exercise.notes || null,
-      sortOrder: editingId ? plan.exercises.find((item) => item.id === editingId)?.sortOrder : null,
-    };
-    try {
-      if (editingId) await updateTrainingExerciseApi(token, editingId, payload);
-      else await addTrainingExerciseApi(token, classId, payload);
-      flash(editingId ? "Đã sửa bài tập." : "Đã thêm bài tập.");
-      setExercise(EMPTY_EXERCISE);
-      setEditingId(null);
-      await load();
-    } catch (requestError) { fail(requestError, "Không lưu được bài tập."); }
-    finally { actionLock.current = false; setBusy(false); }
-  }
-
-  async function removeExercise(item) {
-    if (!canManageTraining) return;
-    if (!window.confirm(`Xóa bài tập “${item.name}”?`)) return;
-    if (!acquireAction(actionLock)) return;
-    setBusy(true);
-    try {
-      await deleteTrainingExerciseApi(token, item.id);
-      flash("Đã xóa bài tập.");
-      await load();
-    } catch (requestError) { fail(requestError, "Không xóa được bài tập."); }
-    finally { actionLock.current = false; setBusy(false); }
-  }
-
-  function edit(item) {
-    setEditingId(item.id);
-    setExercise({
-      name: item.name, sets: item.sets ?? "", reps: item.reps ?? "",
-      durationMinutes: item.durationMinutes ?? "", notes: item.notes ?? "",
-    });
-  }
-
-  if (!loaded) return <p role="status">Đang tải giáo án…</p>;
-  return <div className="training-grid">
-    <section className="dash-card">
-      <h2>Giáo án &amp; mục tiêu</h2>
-      {canManageTraining ? <form className="training-form" onSubmit={savePlan}>
-        <label>Mục tiêu tập luyện *
-          <input required maxLength={500} value={form.goal} onChange={(event) => setForm({ ...form, goal: event.target.value })}
-            placeholder="Ví dụ: Đánh cầu qua lại liên tục 20 lần" />
-        </label>
-        <label>Mô tả giáo án
-          <textarea maxLength={2000} rows={4} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })}
-            placeholder="Nội dung chính, phương pháp, lưu ý an toàn…" />
-        </label>
-        <button type="submit" disabled={busy}>{plan ? "Cập nhật giáo án" : "Tạo giáo án"}</button>
-        {plan && <small className="training-muted">Cập nhật lần cuối {formatDateTime(plan.updatedAt)} bởi {plan.updatedByName || `#${plan.updatedById}`}</small>}
-      </form> : plan ? <div className="training-form">
-        <p><strong>Mục tiêu:</strong> {plan.goal}</p>
-        {plan.description && <p>{plan.description}</p>}
-        <small className="training-muted">Cập nhật lần cuối {formatDateTime(plan.updatedAt)} bởi {plan.updatedByName || `#${plan.updatedById}`}</small>
-      </div> : <p className="dash-empty">Lớp chưa có giáo án.</p>}
-    </section>
-
-    <section className="dash-card">
-      <h2>Bài tập <small>{plan ? `${plan.exercises.length} bài` : ""}</small></h2>
-      {!plan ? <p className="dash-empty">Tạo giáo án trước khi thêm bài tập.</p> : <>
-        {plan.exercises.length === 0 ? <p className="dash-empty">Chưa có bài tập.</p>
-          : <ol className="training-exercises">{plan.exercises.map((item) => <li key={item.id}>
-            <div>
-              <b>{item.name}</b>
-              <small>{[item.sets && `${item.sets} hiệp`, item.reps && `${item.reps} lần`, item.durationMinutes && `${item.durationMinutes} phút`].filter(Boolean).join(" · ") || "—"}</small>
-              {item.notes && <small>{item.notes}</small>}
-            </div>
-            {canManageTraining && <span>
-              <button type="button" className="training-link-button" disabled={busy} onClick={() => edit(item)}>Sửa</button>
-              <button type="button" className="training-link-button danger" disabled={busy} onClick={() => void removeExercise(item)}>Xóa</button>
-            </span>}
-          </li>)}</ol>}
-        {canManageTraining && <form className="training-form training-exercise-form" onSubmit={saveExercise}>
-          <h3>{editingId ? "Sửa bài tập" : "Thêm bài tập"}</h3>
-          <label>Tên bài tập *<input required maxLength={150} value={exercise.name} onChange={(event) => setExercise({ ...exercise, name: event.target.value })} /></label>
-          <div className="training-inline">
-            <label>Số hiệp<input type="number" min={1} max={100} value={exercise.sets} onChange={(event) => setExercise({ ...exercise, sets: event.target.value })} /></label>
-            <label>Số lần<input type="number" min={1} max={1000} value={exercise.reps} onChange={(event) => setExercise({ ...exercise, reps: event.target.value })} /></label>
-            <label>Phút<input type="number" min={1} max={240} value={exercise.durationMinutes} onChange={(event) => setExercise({ ...exercise, durationMinutes: event.target.value })} /></label>
-          </div>
-          <label>Ghi chú<input maxLength={500} value={exercise.notes} onChange={(event) => setExercise({ ...exercise, notes: event.target.value })} /></label>
-          <span className="training-actions">
-            <button type="submit" disabled={busy}>{editingId ? "Lưu bài tập" : "Thêm bài tập"}</button>
-            {editingId && <button type="button" className="secondary" onClick={() => { setEditingId(null); setExercise(EMPTY_EXERCISE); }}>Hủy sửa</button>}
-          </span>
-        </form>}
-      </>}
-    </section>
-  </div>;
-}
+function PlanTab(props) { return <GeneralTrainingPlanTab {...props}/>; }
 
 function SessionsTab({ token, classId, canManageTraining, onChanged, flash, fail }) {
   const [sessions, setSessions] = useState(null);
@@ -404,10 +296,10 @@ function ProgressTab({ token, classId, canManageTraining, flash, fail }) {
     return <section key={row.memberId} className="dash-card">
       <h2>{row.memberName} <small>Có mặt {row.sessionsPresent}/{row.sessionsMarked} buổi đã điểm danh · {row.resultsRecorded} kết quả · Điểm TB {row.averageScore ?? "—"}</small></h2>
       {row.latestEvaluation
-        ? <p><Stars value={row.latestEvaluation.rating} /> {row.latestEvaluation.comment} <small className="training-muted">({formatDateTime(row.latestEvaluation.evaluatedAt)})</small></p>
+        ? <p><strong>{row.latestEvaluation.rating}/5 · {progressLevelLabel(row.latestEvaluation.rating)}</strong> <Stars value={row.latestEvaluation.rating} /> {row.latestEvaluation.comment} <small className="training-muted">({formatDateTime(row.latestEvaluation.evaluatedAt)})</small></p>
         : <p className="training-muted">Chưa có đánh giá tiến độ.</p>}
       {row.evaluationHistory.length > 1 && <details><summary>Lịch sử đánh giá ({row.evaluationHistory.length})</summary>
-        <ul>{row.evaluationHistory.map((item) => <li key={item.id}><Stars value={item.rating} /> {item.comment} — {formatDateTime(item.evaluatedAt)}</li>)}</ul>
+        <ul>{row.evaluationHistory.map((item) => <li key={item.id}><b>{item.rating}/5 · {progressLevelLabel(item.rating)}</b> <Stars value={item.rating} /> {item.comment} — {formatDateTime(item.evaluatedAt)}</li>)}</ul>
       </details>}
       {canManageTraining && <form className="training-inline" onSubmit={(event) => { event.preventDefault(); void evaluate(row); }}>
         <label>Mức tiến độ

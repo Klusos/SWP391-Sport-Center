@@ -155,6 +155,53 @@ class ConsultationRequestIntegrationTest {
     }
 
     @Test
+    void authenticatedMemberConsultationUsesAccountIdentityInsteadOfSubmittedIdentity() {
+        member.setName("Authoritative Member");
+        member.setEmail("authoritative-member@example.test");
+        member.setPhone("0901234567");
+        member = users.saveAndFlush(member);
+
+        CreateConsultationRequest tampered = new CreateConsultationRequest(
+                "Different Person", "0999999999", "other@example.test", sport.getId(), 22,
+                "Kinh nghiệm hợp lệ", "Yêu cầu tư vấn hợp lệ", LocalDate.of(1990, 1, 1));
+        ConsultationResponse created = service.create(tampered, jwt(member));
+
+        ConsultationRequest persisted = consultations.findById(created.id()).orElseThrow();
+        assertEquals(member.getId(), persisted.getMember().getId());
+        assertEquals("Authoritative Member", persisted.getName());
+        assertEquals("authoritative-member@example.test", persisted.getEmail());
+        assertEquals("0901234567", persisted.getPhone());
+        assertEquals("Kinh nghiệm hợp lệ", persisted.getExperience());
+        assertEquals("Yêu cầu tư vấn hợp lệ", persisted.getNote());
+        assertEquals(sport.getId(), persisted.getSport().getId());
+        assertEquals(member.getDateOfBirth(), persisted.getDateOfBirth());
+    }
+
+    @Test
+    void memberApiIgnoresTamperedIdentityAndMemberIdFields() throws Exception {
+        member.setName("Account Name");
+        member.setEmail("account-name@example.test");
+        member.setPhone("0907654321");
+        member = users.saveAndFlush(member);
+        String body = "{\"name\":\"Tampered Name\",\"phone\":\"0999999999\","
+                + "\"email\":\"tampered@example.test\",\"memberId\":" + otherMember.getId() + ","
+                + "\"sportId\":" + sport.getId() + ",\"experience\":\"Relevant experience\","
+                + "\"note\":\"A valid consultation request\",\"dateOfBirth\":\"1990-01-01\"}";
+
+        mvc.perform(post("/api/consultation-requests")
+                        .header("Authorization", bearer(member))
+                        .contentType("application/json")
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.memberId").value(member.getId()))
+                .andExpect(jsonPath("$.name").value("Account Name"))
+                .andExpect(jsonPath("$.email").value("account-name@example.test"))
+                .andExpect(jsonPath("$.phone").value("0907654321"))
+                .andExpect(jsonPath("$.experience").value("Relevant experience"))
+                .andExpect(jsonPath("$.note").value("A valid consultation request"));
+    }
+
+    @Test
     void serviceRejectsMissingOrInvalidEmailAndAllowsRepeatedConsultationsForOneEmail() {
         for (String invalidEmail : new String[] { null, "", "   ", "not-an-email" }) {
             assertStatus(400, () -> service.create(request(invalidEmail, null), null));
@@ -609,6 +656,7 @@ class ConsultationRequestIntegrationTest {
         User user = new User();
         user.setName(role + " user");
         user.setEmail(role + "-" + UUID.randomUUID() + "@example.test");
+        user.setPhone("090" + String.format("%07d", Math.abs(UUID.randomUUID().hashCode()) % 10_000_000));
         user.setRole(role);
         user.setStatus("ACTIVE");
         user.setPasswordHash("test-only-unused-hash");

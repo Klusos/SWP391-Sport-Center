@@ -38,7 +38,7 @@ public class PtBookingOutcomeFallbackScheduler {
         this.globalSchedulingEnabled = globalSchedulingEnabled;
     }
 
-    @Scheduled(fixedDelayString = "${sportcenter.pt.outcome-fallback.interval-ms:60000}")
+    @Scheduled(fixedDelayString = "${sportcenter.pt.outcome-fallback.interval-ms}")
     public int completeDueOutcomes() {
         if (!globalSchedulingEnabled) return 0;
         LocalDateTime cutover = parseCutover();

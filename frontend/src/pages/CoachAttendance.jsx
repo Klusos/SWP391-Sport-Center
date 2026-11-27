@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Sidebar from "../components/Sidebar";
 import {
   getAttendanceHistoryApi,
   getAttendanceRosterApi,
   getCoachAttendanceSessionsApi,
   markAttendanceApi,
+  submitInitialAttendanceApi,
 } from "../api";
 import { applyAttendanceRequestIfCurrent, attendanceRowKey, isCurrentAttendanceRosterRequest } from "../attendanceRequests";
 import {
@@ -13,6 +14,7 @@ import {
   paginateAttendanceSessions,
 } from "../coachAttendanceView.js";
 import { buildAttendanceCsv } from "../attendanceCsv.js";
+import { attendanceSessionStatusLabel } from "../attendanceStatusPresentation.js";
 import "./CoachAttendance.css";
 
 const STATUS_LABELS = {
@@ -39,6 +41,11 @@ function formatDateTime(value) {
   return date ? date.toLocaleString("vi-VN") : "Chưa có thời gian";
 }
 
+function formatDate(value) {
+  const date = parseLocalDateTime(value);
+  return date ? date.toLocaleDateString("vi-VN") : "Chưa có ngày";
+}
+
 function formatTime(value) {
   const date = parseLocalDateTime(value);
   return date ? date.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }) : "—";
@@ -62,6 +69,7 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
   const [classFilter, setClassFilter] = useState("");
   const [view, setView] = useState("list");
   const [sessionPage, setSessionPage] = useState(1);
+  const [workQueuePage, setWorkQueuePage] = useState(1);
   const [roster, setRoster] = useState(null);
   const [rosterLoading, setRosterLoading] = useState(false);
   const [rosterError, setRosterError] = useState("");
@@ -101,6 +109,9 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
   const members = Array.isArray(roster?.members) ? roster.members : [];
   const sessionCancelled = String(roster?.sessionStatus || selectedSession?.sessionStatus || "").toUpperCase() === "CANCELLED";
   const canMark = Boolean(roster) && roster.markingAllowed === true && !sessionCancelled;
+  const initialSubmission = Boolean(roster) && ["NOT_RECORDED", "PARTIAL"].includes(roster.attendanceCompleteness);
+  const showActionColumn = !initialSubmission || members.some((member) => member?.attendanceId != null
+    || attendanceIds[attendanceRowKey(selectedSessionId, member?.memberId)] != null);
   const busy = savingMemberId !== null || savingAll;
   const rowState = (member) => {
     const rowKey = attendanceRowKey(selectedSessionId, member?.memberId);
@@ -122,8 +133,15 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
     : members;
   const pendingMembers = members.filter((member) => {
     const state = rowState(member);
-    return state.changed && ["PRESENT", "ABSENT", "EXCUSED"].includes(state.chosenStatus);
+    return state.changed && ["PRESENT", "ABSENT"].includes(state.chosenStatus);
   });
+  const attendanceWorkRows = sessions.filter((session) => ["NOT_RECORDED", "PARTIAL"].includes(session.attendanceCompleteness));
+  const attendanceWorkPage = paginateAttendanceSessions(attendanceWorkRows, workQueuePage, 10);
+  const workCounts = sessions.reduce((counts, session) => {
+    if (["NOT_RECORDED", "PARTIAL"].includes(session.attendanceCompleteness)) counts.needsAttendance++;
+    else if (session.attendanceCompleteness === "COMPLETE") counts.complete++;
+    return counts;
+  }, { needsAttendance: 0, complete: 0 });
 
   useEffect(() => {
     mountedRef.current = true;
@@ -263,13 +281,13 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
   }
 
   async function saveAttendance(member) {
-    if (!roster || !selectedSessionId || busy || sessionCancelled || roster.markingAllowed !== true) return;
+    if (!roster || initialSubmission || !selectedSessionId || busy || sessionCancelled || roster.markingAllowed !== true) return;
     const memberId = member?.memberId;
     if (memberId == null) return;
     const rowKey = attendanceRowKey(selectedSessionId, memberId);
     const currentStatus = member.attendanceStatus || "NOT_MARKED";
     const nextStatus = selectedStatuses[rowKey] ?? currentStatus;
-    if (!["PRESENT", "ABSENT", "EXCUSED"].includes(nextStatus) || nextStatus === currentStatus) return;
+    if (!["PRESENT", "ABSENT"].includes(nextStatus) || nextStatus === currentStatus) return;
 
     const correcting = currentStatus !== "NOT_MARKED";
     const reason = String(reasons[rowKey] || "").trim();
@@ -278,7 +296,7 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
       return;
     }
     if (correcting && !window.confirm(
-      "Xác nhận điều chỉnh điểm danh của " + (member.memberName || "Member #" + memberId)
+      "Xác nhận điều chỉnh điểm danh của " + (member.memberName || "Học viên #" + memberId)
       + " từ “" + statusLabel(currentStatus) + "” sang “" + statusLabel(nextStatus) + "”?",
     )) return;
 
@@ -295,8 +313,8 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
       if (response?.id != null) setAttendanceIds((current) => ({ ...current, [rowKey]: response.id }));
       setSelectedStatuses((current) => ({ ...current, [rowKey]: nextStatus }));
       if (String(selectedSessionIdRef.current) === String(selectedSessionId)) {
-        setNotice("Đã lưu điểm danh cho " + (member.memberName || "Member #" + memberId) + ".");
-        await loadRoster(selectedSessionId);
+        setNotice("Đã lưu điểm danh cho " + (member.memberName || "Học viên #" + memberId) + ".");
+        await Promise.all([loadRoster(selectedSessionId), loadSessions()]);
       }
     } catch (error) {
       if (mountedRef.current) setRowErrors((current) => ({ ...current, [rowKey]: errorMessage(error, "Không lưu được điểm danh.") }));
@@ -306,15 +324,47 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
   }
 
   function markAllPresent() {
-    if (!canMark || busy) return;
+    if (!canMark || !initialSubmission || busy) return;
     setSelectedStatuses((current) => {
       const next = { ...current };
-      members.forEach((member) => { next[attendanceRowKey(selectedSessionId, member?.memberId)] = "PRESENT"; });
+      members.filter((member) => (member?.attendanceStatus || "NOT_MARKED") === "NOT_MARKED")
+        .forEach((member) => { next[attendanceRowKey(selectedSessionId, member?.memberId)] = "PRESENT"; });
       return next;
     });
   }
 
   async function saveAll() {
+    if (initialSubmission) {
+      if (!canMark || busy) return;
+      const unselected = members.filter((member) => {
+        const current = member?.attendanceStatus || "NOT_MARKED";
+        const chosen = selectedStatuses[attendanceRowKey(selectedSessionId, member?.memberId)] ?? current;
+        return current === "NOT_MARKED" && !["PRESENT", "ABSENT"].includes(chosen);
+      });
+      if (unselected.length) {
+        setNotice(`${unselected.length} học viên chưa được chọn trạng thái.`);
+        return;
+      }
+      const sessionId = selectedSessionId;
+      setSavingAll(true);
+      setNotice("");
+      try {
+        await submitInitialAttendanceApi(token, sessionId, members.map((member) => {
+          const rowKey = attendanceRowKey(sessionId, member.memberId);
+          return { memberId: member.memberId, status: selectedStatuses[rowKey] ?? member.attendanceStatus,
+            note: String(notes[rowKey] ?? member.note ?? "").trim() || null };
+        }));
+        if (mountedRef.current && String(selectedSessionIdRef.current) === String(sessionId)) {
+          setNotice("Đã gửi điểm danh cho toàn bộ học viên.");
+          await Promise.all([loadRoster(sessionId), loadSessions()]);
+        }
+      } catch (error) {
+        if (mountedRef.current) setRosterError(errorMessage(error, "Không thể gửi điểm danh. Hãy tải lại danh sách."));
+      } finally {
+        if (mountedRef.current) setSavingAll(false);
+      }
+      return;
+    }
     if (!canMark || busy || pendingMembers.length === 0) return;
     const missingReasons = pendingMembers.filter((member) => {
       const state = rowState(member);
@@ -362,7 +412,7 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
       : saved === batch.length
       ? `Đã lưu điểm danh cho ${saved} học viên.`
       : `Đã lưu ${saved}/${batch.length} học viên; các dòng báo lỗi cần được kiểm tra.`);
-    if (String(selectedSessionIdRef.current) === String(sessionId)) await loadRoster(sessionId);
+    if (String(selectedSessionIdRef.current) === String(sessionId)) await Promise.all([loadRoster(sessionId), loadSessions()]);
   }
 
   function exportCsv() {
@@ -411,12 +461,7 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
   }
 
   function sessionAvailability(session) {
-    if (String(session?.sessionStatus || "").toUpperCase() === "CANCELLED") return "Buổi học đã hủy";
-    const start = parseLocalDateTime(session?.startTime);
-    if (!start) return "Chưa xác định thời điểm điểm danh";
-    if (Date.now() < start.getTime()) return "Chưa đến giờ điểm danh";
-    if (String(session?.sessionStatus || "").toUpperCase() === "COMPLETED") return "Có thể điểm danh bổ sung";
-    return "Có thể điểm danh";
+    return attendanceSessionStatusLabel(session);
   }
 
   return (
@@ -429,8 +474,8 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
               <p className="pt-eyebrow">SPORTCENTER / COACH</p>
               <h1>Quản lý điểm danh</h1>
               <p>{view === "list"
-                ? "Chọn lớp và buổi học được phân công để xem danh sách Member đã đăng ký."
-                : "Xem thông tin và điểm danh Member của buổi học đã chọn."}</p>
+                ? "Chọn lớp và buổi học được phân công để xem danh sách học viên đã đăng ký."
+                : "Xem thông tin và điểm danh học viên của buổi học đã chọn."}</p>
             </div>
             <button type="button" className="coach-attendance-refresh" onClick={() => void loadSessions()} disabled={sessionsLoading}>
               {sessionsLoading ? "Đang tải…" : "Làm mới"}
@@ -440,7 +485,31 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
           {sessionsError && <p className="coach-attendance-alert is-error" role="alert">{sessionsError}</p>}
           {notice && <p className="coach-attendance-alert is-success" role="status">{notice}</p>}
 
-          {view === "list" ? <section className="coach-attendance-panel coach-attendance-session-list-view" aria-labelledby="coach-attendance-sessions-title">
+          {view === "list" ? <>
+          <section className="coach-attendance-panel coach-attendance-work-queue" aria-labelledby="coach-attendance-work-queue-title">
+            <div className="coach-attendance-section-heading"><div><h2 id="coach-attendance-work-queue-title">Buổi học cần điểm danh</h2><p>Thống kê các buổi đã bắt đầu, có học viên đủ điều kiện điểm danh và chưa ghi nhận đầy đủ.</p></div><span>{attendanceWorkRows.length} buổi cần xử lý</span></div>
+            <div className="coach-attendance-work-summary" aria-label="Tình trạng điểm danh đã lưu">
+              <div><span>Cần điểm danh</span><strong>{workCounts.needsAttendance}</strong></div>
+              <div><span>Đã điểm danh</span><strong>{workCounts.complete}</strong></div>
+            </div>
+            {attendanceWorkRows.length === 0 ? <p className="coach-attendance-empty">Không có buổi học nào cần điểm danh.</p> : <>
+              <div className="coach-attendance-sessions" role="list" aria-label="Buổi học đang cần điểm danh">
+                {attendanceWorkPage.items.map((session) => <button type="button" role="listitem" className="coach-attendance-session" key={session.classSessionId} onClick={() => chooseSession(session.classSessionId)}>
+                  <span className="coach-attendance-session-title"><strong>{session.courseName}</strong><span>{session.courseClassName}</span></span>
+                  <span className="coach-attendance-session-time"><strong>{formatDate(session.startTime)}</strong><span>{formatTime(session.startTime)} – {formatTime(session.endTime)}</span></span>
+                  <span className="coach-attendance-badge attendance-unrecorded">{session.attendanceCompleteness === "NOT_RECORDED" ? "Chưa điểm danh" : "Chưa hoàn tất"}</span>
+                  <span>{session.recordedAttendanceCount}/{session.eligibleStudentCount} học viên</span>
+                  <span className="coach-attendance-work-action">{session.attendanceCompleteness === "NOT_RECORDED" ? "Điểm danh" : "Tiếp tục"} →</span>
+                </button>)}
+              </div>
+              {attendanceWorkPage.totalPages > 1 && <nav className="coach-attendance-session-pagination" aria-label="Phân trang hàng đợi điểm danh">
+                <button type="button" className="coach-attendance-history-button" onClick={() => setWorkQueuePage(attendanceWorkPage.page - 1)} disabled={attendanceWorkPage.page <= 1}>Trước</button>
+                <span>Trang {attendanceWorkPage.page}/{attendanceWorkPage.totalPages} · {attendanceWorkPage.total} buổi</span>
+                <button type="button" className="coach-attendance-history-button" onClick={() => setWorkQueuePage(attendanceWorkPage.page + 1)} disabled={attendanceWorkPage.page >= attendanceWorkPage.totalPages}>Sau</button>
+              </nav>}
+            </>}
+          </section>
+          <section className="coach-attendance-panel coach-attendance-session-list-view" aria-labelledby="coach-attendance-sessions-title">
             <div className="coach-attendance-section-heading">
               <div>
                 <h2 id="coach-attendance-sessions-title">Buổi học được phân công</h2>
@@ -482,13 +551,13 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
                           {(session?.sportName || session?.sportId != null) && <span>{session?.sportName || "Môn thể thao"}{session?.sportId != null ? " · Sport #" + session.sportId : ""}</span>}
                         </span>
                         <span className="coach-attendance-session-time">
-                          <strong>{formatDateTime(session?.startTime)}</strong>
+                          <strong>{formatDate(session?.startTime)}</strong>
                           <span>{formatTime(session?.startTime)} – {formatTime(session?.endTime)}</span>
                         </span>
                         <span className={"coach-attendance-badge status-" + String(session?.sessionStatus || "unknown").toLowerCase()}>
                           {SESSION_STATUS_LABELS[session?.sessionStatus] || session?.sessionStatus || "Chưa xác định"}
                         </span>
-                        <span className="coach-attendance-availability">{sessionAvailability(session)}</span>
+                        {sessionAvailability(session) && <span className="coach-attendance-availability">{sessionAvailability(session)}</span>}
                       </button>;
                     })}
                   </div>}
@@ -498,7 +567,7 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
                       <button type="button" className="coach-attendance-history-button" onClick={() => setSessionPage(sessionPageData.page + 1)} disabled={sessionPageData.page >= sessionPageData.totalPages}>Sau</button>
                     </nav>}
                   </>}
-          </section> : selectedSessionId ? <section className="coach-attendance-panel coach-attendance-detail-view" aria-labelledby="coach-attendance-roster-title">
+          </section></> : selectedSessionId ? <section className="coach-attendance-panel coach-attendance-detail-view" aria-labelledby="coach-attendance-roster-title">
             <div className="coach-attendance-detail-toolbar">
               <button type="button" className="coach-attendance-history-button" onClick={returnToSessionList}>Quay lại danh sách</button>
             </div>
@@ -510,26 +579,27 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
               <span className="coach-attendance-count">{members.length} học viên</span>
             </div>
 
-            {rosterLoading ? <p className="coach-attendance-empty" role="status">Đang tải danh sách Member…</p>
+            {rosterLoading ? <p className="coach-attendance-empty" role="status">Đang tải danh sách hội viên…</p>
               : rosterError ? <p className="coach-attendance-alert is-error" role="alert">{rosterError}</p>
                 : !roster ? <p className="coach-attendance-empty">Chưa có dữ liệu danh sách điểm danh.</p>
                   : <>
                     <div className="coach-attendance-session-meta">
-                      <span>{formatDateTime(roster.startTime)}</span>
+                      <span>{formatDate(roster.startTime)}</span>
                       <span>{formatTime(roster.startTime)} – {formatTime(roster.endTime)}</span>
                       <span className={"coach-attendance-badge status-" + String(roster.sessionStatus || "unknown").toLowerCase()}>
                         {SESSION_STATUS_LABELS[roster.sessionStatus] || roster.sessionStatus || "Chưa xác định"}
                       </span>
+                      {attendanceSessionStatusLabel({ ...roster, attendanceTimeEligible: roster.markingAllowed }) && <span className="coach-attendance-availability">{attendanceSessionStatusLabel({ ...roster, attendanceTimeEligible: roster.markingAllowed })}</span>}
                     </div>
                     {sessionCancelled && <p className="coach-attendance-alert is-warning">Buổi học đã hủy. Danh sách chỉ xem được, không thể đánh dấu hoặc điều chỉnh.</p>}
                     {!sessionCancelled && roster.markingAllowed !== true && <p className="coach-attendance-alert is-warning">Chưa đến giờ bắt đầu buổi học. Có thể xem danh sách nhưng chưa thể điểm danh.</p>}
-                    {members.length === 0 ? <p className="coach-attendance-empty">Không có Member đăng ký CONFIRMED cho buổi học này.</p>
+                    {members.length === 0 ? <p className="coach-attendance-empty">Chưa có học viên đăng ký đã xác nhận cho buổi học này.</p>
                       : <>
                         <div className="coach-attendance-stats" aria-label="Tổng hợp trạng thái điểm danh">
                           <div className="stat stat-total"><span>Tổng sĩ số</span><strong>{members.length}</strong></div>
                           <div className="stat stat-present"><span>Có mặt</span><strong>{stats.present}</strong></div>
                           <div className="stat stat-absent"><span>Vắng mặt</span><strong>{stats.absent}</strong></div>
-                          <div className="stat stat-excused"><span>Có phép</span><strong>{stats.excused}</strong></div>
+                          {stats.excused > 0 && <div className="stat stat-excused"><span>Có phép</span><strong>{stats.excused}</strong></div>}
                           <div className="stat stat-pending"><span>Chưa điểm danh</span><strong>{stats.pending}</strong></div>
                         </div>
                         <p className="coach-attendance-stats-note" role="status">
@@ -542,17 +612,21 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
                             <input className="coach-attendance-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tên hoặc mã học viên" />
                           </label>
                           <div className="coach-attendance-toolbar-actions">
-                            <button type="button" className="coach-attendance-history-button" onClick={markAllPresent} disabled={!canMark || busy || members.length === 0}>Đánh dấu tất cả có mặt</button>
+                            <button type="button" className="coach-attendance-history-button" onClick={markAllPresent} disabled={!canMark || !initialSubmission || busy || members.length === 0}>Đánh dấu tất cả có mặt</button>
                             <button type="button" className="coach-attendance-history-button" onClick={exportCsv} disabled={members.length === 0}>Xuất CSV</button>
-                            <button type="button" className="coach-attendance-save-all" onClick={() => void saveAll()} disabled={!canMark || busy || pendingMembers.length === 0}>
-                              {savingAll ? "Đang lưu…" : `Lưu tất cả${pendingMembers.length ? ` (${pendingMembers.length})` : ""}`}
+                            <button type="button" className="coach-attendance-save-all" onClick={() => void saveAll()} disabled={!canMark || busy || (initialSubmission && members.some((member) => {
+                              const current = member?.attendanceStatus || "NOT_MARKED";
+                              const chosen = selectedStatuses[attendanceRowKey(selectedSessionId, member?.memberId)] ?? current;
+                              return current === "NOT_MARKED" && !["PRESENT", "ABSENT"].includes(chosen);
+                            })) || (!initialSubmission && pendingMembers.length === 0)}>
+                              {savingAll ? "Đang gửi…" : initialSubmission ? "Gửi điểm danh" : `Lưu tất cả${pendingMembers.length ? ` (${pendingMembers.length})` : ""}`}
                             </button>
                           </div>
                         </div>
                         <div className="coach-attendance-table-wrap">
                           <table className="coach-attendance-table">
-                            <thead><tr><th>Học viên</th><th>Trạng thái</th><th>Lần đánh dấu gần nhất</th><th>Ghi chú</th><th>Thao tác</th></tr></thead>
-                            <tbody>{visibleMembers.length === 0 ? <tr><td colSpan={5}>Không tìm thấy học viên phù hợp.</td></tr> : visibleMembers.map((member) => {
+                            <thead><tr><th>Học viên</th><th>Trạng thái</th><th>Lần đánh dấu gần nhất</th><th>Ghi chú</th>{showActionColumn && <th>Thao tác</th>}</tr></thead>
+                            <tbody>{visibleMembers.length === 0 ? <tr><td colSpan={showActionColumn ? 5 : 4}>Không tìm thấy học viên phù hợp.</td></tr> : visibleMembers.map((member) => {
                               const memberId = member?.memberId;
                               const rowKey = attendanceRowKey(selectedSessionId, memberId);
                               const currentStatus = member?.attendanceStatus || "NOT_MARKED";
@@ -563,15 +637,15 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
                                 && (!correcting || String(reasons[rowKey] || "").trim().length > 0);
                               const attendanceId = member?.attendanceId ?? attendanceIds[rowKey];
                               const historyAvailable = attendanceId != null;
-                              return <tr key={memberId ?? member?.memberName}>
-                                <td><strong>{member?.memberName || "Member"}</strong><small>ID: {memberId ?? "—"}</small></td>
+                              return <Fragment key={memberId ?? member?.memberName}><tr>
+                                <td><strong>{member?.memberName || "Học viên"}</strong><small>ID: {memberId ?? "—"}</small></td>
                                 <td>
                                   <span className={"coach-attendance-badge attendance-" + String(currentStatus).toLowerCase()}>{statusLabel(currentStatus)}</span>
                                   <label className="coach-attendance-select-label" htmlFor={"attendance-" + memberId}>Trạng thái cập nhật</label>
                                   <select id={"attendance-" + memberId} value={chosenStatus}
                                     onChange={(event) => setRowValue(setSelectedStatuses, rowKey, event.target.value)}
-                                     disabled={!roster.markingAllowed || sessionCancelled || busy}>
-                                    {["NOT_MARKED", "PRESENT", "ABSENT", "EXCUSED"].map((status) =>
+                                     disabled={!roster.markingAllowed || sessionCancelled || busy || (initialSubmission && correcting)}>
+                                    {[...(currentStatus === "EXCUSED" ? ["EXCUSED"] : []), "NOT_MARKED", "PRESENT", "ABSENT"].map((status) =>
                                       <option key={status} value={status} disabled={status === "NOT_MARKED"}>{statusLabel(status)}</option>)}
                                   </select>
                                   {correcting && changed && <label className="coach-attendance-reason">
@@ -582,24 +656,25 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
                                   </label>}
                                 </td>
                                 <td>{member?.markedAt ? <><span>{formatDateTime(member.markedAt)}</span><small>Nhân viên ID: {member?.markedById ?? "—"}</small></> : <span>Chưa đánh dấu</span>}</td>
-                                <td><textarea aria-label={"Ghi chú điểm danh Member " + (memberId ?? "")} maxLength={500}
+                                    <td><textarea aria-label={"Ghi chú điểm danh học viên " + (memberId ?? "")} maxLength={500}
                                   value={notes[rowKey] ?? member?.note ?? ""}
                                   onChange={(event) => setRowValue(setNotes, rowKey, event.target.value)}
                                    disabled={!roster.markingAllowed || sessionCancelled || busy}
                                   placeholder="Ghi chú không bắt buộc" /></td>
-                                <td>
-                                  <button type="button" className="coach-attendance-save"
+                                {showActionColumn && <td>
+                                  <div className="coach-attendance-row-actions">
+                                  {!initialSubmission && <button type="button" className="coach-attendance-save"
                                      disabled={!canSave || busy}
                                     onClick={() => void saveAttendance(member)}>
-                                    {savingMemberId === memberId ? "Đang lưu…" : correcting ? "Lưu điều chỉnh" : "Lưu điểm danh"}
-                                  </button>
+                                    {savingMemberId === memberId ? "Đang lưu…" : "Lưu điều chỉnh"}
+                                  </button>}
                                   {historyAvailable
                                     ? <button type="button" className="coach-attendance-history-button"
                                        onClick={() => void openHistory(memberId, attendanceId)}>Lịch sử</button>
                                     : correcting && <small className="coach-attendance-history-unavailable">API roster chưa trả mã bản ghi để mở lịch sử.</small>}
-                                  {rowErrors[rowKey] && <small className="coach-attendance-row-error" role="alert">{rowErrors[rowKey]}</small>}
-                                </td>
-                              </tr>;
+                                  </div>
+                                </td>}
+                              </tr>{rowErrors[rowKey] && <tr className="coach-attendance-error-row"><td colSpan={showActionColumn ? 5 : 4}><small className="coach-attendance-row-error" role="alert">{rowErrors[rowKey]}</small></td></tr>}</Fragment>;
                             })}</tbody>
                           </table>
                         </div>
@@ -609,7 +684,7 @@ export default function CoachAttendance({ token, role, onLogout, onNavigate }) {
 
           {view === "detail" && historyForMemberId != null && <section className="coach-attendance-panel coach-attendance-history" aria-labelledby="attendance-history-title">
             <div className="coach-attendance-section-heading">
-              <h2 id="attendance-history-title">Lịch sử điểm danh · Member #{historyMemberId}</h2>
+              <h2 id="attendance-history-title">Lịch sử điểm danh · Học viên #{historyMemberId}</h2>
               <button type="button" className="coach-attendance-history-button" onClick={closeHistory}>Đóng</button>
             </div>
             {historyLoading ? <p role="status">Đang tải lịch sử…</p>

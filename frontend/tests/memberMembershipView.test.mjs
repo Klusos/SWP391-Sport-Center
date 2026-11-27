@@ -7,7 +7,7 @@ const css = await readFile(new URL("../src/pages/MemberMembership.css", import.m
 
 test("Membership overview uses the effective membership and has a real empty state", () => {
   assert.match(source, /const sections = membershipSections\(memberships, today\)/);
-  assert.match(source, /currentMemberships\.length === 0[\s\S]*?Bạn chưa có Membership đang hiệu lực/);
+assert.match(source, /currentMemberships\.length === 0[\s\S]*?Bạn chưa có gói hội viên đang hiệu lực/);
   assert.match(source, /ngày kết thúc không bao gồm/);
   assert.match(source, /const remainingDays = membership\.endDate/);
   assert.equal((source.match(/aria-labelledby="membership-current-title"/g) || []).length, 1);
@@ -17,7 +17,7 @@ test("Membership overview uses the effective membership and has a real empty sta
 test("Benefits render purchased Membership values and distinguish legacy Plan fallback", () => {
   assert.match(source, /renderMembershipBenefits\(membership\)/);
   assert.match(source, /membership\.benefitSource === "LEGACY_PLAN_FALLBACK"/);
-  assert.match(source, /Chưa có dữ liệu quyền lợi cho gói Membership này/);
+assert.match(source, /Chưa có dữ liệu quyền lợi cho gói hội viên này/);
   assert.match(source, /membership\.courseDiscountPercent/);
   assert.match(source, /membership\.allowOneOnOneCoaching/);
   assert.match(source, /membership\.allowPersonalTrainingPlan/);
@@ -42,7 +42,11 @@ test("The Phase 16N.3 two-column overview is restored without a duplicate curren
 
 test("Every queued membership and pending payment is rendered from the loaded collections", () => {
   assert.match(source, /renderMembershipRows\(sections\.upcoming\)/);
-  assert.match(source, /visiblePendingMembershipPayments\.map\(\(payment\)/);
+  assert.match(source, /pendingPresentation\.paymentItems\.map\(\(\{ payment, renewalIntent/);
+  assert.match(source, /renewalRequestIntents\.map/);
+  assert.match(source, /unresolvedRenewalIntents\.map/);
+  assert.match(source, /Yêu cầu và thanh toán đang chờ/);
+  assert.doesNotMatch(source, /aria-labelledby="member-renewal-title"/);
   assert.match(source, /paymentStatusLabel\[payment\.status\] \|\| payment\.status/);
   assert.match(source, /pagedPaymentHistory\.items\.map\(\(payment\)/);
 });
@@ -68,6 +72,16 @@ test("Auto-renew stays on the existing API flow and explains that payment is sti
   assert.equal((source.match(/onClick=\{\(\) => void toggleAutoRenew\(membership\)\}/g) || []).length, 2);
   assert.match(source, /\{last && <button/);
   assert.match(source, /\{last \? <button/);
+});
+
+test("Renewal guidance preserves the 72-hour policy and is scoped to Renewal intents and attempts", () => {
+  assert.match(source, /Bạn có thể tắt gia hạn trước khi thanh toán\. Hệ thống không tự động thu tiền\./);
+  assert.match(source, /intent\.status === "OPEN"[\s\S]*?renewal-cancellation-warning/);
+  assert.match(source, /\{renewalIntent && <p className="membership-policy-note renewal-cancellation-warning"/);
+  assert.match(source, /async function cancelPendingPayment[\s\S]*?setNotice\([\s\S]*?await load\(\);[\s\S]*?\} catch/);
+  assert.match(source, /không thể gửi yêu cầu hủy thông thường vì gói mới đã ở trong thời hạn báo trước 72 giờ/);
+  assert.match(css, /renewal-cancellation-warning[^}]*background: #fff7e8/);
+  assert.match(source, /sections\.upcoming\.length > 0 && <p className="membership-policy-note">Với gói hội viên sắp có hiệu lực/);
 });
 
 test("Upgrade choices and purchase actions use existing server data and handlers", () => {
@@ -101,7 +115,7 @@ test("Pending Upgrade presents the frozen quote once in a compact responsive pri
 
 test("Member-facing status and plan benefit descriptions avoid implementation jargon", () => {
   assert.doesNotMatch(source, /TRẠNG THÁI TỪ MÁY CHỦ|snapshot|Purchase thông thường/);
-  assert.match(source, /Thanh toán gói thành viên đang chờ/);
+  assert.match(source, /Yêu cầu và thanh toán đang chờ/);
   assert.match(source, /Quyền lợi theo gói tại thời điểm mua/);
 });
 
@@ -109,9 +123,10 @@ test("Unsupported mock membership claims and fake identities are absent", () => 
   for (const unsupported of ["RILEY CHEN", "PLATINUM", "MEM-2026-", "Smart Locker", "CHECK-IN NHANH", "50 ngày hiệu lực", "Miễn phí 100% ra vào"]) {
     assert.ok(!source.includes(unsupported), `unexpected unsupported content: ${unsupported}`);
   }
-  assert.match(source, /Membership sắp có hiệu lực/);
-  assert.match(source, /Lịch sử Membership/);
-  assert.match(source, /Yêu cầu hủy Membership/);
+  assert.match(source, /Gói sắp có hiệu lực/);
+  assert.match(source, /Lịch sử gói hội viên/);
+  assert.match(source, /Bạn có thể tắt gia hạn trước khi thanh toán/);
+  assert.doesNotMatch(source, /Mã Membership #\{membership\.id\}/);
 });
 
 test("Membership page uses scoped responsive light-theme styles", () => {

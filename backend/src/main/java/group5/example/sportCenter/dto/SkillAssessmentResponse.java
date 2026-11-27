@@ -3,7 +3,7 @@ package group5.example.sportCenter.dto;
 import java.time.LocalDateTime;
 
 public record SkillAssessmentResponse(
-        Integer id, Integer memberId, Integer sportId, Integer assignedCoachId,
+        Integer id, Integer memberId, Integer sportId, Integer assignedCoachId, String assignedCoachName,
         Integer requestedByUserId, String status, String assessedLevel, String notes,
         LocalDateTime createdAt, LocalDateTime assessedAt, LocalDateTime cancelledAt,
         Integer consultationRequestId) {}

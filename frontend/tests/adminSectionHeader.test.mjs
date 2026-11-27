@@ -12,10 +12,11 @@ test("Sport and Facility Management share the compact Admin section header", asy
 
   assert.equal((sport.match(/<AdminSectionHeader/g) || []).length, 1);
   assert.equal((facility.match(/<AdminSectionHeader/g) || []).length, 1);
-  assert.match(header, /QUẢN TRỊ NỘI DUNG/);
-  assert.match(header, /admin-section-meta/);
-  assert.match(header, /admin-section-summary/);
-  assert.match(css, /border-top: 1px solid #dce7f2/);
+  assert.doesNotMatch(header, /admin-section-eyebrow|QUẢN TRỊ NỘI DUNG/);
+  assert.doesNotMatch(sport, /icon=\{<svg/);
+  assert.doesNotMatch(facility, /icon=\{<svg/);
+  assert.match(css, /border: 1px solid #d7e7f7/);
+  assert.match(css, /background: linear-gradient\(120deg, #edf6ff, #fff 78%\)/);
   assert.match(css, /\.admin-section-chip\s*\{/);
   assert.match(css, /@media \(max-width: 640px\)/);
   assert.match(css, /:focus-visible/);
@@ -34,7 +35,6 @@ test("Admin header pilot aliases are portal-scoped and preserve the exact existi
   assert.match(tokens, /--sc-color-text-primary:\s*var\(--navy,\s*#0b2745\)/);
   assert.match(tokens, /--sc-color-text-secondary:\s*var\(--text-sub,\s*#5b6e82\)/);
   assert.match(css, /gap:\s*var\(--sc-space-2\)/);
-  assert.match(css, /color:\s*var\(--sc-color-action\)/);
   assert.match(css, /color:\s*var\(--sc-color-text-primary\)/);
   assert.match(css, /color:\s*var\(--sc-color-text-secondary\)/);
   assert.match(main, /import "\.\/styles\.css";\s*import "\.\/tokens\/admin-pilot\.css";/);

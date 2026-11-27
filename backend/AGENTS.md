@@ -39,3 +39,12 @@
 - Explain proposed changes before making large modifications.
 - Prefer small changes that can be tested with Postman.
 - Do not overwrite teammates' work or unrelated files.
+
+## Runtime and database safety
+- Keep ordinary application defaults in `src/main/resources/application.properties`; keep credentials and signing/payment secrets external.
+- Do not edit the owner's `.env` or shared defaults to run a temporary QA batch. Supply QA datasource, scheduler, and feature overrides through process-local environment variables, launch arguments, or test-specific configuration.
+- Before any database mutation test, verify the live SQL Server identity, database name, database ID, and state. A configured JDBC URL alone is not sufficient evidence.
+- Keep Hibernate `ddl-auto=validate`; do not use application startup to apply schema changes.
+- Elapsed class-session completion is a scheduler-driven status transition only: use the persisted end time in Vietnam business time, the shared session write lock, and the mandatory transactional audit path. Do not create attendance, results, assessments, or financial effects. Keep the global scheduling switch effective in QA.
+- Support claim-and-start uses the existing ticket row lock and transaction. An OPEN ticket is assigned and moved to IN_PROGRESS atomically; an unassigned legacy IN_PROGRESS ticket remains claimable without a status change. Never overwrite a competing staff assignment.
+- General class training plans remain separate from Individual Training Plans. Their weekly whole-plan save is Coach-only, transactional, protected by the class write lock, and uses `expectedUpdatedAt` to reject stale replacement drafts. Keep the legacy exercise list in the response and preserve unassigned exercises unless the Coach explicitly moves/deletes them. General curriculum dates are derived from Offering boundaries; do not persist derived dates or couple weeks to sessions.

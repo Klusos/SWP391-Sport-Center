@@ -133,10 +133,21 @@ test("Coach Attendance exposes scoped summaries, search, bulk marking, and per-m
   assert.match(source, /visibleMembers/);
   assert.match(source, /function markAllPresent\(\)/);
   assert.match(source, /function saveAll\(\)/);
+  assert.match(source, /submitInitialAttendanceApi\(token, sessionId/);
+  assert.match(source, /G\u1eedi \u0111i\u1ec3m danh/);
+  assert.doesNotMatch(source, /ch\u00ednh th\u1ee9c/);
+  assert.match(source, /showActionColumn = !initialSubmission/);
+  assert.doesNotMatch(source, /L\u01b0u \u0111i\u1ec3m danh/);
+  assert.match(source, /attendanceWorkRows = sessions\.filter\(\(session\) => \["NOT_RECORDED", "PARTIAL"\]/);
+  assert.match(source, /attendanceSessionStatusLabel\(session\)/);
+  assert.match(source, /Promise\.all\(\[loadRoster\(sessionId\), loadSessions\(\)\]\)/);
+  assert.match(source, /attendanceCompleteness/);
+  assert.match(source, /attendanceStatusPresentation/);
+  assert.match(source, /Buổi học cần điểm danh/);
   assert.match(source, /for \(const member of batch\)/);
   assert.match(source, /setRowErrors\(\(current\) => \(\{ \.\.\.current, \[rowKey\]: errorMessage/);
   assert.match(source, /if \(correctionCount > 0 && !window\.confirm/);
-  assert.match(source, /savingAll \? "Đang lưu/);
+  assert.match(source, /savingAll \? "Đang gửi/);
   assert.match(source, /coach-attendance-stats/);
   assert.match(source, /Thống kê tính theo lựa chọn hiện tại/);
   assert.match(source, /Thống kê phản ánh điểm danh đã lưu/);
@@ -147,4 +158,37 @@ test("Coach Attendance exposes scoped summaries, search, bulk marking, and per-m
   assert.match(css, /coach-attendance-session-pagination/);
   assert.match(css, /coach-attendance-detail-view/);
   assert.match(css, /@media \(max-width: 1000px\)/);
+});
+
+test("Coach Attendance aligns search and action controls by their field edges", async () => {
+  const css = await readFile(new URL("../src/pages/CoachAttendance.css", import.meta.url), "utf8");
+  assert.match(css, /\.coach-attendance-toolbar \{[^}]*align-items: end/);
+  assert.match(css, /\.coach-attendance-search \{ box-sizing: border-box; width: 100%; height: 44px; min-height: 44px; \}/);
+  assert.match(css, /\.coach-attendance-toolbar-actions \{ align-items:center; align-self:end; \}/);
+  assert.match(css, /height:44px; min-height:44px/);
+});
+
+test("row validation errors render below the full row and cannot resize the action cell", async () => {
+  const [coach, staff, css] = await Promise.all([
+    readFile(sourceUrl, "utf8"),
+    readFile(new URL("../src/pages/StaffAttendance.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/pages/CoachAttendance.css", import.meta.url), "utf8"),
+  ]);
+  for (const source of [coach, staff]) {
+    assert.match(source, /coach-attendance-error-row"><td colSpan=\{showActionColumn \? 5 : 4\}><small className="coach-attendance-row-error" role="alert">\{rowErrors\[rowKey\]/);
+    assert.doesNotMatch(source, /<td>[\s\S]{0,800}\{rowErrors\[rowKey\] && <small className="coach-attendance-row-error"/);
+  }
+  assert.match(css, /coach-attendance-table th:last-child, \.coach-attendance-table td:last-child \{ text-align: right; white-space: nowrap; \}/);
+  assert.match(css, /\.coach-attendance-error-row td \{[^{]*text-align: left !important/);
+});
+
+test("Coach and Admin attendance action controls share a right-aligned column before and after row errors", async () => {
+  const [coach, staff, css] = await Promise.all([
+    readFile(sourceUrl, "utf8"),
+    readFile(new URL("../src/pages/StaffAttendance.jsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/pages/CoachAttendance.css", import.meta.url), "utf8"),
+  ]);
+  for (const source of [coach, staff]) assert.match(source, /className="coach-attendance-row-actions"/);
+  assert.match(css, /\.coach-attendance-row-actions \{ display: flex; flex-direction: column; align-items: flex-end; gap: 7px; \}/);
+  assert.match(css, /\.coach-attendance-row-actions > button \{[^}]*width: 100%;[^}]*max-width: 100%;[^}]*margin: 0;/);
 });

@@ -22,8 +22,8 @@ public class MembershipScheduler {
     }
 
     @Scheduled(
-        cron = "0 0 0 * * *",
-        zone = "Asia/Ho_Chi_Minh"
+        cron = "${sportcenter.membership.scheduler.cron}",
+        zone = "${sportcenter.membership.scheduler.time-zone}"
     )
     public void expireMemberships() {
 

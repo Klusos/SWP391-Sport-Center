@@ -32,7 +32,7 @@ public class PtBookingExpirationService {
         this.events = events;
     }
 
-    @Scheduled(fixedDelayString = "${app.pt.expiration-sweep-interval-ms:60000}")
+    @Scheduled(fixedDelayString = "${app.pt.expiration-sweep-interval-ms}")
     @Transactional
     public int expireDueBookings() {
         LocalDateTime now = now();

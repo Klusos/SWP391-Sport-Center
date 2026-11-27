@@ -255,10 +255,10 @@ export default function MembershipPlans({ token, role, currentUserName, onLogout
       <main className="main membership-main">
         {admin && <AdminTopBar pageLabel="GÓI HỘI VIÊN" displayName={currentUserName} avatarName={currentUserName} />}
         <div className="membership-content">
-        <h1>Gói hội viên</h1>
+        <header className={admin ? "admin-page-header" : "membership-page-header"}><div><h1>Gói hội viên</h1>
         <p className="subtitle">{admin
           ? "Tạo, chỉnh sửa, kích hoạt và tắt các gói hội viên."
-          : "Danh sách gói hội viên đang áp dụng tại Sport Center."}</p>
+          : "Danh sách gói hội viên đang áp dụng tại Sport Center."}</p></div></header>
         {notice && <div className="banner success" role="status">{notice}</div>}
         {error && <div className="banner error" role="alert">{error}</div>}
 
@@ -279,7 +279,7 @@ export default function MembershipPlans({ token, role, currentUserName, onLogout
         {admin && <section className="membership-path-panel" aria-labelledby="membership-path-title">
           <div className="membership-path-heading">
             <div><h2 id="membership-path-title">Lộ trình nâng cấp</h2>
-              <p>Chỉ các cặp gói được Admin bật mới xuất hiện như lựa chọn nâng cấp. Thay đổi giá hoặc quyền lợi không sửa báo giá đã tạo.</p></div>
+              <p>Chỉ những lộ trình nâng cấp được Quản trị viên bật mới xuất hiện. Thay đổi giá hoặc quyền lợi không làm thay đổi báo giá đã tạo.</p></div>
             <button type="button" onClick={() => void loadUpgradePaths()} disabled={pathLoading}>
               {pathLoading ? "Đang tải…" : "Làm mới lộ trình"}
             </button>

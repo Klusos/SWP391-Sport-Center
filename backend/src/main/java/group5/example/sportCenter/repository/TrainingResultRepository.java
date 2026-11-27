@@ -15,6 +15,8 @@ public interface TrainingResultRepository extends JpaRepository<TrainingResult, 
 
     Optional<TrainingResult> findByClassSessionIdAndMemberId(Integer classSessionId, Integer memberId);
 
+    boolean existsByClassSessionIdAndMemberId(Integer classSessionId, Integer memberId);
+
     @EntityGraph(attributePaths = { "classSession", "classSession.courseClass", "recordedBy" })
     List<TrainingResult> findByMemberIdOrderByClassSession_StartTimeDescIdDesc(Integer memberId);
 }

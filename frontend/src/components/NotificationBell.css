@@ -1,6 +1,6 @@
 .notification-widget {
   position: fixed;
-  z-index: 1200;
+  z-index: var(--sc-layer-notification, 1200);
   top: 13px;
   right: 22px;
   isolation: isolate;

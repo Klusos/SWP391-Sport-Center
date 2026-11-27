@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { confirmRefundApi, getRefundRequiredPaymentsApi } from "../api";
 import { coursePaymentMoney } from "../coursePaymentQueue";
+import { statusLabel } from "../uiPresentation.js";
 import { loadAllRefundQueuePages, refundPurposeLabel, refundQueuePage, refundQueueRowsForPurposes, refundReferenceLabel } from "../refundQueue.js";
 import "./ReceptionistRefundQueue.css";
 
@@ -74,7 +75,7 @@ export default function ReceptionistRefundQueue({ token, purposes, groups, refre
                 <div className="cp-refund-list">{page.content.map((payment) => <article className="cp-refund-item" key={payment.id}>
                   <div className="cp-refund-item-main">
                     <strong>Thanh toán #{payment.id} · {payment.memberName || `Thành viên #${payment.memberId}`}</strong>
-                    <span>{refundPurposeLabel(payment)} · {refundReferenceLabel(payment)} · {coursePaymentMoney(payment.amount)} · {payment.status}</span>
+                    <span>{refundPurposeLabel(payment)} · {refundReferenceLabel(payment)} · {coursePaymentMoney(payment.amount)} · {statusLabel(payment.status, "payment")}</span>
                     {payment.purpose === "COURSE_REGISTRATION" && <span>{[payment.courseName, payment.courseOfferingName, payment.className].filter(Boolean).join(" · ")}</span>}
                     {payment.note && <small>{payment.note}</small>}
                   </div>

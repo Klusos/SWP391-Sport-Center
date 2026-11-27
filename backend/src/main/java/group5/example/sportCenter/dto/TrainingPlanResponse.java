@@ -12,5 +12,6 @@ public record TrainingPlanResponse(
         String updatedByName,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
-        List<TrainingExerciseResponse> exercises) {
+        List<TrainingExerciseResponse> exercises,
+        List<TrainingPlanWeekResponse> weeks) {
 }

@@ -1,6 +1,7 @@
 package group5.example.sportCenter.dto;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 public record AttendanceSessionResponse(
         Integer classSessionId,
@@ -13,7 +14,14 @@ public record AttendanceSessionResponse(
         Integer sportId,
         String sportName,
         Integer assignedCoachId,
+        String coachName,
+        LocalDate offeringStartDate,
+        LocalDate offeringEndDate,
         LocalDateTime startTime,
         LocalDateTime endTime,
-        String sessionStatus) {
+        String sessionStatus,
+        String attendanceCompleteness,
+        int eligibleStudentCount,
+        int recordedAttendanceCount,
+        boolean attendanceTimeEligible) {
 }

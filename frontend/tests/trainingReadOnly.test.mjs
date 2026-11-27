@@ -16,7 +16,7 @@ test("only the authenticated Coach role receives Training write capability", () 
 test("shared Coach Training gates every class-level mutation and presents Admin as read-only", async () => {
   const source = await read("pages/CoachTraining.jsx");
   assert.match(source, /canManageTrainingForRole\(role\)/);
-  for (const mutation of ["savePlan", "saveExercise", "removeExercise", "complete", "saveResult", "evaluate"]) {
+  for (const mutation of ["complete", "saveResult", "evaluate"]) {
     const start = source.indexOf(`async function ${mutation}(`);
     assert.notEqual(start, -1, `${mutation} handler exists`);
     const body = source.slice(start, source.indexOf("\n  }", start));
@@ -24,7 +24,9 @@ test("shared Coach Training gates every class-level mutation and presents Admin 
   }
   assert.match(source, /canManageTraining \? "coach" : "admin-readonly"/);
   assert.match(source, /Chế độ chỉ xem:/);
-  assert.match(source, /canManageTraining \? <form className="training-form"/);
+  const planEditor = await read("components/GeneralTrainingPlanTab.jsx");
+  assert.match(planEditor, /canManageTraining \? <WeeklyPlanEditor/);
+  assert.match(planEditor, /GeneralPlanReadOnly plan=\{plan\}/);
   assert.match(source, /canManageTraining && session\.canComplete/);
   assert.match(source, /canManageTraining && <form className="training-inline"/);
 });
@@ -35,7 +37,7 @@ test("Admin individual-plan mode reads class plans and history without mounting 
   assert.match(source, /else if \(isAdminReadOnly\)[\s\S]*?getClassIndividualTrainingPlansApi/);
   assert.match(source, /if \(!canManageTraining\) return;/);
   assert.match(source, /canManageTraining && <button type="button" onClick=\{\(\) => setEditing\(true\)\}/);
-  assert.match(source, /editing && canManageTraining \? <PlanEditor/);
+  assert.match(source, /editing && canManageTraining \? <WeeklyPlanEditor/);
   assert.match(source, /Lịch sử phiên bản/);
   assert.match(member, /mode="member"/);
 });

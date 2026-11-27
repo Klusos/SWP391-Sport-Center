@@ -27,4 +27,8 @@ public interface CourseClassRepository
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select courseClass from CourseClass courseClass where courseClass.id = :id")
     Optional<CourseClass> findByIdForScheduleUpdate(@Param("id") Integer id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select courseClass from CourseClass courseClass where courseClass.id = :id")
+    Optional<CourseClass> findByIdForTrainingPlanUpdate(@Param("id") Integer id);
 }

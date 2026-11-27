@@ -28,7 +28,7 @@ public class CourseRegistrationExpirationService {
         this.clock = clock;
     }
 
-    @Scheduled(fixedDelayString = "${app.course-registration.expiration-sweep-interval-ms:60000}")
+    @Scheduled(fixedDelayString = "${app.course-registration.expiration-sweep-interval-ms}")
     @Transactional
     public int expireDueRegistrations() {
         LocalDateTime now = now();

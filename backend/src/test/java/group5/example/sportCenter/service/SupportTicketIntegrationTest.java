@@ -1,5 +1,6 @@
 package group5.example.sportCenter.service;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -21,6 +22,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 
 import group5.example.sportCenter.entity.User;
+import group5.example.sportCenter.entity.SupportTicket;
+import group5.example.sportCenter.entity.SupportTicketCategory;
+import group5.example.sportCenter.entity.SupportTicketStatus;
+import group5.example.sportCenter.repository.AuditLogRepository;
+import group5.example.sportCenter.repository.SupportTicketRepository;
 import group5.example.sportCenter.repository.UserRepository;
 import group5.example.sportCenter.security.JwtService;
 
@@ -31,6 +37,8 @@ class SupportTicketIntegrationTest {
     @Autowired private WebApplicationContext context;
     @Autowired private FilterChainProxy security;
     @Autowired private UserRepository users;
+    @Autowired private SupportTicketRepository tickets;
+    @Autowired private AuditLogRepository auditLogs;
     @Autowired private JwtService tokens;
     private MockMvc mvc;
     private User member;
@@ -84,7 +92,8 @@ class SupportTicketIntegrationTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1));
 
         mvc.perform(patch("/api/support-tickets/{id}/assign-to-me", ticketId).header("Authorization", bearer(receptionist)))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.assignedStaffId").value(receptionist.getId()));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.assignedStaffId").value(receptionist.getId()))
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
         mvc.perform(post("/api/support-tickets/{id}/messages", ticketId).header("Authorization", bearer(receptionist))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"Chúng tôi đang kiểm tra.\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("IN_PROGRESS"))
@@ -104,9 +113,74 @@ class SupportTicketIntegrationTest {
     }
 
     @Test
+    void claimStartsOpenTicketAtomicallyAndCompetingReceptionistCannotTakeItOver() throws Exception {
+        int ticketId = createTicket(member, "Claim and start", "GENERAL");
+        User competingReceptionist = user("RECEPTIONIST");
+        long auditCountBefore = auditLogs.count();
+
+        mvc.perform(patch("/api/support-tickets/{id}/status", ticketId).header("Authorization", bearer(receptionist))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"IN_PROGRESS\"}"))
+                .andExpect(status().isConflict());
+        mvc.perform(post("/api/support-tickets/{id}/messages", ticketId).header("Authorization", bearer(receptionist))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"Chúng tôi đang xử lý.\"}"))
+                .andExpect(status().isConflict());
+
+        mvc.perform(patch("/api/support-tickets/{id}/assign-to-me", ticketId).header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.assignedStaffId").value(receptionist.getId()));
+        long afterFirstClaim = auditLogs.count();
+        mvc.perform(patch("/api/support-tickets/{id}/assign-to-me", ticketId).header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("IN_PROGRESS"));
+        mvc.perform(patch("/api/support-tickets/{id}/assign-to-me", ticketId).header("Authorization", bearer(competingReceptionist)))
+                .andExpect(status().isConflict());
+        mvc.perform(get("/api/support-tickets/{id}", ticketId).header("Authorization", bearer(admin)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.assignedStaffId").value(receptionist.getId()));
+        assertEquals(auditCountBefore + 1, afterFirstClaim);
+        assertEquals(afterFirstClaim, auditLogs.count(), "repeat claim must not duplicate the audit event");
+    }
+
+    @Test
+    void legacyUnassignedInProgressTicketCanBeClaimedWithoutChangingItsStatus() throws Exception {
+        SupportTicket legacy = new SupportTicket();
+        legacy.setMember(member);
+        legacy.setSubject("Legacy unassigned");
+        legacy.setCategory(SupportTicketCategory.OTHER);
+        legacy.setDescription("Legacy request");
+        legacy.setStatus(SupportTicketStatus.IN_PROGRESS);
+        legacy = tickets.saveAndFlush(legacy);
+
+        mvc.perform(patch("/api/support-tickets/{id}/assign-to-me", legacy.getId()).header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.assignedStaffId").value(receptionist.getId()));
+    }
+
+    @Test
+    void adminMayParticipateOnlyAfterClaimWithoutReplacingReceptionistOwnership() throws Exception {
+        int ticketId = createTicket(member, "Assigned request", "GENERAL");
+        mvc.perform(post("/api/support-tickets/{id}/messages", ticketId).header("Authorization", bearer(admin))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"Admin reply before claim\"}"))
+                .andExpect(status().isConflict());
+        mvc.perform(patch("/api/support-tickets/{id}/assign-to-me", ticketId).header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.assignedStaffId").value(receptionist.getId()));
+        mvc.perform(post("/api/support-tickets/{id}/messages", ticketId).header("Authorization", bearer(admin))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"Admin participates\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.assignedStaffId").value(receptionist.getId()))
+                .andExpect(jsonPath("$.messages.length()").value(1));
+
+        int otherTicket = createTicket(otherMember, "Another assigned request", "GENERAL");
+        User otherReceptionist = user("RECEPTIONIST");
+        mvc.perform(patch("/api/support-tickets/{id}/assign-to-me", otherTicket).header("Authorization", bearer(otherReceptionist)))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/support-tickets/{id}/messages", otherTicket).header("Authorization", bearer(receptionist))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"Not my request\"}"))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
     void memberReplyReopensResolvedTicketAndCoachAndAnonymousAreDenied() throws Exception {
         int ticketId = createTicket(member, "Yêu cầu hỗ trợ", "GENERAL");
-        mvc.perform(patch("/api/support-tickets/{id}/status", ticketId).header("Authorization", bearer(receptionist))
+        mvc.perform(patch("/api/support-tickets/{id}/status", ticketId).header("Authorization", bearer(admin))
                         .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"RESOLVED\"}"))
                 .andExpect(status().isOk());
         mvc.perform(post("/api/support-tickets/{id}/messages", ticketId).header("Authorization", bearer(member))

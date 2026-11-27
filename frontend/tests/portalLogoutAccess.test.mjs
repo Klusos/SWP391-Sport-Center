@@ -14,7 +14,7 @@ test("the shared Sidebar renders one keyboard-operable Logout footer after navig
   assert.equal((sidebar.match(/className="nav-item clickable logout-button"/g) || []).length, 1);
   assert.match(
     sidebar,
-    /<aside className="sidebar">[\s\S]*?<nav aria-label=\{`\$\{role\} navigation`\}>[\s\S]*?<\/nav>\s*<div className="nav-footer">\s*<button className="nav-item clickable logout-button" type="button" onClick=\{\(\) => onLogout\?\.\(\)\}>\s*Đăng xuất\s*<\/button>\s*<\/div>/,
+    /<aside className="sidebar">[\s\S]*?<nav className=\{role === "ADMIN" \? "admin-navigation" : undefined\} aria-label=\{`Điều hướng \$\{label\}`\}>[\s\S]*?<\/nav>\s*<div className="nav-footer">\s*<button className="nav-item clickable logout-button" type="button" onClick=\{\(\) => onLogout\?\.\(\)\}>\s*Đăng xuất\s*<\/button>\s*<\/div>/,
   );
   assert.doesNotMatch(sidebar, /role\s*===\s*"(?:ADMIN|RECEPTIONIST|COACH|MEMBER)"[\s\S]{0,180}logout-button/);
   assert.match(layout, /<Sidebar[\s\S]*?onLogout=\{onLogout\}/);

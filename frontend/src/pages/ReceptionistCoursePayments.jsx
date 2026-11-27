@@ -183,7 +183,7 @@ export default function ReceptionistCoursePayments({ token, role, userId, curren
 
         <div className={`cp-body${isAdmin ? " cp-body--admin" : ""}`}>
           {/* Header Section */}
-          <header className="cp-hero-header">
+          <header className={`cp-hero-header${isAdmin ? " admin-page-header" : ""}`}>
             <div className="cp-hero-titles">
               <div className="cp-title-row">
                 <h1>Thu tiền mặt tại quầy</h1>

@@ -195,11 +195,11 @@ export default function MemberList({ token, role, currentUserName, onLogout, onN
       setSelected((current) => ({ ...current, profile: updated }));
       setProfile(profileForm(updated));
       await loadMembers();
-      setNotice("Đã lưu Member Profile.");
+      setNotice("Đã lưu hồ sơ hội viên.");
     } catch (requestError) {
       setDetailError(requestError.status === 400
         ? requestError.message || "Kiểm tra chiều cao, cân nặng và mục tiêu."
-        : requestError.message || "Không thể lưu Member Profile.");
+        : requestError.message || "Không thể lưu hồ sơ hội viên.");
     } finally {
       setProfileSaving(false);
     }
@@ -306,10 +306,10 @@ export default function MemberList({ token, role, currentUserName, onLogout, onN
     <>
     <div className="layout">
       <Sidebar role={role} activePage="members" onNavigate={onNavigate} onLogout={onLogout} />
-      <main className={`main member-list-main${isAdmin ? " is-admin" : ""}`}>
+      <main className={`main member-list-main${isAdmin ? " is-admin" : " is-receptionist"}`}>
         {isAdmin && <AdminTopBar pageLabel="DANH SÁCH THÀNH VIÊN" displayName={currentUserName} avatarName={currentUserName} />}
         <div className={isAdmin ? "member-list-content" : undefined}>
-        <header className="member-list-heading"><div><h1>Danh sách thành viên</h1>
+        <header className={`member-list-heading${isAdmin ? " admin-page-header" : ""}`}><div><h1>Danh sách thành viên</h1>
           <p className="subtitle">{loading ? "Đang tải danh sách…" : `${filtered.length} thành viên phù hợp`}</p></div>
           {isAdmin && <button className="member-list-create" type="button" onClick={() => onNavigate("register")}>Đăng ký MEMBER</button>}
         </header>
@@ -425,7 +425,7 @@ export default function MemberList({ token, role, currentUserName, onLogout, onN
               <button type="submit" disabled={accountSaving}>{accountSaving ? "Đang lưu…" : "Lưu tài khoản"}</button>
             </form>
             <form className="form-card" onSubmit={saveProfile}>
-              <h3>Member Profile</h3>
+              <h3>Hồ sơ hội viên</h3>
               <label htmlFor="profileHeight">Chiều cao (50–250 cm)</label>
               <input id="profileHeight" type="number" min="50" max="250" step="0.01" required value={profile.height} onChange={(event) => setProfile({ ...profile, height: event.target.value })} />
               <label htmlFor="profileWeight">Cân nặng (10–500 kg)</label>

@@ -76,6 +76,10 @@ public class ConsultationRequestService {
         if (jwt != null) {
             member = access.actor(jwt);
             access.requireMember(member);
+            if (isBlank(member.getName()) || isBlank(member.getPhone()) || isBlank(member.getEmail())) {
+                throw error(HttpStatus.BAD_REQUEST,
+                        "Vui lòng cập nhật họ tên, số điện thoại và email trong tài khoản hoặc liên hệ lễ tân trước khi gửi yêu cầu.");
+            }
         } else {
             if (request.dateOfBirth() == null || !request.dateOfBirth().isBefore(LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")))) {
                 throw error(HttpStatus.BAD_REQUEST, "A valid date of birth is required to submit this request");
@@ -94,9 +98,9 @@ public class ConsultationRequestService {
 
         ConsultationRequest consultation = new ConsultationRequest();
         consultation.setMember(member);
-        consultation.setName(request.name().trim());
-        consultation.setPhone(request.phone().trim());
-        consultation.setEmail(request.email());
+        consultation.setName(member == null ? request.name().trim() : member.getName().trim());
+        consultation.setPhone(member == null ? request.phone().trim() : member.getPhone().trim());
+        consultation.setEmail(member == null ? request.email() : member.getEmail().trim().toLowerCase(Locale.ROOT));
         consultation.setSport(sport);
         consultation.setAge(jwt == null ? null : request.age());
         consultation.setDateOfBirth(jwt == null ? request.dateOfBirth() : member.getDateOfBirth());
@@ -304,6 +308,10 @@ public class ConsultationRequestService {
             return null;
         }
         return value.trim();
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private ConsultationResponse response(ConsultationRequest request) {

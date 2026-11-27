@@ -6,11 +6,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
@@ -21,11 +23,13 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import org.springframework.data.domain.PageRequest;
 
 import javax.sql.DataSource;
 
@@ -71,6 +75,7 @@ import group5.example.sportCenter.repository.CourseRegistrationRepository;
 import group5.example.sportCenter.repository.CourseRepository;
 import group5.example.sportCenter.repository.SportRepository;
 import group5.example.sportCenter.repository.UserRepository;
+import group5.example.sportCenter.repository.NotificationRepository;
 import group5.example.sportCenter.security.JwtService;
 
 @SpringBootTest
@@ -105,6 +110,7 @@ class AttendanceIntegrationTest {
     @Autowired CourseRegistrationRepository registrations;
     @Autowired AttendanceRepository attendance;
     @Autowired AuditLogRepository auditLogs;
+    @Autowired NotificationRepository notifications;
     @Autowired AttendanceHistoryRepository histories;
     @MockitoSpyBean AttendanceHistoryRepository historySpy;
 
@@ -155,6 +161,7 @@ class AttendanceIntegrationTest {
         mvc.perform(get("/api/attendance/coach/sessions").header("Authorization", bearer(coachUser)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].classSessionId").value(startedSession.getId()))
+                .andExpect(jsonPath("$[0].attendanceTimeEligible").value(true))
                 .andExpect(jsonPath("$[0].sportId").value(coachClass.getCourseOffering().getCourse().getSport().getId()))
                 .andExpect(jsonPath("$[0].sportName").value(coachClass.getCourseOffering().getCourse().getSport().getName()))
                 .andExpect(jsonPath("$[?(@.classSessionId == " + otherSession.getId() + ")]").doesNotExist());
@@ -166,11 +173,35 @@ class AttendanceIntegrationTest {
     }
 
     @Test
+    void sessionReadModelSeparatesFutureEmptyRosterElapsedEmptyRosterAndCancellation() throws Exception {
+        CourseClass emptyClass = courseClass(coach);
+        ClassSession futureEmpty = session(emptyClass, now.plusDays(1), now.plusDays(1).plusHours(1), "SCHEDULED");
+        ClassSession elapsedEmpty = session(emptyClass, now.minusDays(1), now.minusDays(1).plusHours(1), "COMPLETED");
+        ClassSession cancelled = session(emptyClass, now.minusDays(2), now.minusDays(2).plusHours(1), "CANCELLED");
+
+        var response = mvc.perform(get("/api/attendance/coach/sessions").header("Authorization", bearer(coachUser)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.classSessionId == " + futureEmpty.getId() + ")].attendanceCompleteness")
+                        .value(org.hamcrest.Matchers.hasItem("NOT_APPLICABLE")))
+                .andExpect(jsonPath("$[?(@.classSessionId == " + futureEmpty.getId() + ")].attendanceTimeEligible")
+                        .value(org.hamcrest.Matchers.hasItem(false)))
+                .andExpect(jsonPath("$[?(@.classSessionId == " + elapsedEmpty.getId() + ")].attendanceCompleteness")
+                        .value(org.hamcrest.Matchers.hasItem("NOT_APPLICABLE")))
+                .andExpect(jsonPath("$[?(@.classSessionId == " + elapsedEmpty.getId() + ")].attendanceTimeEligible")
+                        .value(org.hamcrest.Matchers.hasItem(true)))
+                .andExpect(jsonPath("$[?(@.classSessionId == " + cancelled.getId() + ")].attendanceTimeEligible")
+                        .value(org.hamcrest.Matchers.hasItem(false)))
+                .andReturn();
+        assertNotNull(response.getResponse().getContentAsString());
+    }
+
+    @Test
     void rosterReturnsPersistedAttendanceIdsAndCoachCanReadHistoryWithoutExposingIdsForUnmarkedMembers() throws Exception {
         register(otherMember, coachClass, CourseRegistrationStatus.CANCELLED);
         User enrolledMember = user("MEMBER", "ACTIVE");
         register(enrolledMember, coachClass, CourseRegistrationStatus.CONFIRMED);
-        markAsAdmin(startedSession, member, "PRESENT");
+        Attendance fixture = persistAttendance(startedSession, member, AttendanceStatus.PRESENT, admin);
+        appendInitialHistory(fixture);
         Attendance persisted = attendance.findByClassSessionIdAndMemberId(startedSession.getId(), member.getId())
                 .orElseThrow();
 
@@ -191,7 +222,7 @@ class AttendanceIntegrationTest {
         assertNotNull(unmarkedMember);
         assertEquals(persisted.getId(), markedMember.path("attendanceId").asInt());
         assertEquals("PRESENT", markedMember.path("attendanceStatus").asText());
-        assertTrue(unmarkedMember.get("attendanceId").isNull());
+        assertTrue(unmarkedMember.path("attendanceId").isMissingNode() || unmarkedMember.path("attendanceId").isNull());
         assertEquals("NOT_MARKED", unmarkedMember.path("attendanceStatus").asText());
 
         mvc.perform(get("/api/attendance/" + markedMember.path("attendanceId").asInt() + "/history")
@@ -204,9 +235,7 @@ class AttendanceIntegrationTest {
 
     @Test
     void adminAndAssignedCoachCanMarkButReceptionistIsReadOnlyForAttendance() throws Exception {
-        mvc.perform(put(markUrl(startedSession, member)).header("Authorization", bearer(admin))
-                .contentType("application/json").content("{\"status\":\"PRESENT\"}"))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.markedById").value(admin.getId()));
+        markAsAdmin(startedSession, member, "PRESENT");
 
         mvc.perform(put(markUrl(startedSession, member)).header("Authorization", bearer(receptionist))
                 .contentType("application/json").content("{\"status\":\"EXCUSED\",\"reason\":\"Verified by reception\"}"))
@@ -216,6 +245,9 @@ class AttendanceIntegrationTest {
         mvc.perform(get("/api/attendance/" + attendance.findByClassSessionIdAndMemberId(startedSession.getId(), member.getId()).orElseThrow().getId()
                 + "/history").header("Authorization", bearer(admin)))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].changedById").value(admin.getId()));
+        mvc.perform(put(markUrl(startedSession, member)).header("Authorization", bearer(coachUser))
+                .contentType("application/json").content("{\"status\":\"ABSENT\",\"reason\":\"Coach correction\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.markedById").value(coachUser.getId()));
     }
 
     @Test
@@ -261,22 +293,137 @@ class AttendanceIntegrationTest {
     }
 
     @Test
-    void acceptsAllStatusesAfterStartIncludingCompletedSessionsButRejectsEarlyAndCancelledSessions() throws Exception {
+    void initialSubmissionIsCompleteAtomicAndIndividualEndpointCannotCreateFirstRow() throws Exception {
+        User second = user("MEMBER", "ACTIVE");
+        register(second, coachClass, CourseRegistrationStatus.CONFIRMED);
+
+        mvc.perform(put(markUrl(startedSession, member)).header("Authorization", bearer(coachUser))
+                .contentType("application/json").content("{\"status\":\"PRESENT\"}"))
+                .andExpect(status().isConflict());
+        assertEquals(0, attendance.count());
+
+        mvc.perform(post(submitUrl(startedSession)).header("Authorization", bearer(coachUser))
+                .contentType("application/json")
+                .content("{\"members\":[{\"memberId\":" + member.getId() + ",\"status\":\"PRESENT\"}]}"))
+                .andExpect(status().isConflict());
+        assertEquals(0, attendance.count(), "incomplete roster must not partially persist");
+
+        String complete = "{\"members\":[{\"memberId\":" + member.getId()
+                + ",\"status\":\"PRESENT\"},{\"memberId\":" + second.getId() + ",\"status\":\"ABSENT\"}]}";
+        mvc.perform(post(submitUrl(startedSession)).header("Authorization", bearer(coachUser))
+                .contentType("application/json").content(complete))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.attendanceCompleteness").value("COMPLETE"))
+                .andExpect(jsonPath("$.eligibleStudentCount").value(2)).andExpect(jsonPath("$.recordedAttendanceCount").value(2));
+        assertEquals(2, attendance.findByClassSessionId(startedSession.getId()).size());
+        assertEquals(1, histories.findByAttendanceIdOrderByChangedAtAscIdAsc(
+                attendance.findByClassSessionIdAndMemberId(startedSession.getId(), second.getId()).orElseThrow().getId()).size());
+        long absentNotices = notifications.findByUserId(second.getId(), PageRequest.of(0, 20)).getContent().stream()
+                .filter(item -> item.getTitle().contains("điểm danh")).count();
+        assertEquals(1, absentNotices);
+        var absentNotice = notifications.findByUserId(second.getId(), PageRequest.of(0, 20)).getContent().stream()
+                .filter(item -> item.getTitle().contains("điểm danh")).findFirst().orElseThrow();
+        assertTrue(absentNotice.getMessage().contains("Vắng mặt"));
+        assertTrue(absentNotice.getMessage().contains(coachClass.getName()));
+        assertFalse(absentNotice.getMessage().contains("ABSENT"));
+        mvc.perform(post(submitUrl(startedSession)).header("Authorization", bearer(coachUser))
+                .contentType("application/json").content(complete)).andExpect(status().isOk());
+        assertEquals(1, notifications.findByUserId(second.getId(), PageRequest.of(0, 20)).getContent().stream()
+                .filter(item -> item.getTitle().contains("điểm danh")).count(), "unchanged retry does not notify twice");
+    }
+
+    @Test
+    void historicalPartialCompletionPreservesExcusedRecordAndRejectsDuplicateOrUnexpectedIds() throws Exception {
+        User second = user("MEMBER", "ACTIVE");
+        register(second, coachClass, CourseRegistrationStatus.CONFIRMED);
+        Attendance existing = new Attendance();
+        existing.setClassSession(startedSession); existing.setMember(member); existing.setStatus(AttendanceStatus.EXCUSED);
+        existing.setMarkedBy(admin); existing.setMarkedAt(now.minusMinutes(5)); existing.setNote("Historical approved absence");
+        attendance.saveAndFlush(existing);
+        appendInitialHistory(existing);
+        LocalDateTime originalMarkedAt = existing.getMarkedAt();
+
+        String duplicate = "{\"members\":[{\"memberId\":" + member.getId() + ",\"status\":\"EXCUSED\"},"
+                + "{\"memberId\":" + member.getId() + ",\"status\":\"EXCUSED\"},"
+                + "{\"memberId\":" + second.getId() + ",\"status\":\"ABSENT\"}]}";
+        mvc.perform(post(submitUrl(startedSession)).header("Authorization", bearer(admin))
+                .contentType("application/json").content(duplicate)).andExpect(status().isBadRequest());
+        String unexpected = "{\"members\":[{\"memberId\":" + member.getId() + ",\"status\":\"EXCUSED\"},"
+                + "{\"memberId\":" + second.getId() + ",\"status\":\"ABSENT\"},"
+                + "{\"memberId\":" + otherMember.getId() + ",\"status\":\"PRESENT\"}]}";
+        mvc.perform(post(submitUrl(startedSession)).header("Authorization", bearer(admin))
+                .contentType("application/json").content(unexpected)).andExpect(status().isConflict());
+        String valid = "{\"members\":[{\"memberId\":" + member.getId() + ",\"status\":\"EXCUSED\"},"
+                + "{\"memberId\":" + second.getId() + ",\"status\":\"ABSENT\"}]}";
+        mvc.perform(post(submitUrl(startedSession)).header("Authorization", bearer(admin))
+                .contentType("application/json").content(valid)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.attendanceCompleteness").value("COMPLETE"));
+        Attendance preserved = attendance.findById(existing.getId()).orElseThrow();
+        assertEquals(AttendanceStatus.EXCUSED, preserved.getStatus());
+        assertEquals(originalMarkedAt, preserved.getMarkedAt());
+        assertEquals("Historical approved absence", preserved.getNote());
+        assertEquals(1, histories.findByAttendanceIdOrderByChangedAtAscIdAsc(existing.getId()).size());
+        assertEquals(2, attendance.findByClassSessionId(startedSession.getId()).size());
+    }
+
+    @Test
+    void historicalRegistrationCancelledAfterSessionStartRemainsInEligibleRoster() throws Exception {
+        User historicalMember = user("MEMBER", "ACTIVE");
+        CourseRegistration registration = register(historicalMember, coachClass, CourseRegistrationStatus.CANCELLED);
+        registration.setRegisteredAt(now.minusDays(10));
+        registration.setCancelledAt(now.minusMinutes(20));
+        registrations.saveAndFlush(registration);
+        ClassSession session = session(coachClass, now.minusMinutes(30), now.minusMinutes(5), "COMPLETED");
+
+        mvc.perform(get("/api/attendance/sessions/" + session.getId() + "/roster")
+                .header("Authorization", bearer(coachUser)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.eligibleStudentCount").value(2))
+                .andExpect(jsonPath("$.members[?(@.memberId == " + historicalMember.getId() + ")].memberId")
+                        .value(org.hamcrest.Matchers.hasItem(historicalMember.getId())));
+    }
+
+    @Test
+    void memberStatisticsExposeElapsedUnrecordedSessionsWithoutCountingThemAsAbsent() throws Exception {
+        ClassSession elapsed = session(coachClass, now.minusHours(3), now.minusHours(2), "COMPLETED");
+        Attendance historical = new Attendance(); historical.setClassSession(elapsed); historical.setMember(member);
+        historical.setStatus(AttendanceStatus.EXCUSED); historical.setMarkedBy(admin); historical.setMarkedAt(now.minusHours(1));
+        attendance.saveAndFlush(historical);
+        ClassSession unrecorded = session(coachClass, now.minusHours(6), now.minusHours(5), "COMPLETED");
+
+        mvc.perform(get("/api/attendance/me/overview").header("Authorization", bearer(member)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].eligibleElapsedCount").value(2))
+                .andExpect(jsonPath("$[0].recordedElapsedCount").value(1))
+                .andExpect(jsonPath("$[0].unrecordedElapsedCount").value(1))
+                .andExpect(jsonPath("$[0].presentCount").value(0))
+                .andExpect(jsonPath("$[0].excusedCount").value(1))
+                .andExpect(jsonPath("$[0].unrecordedElapsedCount").value(1));
+        mvc.perform(get("/api/attendance/me/overview").header("Authorization", bearer(otherMember)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void newAttendanceAllowsOnlyPresentAndAbsentAndRejectsEarlyOrCancelledSessions() throws Exception {
         ClassSession future = session(coachClass, now.plusMinutes(1), now.plusMinutes(45), "SCHEDULED");
         mvc.perform(put(markUrl(future, member)).header("Authorization", bearer(coachUser))
                 .contentType("application/json").content("{\"status\":\"PRESENT\"}"))
                 .andExpect(status().isConflict());
 
-        List<String> statuses = List.of("PRESENT", "ABSENT", "EXCUSED");
+        List<String> statuses = List.of("PRESENT", "ABSENT");
         for (String statusValue : statuses) {
             User rowMember = user("MEMBER", "ACTIVE");
             register(rowMember, coachClass, CourseRegistrationStatus.CONFIRMED);
             ClassSession completedSession = session(coachClass, now.minusHours(2), now.minusHours(1), "COMPLETED");
-            mvc.perform(put(markUrl(completedSession, rowMember)).header("Authorization", bearer(coachUser))
-                    .contentType("application/json").content("{\"status\":\"" + statusValue + "\"}"))
-                    .andExpect(status().isOk()).andExpect(jsonPath("$.status").value(statusValue))
-                    .andExpect(jsonPath("$.sessionStatus").value("COMPLETED"));
+            mvc.perform(post(submitUrl(completedSession)).header("Authorization", bearer(coachUser))
+                    .contentType("application/json").content(submissionBody(completedSession, rowMember, statusValue)))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.attendanceCompleteness").value("COMPLETE"));
         }
+
+        ClassSession excusedSession = session(coachClass, now.minusHours(2), now.minusHours(1), "COMPLETED");
+        User excusedMember = user("MEMBER", "ACTIVE");
+        register(excusedMember, coachClass, CourseRegistrationStatus.CONFIRMED);
+        mvc.perform(post(submitUrl(excusedSession)).header("Authorization", bearer(coachUser))
+                .contentType("application/json").content(submissionBody(excusedSession, excusedMember, "EXCUSED")))
+                .andExpect(status().isBadRequest());
 
         ClassSession cancelled = session(coachClass, now.minusHours(2), now.minusHours(1), "CANCELLED");
         User cancelledSessionMember = user("MEMBER", "ACTIVE");
@@ -290,6 +437,7 @@ class AttendanceIntegrationTest {
     void correctionsRequireReasonAndAppendHistoryWhileRepeatedStatusIsIdempotent() throws Exception {
         markAsAdmin(startedSession, member, "PRESENT");
         Attendance record = attendance.findByClassSessionIdAndMemberId(startedSession.getId(), member.getId()).orElseThrow();
+        long notificationsBefore = notifications.findByUserId(member.getId(), PageRequest.of(0, 100)).getTotalElements();
 
         mvc.perform(put(markUrl(startedSession, member)).header("Authorization", bearer(coachUser))
                 .contentType("application/json").content("{\"status\":\"ABSENT\"}"))
@@ -314,6 +462,28 @@ class AttendanceIntegrationTest {
         assertEquals(1, auditCount(record.getId(), "CORRECT"));
         Attendance updated = attendance.findById(record.getId()).orElseThrow();
         assertEquals(coachUser.getId(), updated.getMarkedBy().getId());
+        assertEquals(notificationsBefore + 1,
+                notifications.findByUserId(member.getId(), PageRequest.of(0, 100)).getTotalElements(),
+                "only the genuine status transition notifies the affected Member");
+    }
+
+    @Test
+    void authorizedAdminAndCoachCanStillCorrectAttendanceWhenNoTrainingResultExists() throws Exception {
+        markAsAdmin(startedSession, member, "PRESENT");
+        mvc.perform(put(markUrl(startedSession, member)).header("Authorization", bearer(coachUser))
+                .contentType("application/json").content("{\"status\":\"ABSENT\",\"reason\":\"Roster correction\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("ABSENT"));
+        mvc.perform(put(markUrl(startedSession, member)).header("Authorization", bearer(admin))
+                .contentType("application/json").content("{\"status\":\"PRESENT\",\"reason\":\"Verified attendance\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PRESENT"));
+
+        ClassSession second = session(coachClass, now.minusHours(2), now.minusHours(1), "COMPLETED");
+        User secondMember = user("MEMBER", "ACTIVE");
+        register(secondMember, coachClass, CourseRegistrationStatus.CONFIRMED);
+        markAsAdmin(second, secondMember, "PRESENT");
+        mvc.perform(put(markUrl(second, secondMember)).header("Authorization", bearer(admin))
+                .contentType("application/json").content("{\"status\":\"EXCUSED\",\"reason\":\"Medical note\"}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -369,13 +539,21 @@ class AttendanceIntegrationTest {
 
     @Test
     void historyFailureRollsBackBothTheCurrentRecordAndHistory() throws Exception {
-        doThrow(new DataIntegrityViolationException("simulated history write failure"))
-                .when(historySpy).saveAndFlush(any());
-        mvc.perform(put(markUrl(startedSession, member)).header("Authorization", bearer(admin))
-                .contentType("application/json").content("{\"status\":\"PRESENT\"}"))
-                .andExpect(status().isConflict());
+        User second = user("MEMBER", "ACTIVE");
+        register(second, coachClass, CourseRegistrationStatus.CONFIRMED);
+        AtomicInteger historyWrites = new AtomicInteger();
+        doAnswer(invocation -> {
+            if (historyWrites.incrementAndGet() == 2) throw new DataIntegrityViolationException("simulated later history write failure");
+            return invocation.callRealMethod();
+        }).when(historySpy).saveAndFlush(any());
+        mvc.perform(post(submitUrl(startedSession)).header("Authorization", bearer(admin))
+                .contentType("application/json").content("{\"members\":[{\"memberId\":" + member.getId()
+                        + ",\"status\":\"ABSENT\"},{\"memberId\":" + second.getId() + ",\"status\":\"PRESENT\"}]}"))
+                .andExpect(status().isInternalServerError());
         assertEquals(0, attendance.count());
         assertEquals(0, histories.count());
+        assertEquals(0, notifications.findByUserId(member.getId(), PageRequest.of(0, 100)).getTotalElements());
+        assertEquals(0, notifications.findByUserId(second.getId(), PageRequest.of(0, 100)).getTotalElements());
     }
 
     @Test
@@ -395,15 +573,34 @@ class AttendanceIntegrationTest {
     private int concurrentMark(CountDownLatch ready, CountDownLatch start) throws Exception {
         ready.countDown();
         if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("start timeout");
-        return mvc.perform(put(markUrl(startedSession, member)).header("Authorization", bearer(coachUser))
-                .contentType("application/json").content("{\"status\":\"PRESENT\"}"))
+        return mvc.perform(post(submitUrl(startedSession)).header("Authorization", bearer(coachUser))
+                .contentType("application/json").content(submissionBody(startedSession, member, "PRESENT")))
                 .andReturn().getResponse().getStatus();
     }
 
     private void markAsAdmin(ClassSession session, User forMember, String statusValue) throws Exception {
-        mvc.perform(put(markUrl(session, forMember)).header("Authorization", bearer(admin))
-                .contentType("application/json").content("{\"status\":\"" + statusValue + "\"}"))
+        mvc.perform(post(submitUrl(session)).header("Authorization", bearer(admin))
+                .contentType("application/json").content(submissionBody(session, forMember, statusValue)))
                 .andExpect(status().isOk());
+    }
+
+    private String submitUrl(ClassSession session) {
+        return "/api/attendance/sessions/" + session.getId() + "/submit";
+    }
+
+    private String submissionBody(ClassSession session, User selected, String statusValue) {
+        String rows = registrations.findByCourseClassIdAndStatus(session.getCourseClass().getId(), CourseRegistrationStatus.CONFIRMED)
+                .stream().map(registration -> "{\"memberId\":" + registration.getMember().getId()
+                        + ",\"status\":\"" + (registration.getMember().getId().equals(selected.getId()) ? statusValue : "PRESENT")
+                        + "\"}").collect(java.util.stream.Collectors.joining(","));
+        return "{\"members\":[" + rows + "]}";
+    }
+
+    private void appendInitialHistory(Attendance record) {
+        AttendanceHistory event = new AttendanceHistory();
+        event.setAttendance(record); event.setOldStatus(null); event.setNewStatus(record.getStatus());
+        event.setChangedBy(record.getMarkedBy()); event.setChangedAt(record.getMarkedAt());
+        histories.saveAndFlush(event);
     }
 
     private String markUrl(ClassSession session, User forMember) {
@@ -475,10 +672,18 @@ class AttendanceIntegrationTest {
         result.setMember(forMember);
         result.setCourseClass(courseClass);
         result.setStatus(status);
+        result.setRegisteredAt(now.minusDays(1));
         result.setOriginalPrice(new BigDecimal("100.00"));
         result.setMembershipDiscount(new BigDecimal("0.00"));
         result.setFinalPrice(new BigDecimal("100.00"));
         return registrations.saveAndFlush(result);
+    }
+
+    private Attendance persistAttendance(ClassSession session, User forMember, AttendanceStatus status, User marker) {
+        Attendance record = new Attendance();
+        record.setClassSession(session); record.setMember(forMember); record.setStatus(status);
+        record.setMarkedBy(marker); record.setMarkedAt(now);
+        return attendance.saveAndFlush(record);
     }
 
     private String bearer(User user) {

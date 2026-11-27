@@ -3,6 +3,7 @@ import Sidebar from "../components/Sidebar";
 import AdminTopBar from "../components/AdminTopBar";
 import AdminSectionHeader from "../components/AdminSectionHeader";
 import { createFacilityApi, getFacilitiesApi, getSportsApi, updateFacilityApi } from "../api";
+import { statusLabel } from "../uiPresentation.js";
 import "./FacilityManagement.css";
 
 const EMPTY_FORM = { sportIds: [], name: "", type: "", status: "ACTIVE" };
@@ -117,7 +118,6 @@ export default function FacilityManagement({ token, role, currentUserName, onLog
       <AdminSectionHeader
         title="Quản lý cơ sở vật chất"
         description="Tạo cơ sở, chọn bộ môn và cập nhật trạng thái cho hoạt động nội bộ."
-        icon={<svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V5l7-2v18M12 8h7v13M8 7h1m-1 4h1m-1 4h1m8-4h1m-1 4h1" /></svg>}
         summary={<>
           <span className="admin-section-chip"><strong>{facilities.length}</strong> cơ sở</span>
           <span className="admin-section-chip"><strong>{sports.length}</strong> bộ môn đang hoạt động</span>
@@ -142,7 +142,7 @@ export default function FacilityManagement({ token, role, currentUserName, onLog
                 <tbody>{facilities.map((facility) => <tr key={facility.id} className={selectedId === facility.id ? "selected" : ""}>
                   <td>{facility.id}</td><td>{facility.name}</td><td>{facility.type}</td>
                   <td>{(facility.sports || (facility.sportName ? [{ name: facility.sportName }] : [])).map((sport) => sport.name).join(", ")}</td>
-                  <td><span className={"status-pill status-" + String(facility.status || "").toLowerCase()}>{facility.status}</span></td>
+                  <td><span className={"status-pill status-" + String(facility.status || "").toLowerCase()}>{statusLabel(facility.status, "facility")}</span></td>
                   <td><button type="button" className="btn-secondary" onClick={() => selectFacility(facility)} disabled={saving}>{"Ch\u1ec9nh s\u1eeda"}</button></td>
                 </tr>)}</tbody>
               </table></div>}
@@ -157,7 +157,7 @@ export default function FacilityManagement({ token, role, currentUserName, onLog
                 <input type="checkbox" checked={form.sportIds.includes(String(sport.id))}
                   onChange={(event) => setForm((current) => ({ ...current, sportIds: event.target.checked
                     ? [...current.sportIds, String(sport.id)] : current.sportIds.filter((id) => id !== String(sport.id)) }))} />
-                {sport.name}{String(sport.status).toUpperCase() !== "ACTIVE" ? " (INACTIVE)" : ""}
+                {sport.name}{String(sport.status).toUpperCase() !== "ACTIVE" ? " (Ngừng hoạt động)" : ""}
               </label>)}
             </fieldset>
             {sports.length === 0 && <p className="muted small">{"C\u1ea7n c\u00f3 \u00edt nh\u1ea5t m\u1ed9t b\u1ed9 m\u00f4n ACTIVE \u0111\u1ec3 g\u00e1n cho c\u01a1 s\u1edf."}</p>}
@@ -168,9 +168,9 @@ export default function FacilityManagement({ token, role, currentUserName, onLog
             {selectedFacility && <>
               <label htmlFor="facility-status">{"Tr\u1ea1ng th\u00e1i"}</label>
               <select id="facility-status" value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })} disabled={saving}>
-                <option value="ACTIVE">ACTIVE</option><option value="INACTIVE">INACTIVE</option>
+                <option value="ACTIVE">Đang hoạt động</option><option value="INACTIVE">Ngừng hoạt động</option>
               </select>
-              <p className="muted small">{"Kh\u00f4ng th\u1ec3 chuy\u1ec3n sang INACTIVE khi c\u00f2n bu\u1ed5i h\u1ecdc SCHEDULED \u0111ang di\u1ec5n ra ho\u1eb7c s\u1eafp t\u1edbi."}</p>
+              <p className="muted small">{"Kh\u00f4ng th\u1ec3 ng\u1eebng ho\u1ea1t \u0111\u1ed9ng khi c\u00f2n bu\u1ed5i h\u1ecdc \u0111\u00e3 l\u00ean l\u1ecbch \u0111ang di\u1ec5n ra ho\u1eb7c s\u1eafp t\u1edbi."}</p>
             </>}
             <div className="sport-admin-actions">
               <button type="submit" className="btn-primary" disabled={saving || sportOptions.length === 0 || form.sportIds.length === 0}>{saving ? "\u0110ang l\u01b0u\u2026" : selectedFacility ? "L\u01b0u thay \u0111\u1ed5i" : "T\u1ea1o c\u01a1 s\u1edf"}</button>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import { formatTargetAgeRange } from "../memberCoursePresentation.js";
 import { courseRegistrationStatus } from "../memberCourseRegistration.js";
@@ -9,6 +9,10 @@ import { cancelCourseRegistrationApi, getMyClassSessionsApi, getMyPaymentsApi, g
 import { coursePaymentInfo, paidCancellationEligibility, cancellationErrorMessage } from "../courseCancellation.js";
 import { memberRegistrationSections } from "../memberRegistrationSections.js";
 const list = (d) => Array.isArray(d) ? d : d?.content ?? [];
+function RegistrationPager({ page, pages, total, onChange }) {
+  if (total <= 5) return null;
+  return <nav className="member-registration-pager" aria-label="Phân trang đăng ký"><span>{total} mục · Trang {page}/{pages}</span><div><button type="button" disabled={page <= 1} onClick={() => onChange(page - 1)}>Trước</button><button type="button" disabled={page >= pages} onClick={() => onChange(page + 1)}>Sau</button></div></nav>;
+}
 function formatVietnamDateTime(value) {
   if (!value) return "deadline unavailable";
   const local = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(value);
@@ -18,11 +22,13 @@ function formatVietnamDateTime(value) {
   }).format(date);
 }
 export default function MemberCourses({ token, role, onLogout, onNavigate }) {
+  const [searchParams] = useSearchParams();
+  const requestedSportId = searchParams.get("sportId");
   const [sports, setSports] = useState([]), [sportId, setSportId] = useState(null), [courses, setCourses] = useState([]);
   const [loadingSports, setLoadingSports] = useState(true), [loadingCourses, setLoadingCourses] = useState(false), [error, setError] = useState("");
   const [registrations, setRegistrations] = useState([]), [registrationsLoading, setRegistrationsLoading] = useState(true), [registrationsError, setRegistrationsError] = useState("");
   const [classSessions, setClassSessions] = useState([]), [classSessionsLoading, setClassSessionsLoading] = useState(true), [classSessionsError, setClassSessionsError] = useState("");
-  const [registrationTab, setRegistrationTab] = useState("CURRENT"), [visibleHistoryCount, setVisibleHistoryCount] = useState(10);
+  const [registrationTab, setRegistrationTab] = useState("CURRENT"), [currentPage, setCurrentPage] = useState(1), [historyPage, setHistoryPage] = useState(1);
   const [payments, setPayments] = useState([]), [paymentsLoading, setPaymentsLoading] = useState(true), [paymentsError, setPaymentsError] = useState("");
   const [cancellingId, setCancellingId] = useState(null), [paidCancelId, setPaidCancelId] = useState(null), [paidCancelSuccessId, setPaidCancelSuccessId] = useState(null), [cancelError, setCancelError] = useState("");
   async function cancelHold(id) {
@@ -33,8 +39,8 @@ export default function MemberCourses({ token, role, onLogout, onNavigate }) {
     } catch (requestError) { setCancelError(requestError.message || "Could not cancel this pending registration."); }
     finally { setCancellingId(null); }
   }
-  useEffect(() => { let active = true; getPublicSportsApi().then((d) => { const rows = list(d); if (active) { setSports(rows); setSportId(rows[0]?.id ?? null); } })
-    .catch((e) => { if (active) setError(e.message || "Không tải được bộ môn."); }).finally(() => { if (active) setLoadingSports(false); }); return () => { active = false; }; }, []);
+  useEffect(() => { let active = true; getPublicSportsApi().then((d) => { const rows = list(d); if (active) { setSports(rows); const selected = rows.find((sport) => Number(sport.id) === Number(requestedSportId)); setSportId(selected?.id ?? rows[0]?.id ?? null); } })
+    .catch((e) => { if (active) setError(e.message || "Không tải được bộ môn."); }).finally(() => { if (active) setLoadingSports(false); }); return () => { active = false; }; }, [requestedSportId]);
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (sportId == null) return undefined; let active = true; setLoadingCourses(true); setError("");
     getPublicCoursesBySportApi(sportId).then((d) => { if (active) setCourses(list(d)); }).catch((e) => { if (active) { setCourses([]); setError(e.message || "Không tải được khóa học."); } })
@@ -101,9 +107,12 @@ export default function MemberCourses({ token, role, onLogout, onNavigate }) {
     return () => { active = false; window.clearInterval(interval); window.removeEventListener("focus", refreshPaymentStatus); };
   }, [token]);
   const registrationSections = memberRegistrationSections(registrations, classSessions);
+  const currentPages = Math.max(1, Math.ceil(registrationSections.current.length / 5));
+  const historyPages = Math.max(1, Math.ceil(registrationSections.history.length / 5));
+  const safeCurrentPage = Math.min(currentPage, currentPages), safeHistoryPage = Math.min(historyPage, historyPages);
   const registrationRows = registrationTab === "CURRENT"
-    ? registrationSections.current
-    : registrationSections.history.slice(0, visibleHistoryCount);
+    ? registrationSections.current.slice((safeCurrentPage - 1) * 5, safeCurrentPage * 5)
+    : registrationSections.history.slice((safeHistoryPage - 1) * 5, safeHistoryPage * 5);
   return <div className="layout"><Sidebar role={role} activePage="member-courses" onLogout={onLogout} onNavigate={onNavigate}/><main className="main member-courses-page">
     <div className="member-courses-shell">
       <header className="member-courses-hero">
@@ -157,13 +166,13 @@ export default function MemberCourses({ token, role, onLogout, onNavigate }) {
           <p>Trạng thái giữ chỗ, thanh toán và lớp học của bạn.</p></div><Link className="member-course-schedule-link" to="/member/schedule">Xem lịch học <span aria-hidden="true">→</span></Link></div>
         {registrationsLoading ? <p className="member-course-history-state" role="status">Đang tải đăng ký…</p>
           : registrationsError ? <div><p className="banner error" role="alert">{registrationsError}</p><button type="button" className="member-registration-show-more" onClick={() => void retryRegistrationData()}>Thử tải lại</button></div>
-            : registrations.length === 0 ? <p className="member-course-history-state">Bạn chưa có đăng ký CONFIRMED nào.</p>
+            : registrations.length === 0 ? <p className="member-course-history-state">Bạn chưa có đăng ký nào đã được xác nhận.</p>
               : <>
                 <div className="member-registration-tabs" role="tablist" aria-label="Lọc đăng ký khóa học">
                   <button type="button" role="tab" aria-selected={registrationTab === "CURRENT"} className={registrationTab === "CURRENT" ? "selected" : ""}
-                    onClick={() => setRegistrationTab("CURRENT")}>Đang tham gia ({registrationSections.current.length})</button>
+                    onClick={() => { setRegistrationTab("CURRENT"); setCurrentPage(1); }}>Đang tham gia ({registrationSections.current.length})</button>
                   <button type="button" role="tab" aria-selected={registrationTab === "HISTORY"} className={registrationTab === "HISTORY" ? "selected" : ""}
-                    onClick={() => setRegistrationTab("HISTORY")}>Lịch sử đăng ký ({registrationSections.history.length})</button>
+                    onClick={() => { setRegistrationTab("HISTORY"); setHistoryPage(1); }}>Lịch sử đăng ký ({registrationSections.history.length})</button>
                 </div>
                 {classSessionsLoading && <p className="member-course-history-note" role="status">Đang tải lịch các lớp để xác định đăng ký đã hoàn tất hay chưa.</p>}
                 {classSessionsError && <div><p className="member-course-history-note" role="status">{classSessionsError} Các đăng ký đã xác nhận được giữ trong mục đang tham gia khi chưa xác minh được lịch.</p><button type="button" className="member-registration-show-more" onClick={() => void retryRegistrationData()}>Thử tải lại lịch</button></div>}
@@ -178,7 +187,7 @@ export default function MemberCourses({ token, role, onLogout, onNavigate }) {
                 {item.status === "CONFIRMED" && registrationTab === "CURRENT" && (() => {
                   const info = coursePaymentInfo(payments, item.id);
                   const eligibility = paidCancellationEligibility(item, payments, new Date());
-                  const reason = paymentsLoading ? "Đang xác minh thanh toán…" : paymentsError ? "Chưa thể xác minh khoản thanh toán." : eligibility.reason === "deadline-unavailable" ? "Chưa có hạn hủy đáng tin cậy từ máy chủ." : eligibility.reason === "deadline-passed" ? "Đã qua hạn hủy theo thời gian hiển thị; máy chủ xác nhận điều kiện cuối cùng." : eligibility.reason === "payment-unverified" ? "Chưa xác minh được duy nhất một khoản thanh toán thành công." : null;
+                  const reason = paymentsLoading ? "Đang xác minh thanh toán…" : paymentsError ? "Chưa thể xác minh khoản thanh toán." : eligibility.reason === "deadline-unavailable" ? "Chưa có thông tin hạn hủy." : eligibility.reason === "deadline-passed" ? "Đã hết hạn hủy đăng ký." : eligibility.reason === "payment-unverified" ? "Chưa xác minh được duy nhất một khoản thanh toán thành công." : null;
                   return <div className="member-registration-cancellation">
                     <span>Hạn hủy: {formatVietnamDateTime(item.cancellationDeadline)} (giờ Việt Nam).</span>
                     {eligibility.allowed ? <button type="button" disabled={paidCancelId !== null || cancellingId !== null} onClick={() => void cancelConfirmedRegistration(item)}>{paidCancelId === item.id ? "Đang hủy…" : "Hủy đăng ký"}</button> : <button type="button" disabled aria-describedby={"cancel-unavailable-" + item.id}>Hủy đăng ký</button>}
@@ -195,8 +204,10 @@ export default function MemberCourses({ token, role, onLogout, onNavigate }) {
                   {item.status === "PENDING_PAYMENT" && <button type="button" disabled={cancellingId !== null} onClick={() => void cancelHold(item.id)}>{cancellingId === item.id ? "Đang hủy…" : "Hủy giữ chỗ"}</button>}
                   {item.courseId != null && <Link to={`/member/courses/${item.courseId}`}>Xem khóa học</Link>}</div>
               </article>)}</div>
-                {registrationTab === "HISTORY" && registrationSections.history.length > visibleHistoryCount
-                  && <button type="button" className="member-registration-show-more" onClick={() => setVisibleHistoryCount((count) => count + 10)}>Xem thêm lịch sử</button>}
+                <RegistrationPager page={registrationTab === "CURRENT" ? safeCurrentPage : safeHistoryPage}
+                  pages={registrationTab === "CURRENT" ? currentPages : historyPages}
+                  total={registrationTab === "CURRENT" ? registrationSections.current.length : registrationSections.history.length}
+                  onChange={registrationTab === "CURRENT" ? setCurrentPage : setHistoryPage} />
               </>}
         {cancelError && <p className="banner error" role="alert">{cancelError}</p>}
       </section>
