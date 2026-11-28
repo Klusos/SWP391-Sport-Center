@@ -23,7 +23,7 @@ public class CreateStaffCoachRequest {
     private String phone;
     @Size(max = 1)
     private String gender;
-    @NotBlank @Size(min = 6)
+    @NotBlank @Size(min = 8)
     private String password;
     @Size(max = 1000)
     private String bio;

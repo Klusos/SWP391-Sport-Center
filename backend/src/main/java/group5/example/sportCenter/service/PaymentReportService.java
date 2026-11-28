@@ -53,6 +53,15 @@ public class PaymentReportService {
         for (Object[] r : paymentRepository.revenueByMethod(start, end)) {
             byMethod.put(r[0].toString(), (BigDecimal) r[1]);
         }
+        Map<String, BigDecimal> membershipCategories = new LinkedHashMap<>();
+        membershipCategories.put("PURCHASE", BigDecimal.ZERO);
+        membershipCategories.put("UPGRADE", BigDecimal.ZERO);
+        membershipCategories.put("RENEWAL", BigDecimal.ZERO);
+        for (Object[] row : paymentRepository.membershipRevenueByCategory(start, end)) {
+            membershipCategories.put(row[0].toString(), (BigDecimal) row[1]);
+        }
+        membershipCategories.put("TOTAL", membershipCategories.get("PURCHASE")
+                .add(membershipCategories.get("UPGRADE")).add(membershipCategories.get("RENEWAL")));
         Map<LocalDate, Map<String, BigDecimal>> daily = new TreeMap<>();
         for (Object[] row : paymentRepository.revenueBySettlementDay(start, end)) {
             LocalDate day = LocalDate.of(((Number) row[0]).intValue(), ((Number) row[1]).intValue(),
@@ -78,7 +87,8 @@ public class PaymentReportService {
         for (PaymentPurpose purpose : PaymentPurpose.values()) {
             byPurpose.putIfAbsent(purpose.name(), BigDecimal.ZERO);
         }
-        return new RevenueReportResponse(from, to, paymentRepository.sumRevenue(start, end), byPurpose, byMethod,
+        return new RevenueReportResponse(from, to, paymentRepository.sumRevenue(start, end), byPurpose,
+                membershipCategories, byMethod,
                 groupBy.name(), periods);
     }
 

@@ -89,14 +89,14 @@ class MembershipPlanIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(inactive.getId()));
 
-        String createBody = planBody("New Demo Plan", "0.00", 6, "0", "100");
+        String createBody = planBody("New Demo Plan", "1.00", 6, "0", "100");
         String response = mvc.perform(post("/api/membership-plans")
                         .header("Authorization", adminToken)
                         .contentType("application/json")
                         .content(createBody))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
-                .andExpect(jsonPath("$.price").value(0.00))
+                .andExpect(jsonPath("$.price").value(1.00))
                 .andReturn().getResponse().getContentAsString();
         int createdId = objectMapper.readTree(response).get("id").intValue();
 
@@ -133,6 +133,7 @@ class MembershipPlanIntegrationTest {
         String adminToken = bearer(user("ADMIN"));
         String[] invalidBodies = {
                 planBody("Negative Price", "-0.01", 1, "0", "0"),
+                planBody("Zero Price", "0.00", 1, "0", "0"),
                 planBody("Zero Duration", "10.00", 0, "0", "0"),
                 planBody("Large Discount", "10.00", 1, "100.01", "0"),
                 planBody("Too Many Decimals", "10.001", 1, "0", "0")
@@ -145,6 +146,13 @@ class MembershipPlanIntegrationTest {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.message").isNotEmpty());
         }
+
+        MembershipPlan existing = plan("ACTIVE");
+        mvc.perform(put("/api/membership-plans/{id}", existing.getId())
+                        .header("Authorization", adminToken)
+                        .contentType("application/json")
+                        .content(updateBody(existing.getName(), "0.00", 12, "0", "0", "ACTIVE")))
+                .andExpect(status().isBadRequest());
 
         mvc.perform(patch("/api/membership-plans/{id}/status", 1)
                         .header("Authorization", adminToken)

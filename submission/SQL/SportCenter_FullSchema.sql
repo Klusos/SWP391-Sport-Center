@@ -522,6 +522,8 @@ GO
 ALTER TABLE [dbo].[membership_cancellation_request] ADD CONSTRAINT [pk_membership_cancellation_request] PRIMARY KEY CLUSTERED ([id] ASC);
 GO
 ALTER TABLE [dbo].[membership_plan] ADD CONSTRAINT [pk_membership_plan] PRIMARY KEY CLUSTERED ([id] ASC);
+ALTER TABLE [dbo].[membership_plan] WITH CHECK ADD CONSTRAINT [ck_membership_plan_price_positive] CHECK ([price]>(0));
+ALTER TABLE [dbo].[membership_plan] CHECK CONSTRAINT [ck_membership_plan_price_positive];
 GO
 ALTER TABLE [dbo].[membership_upgrade] ADD CONSTRAINT [pk_membership_upgrade] PRIMARY KEY CLUSTERED ([id] ASC);
 GO

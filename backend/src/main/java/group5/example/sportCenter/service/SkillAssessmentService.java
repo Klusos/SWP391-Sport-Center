@@ -46,7 +46,7 @@ public class SkillAssessmentService {
             throw error(HttpStatus.CONFLICT, "Target must be an ACTIVE MEMBER");
         Sport sport = sports.findById(request.sportId()).orElseThrow(() -> error(HttpStatus.NOT_FOUND, "Sport not found"));
         if (!"ACTIVE".equalsIgnoreCase(sport.getStatus())) throw error(HttpStatus.CONFLICT, "Sport must be ACTIVE");
-        Coach coach = coaches.findById(request.assignedCoachId()).orElseThrow(() -> error(HttpStatus.NOT_FOUND, "Coach not found"));
+        Coach coach = coaches.findByIdForBookingUpdate(request.assignedCoachId()).orElseThrow(() -> error(HttpStatus.NOT_FOUND, "Coach not found"));
         if (!"ACTIVE".equalsIgnoreCase(coach.getStatus()) || !"ACTIVE".equalsIgnoreCase(coach.getUser().getStatus())
                 || !"COACH".equalsIgnoreCase(coach.getUser().getRole()))
             throw error(HttpStatus.CONFLICT, "Assigned coach and COACH account must be ACTIVE");
@@ -173,7 +173,8 @@ public class SkillAssessmentService {
         if (notes != null && notes.length() > 1000) throw error(HttpStatus.BAD_REQUEST, "notes cannot exceed 1000 characters");
     }
     private SkillAssessmentResponse response(SkillAssessment a) {
-        return new SkillAssessmentResponse(a.getId(), a.getMember().getId(), a.getSport().getId(),
+        return new SkillAssessmentResponse(a.getId(), a.getMember().getId(), a.getMember().getName(),
+                a.getSport().getId(), a.getSport().getName(),
                 a.getAssignedCoach().getId(), a.getAssignedCoach().getUser().getName(), a.getRequestedByUser().getId(), a.getStatus().name(),
                 a.getAssessedLevel() == null ? null : a.getAssessedLevel().name(), a.getNotes(),
                 a.getCreatedAt(), a.getAssessedAt(), a.getCancelledAt(),

@@ -171,10 +171,16 @@ export default function ReportPage({ token, currentUserName }) {
               <strong>{formatVnd(report.totalRevenue)}</strong>
               <small>{report.from} — {report.to}</small>
             </article>
-            {REVENUE_PURPOSES.map(([purpose, label]) => (
+            {REVENUE_PURPOSES.map(([purpose, label]) => ["MEMBERSHIP", "UPGRADE"].includes(purpose) ? null : (
               <article className="panel revenue-purpose-card" key={purpose}>
                 <span>{label}</span>
                 <strong>{formatVnd(totals[purpose])}</strong>
+              </article>
+            ))}
+            {[["PURCHASE", "Mua gói hội viên"], ["UPGRADE", "Nâng cấp gói hội viên"], ["RENEWAL", "Gia hạn gói hội viên"], ["TOTAL", "Tổng doanh thu gói hội viên"]].map(([category, label]) => (
+              <article className="panel revenue-purpose-card" key={`membership-${category}`}>
+                <span>{label}</span>
+                <strong>{formatVnd(report.membershipRevenueByCategory?.[category])}</strong>
               </article>
             ))}
           </section>

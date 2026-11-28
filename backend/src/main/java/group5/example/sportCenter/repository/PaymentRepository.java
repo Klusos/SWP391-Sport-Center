@@ -193,6 +193,22 @@ public interface PaymentRepository extends JpaRepository<Payment, Integer> {
         """)
     List<Object[]> revenueByPurpose(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
+    @Query("""
+        SELECT CASE WHEN p.purpose = group5.example.sportCenter.entity.PaymentPurpose.UPGRADE THEN 'UPGRADE'
+                    WHEN p.renewalIntent IS NOT NULL THEN 'RENEWAL'
+                    ELSE 'PURCHASE' END,
+               COALESCE(SUM(p.amount), 0)
+        FROM Payment p
+        WHERE p.status = group5.example.sportCenter.entity.PaymentStatus.SUCCESS
+          AND p.paidAt >= :from AND p.paidAt < :to
+          AND (p.purpose = group5.example.sportCenter.entity.PaymentPurpose.UPGRADE
+               OR p.purpose = group5.example.sportCenter.entity.PaymentPurpose.MEMBERSHIP)
+        GROUP BY CASE WHEN p.purpose = group5.example.sportCenter.entity.PaymentPurpose.UPGRADE THEN 'UPGRADE'
+                      WHEN p.renewalIntent IS NOT NULL THEN 'RENEWAL'
+                      ELSE 'PURCHASE' END
+        """)
+    List<Object[]> membershipRevenueByCategory(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
     /** Daily verified revenue, grouped by purpose for DAY/MONTH/YEAR report buckets. */
     @Query("""
         SELECT FUNCTION('year', p.paidAt), FUNCTION('month', p.paidAt), FUNCTION('day', p.paidAt),

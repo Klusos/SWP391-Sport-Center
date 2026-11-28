@@ -19,6 +19,7 @@ import group5.example.sportCenter.dto.UpdateUserRequest;
 import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.UserRepository;
+import group5.example.sportCenter.repository.CoachRepository;
 import group5.example.sportCenter.validation.VietnamesePhoneNumbers;
 
 @Service
@@ -30,16 +31,22 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuditLogService auditLogs;
+    private final CoachRepository coachRepository;
+    private final CoachDeactivationGuard coachDeactivationGuard;
 
 
     public UserService(
             UserRepository userRepository,
             PasswordEncoder passwordEncoder,
-            AuditLogService auditLogs) {
+            AuditLogService auditLogs,
+            CoachRepository coachRepository,
+            CoachDeactivationGuard coachDeactivationGuard) {
 
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.auditLogs = auditLogs;
+        this.coachRepository = coachRepository;
+        this.coachDeactivationGuard = coachDeactivationGuard;
     }
 
     public List<UserResponse> getAllUsers(Jwt callerJwt) {
@@ -93,6 +100,11 @@ public class UserService {
 
     String role = normalizeRole(request.getRole());
 
+    if ("COACH".equals(role)) {
+        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Create Coach accounts through the Coach management workflow so the Coach profile is created consistently");
+    }
+
     if (userRepository.existsByEmail(request.getEmail())) {
         throw new IllegalArgumentException("Email already exists");
     }
@@ -119,11 +131,19 @@ public class UserService {
     }
 
     @Transactional
-    public UserResponse updateUser(Integer id, UpdateUserRequest request) {
+    public UserResponse updateUser(Integer id, UpdateUserRequest request, Jwt jwt) {
 
         String role = normalizeRole(request.getRole());
+        String requestedStatus = request.getStatus() == null ? "" : request.getStatus().trim().toUpperCase(Locale.ROOT);
+        if (!requestedStatus.equals("ACTIVE") && !requestedStatus.equals("INACTIVE")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Status must be ACTIVE or INACTIVE");
+        }
+        User caller = getActiveActor(jwt);
+        if (!"ADMIN".equalsIgnoreCase(caller.getRole())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only ADMIN can update accounts");
+        }
 
-        User user = userRepository.findById(id)
+        User user = userRepository.findByIdForAdminUpdate(id)
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "User not found with id: " + id));
@@ -131,6 +151,33 @@ public class UserService {
         if ("MEMBER".equalsIgnoreCase(user.getRole()) && !"MEMBER".equals(role)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Changing a MEMBER account to a staff or ADMIN role is not supported");
+        }
+
+        if (!user.getRole().equalsIgnoreCase(role)
+                && ("COACH".equalsIgnoreCase(user.getRole()) || "COACH".equals(role))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Coach role transitions must use the Coach management workflow to preserve Coach records");
+        }
+        if ("COACH".equalsIgnoreCase(user.getRole()) && "ACTIVE".equalsIgnoreCase(user.getStatus())
+                && "INACTIVE".equals(requestedStatus)) {
+            var coach = coachRepository.findByUserId(user.getId())
+                    .flatMap(existing -> coachRepository.findByIdForBookingUpdate(existing.getId()))
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Coach profile is missing; account status cannot be changed safely"));
+            coachDeactivationGuard.requireNoUnfinishedObligations(coach);
+            coach.setStatus("INACTIVE");
+        }
+        if (caller.getId().equals(id)
+                && (!"ADMIN".equalsIgnoreCase(role) || !"ACTIVE".equals(requestedStatus))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "You cannot remove Admin access or deactivate your own account");
+        }
+        if ("ADMIN".equalsIgnoreCase(user.getRole())
+                && "ACTIVE".equalsIgnoreCase(user.getStatus())
+                && (!"ADMIN".equalsIgnoreCase(role) || !"ACTIVE".equals(requestedStatus))
+                && userRepository.countByRoleIgnoreCaseAndStatusIgnoreCase("ADMIN", "ACTIVE") <= 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "The last active Admin account cannot be demoted or deactivated");
         }
 
         if (!user.getEmail().equals(request.getEmail())
@@ -153,7 +200,7 @@ public class UserService {
         user.setGender(request.getGender());
         user.setPhone(VietnamesePhoneNumbers.normalizeOptional(request.getPhone()));
         user.setRole(role);
-        user.setStatus(request.getStatus());
+        user.setStatus(requestedStatus);
 
         User updatedUser = userRepository.save(user);
         if (!changedProfileFields.isEmpty()) {
@@ -190,9 +237,14 @@ public class UserService {
     }
 
     @Transactional
-    public void deleteUser(Integer id) {
+    public void deleteUser(Integer id, Jwt jwt) {
 
-        User user = userRepository.findById(id)
+        User caller = getActiveActor(jwt);
+        if (!"ADMIN".equalsIgnoreCase(caller.getRole())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only ADMIN can delete accounts");
+        }
+
+        User user = userRepository.findByIdForAdminUpdate(id)
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "User not found with id: " + id));
@@ -200,6 +252,17 @@ public class UserService {
         if ("MEMBER".equalsIgnoreCase(user.getRole())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "MEMBER accounts are retained for business history; deactivate the account instead");
+        }
+        if ("COACH".equalsIgnoreCase(user.getRole())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Coach accounts are retained to preserve class and assessment history; deactivate the Coach instead");
+        }
+
+        if (caller.getId().equals(id) || ("ADMIN".equalsIgnoreCase(user.getRole())
+                && "ACTIVE".equalsIgnoreCase(user.getStatus())
+                && userRepository.countByRoleIgnoreCaseAndStatusIgnoreCase("ADMIN", "ACTIVE") <= 1)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "An Admin cannot delete their own account or the last active Admin account");
         }
 
         if (auditLogs.existsForActor(id)) {

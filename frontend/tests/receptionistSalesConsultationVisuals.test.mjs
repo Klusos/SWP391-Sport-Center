@@ -5,6 +5,7 @@ import test from "node:test";
 const sales = await readFile(new URL("../src/pages/ReceptionistMembershipSales.jsx", import.meta.url), "utf8");
 const salesCss = await readFile(new URL("../src/pages/ReceptionistMembershipSales.css", import.meta.url), "utf8");
 const queue = await readFile(new URL("../src/pages/ConsultationQueue.jsx", import.meta.url), "utf8");
+const api = await readFile(new URL("../src/api.js", import.meta.url), "utf8");
 const queueCss = await readFile(new URL("../src/pages/ConsultationQueue.css", import.meta.url), "utf8");
 const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
 const courseRegistration = await readFile(new URL("../src/pages/ReceptionistCourseRegistration.jsx", import.meta.url), "utf8");
@@ -79,6 +80,8 @@ test("Consultations adds Admin-only account context and preserves Receptionist p
   assert.match(queue, /allowedRole = role === "RECEPTIONIST" \|\| role === "ADMIN"/);
   assert.match(queue, /completeConsultationRequestApi/);
   assert.match(queue, /takeConsultationRequestApi/);
+  assert.doesNotMatch(queue, /cancelConsultationRequestApi|handleCancel|Hủy yêu cầu/);
+  assert.doesNotMatch(api, /cancelConsultationRequestApi/);
   assert.doesNotMatch(queue, /NotificationBell/);
   assert.match(queueCss, /consultation-admin-content/);
   assert.match(queueCss, /\.main\.consultation-queue-page--admin \{ padding: 0; gap: 0; \}/);
@@ -96,7 +99,8 @@ test("Receptionist sales and Consultation DOB omit unnecessary process explanati
   const readOnlyDob = queue.slice(queue.indexOf('className="consultation-member-dob-readonly"'), queue.indexOf("</div>", queue.indexOf('className="consultation-member-dob-readonly"')));
   assert.match(readOnlyDob, /detail\.dateOfBirth/);
   assert.doesNotMatch(readOnlyDob, /<small>/);
-  assert.match(queue, /type="date" required max=\{CONSULTATION_TODAY\}/);
+  assert.match(queue, /type="date" required max=\{CONSULTATION_MAX_DOB\}/);
+  assert.match(queue, /timeZone: "Asia\/Ho_Chi_Minh"/);
 });
 
 test("Course registration uses natural Vietnamese labels and the approved 14-day opening", () => {

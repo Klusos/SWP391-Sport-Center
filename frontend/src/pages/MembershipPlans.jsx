@@ -177,7 +177,7 @@ export default function MembershipPlans({ token, role, currentUserName, onLogout
   function validateForm() {
     if (!form.name.trim()) return "Vui lòng nhập tên gói.";
     if (form.name.trim().length > 100) return "Tên gói không được vượt quá 100 ký tự.";
-    if (!/^[0-9]+(?:\.[0-9]{1,2})?$/.test(form.price) || Number(form.price) < 0) return "Giá phải từ 0 trở lên và có tối đa 2 chữ số thập phân.";
+    if (!/^[0-9]+(?:\.[0-9]{1,2})?$/.test(form.price) || Number(form.price) <= 0) return "Giá gói hội viên phải lớn hơn 0 và có tối đa 2 chữ số thập phân.";
     if (!Number.isInteger(Number(form.durationMonths)) || Number(form.durationMonths) <= 0) return "Thời hạn phải là số tháng nguyên dương.";
     for (const field of ["courseDiscountPercent", "personalTrainingDiscountPercent"]) {
       const rawValue = form[field];
@@ -327,7 +327,7 @@ export default function MembershipPlans({ token, role, currentUserName, onLogout
               </div>
               <div className="col-md-6">
                 <label className="form-label" htmlFor="planPrice">Giá</label>
-                <input className="form-control" id="planPrice" type="number" min="0" step="0.01" required value={form.price}
+                <input className="form-control" id="planPrice" type="number" min="0.01" step="0.01" required value={form.price}
                   onChange={(event) => setForm({ ...form, price: event.target.value })} />
               </div>
               <div className="col-md-6">

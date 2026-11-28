@@ -24,6 +24,12 @@ public interface MembershipUpgradePathRepository extends JpaRepository<Membershi
 
     Optional<MembershipUpgradePath> findByFromPlanIdAndToPlanId(Integer fromPlanId, Integer toPlanId);
 
+    @EntityGraph(attributePaths = { "fromPlan", "toPlan" })
+    @Query("select p from MembershipUpgradePath p where p.active = true "
+            + "and (p.fromPlan.id = :planId or p.toPlan.id = :planId) "
+            + "order by p.fromPlan.id, p.toPlan.id")
+    List<MembershipUpgradePath> findActiveInvolvingPlan(@Param("planId") Integer planId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from MembershipUpgradePath p where p.fromPlan.id = :fromPlanId "
             + "and p.toPlan.id = :toPlanId and p.active = true")

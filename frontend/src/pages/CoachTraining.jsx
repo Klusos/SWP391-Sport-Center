@@ -34,7 +34,8 @@ export default function CoachTraining({ token, role, currentUserName, onLogout, 
   const [classes, setClasses] = useState([]);
   const [classId, setClassId] = useState("");
   const [selectedCourseId, setSelectedCourseId] = useState("");
-  const [selectionQuery, setSelectionQuery] = useState("");
+  const [courseQuery, setCourseQuery] = useState("");
+  const [classQuery, setClassQuery] = useState("");
   const [selectionSport, setSelectionSport] = useState("");
   const [selectionFrom, setSelectionFrom] = useState("");
   const [selectionTo, setSelectionTo] = useState("");
@@ -80,11 +81,12 @@ export default function CoachTraining({ token, role, currentUserName, onLogout, 
   const setSelectionPage = (update) => selectedCourseId ? setClassSelectionPage(update) : setCourseSelectionPage(update);
   const courses = [...new Map(classes.map((item) => [String(item.courseId), item])).values()];
   const sports = [...new Map(classes.map((item) => [String(item.sportId), item])).values()];
-  const term = selectionQuery.trim().toLocaleLowerCase("vi");
-  const visibleCourses = courses.filter((item) => (!term || `${item.courseName} ${item.courseId}`.toLocaleLowerCase("vi").includes(term))
+  const courseTerm = courseQuery.trim().toLocaleLowerCase("vi");
+  const classTerm = classQuery.trim().toLocaleLowerCase("vi");
+  const visibleCourses = courses.filter((item) => (!courseTerm || `${item.courseName} ${item.courseId}`.toLocaleLowerCase("vi").includes(courseTerm))
     && (!selectionSport || String(item.sportId) === selectionSport));
   const visibleClasses = classes.filter((item) => String(item.courseId) === selectedCourseId
-    && (!term || `${item.className} ${item.classId}`.toLocaleLowerCase("vi").includes(term))
+    && (!classTerm || `${item.className} ${item.classId}`.toLocaleLowerCase("vi").includes(classTerm))
     && (!selectionFrom || !item.endDate || item.endDate >= selectionFrom)
     && (!selectionTo || !item.startDate || item.startDate <= selectionTo));
   const selectionPages = Math.max(1, Math.ceil((selectedCourseId ? visibleClasses.length : visibleCourses.length) / 10));
@@ -121,7 +123,7 @@ export default function CoachTraining({ token, role, currentUserName, onLogout, 
         </div><span>{selectedCourseId ? `${visibleClasses.length} lớp học` : `${visibleCourses.length} khóa học`}</span></div>
         {selectedCourseId && <div className="training-selection-back-row"><button type="button" className="secondary" onClick={() => setSelectedCourseId("")}>Quay lại khóa học</button></div>}
         <div className={`training-selection-filters${selectedCourseId ? " has-class-filters" : " has-course-filters"}`}>
-          <label>{selectedCourseId ? "Tìm lớp học" : "Tìm khóa học"}<input value={selectionQuery} onChange={(event) => { setSelectionQuery(event.target.value); setSelectionPage(1); }} /></label>
+          <label>{selectedCourseId ? "Tìm lớp học" : "Tìm khóa học"}<input value={selectedCourseId ? classQuery : courseQuery} onChange={(event) => { (selectedCourseId ? setClassQuery : setCourseQuery)(event.target.value); setSelectionPage(1); }} /></label>
           {!selectedCourseId && <label>Bộ môn<select value={selectionSport} onChange={(event) => { setSelectionSport(event.target.value); setSelectionPage(1); }}><option value="">Tất cả bộ môn</option>{sports.map((item) => <option key={item.sportId} value={item.sportId}>{item.sportName}</option>)}</select></label>}
           {selectedCourseId && <><label>Từ ngày<input type="date" value={selectionFrom} onChange={(event) => { setSelectionFrom(event.target.value); setSelectionPage(1); }} /></label><label>Đến ngày<input type="date" value={selectionTo} onChange={(event) => { setSelectionTo(event.target.value); setSelectionPage(1); }} /></label></>}
         </div>

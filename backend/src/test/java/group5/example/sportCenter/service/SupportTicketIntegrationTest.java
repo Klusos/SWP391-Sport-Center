@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.UUID;
+import java.time.LocalDateTime;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -79,6 +80,31 @@ class SupportTicketIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"subject\":\"   \",\"category\":\"OTHER\",\"description\":\"mô tả\"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void memberAndStaffRepliesUpdateLastActivityWithoutChangingCurrentStatus() throws Exception {
+        int memberTicketId = createTicket(member, "Member activity", "GENERAL");
+        SupportTicket memberTicket = tickets.findById(memberTicketId).orElseThrow();
+        memberTicket.setUpdatedAt(LocalDateTime.parse("2020-01-01T00:00:00"));
+        tickets.saveAndFlush(memberTicket);
+        mvc.perform(post("/api/support-tickets/{id}/messages", memberTicketId).header("Authorization", bearer(member))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"More information\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("OPEN"))
+                .andExpect(jsonPath("$.updatedAt").value(org.hamcrest.Matchers.not("2020-01-01T00:00:00")));
+        assertEquals(SupportTicketStatus.OPEN, tickets.findById(memberTicketId).orElseThrow().getStatus());
+
+        int staffTicketId = createTicket(otherMember, "Staff activity", "GENERAL");
+        mvc.perform(patch("/api/support-tickets/{id}/assign-to-me", staffTicketId).header("Authorization", bearer(receptionist)))
+                .andExpect(status().isOk());
+        SupportTicket staffTicket = tickets.findById(staffTicketId).orElseThrow();
+        staffTicket.setUpdatedAt(LocalDateTime.parse("2020-01-01T00:00:00"));
+        tickets.saveAndFlush(staffTicket);
+        mvc.perform(post("/api/support-tickets/{id}/messages", staffTicketId).header("Authorization", bearer(receptionist))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"Staff update\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.updatedAt").value(org.hamcrest.Matchers.not("2020-01-01T00:00:00")));
+        assertEquals(SupportTicketStatus.IN_PROGRESS, tickets.findById(staffTicketId).orElseThrow().getStatus());
     }
 
     @Test

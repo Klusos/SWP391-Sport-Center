@@ -747,3 +747,15 @@ Response fields are `id`, `actorUserId`, `actorRole`, `action`, `entityType`, `e
 Unauthenticated callers receive 401; RECEPTIONIST, COACH, and MEMBER receive 403. Invalid pagination, date filters, or oversized filter values return 400. There are no create/update/delete AuditLog endpoints. Business mutation and audit insert share one transaction (`MANDATORY` audit write): business failure leaves no success audit, and audit failure rolls back the mutation. ADMIN broadcast notifications and its single audit row share the same transaction. User DELETE remains a soft business restriction only for MEMBER accounts as before; other Users referenced as audit actors now receive 409 rather than being physically removed.
 
 The single-table migration is `docs/sql/phase7-1-audit-log.sql`; it requires `dbo.users.id` as SQL Server INT and must be applied manually after the core schema, before startup with `ddl-auto=validate`. It has not been executed. The API is not available on `origin/main` yet: the implementation branch is `feature/notification-core`, currently ahead of main. H2 tests do not establish SQL Server migration compatibility. AuditLog is transactional, not an outbox: it records only the listed business changes and does not provide immutable database-level protection against a privileged DBA modifying rows.
+
+## Final hardening API/source notes (2026-11-28)
+
+This supplement describes current integration-branch source, not the original SRD Word file or live DB state.
+
+- `PUT /api/users/{id}` and `DELETE /api/users/{id}` remain Admin routes. `UserController` passes the authenticated `Jwt` to `UserService`; request-supplied actor identity is not used. Current code rejects self-demotion/deactivation, removal of the last active Admin, and unsafe generic Coach role transitions. Direct API regression coverage is incomplete; see `docs/FINAL_BUSINESS_RULE_HARDENING_AND_QA_REPORT.md`.
+- Staff/Coach status maintenance invokes `CoachDeactivationGuard` before deactivation. It checks class/session, PT and pending Assessment obligations. This is not a Sport/Course/Offering/Class parent-deactivation guard.
+- `GET /api/reports/revenue` is Admin-only and retains existing report filters and gross `paidAt` semantics. Response adds `membershipRevenueByCategory`: `PURCHASE`, `UPGRADE`, `RENEWAL`, `TOTAL`. Renewal classification uses the persisted `renewalIntent` association. SQL Server and comprehensive refund/date-boundary coverage are separate verification.
+- Newly created or changed passwords require at least eight characters through relevant DTOs. Login is unchanged for existing password hashes.
+- Authenticated `POST /api/consultation-requests` continues to derive identity from the account; Guest requests retain submitted contact fields. Consultation submission does not update the User record.
+
+BR-06 parent lifecycle protection is an identified implementation gap. Do not read this API note as a claim that all newly approved rules have passed acceptance.

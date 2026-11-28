@@ -23,7 +23,7 @@ public class CreateMembershipPlanRequest {
     private String description;
 
     @NotNull(message = "Price is required")
-    @DecimalMin(value = "0.00", message = "Price cannot be negative")
+    @DecimalMin(value = "0.01", message = "Membership Plan price must be greater than zero")
     @Digits(integer = 10, fraction = 2, message = "Price must have at most 10 integer and 2 decimal digits")
     private BigDecimal price;
 

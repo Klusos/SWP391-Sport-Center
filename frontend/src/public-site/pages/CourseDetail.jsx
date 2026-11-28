@@ -493,7 +493,6 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
             onChange={setConsultation}
             profileError={profileError}
             error={consultationError}
-            onEmailInvalid={() => setConsultationError(CONSULTATION_EMAIL_ERROR)}
             submitting={consultationSubmitting}
             onClose={() => setConsultationOpen(false)}
             onSubmit={submitConsultation}

@@ -29,14 +29,17 @@ public class StaffManagementService {
     private final UserService userService;
     private final CoachService coachService;
     private final CoachSportService coachSportService;
+    private final CoachDeactivationGuard coachDeactivationGuard;
 
     public StaffManagementService(UserRepository users, CoachRepository coaches,
-            UserService userService, CoachService coachService, CoachSportService coachSportService) {
+            UserService userService, CoachService coachService, CoachSportService coachSportService,
+            CoachDeactivationGuard coachDeactivationGuard) {
         this.users = users;
         this.coaches = coaches;
         this.userService = userService;
         this.coachService = coachService;
         this.coachSportService = coachSportService;
+        this.coachDeactivationGuard = coachDeactivationGuard;
     }
 
     @Transactional
@@ -95,13 +98,26 @@ public class StaffManagementService {
 
     @Transactional
     public UserResponse updateStatus(Integer userId, String requestedStatus) {
-        User staff = findStaff(userId);
+        User staff = users.findByIdForAdminUpdate(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Staff user not found with id: " + userId));
+        if (!"COACH".equalsIgnoreCase(staff.getRole()) && !"RECEPTIONIST".equalsIgnoreCase(staff.getRole())) {
+            throw new ResourceNotFoundException("Staff user not found with id: " + userId);
+        }
         String status = requestedStatus.trim().toUpperCase(Locale.ROOT);
         if (!status.equals("ACTIVE") && !status.equals("INACTIVE")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Status must be ACTIVE or INACTIVE");
         }
+        if ("COACH".equalsIgnoreCase(staff.getRole()) && "ACTIVE".equalsIgnoreCase(staff.getStatus())
+                && "INACTIVE".equals(status)) {
+            Coach coach = coaches.findByUserId(staff.getId())
+                    .flatMap(existing -> coaches.findByIdForBookingUpdate(existing.getId()))
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT,
+                            "Coach profile is missing; account status cannot be changed safely"));
+            coachDeactivationGuard.requireNoUnfinishedObligations(coach);
+            coach.setStatus(status);
+        }
         staff.setStatus(status);
-        if ("COACH".equalsIgnoreCase(staff.getRole())) {
+        if ("COACH".equalsIgnoreCase(staff.getRole()) && "ACTIVE".equals(status)) {
             coaches.findByUserId(userId).ifPresent(coach -> coach.setStatus(status));
         }
         return response(users.save(staff));

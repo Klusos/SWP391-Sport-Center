@@ -51,6 +51,13 @@ test("genuine completed Coach assessment qualifies without a confirmed registrat
   assert.deepEqual(relevant({ assessments: [assessment()] }).map((sport) => sport.id), [2]);
 });
 
+test("Member-owned pending Consultation or assessment makes only that Sport discoverable", () => {
+  assert.deepEqual(relevant({ assessments: [assessment({ status: "PENDING" })] }).map((sport) => sport.id), [2]);
+  assert.deepEqual(relevant({ consultations: [{ memberId, sportId: 3, status: "PENDING" }] }).map((sport) => sport.id), [3]);
+  assert.deepEqual(relevant({ consultations: [{ memberId: 6, sportId: 3, status: "PENDING" }] }), []);
+  assert.deepEqual(relevant({ consultations: [{ memberId, sportId: 3, status: "COMPLETED" }] }), []);
+});
+
 test("consultation, default BEGINNER level, and catalog presence alone do not qualify", () => {
   const consultationOnly = [{ sportId: 1, status: "COMPLETED" }];
   const defaultLevelOnly = [{ sportId: 2, level: "BEGINNER" }];
@@ -61,7 +68,6 @@ test("assessment validation rejects wrong Member, unknown sport, non-completed s
   const invalid = [
     assessment({ memberId: 6 }),
     assessment({ sportId: 999 }),
-    assessment({ status: "PENDING" }),
     assessment({ assessedAt: null }),
     assessment({ assessedAt: "2026-02-30T10:00:00" }),
     assessment({ assessedLevel: "" }),

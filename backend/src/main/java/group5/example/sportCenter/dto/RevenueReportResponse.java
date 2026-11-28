@@ -17,6 +17,7 @@ public class RevenueReportResponse {
     private LocalDate to;
     private BigDecimal totalRevenue;
     private Map<String, BigDecimal> revenueByPurpose;
+    private Map<String, BigDecimal> membershipRevenueByCategory;
     private Map<String, BigDecimal> revenueByMethod;
     private String groupBy;
     private List<RevenuePeriodResponse> periods;

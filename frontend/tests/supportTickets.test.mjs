@@ -91,6 +91,8 @@ test("Member Support uses an inbox layout and accessible create modal without ch
   assert.match(page, /getCurrentUserApi\(token\)/);
   assert.match(page, /Number\(message\.senderId\) === Number\(viewerId\)/);
   assert.match(page, /Number\(detail\.memberId\) === Number\(viewerId\)/);
+  assert.match(page, /detail\?\.assignedStaffId != null && viewerId != null/);
+  assert.match(page, /Number\.isFinite\(Number\(detail\.assignedStaffId\)\)/);
   assert.match(page, /className="support-conversation-actions"/);
   assert.match(page, /canReply && <button className="btn-primary" type="submit"/);
   assert.match(page, /window\.confirm\("Đánh dấu yêu cầu hỗ trợ này là đã giải quyết\?"\)/);

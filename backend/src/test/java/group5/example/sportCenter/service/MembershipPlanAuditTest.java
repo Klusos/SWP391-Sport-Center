@@ -16,10 +16,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import group5.example.sportCenter.dto.UpdateMembershipPlanRequest;
 import group5.example.sportCenter.entity.MembershipPlan;
 import group5.example.sportCenter.repository.MembershipPlanRepository;
+import group5.example.sportCenter.repository.MembershipUpgradePathRepository;
 
 @ExtendWith(MockitoExtension.class)
 class MembershipPlanAuditTest {
     @Mock MembershipPlanRepository plans;
+    @Mock MembershipUpgradePathRepository paths;
     @Mock AuditLogService auditLogs;
 
     @Test
@@ -34,8 +36,9 @@ class MembershipPlanAuditTest {
         plan.setAllowPersonalTrainingPlan(false);
         plan.setAllowOneOnOneCoaching(false);
         plan.setStatus("ACTIVE");
-        when(plans.findById(82)).thenReturn(Optional.of(plan));
+        when(plans.findByIdForUpgradeQuote(82)).thenReturn(Optional.of(plan));
         when(plans.save(plan)).thenReturn(plan);
+        when(paths.findActiveInvolvingPlan(82)).thenReturn(java.util.List.of());
 
         UpdateMembershipPlanRequest request = new UpdateMembershipPlanRequest();
         request.setName("Premium");
@@ -47,7 +50,7 @@ class MembershipPlanAuditTest {
         request.setAllowOneOnOneCoaching(true);
         request.setStatus("INACTIVE");
 
-        new MembershipPlanService(plans, auditLogs).updatePlan(82, request);
+        new MembershipPlanService(plans, auditLogs, paths).updatePlan(82, request);
 
         var description = org.mockito.ArgumentCaptor.forClass(String.class);
         verify(auditLogs).record(eq("UPDATE"), eq("MEMBERSHIP_PLAN"), eq(82), description.capture());

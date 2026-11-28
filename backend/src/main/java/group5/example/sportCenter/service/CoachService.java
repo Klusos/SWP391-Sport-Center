@@ -28,17 +28,20 @@ public class CoachService {
     private final CoachRepository coachRepository;
     private final CoachSportRepository coachSportRepository;
     private final UserRepository userRepository;
+    private final CoachDeactivationGuard coachDeactivationGuard;
 
     public CoachService(
             CoachRepository coachRepository,
             CoachSportRepository coachSportRepository,
             UserRepository userRepository,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            CoachDeactivationGuard coachDeactivationGuard) {
 
         this.coachRepository = coachRepository;
         this.coachSportRepository = coachSportRepository;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.coachDeactivationGuard = coachDeactivationGuard;
     }
 
     public List<CoachResponse> getAllCoaches() {
@@ -133,19 +136,28 @@ public class CoachService {
             Integer id,
             String requestedStatus) {
 
-        Coach coach = coachRepository.findById(id)
+        Coach snapshot = coachRepository.findById(id)
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "Coach not found with id: " + id));
+        User user = userRepository.findByIdForAdminUpdate(snapshot.getUser().getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Coach account not found"));
+        Coach coach = coachRepository.findByIdForBookingUpdate(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Coach not found with id: " + id));
 
         String status = requestedStatus == null ? "" : requestedStatus.trim().toUpperCase(Locale.ROOT);
         if (!status.equals("ACTIVE") && !status.equals("INACTIVE")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Status must be ACTIVE or INACTIVE");
         }
 
+        if ("ACTIVE".equalsIgnoreCase(coach.getStatus()) && "INACTIVE".equals(status)) {
+            coachDeactivationGuard.requireNoUnfinishedObligations(coach);
+        }
+
         coach.setStatus(status);
-        coach.getUser().setStatus(status);
-        userRepository.save(coach.getUser());
+        user.setStatus(status);
+        coach.setUser(user);
+        userRepository.save(user);
 
         return toResponse(coachRepository.save(coach));
     }

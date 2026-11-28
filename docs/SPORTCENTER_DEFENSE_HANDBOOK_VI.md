@@ -380,3 +380,18 @@ Answers are short speaking points; expand from source rather than memorizing cla
 78. **What schema caution applies to FullSchema.sql?** It is for fresh setup, not repeatable deployment; existing DB uses guarded migrations.
 79. **Is the SQL snapshot proven by Hibernate validate alone?** No; validate proves source-to-current-DB compatibility. Snapshot installation itself is a separate check.
 80. **What future improvements are reasonable?** Durable outbox, richer explicit approval register, SQL Server concurrency coverage, updated SRD/ERD governance and operational monitoring—only after owner prioritization.
+
+### 81–90. Quyết định hardening và câu hỏi bảo vệ
+
+81. **Vì sao không cho Admin tự hạ quyền hoặc tự khóa tài khoản?** Vì thao tác đó có thể làm mất quyền quản trị của chính người gọi. `UserController.updateUser` chuyển JWT vào `UserService.updateUser`; service chặn self-demotion/self-deactivation và việc loại bỏ Admin ACTIVE cuối cùng. Các đường API trực tiếp vẫn cần regression test riêng.
+82. **Vì sao không tự chuyển lớp/PT khi Coach bị deactive?** Vì hệ thống không được tự tạo thay đổi phân công, hủy lịch hay nghĩa vụ tài chính khi không có quy trình đã duyệt. `CoachDeactivationGuard` trả conflict kèm nhóm công việc còn tồn tại để Admin xử lý chủ động.
+83. **Member deactivation có hủy Membership không?** Không. Account access và quyền lợi thương mại là hai trạng thái khác nhau. `MemberRegistrationService.deactivateMember` chỉ đổi trạng thái User; không xóa hay hoàn tiền. Khi reactivation, chỉ quyền lợi còn trong thời hạn mới có hiệu lực.
+84. **Ví dụ báo cáo doanh thu Membership?** Nếu một khoảng ngày có mua gói 1.000.000 VND, Upgrade thu thêm 250.000 VND và Renewal thu 800.000 VND, breakdown là Purchase 1.000.000, Upgrade 250.000, Renewal 800.000, tổng 2.050.000 VND. Không cộng lại giá gói đích hoặc tín dụng Upgrade; phân loại Renewal dựa vào `renewalIntent`, không dựa trên tên gói. Xem `PaymentRepository.membershipRevenueByCategory` và `PaymentReportService.revenueReport`.
+85. **Vì sao Plan giá phải lớn hơn 0?** Vì không có luồng kích hoạt Membership miễn phí được duyệt. DTO và `MembershipPlanService` từ chối `price <= 0`; Admin gửi 0 phải nhận lỗi validation, không tạo quyền lợi miễn phí.
+86. **Ví dụ Upgrade Path hợp lệ?** Gói nguồn 1.000.000 VND → gói đích 1.500.000 VND là hợp lệ; đổi đích thành 1.000.000 hoặc 900.000 làm path active không còn hợp lệ nên việc sửa giá bị chặn. Path inactive không chặn giá; bật lại phải kiểm tra giá hiện tại. Quote đã đóng băng không bị tính lại.
+87. **Vì sao không tự tắt path xung đột?** Admin cần quyết định thay đổi cấu hình. Service báo xung đột thay vì sửa hoặc xóa `MembershipUpgradePath` âm thầm.
+88. **Vì sao mật khẩu mới cần tối thiểu tám ký tự nhưng tài khoản cũ vẫn đăng nhập được?** Tối thiểu áp dụng khi tạo/đổi mật khẩu tại DTO; login tiếp tục xác minh hash hiện có, không ép đổi mật khẩu hàng loạt.
+89. **Member có tự đổi tên, email, phone hoặc DOB không?** Không theo hợp đồng hiện tại. Member chỉ tự sửa chiều cao, cân nặng và mục tiêu. Hai form Consultation của Member dùng danh tính account; form Guest vẫn cho nhập contact. Thiếu dữ liệu account thì liên hệ Admin/nhân viên có quyền, không sửa payload để giả danh.
+90. **BR-06 đã được hoàn thành chưa?** Chưa. Bảo vệ deactivation Sport/Course/Offering/Class trước nghĩa vụ phụ thuộc vẫn là gap; không nên tuyên bố hoàn tất hardening chỉ từ các phần đã code. Tình trạng và test gap cập nhật tại `docs/FINAL_BUSINESS_RULE_HARDENING_AND_QA_REPORT.md`.
+
+Các giải thích mục đích ở trên là rationale kỹ thuật để bảo vệ thiết kế; chỉ chính sách có owner approval mới là quy tắc sản phẩm. Test H2 không chứng minh hành vi khóa đồng thời trên SQL Server.

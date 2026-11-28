@@ -21,8 +21,8 @@ function validAssessmentTimestamp(value) {
 }
 
 /** Return catalog sports supported by this Member's confirmed registration or genuine Coach assessment. */
-export function getMemberRelevantSports({ sports, registrations, assessments, memberId }) {
-  if (![sports, registrations, assessments].every(Array.isArray)) return [];
+export function getMemberRelevantSports({ sports, registrations, assessments, consultations = [], memberId }) {
+  if (![sports, registrations, assessments, consultations].every(Array.isArray)) return [];
 
   const currentMemberId = positiveId(memberId);
   const registeredSportIds = new Set(registrations
@@ -40,7 +40,18 @@ export function getMemberRelevantSports({ sports, registrations, assessments, me
     .map((assessment) => positiveId(assessment.sportId))
     .filter(Boolean));
 
-  const relevantIds = new Set([...registeredSportIds, ...assessedSportIds]);
+  const pendingSportIds = new Set(assessments
+    .filter((assessment) => String(assessment.status).toUpperCase() === "PENDING"
+      && currentMemberId != null && positiveId(assessment.memberId) === currentMemberId)
+    .map((assessment) => positiveId(assessment.sportId)).filter(Boolean));
+  for (const consultation of consultations) {
+    if (currentMemberId != null && positiveId(consultation.memberId) === currentMemberId
+      && ["PENDING", "IN_PROGRESS"].includes(String(consultation.status).toUpperCase())) {
+      const id = positiveId(consultation.sportId);
+      if (id) pendingSportIds.add(id);
+    }
+  }
+  const relevantIds = new Set([...registeredSportIds, ...assessedSportIds, ...pendingSportIds]);
   const seen = new Set();
   return sports.filter((sport) => {
     const id = positiveId(sport.id);

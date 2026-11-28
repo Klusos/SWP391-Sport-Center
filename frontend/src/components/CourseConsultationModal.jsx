@@ -7,7 +7,6 @@ export default function CourseConsultationModal({
   onChange,
   profileError,
   error,
-  onEmailInvalid,
   submitting,
   onClose,
   onSubmit,
@@ -97,17 +96,19 @@ export default function CourseConsultationModal({
       <form className="course-consult-modal-form" onSubmit={onSubmit}>
         <div className="course-consult-modal-body" id={descriptionId}>
           <p className="course-consult-modal-help">
-            {profileError ? "Không tải được hồ sơ; vui lòng nhập thông tin liên hệ." : "Thông tin liên hệ được lấy từ hồ sơ nếu có; vui lòng kiểm tra trước khi gửi."}
+            {profileError
+              ? "Không tải được thông tin tài khoản. Vui lòng liên hệ quản trị viên hoặc nhân viên được ủy quyền để kiểm tra hồ sơ trước khi gửi."
+              : "Thông tin liên hệ được lấy từ tài khoản của bạn và không thể chỉnh sửa tại đây."}
           </p>
           <div className="course-consult-modal-fields">
             <label htmlFor="course-consult-name">Họ và tên <span aria-hidden="true">*</span>
-              <input ref={firstFieldRef} id="course-consult-name" required maxLength={100} autoComplete="name" value={values.name} onChange={update("name")} />
+              <input ref={firstFieldRef} id="course-consult-name" required maxLength={100} autoComplete="name" value={values.name} readOnly />
             </label>
             <label htmlFor="course-consult-phone">Số điện thoại <span aria-hidden="true">*</span>
-              <input id="course-consult-phone" type="tel" required maxLength={20} autoComplete="tel" value={values.phone} onChange={update("phone")} />
+              <input id="course-consult-phone" type="tel" required maxLength={20} autoComplete="tel" value={values.phone} readOnly />
             </label>
             <label htmlFor="course-consult-email">Email <span aria-hidden="true">*</span>
-              <input id="course-consult-email" type="email" maxLength={150} autoComplete="email" value={values.email} onChange={update("email")} required onInvalid={(event) => { event.preventDefault(); onEmailInvalid?.(); }} />
+              <input id="course-consult-email" type="email" maxLength={150} autoComplete="email" value={values.email} readOnly required />
             </label>
             <label htmlFor="course-consult-age">Tuổi (không bắt buộc)
               <input id="course-consult-age" type="number" min="1" max="120" value={values.age} onChange={update("age")} />

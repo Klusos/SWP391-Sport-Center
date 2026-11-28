@@ -37,3 +37,9 @@ Current normal defaults: SQL Server `SportCenterDemo`, Hibernate `validate`, VNP
 Detailed preconditions, persistence effects, boundary rules and source entry points are in the Vietnamese handbook's “Actors and business flows” and “Business rules” sections. This table describes implementation scope and does not establish approval for unresolved policy in the business-rule register.
 
 This addendum describes implementation, not complete live production verification. The adversarial matrix identifies executed evidence per scenario; H2 tests do not establish SQL Server behavior. DB5 Hibernate validation and the three focused backend suites (111/111) passed on 2026-11-28.
+
+## Final hardening decisions and implementation status (2026-11-28)
+
+The owner-approved account/price/path/password policies are recorded in the business-rule register. Current source includes Admin self/last-Admin guards, Coach deactivation checks, status-only Member deactivation, positive Membership Plan price validation, active directed Upgrade Path checks on Plan price edits, eight-character minimum for newly created/changed passwords, categorized Membership revenue, and the related Consultation, Support, PT, assessment, sport-discovery and Coach search corrections. The focused evidence and gaps are in `docs/FINAL_BUSINESS_RULE_HARDENING_AND_QA_REPORT.md`.
+
+**Important gap:** Sport/Course/CourseOffering/Class parent deactivation protection (BR-06) has not been implemented. Do not infer it from existing Offering update restrictions. The original SRD Word document is unchanged; this Markdown addendum is not a substitute for editing it.

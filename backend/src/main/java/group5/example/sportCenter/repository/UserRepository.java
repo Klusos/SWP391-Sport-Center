@@ -11,6 +11,12 @@ import jakarta.persistence.LockModeType;
 import group5.example.sportCenter.entity.User;
 
 public interface UserRepository extends JpaRepository<User, Integer> {
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from User u where u.id = :id")
+    Optional<User> findByIdForAdminUpdate(@Param("id") Integer id);
+
+    long countByRoleIgnoreCaseAndStatusIgnoreCase(String role, String status);
+
     // Stable lock anchor, including when no assessment or level exists yet.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from User u where u.id = :id")

@@ -13,6 +13,11 @@ import org.springframework.data.repository.query.Param;
 import group5.example.sportCenter.entity.PersonalTrainingBooking;
 
 public interface PersonalTrainingBookingRepository extends JpaRepository<PersonalTrainingBooking, Integer> {
+    @Query("select count(b) from PersonalTrainingBooking b where b.coach.id = :coachId and "
+            + "(b.status = group5.example.sportCenter.entity.PersonalTrainingBookingStatus.CONFIRMED "
+            + "or (b.status = group5.example.sportCenter.entity.PersonalTrainingBookingStatus.PENDING_PAYMENT "
+            + "and b.paymentExpiresAt > :now))")
+    long countUnfinishedForCoach(@Param("coachId") Integer coachId, @Param("now") LocalDateTime now);
     @Query("select b from PersonalTrainingBooking b join fetch b.member join fetch b.coach c "
             + "join fetch c.user join fetch b.sport where b.member.id = :memberId order by b.startTime desc")
     List<PersonalTrainingBooking> findAllForMember(@Param("memberId") Integer memberId);

@@ -66,3 +66,18 @@ The reviewed SRD v1.5.9 Word file is retained as the baseline artifact. [SRD_AS_
 - Browser E2E requires the frontend and necessary APIs to be running, real/known test data, and a Playwright browser. Visual/layout verification should state browser, role, route, and viewport.
 - SQL Server migrations, locking, payment provider behavior, and live data require their own explicitly authorized and isolated verification. Do not perform those checks by modifying shared data.
 - Product decisions are not established by implementation, tests, demo seeds, or this architecture map. See [`docs/business-rules/README.md`](business-rules/README.md); unresolved items require owner confirmation.
+
+## Final hardening source navigation — 2026-11-28
+
+| Concern | HTTP entry | Authoritative service/repository | Important invariant |
+|---|---|---|---|
+| Admin account edits | `PUT /api/users/{id}`, `DELETE /api/users/{id}` — `UserController.updateUser/deleteUser` | `UserService.updateUser/deleteUser`, `UserRepository.findByIdForAdminUpdate/countByRoleIgnoreCaseAndStatusIgnoreCase` | JWT-derived actor; prevent self-demotion/deactivation and last active Admin removal; generic Coach role transitions rejected. |
+| Coach deactivation | `PATCH /api/staff/{userId}/status`, Coach update | `StaffManagementService.updateStatus`, `CoachService.updateCoachStatus`, `CoachDeactivationGuard` | Lock User then Coach; inspect unfinished class/session/PT/assessment obligations. SQL Server concurrency evidence remains needed. |
+| Member deactivation | Admin Member status route | `MemberRegistrationService.deactivateMember` | Status-only; entitlement and history rows remain. Active-account authorization is checked on requests. |
+| Membership Plan and Upgrade Paths | Membership Plan and Upgrade Path Admin endpoints | `MembershipPlanService`, `MembershipUpgradePathService`, `MembershipUpgradePathRepository.findActiveInvolvingPlan` | Price > 0; active directed path requires target > source; frozen quotes remain frozen. |
+| Revenue reporting | `GET /api/reports/revenue` | `PaymentReportService.revenueReport`, `PaymentRepository.membershipRevenueByCategory` | Successful Payments grouped as purchase/Upgrade/Renewal; Renewal uses persisted `renewalIntent` association. |
+| Support activity | Support ticket reply endpoint | `SupportTicketService.reply` | Ticket `updatedAt` and message change in one transaction. |
+| Skill Assessment display | `/api/skill-assessments`, `/me`, `/my-assignments` | `SkillAssessmentService.response`, `SkillAssessmentRepository` | Member/Sport names come from persisted relationships fetched in list graphs. |
+| Consultation identity | `POST /api/consultation-requests` | `ConsultationRequestService.create` | Member identity remains account-derived; Guest identity remains submitted; request creation does not update User. |
+
+See [`FINAL_BUSINESS_RULE_HARDENING_AND_QA_REPORT.md`](FINAL_BUSINESS_RULE_HARDENING_AND_QA_REPORT.md) for approved BR/FIX status and evidence. This source map does not establish SQL Server concurrency or browser verification.

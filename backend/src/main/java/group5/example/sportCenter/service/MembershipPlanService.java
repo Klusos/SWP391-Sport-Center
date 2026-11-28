@@ -12,18 +12,22 @@ import group5.example.sportCenter.dto.MembershipPlanResponse;
 import group5.example.sportCenter.entity.MembershipPlan;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.MembershipPlanRepository;
+import group5.example.sportCenter.repository.MembershipUpgradePathRepository;
 
 @Service
 public class MembershipPlanService {
 
     private final MembershipPlanRepository membershipPlanRepository;
     private final AuditLogService auditLogs;
+    private final MembershipUpgradePathRepository upgradePaths;
 
     public MembershipPlanService(
             MembershipPlanRepository membershipPlanRepository,
-            AuditLogService auditLogs) {
+            AuditLogService auditLogs,
+            MembershipUpgradePathRepository upgradePaths) {
         this.membershipPlanRepository = membershipPlanRepository;
         this.auditLogs = auditLogs;
+        this.upgradePaths = upgradePaths;
     }
 
     @Transactional(readOnly = true)
@@ -56,6 +60,8 @@ public class MembershipPlanService {
     @Transactional
     public MembershipPlanResponse createPlan(
             CreateMembershipPlanRequest request) {
+
+        requirePositivePrice(request.getPrice());
 
         MembershipPlan plan = new MembershipPlan();
 
@@ -90,10 +96,14 @@ public class MembershipPlanService {
             Integer id,
             UpdateMembershipPlanRequest request) {
 
-        MembershipPlan plan = membershipPlanRepository.findById(id)
+        requirePositivePrice(request.getPrice());
+
+        MembershipPlan plan = membershipPlanRepository.findByIdForUpgradeQuote(id)
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "Membership plan not found with id: " + id));
+
+        validateActiveUpgradePaths(id, request.getPrice());
 
         String beforeAfter = changes(plan, request);
         String previousStatus = plan.getStatus();
@@ -190,6 +200,30 @@ public class MembershipPlanService {
             throw new IllegalArgumentException("Status must be ACTIVE or INACTIVE");
         }
         return normalized;
+    }
+
+    private void requirePositivePrice(java.math.BigDecimal price) {
+        if (price == null || price.signum() <= 0) {
+            throw new IllegalArgumentException("Membership Plan price must be greater than zero");
+        }
+    }
+
+    private void validateActiveUpgradePaths(Integer planId, java.math.BigDecimal proposedPrice) {
+        requirePositivePrice(proposedPrice);
+        var conflicts = upgradePaths.findActiveInvolvingPlan(planId).stream()
+                .filter(path -> {
+                    java.math.BigDecimal from = path.getFromPlan().getId().equals(planId)
+                            ? proposedPrice : path.getFromPlan().getPrice();
+                    java.math.BigDecimal to = path.getToPlan().getId().equals(planId)
+                            ? proposedPrice : path.getToPlan().getPrice();
+                    return to.compareTo(from) <= 0;
+                })
+                .map(path -> path.getFromPlan().getName() + " → " + path.getToPlan().getName())
+                .toList();
+        if (!conflicts.isEmpty()) {
+            throw new IllegalArgumentException("Price conflicts with active Upgrade Path(s): "
+                    + String.join(", ", conflicts) + ". Deactivate them before changing this price.");
+        }
     }
 
     private MembershipPlanResponse toResponse(MembershipPlan plan) {

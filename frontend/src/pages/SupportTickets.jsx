@@ -163,7 +163,9 @@ export default function SupportTickets({ token, role, currentUserName, onLogout,
     await runAction(() => updateSupportTicketStatusApi(token, selectedId, next));
   }
 
-  const assignedToViewer = Number(detail?.assignedStaffId) === Number(viewerId);
+  const assignedToViewer = detail?.assignedStaffId != null && viewerId != null
+    && Number.isFinite(Number(detail.assignedStaffId)) && Number.isFinite(Number(viewerId))
+    && Number(detail.assignedStaffId) === Number(viewerId);
   const canClaim = !member && detail && detail.assignedStaffId == null
     && ["OPEN", "IN_PROGRESS"].includes(detail.status);
   const canReply = member || (isAdmin && detail?.assignedStaffId != null) || assignedToViewer;

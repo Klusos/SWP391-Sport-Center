@@ -70,7 +70,7 @@ public class MemberRegistrationService {
 
     @Transactional
     public MemberResponse updateMember(Integer id, UpdateMemberRequest request) {
-        User member = userRepository.findById(id)
+        User member = userRepository.findByIdForAdminUpdate(id)
                 .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Member not found"));
         requireMember(member);
@@ -103,7 +103,7 @@ public class MemberRegistrationService {
 
     @Transactional
     public MemberResponse deactivateMember(Integer id) {
-        User member = userRepository.findById(id)
+        User member = userRepository.findByIdForAdminUpdate(id)
                 .orElseThrow(() -> new org.springframework.web.server.ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Member not found"));
         requireMember(member);

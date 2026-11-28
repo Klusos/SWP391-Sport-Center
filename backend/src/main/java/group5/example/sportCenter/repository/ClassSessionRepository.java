@@ -16,6 +16,9 @@ import group5.example.sportCenter.entity.PersonalTrainingBookingStatus;
 
 public interface ClassSessionRepository extends JpaRepository<ClassSession, Integer> {
 
+    @Query("select count(s) from ClassSession s where s.courseClass.coach.id = :coachId and upper(s.status) = 'SCHEDULED'")
+    long countByCoachAndScheduled(@Param("coachId") Integer coachId);
+
     @Query("select case when count(s) > 0 then true else false end from ClassSession s "
             + "where s.courseClass.courseOffering.id = :offeringId and "
             + "(s.startTime < :rangeStart or s.startTime >= :rangeEndExclusive "

@@ -118,7 +118,7 @@ test("booking and payment refresh is placed under Pending Actions and keeps its 
 test("member booking history exposes eligible cancellation with confirmation, refresh, and explicit refund-pending messaging", async () => {
   const page = await (await import("node:fs/promises")).readFile(new URL("../src/pages/PtBooking.jsx", import.meta.url), "utf8");
   assert.match(page, /cancelPtBookingApi\(token, booking\.id\)/);
-  assert.match(page, /!actionable && canMemberCancel\(booking, now\).*?Hủy lịch đặt/s);
+  assert.match(page, /canMemberCancel\(booking, now\) && <button/);
   assert.match(page, /window\.confirm\(prompt\)/);
   assert.match(page, /await refreshAuthoritative\(\)/);
   assert.match(page, /đang chờ nhân viên xác nhận hoàn tiền/);

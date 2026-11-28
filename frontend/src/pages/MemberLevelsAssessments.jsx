@@ -240,9 +240,9 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
   const eligibilityAvailable = !errors.sports && !errors.registrations && !errors.assessments;
   const relevantSports = useMemo(
     () => eligibilityAvailable
-      ? getMemberRelevantSports({ sports, registrations, assessments, memberId: profile?.id })
+      ? getMemberRelevantSports({ sports, registrations, assessments, consultations, memberId: profile?.id })
       : [],
-    [eligibilityAvailable, sports, registrations, assessments, profile?.id]
+    [eligibilityAvailable, sports, registrations, assessments, consultations, profile?.id]
   );
 
   // Tổng hợp dữ liệu cho từng bộ môn ở Bước 1

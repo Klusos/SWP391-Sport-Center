@@ -224,7 +224,7 @@ export default function PtBooking({ token, role, onLogout, onNavigate }) {
         <span>{vietnamTime(booking.startTime, true)} – {vietnamTime(booking.endTime)}</span>
         {actionable && <small>Giữ chỗ đến {vietnamTime(booking.paymentExpiresAt, true)} (giờ Việt Nam)</small>}
         <span className="pt-status">{bookingStatus(booking)}</span>
-        {!actionable && canMemberCancel(booking, now) && <button type="button" className="pt-secondary-button" disabled={paymentBusyId !== null} onClick={() => void cancelBooking(booking)}>{paymentBusyId === booking.id ? "Đang hủy…" : "Hủy lịch đặt"}</button>}
+        {canMemberCancel(booking, now) && <button type="button" className="pt-secondary-button" disabled={paymentBusyId !== null} onClick={() => void cancelBooking(booking)}>{paymentBusyId === booking.id ? "Đang hủy…" : "Hủy lịch đặt"}</button>}
         {booking.status === "PENDING_PAYMENT" && ptPaymentExpired(booking, now) && <small className="pt-expired-hold">Đã hết hạn giữ chỗ; máy chủ vẫn đang ghi nhận trạng thái chờ thanh toán.</small>}
       </div>
       <div className="pt-booking-summary-side">

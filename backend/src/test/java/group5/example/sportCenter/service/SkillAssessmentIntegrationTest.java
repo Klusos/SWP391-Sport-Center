@@ -270,7 +270,10 @@ class SkillAssessmentIntegrationTest {
         mvc.perform(post("/api/skill-assessments").header("Authorization", bearer(admin)).contentType("application/json").content("{}"))
                 .andExpect(status().isBadRequest());
         mvc.perform(post("/api/skill-assessments").header("Authorization", bearer(admin)).contentType("application/json").content(createJson()))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.status").value("PENDING")).andExpect(jsonPath("$.passwordHash").doesNotExist());
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.memberName").value(member.getName()))
+                .andExpect(jsonPath("$.sportName").value(sport.getName()))
+                .andExpect(jsonPath("$.passwordHash").doesNotExist());
         Integer id = service.all(jwt(admin)).getFirst().id();
         mvc.perform(patch("/api/skill-assessments/" + id + "/complete").header("Authorization", bearer(coachUser))
                 .contentType("application/json").content("{\"assessedLevel\":\"expert\"}")).andExpect(status().isBadRequest());

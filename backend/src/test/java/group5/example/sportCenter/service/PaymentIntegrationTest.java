@@ -1408,6 +1408,7 @@ class PaymentIntegrationTest {
     @Test
     void revenueReportGroupsSupportedPaymentPurposesBySettlementDate() {
         reportPayment(PaymentPurpose.MEMBERSHIP, PaymentStatus.SUCCESS, "100.00", "2026-10-01T09:00:00");
+        reportPayment(PaymentPurpose.UPGRADE, PaymentStatus.SUCCESS, "50.00", "2026-10-20T10:00:00");
         reportPayment(PaymentPurpose.COURSE_REGISTRATION, PaymentStatus.SUCCESS, "200.00", "2026-10-31T23:59:59");
         reportPayment(PaymentPurpose.PT_BOOKING, PaymentStatus.SUCCESS, "300.00", "2026-11-01T23:59:59");
         reportPayment(PaymentPurpose.MEMBERSHIP, PaymentStatus.SUCCESS, "40.00", "2027-01-01T12:00:00");
@@ -1426,15 +1427,19 @@ class PaymentIntegrationTest {
         var monthly = reports.revenueReport(LocalDate.parse("2026-10-01"), LocalDate.parse("2026-12-01"),
                 RevenueGrouping.MONTH, jwt(admin));
         assertEquals(3, monthly.getPeriods().size());
-        assertEquals(new BigDecimal("600.00"), monthly.getTotalRevenue());
+        assertEquals(new BigDecimal("650.00"), monthly.getTotalRevenue());
         assertEquals(new BigDecimal("100.00"), monthly.getRevenueByPurpose().get("MEMBERSHIP"));
+        assertEquals(new BigDecimal("100.00"), monthly.getMembershipRevenueByCategory().get("PURCHASE"));
+        assertEquals(new BigDecimal("50.00"), monthly.getMembershipRevenueByCategory().get("UPGRADE"));
+        assertEquals(BigDecimal.ZERO, monthly.getMembershipRevenueByCategory().get("RENEWAL"));
+        assertEquals(new BigDecimal("150.00"), monthly.getMembershipRevenueByCategory().get("TOTAL"));
         assertEquals(new BigDecimal("200.00"), monthly.getRevenueByPurpose().get("COURSE_REGISTRATION"));
         assertEquals(new BigDecimal("300.00"), monthly.getRevenueByPurpose().get("PT_BOOKING"));
 
         var yearly = reports.revenueReport(LocalDate.parse("2026-10-01"), LocalDate.parse("2027-01-01"),
                 RevenueGrouping.YEAR, jwt(admin));
         assertEquals(2, yearly.getPeriods().size());
-        assertEquals(new BigDecimal("640.00"), yearly.getTotalRevenue());
+        assertEquals(new BigDecimal("690.00"), yearly.getTotalRevenue());
     }
 
     @Test

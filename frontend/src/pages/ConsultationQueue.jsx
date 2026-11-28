@@ -22,7 +22,8 @@ import {
 } from "../api";
 
 const PAGE_SIZE = 20;
-const CONSULTATION_TODAY = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const consultationToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+const CONSULTATION_MAX_DOB = (() => { const [y, m, d] = consultationToday.split("-").map(Number); const date = new Date(Date.UTC(y, m - 1, d - 1)); return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`; })();
 const STATUSES = ["", "PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"];
 const STATUS_LABELS = { PENDING: "Ch\u1edd ti\u1ebfp nh\u1eadn", IN_PROGRESS: "\u0110ang x\u1eed l\u00fd", COMPLETED: "Ho\u00e0n t\u1ea5t", CANCELLED: "\u0110\u00e3 h\u1ee7y" };
 
@@ -519,7 +520,7 @@ export default function ConsultationQueue({ token, role, currentUserName, onLogo
                     ) : (
                       <>
                         <label htmlFor="newMemberDob">{"Ng\u00e0y sinh"}</label>
-                        <input id="newMemberDob" type="date" required max={CONSULTATION_TODAY} value={memberDateOfBirth || ""} onChange={(event) => setMemberDateOfBirth(event.target.value)} />
+                        <input id="newMemberDob" type="date" required max={CONSULTATION_MAX_DOB} value={memberDateOfBirth || ""} onChange={(event) => setMemberDateOfBirth(event.target.value)} />
                       </>
                     )}
                     <label htmlFor="newMemberPassword">{"M\u1eadt kh\u1ea9u kh\u1edfi t\u1ea1o (t\u1ed1i thi\u1ec3u 8 k\u00fd t\u1ef1)"}</label>

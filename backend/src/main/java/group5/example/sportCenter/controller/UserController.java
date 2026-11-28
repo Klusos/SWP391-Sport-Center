@@ -50,9 +50,10 @@ public class UserController {
     @PutMapping("/{id}")
     public UserResponse updateUser(
             @PathVariable Integer id,
-            @Valid @RequestBody UpdateUserRequest request) {
+            @Valid @RequestBody UpdateUserRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
 
-        return userService.updateUser(id, request);
+        return userService.updateUser(id, request, jwt);
     }
 
     @PostMapping
@@ -65,8 +66,8 @@ public class UserController {
 
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteUser(@PathVariable Integer id) {
-        userService.deleteUser(id);
+    public void deleteUser(@PathVariable Integer id, @AuthenticationPrincipal Jwt jwt) {
+        userService.deleteUser(id, jwt);
     }
 
     @PatchMapping("/{id}/password")

@@ -122,6 +122,7 @@ public class SupportTicketService {
         message.setSender(actor);
         message.setMessage(request.message().trim());
         messages.save(message);
+        ticket.setUpdatedAt(java.time.LocalDateTime.now(java.time.Clock.systemUTC()));
         tickets.saveAndFlush(ticket);
         return detail(ticket);
     }

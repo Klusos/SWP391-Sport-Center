@@ -86,6 +86,20 @@ The current owner instruction in the 2026-11-27 Final Owner QA task explicitly a
 - **PT/class overlap:** protect both directions: active class enrollment prevents an overlapping Member PT booking, and an active Member PT booking prevents class registration. Admin schedule mutation is rejected while occupied active registrations exist; no new refund/cancellation policy is implied.
 - **Support ownership:** one primary assigned staff member. An unassigned OPEN request must be claimed before staff reply; Receptionist claim starts processing atomically. Admin may participate after assignment without replacing the Receptionist owner.
 
+## Product-owner decisions recorded 2026-11-28 — final hardening
+
+The owner explicitly approved these rules in the Final Business Rule Hardening task. The register records policy; see `docs/FINAL_BUSINESS_RULE_HARDENING_AND_QA_REPORT.md` for implementation and verification status.
+
+- **Coach deactivation:** reject while current unfinished class/session, valid pending PT hold, confirmed nonterminal PT booking, pending assigned Skill Assessment, or another verified operational obligation remains. Do not auto-reassign, cancel, refund, or mark work complete.
+- **Member deactivation:** Admin may deactivate an account while commercial entitlements/bookings exist. Account access is separate from persisted Membership/payment/registration/PT/training history. Deactivation does not cancel, refund, freeze, extend, or delete those records; reactivation does not recreate entitlement.
+- **Membership revenue:** report successful collected Membership purchase, Upgrade, and Renewal payment categories separately and as a combined Membership-related total. Categories must be mutually exclusive; Upgrade revenue is the additional payment, not target-plan price or applied credit. Preserve report date and refund semantics.
+- **Membership Plan price:** price must be strictly positive; no free-plan activation is introduced.
+- **Upgrade Paths:** an active path requires target price strictly greater than source price. Price edits must preserve every active incoming and outgoing path. Inactive paths do not block edits; activation checks current prices. Frozen pending quotes remain unchanged.
+- **Parent deactivation:** do not deactivate Sport, Course, Offering, or Class while unfinished dependent commitments would be stranded. Existing Offering `OPEN/CLOSED` is registration lifecycle, not necessarily an equivalent active/inactive switch; do not reinterpret `CLOSED` without inspecting its existing contract.
+- **Passwords:** every newly created or changed password has at least eight characters. Existing hashes/login behavior are not invalidated; no additional complexity rule is added.
+- **Account integrity:** an Admin cannot demote/deactivate their own account or remove the last usable active Admin. Generic role changes must not leave `User` and `Coach` records inconsistent.
+- **Member identity:** self-service remains limited to height, weight, and goal. Identity fields, including name, email, phone, DOB and gender, are not Member-editable. Authenticated Consultation identity comes from the account and must not mutate `User`; Guest identity remains editable. Missing required account identity directs the Member to authorized staff/Admin.
+
 These bullets record explicit owner decisions in the current task/conversation, while the test matrix reports which scenarios actually executed. Implementation evidence alone is not approval provenance.
 
 ## Unresolved questions requiring owner confirmation

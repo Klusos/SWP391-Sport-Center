@@ -10,6 +10,32 @@
 - **MISSING-COVERAGE**: chưa xác định test cụ thể bao phủ trường hợp; cần bổ sung trước khi tuyên bố test acceptance.
 - H2 không chứng minh SQL Server locking/dialect/schema. “Có test class” không đồng nghĩa class đã pass.
 
+## Bổ sung sau phê duyệt hardening ngày 28-11-2026
+
+Các ca dưới đây bổ sung cho ma trận hiện có; không thay thế các ca trước. `PASS-2026-11-28` chỉ áp dụng cho đúng test/method được nêu. Các ca ghi `MISSING-COVERAGE` chưa được chứng minh bằng test trực tiếp.
+
+| Test ID | Ưu tiên | Điều kiện | Actor | Hành động adversarial | Kết quả mong đợi | DB effects mong đợi | Bằng chứng | Trạng thái |
+|---|---|---|---|---|---|---|---|---|
+| HARD-AUTH-01 | P0 | Admin caller cập nhật chính mình | Admin | Hạ role hoặc deactivate qua `PUT /api/users/{id}` | 409/403, không đổi User | Không đổi role/status | `UserController.updateUser` truyền JWT; `UserService.updateUser` guard; test trực tiếp chưa có | MISSING-COVERAGE |
+| HARD-AUTH-02 | P0 | Chỉ còn một Admin ACTIVE | Admin | Deactivate/demote qua mọi route | Từ chối; vẫn còn Admin dùng được | Không đổi | `UserService` last-Admin guard; direct API tests chưa có | MISSING-COVERAGE |
+| HARD-AUTH-03 | P0 | Có Coach assignments/obligations | Admin | Deactivate qua staff, Coach và generic user routes | Conflict có giải thích; không tự chuyển việc | Không đổi | `CoachDeactivationGuard`, `StaffManagementService`, `CoachService`, `UserService`; chưa chạy test | MISSING-COVERAGE |
+| HARD-AUTH-04 | P0 | Member có paid entitlement/booking và token cũ | Admin/Member | Deactivate rồi sử dụng JWT cũ/reactivate | Access bị từ chối khi inactive; thương mại/lịch sử giữ nguyên | Không xóa/cancel/refund/extend | `MemberRegistrationService` status-only + khóa User; chưa có test mới | MISSING-COVERAGE |
+| HARD-FIN-01 | P0 | SUCCESS purchase, Upgrade, Renewal; pending/refund khác | Admin | Xem tổng Membership revenue theo ngày | Tách loại, cộng tổng không trùng; pending không tính | Không đổi | `PaymentRepository.membershipRevenueByCategory`, `PaymentReportService`; test Renewal/refund riêng chưa có | MISSING-COVERAGE |
+| HARD-PLAN-01 | P0 | Plan price 0/âm trực tiếp | Admin | POST/PUT plan | 400; không lưu | Plan không đổi | `MembershipPlanIntegrationTest` thêm zero create/update; thuộc 59-test run nhưng cần xác nhận phương thức trong báo cáo surefire | PASS-2026-11-28 class |
+| HARD-PLAN-02 | P0 | Active Upgrade Paths vào/ra Plan | Admin | Sửa giá bằng hoặc thấp hơn Plan tương ứng | Conflict chỉ với active path; inactive path không chặn | Không đổi path/quote | `MembershipPlanService.updatePlan`; matrix cases chưa có | MISSING-COVERAGE |
+| HARD-PLAN-03 | P0 | Đồng thời sửa Plan và activate path | Admin A/B | Chạy song song | Chỉ trạng thái giá/path hợp lệ được commit | Không có path active target<=source | Locking source inspected; SQL Server concurrency chưa chạy | MISSING-COVERAGE |
+| HARD-PASS-01 | P1 | Tạo/đổi mật khẩu 6, 7, 8 ký tự | Admin/Member/Receptionist | Gọi API trực tiếp | <8 bị 400, 8 được xử lý theo rules còn lại | Không lưu password không hợp lệ | DTO `@Size(min=8)`; direct boundary tests chưa có | MISSING-COVERAGE |
+| HARD-CONS-01 | P0 | Member Course Consultation | Member | Mở form/gửi identity tampering | Contact fields read-only; backend dùng account | User không đổi | `CourseConsultationModal`, `ConsultationRequestService`; Consultation suite 59-test run | PASS-2026-11-28 class; modal browser NOT_RUN |
+| HARD-CONS-02 | P1 | Guest DOB hôm nay/ngày mai | Guest | Gửi form/UI/API | UI giới hạn hôm qua; backend từ chối hôm nay/tương lai | Không tạo request sai DOB | `ConsultForm`, `ConsultationRequestService`; browser boundary chưa chạy | PARTIAL |
+| HARD-SUPPORT-01 | P1 | viewer ID hoặc assigned ID null | Staff | Mở ticket chưa claim | Không hiện quyền reply do `null===null` | Không đổi | `SupportTickets.jsx`; frontend test/full suite 611/611 | PASS-2026-11-28 |
+| HARD-SUPPORT-02 | P1 | Member/staff reply không đổi status | Member/Staff | Gửi reply | `updatedAt` mới, ticket được đưa lên đầu danh sách | Message + timestamp cùng transaction | `SupportTicketIntegrationTest` 7/7 trong 59-test run | PASS-2026-11-28 |
+| HARD-PT-01 | P1 | Pending Payment hold còn hạn/expired | Member | Hủy booking hoặc callback muộn | UI chỉ expose cancellation backend cho phép; late collection giữ safeguards | Không tạo quyền refund mới | `PtBooking.jsx`; frontend suite 611/611; late callback chưa rerun | PARTIAL |
+| HARD-ASSESS-01 | P1 | Coach được gán và Coach khác | Coach A/B | Đọc assignment | A thấy tên Member/Sport; B vẫn bị từ chối | Không lộ dữ liệu ngoài assignment | `SkillAssessmentResponse`, repository EntityGraph; `SkillAssessmentIntegrationTest` 21/21 | PASS-2026-11-28 class |
+| HARD-SPORT-01 | P1 | Sport chỉ có request Member-owned PENDING | Member | Mở Sport overview | Sport hiển thị nhưng không cấp course/PT eligibility | Không đổi | `memberSportEligibility.js`; frontend suite 611/611 | PASS-2026-11-28 |
+| HARD-TRAIN-01 | P2 | Search khóa học không khớp tên lớp | Coach | Chọn course rồi tìm lớp/quay lại | Tìm lớp độc lập; course query được giữ khi back | Không đổi | `CoachTraining.jsx`; frontend suite 611/611 | PASS-2026-11-28 |
+| HARD-CANCEL-01 | P1 | Consultation ở bất kỳ trạng thái nào | Receptionist/Admin | Tìm action cancellation trên queue UI | UI cố ý không cung cấp action theo yêu cầu owner; backend API contract vẫn giữ nguyên | Không đổi | Owner instruction 2026-11-28; frontend regression asserts absence; API/backend unchanged | WITHDRAWN_FROM_UI |
+| HARD-PARENT-01 | P0 | Parent có dependent unfinished obligations | Admin | Deactivate Sport/Course/Offering/Class | Conflict, không cascade | Không đổi descendant/financial/history | Guard hiện chưa được implement | MISSING-COVERAGE / NOT_IMPLEMENTED |
+
 | Test ID | Ưu tiên | Điều kiện | Actor | Hành động adversarial | Kết quả HTTP/domain mong đợi | DB effects mong đợi | Bằng chứng hiện có | Trạng thái thực thi |
 |---|---|---|---|---|---|---|---|---|
 | AUTH-01 | P0 | Không JWT | anonymous | GET private profile | 401 | Không đổi | `ConsultationRequestIntegrationTest.httpSecurityAllowsPublicOrMemberSubmissionAndRestrictsConsultationRoutes` | PASS-2026-11-28 class |
