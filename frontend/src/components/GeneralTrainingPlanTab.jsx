@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { acquireAction } from "../courseCheckout.js";
 import { getTrainingPlanApi, saveWeeklyTrainingPlanApi } from "../api.js";
 import WeeklyPlanEditor from "./WeeklyPlanEditor.jsx";
+import TrainingPlanWeeksAccordion from "./TrainingPlanWeeksAccordion.jsx";
 import "../pages/Training.css";
 
 const numeric = (value) => value === "" || value == null ? null : Number(value);
@@ -78,12 +79,7 @@ function GeneralPlanReadOnly({ plan }) {
     <h3>{plan.goal}</h3>{plan.description && <p>{plan.description}</p>}
     {(plan.exercises || []).length > 0 && <section><h4>Bài tập chưa phân tuần</h4><ExerciseList exercises={plan.exercises}/></section>}
     {!(plan.weeks || []).length && !(plan.exercises || []).length && <p className="dash-empty">Giáo án chưa có nội dung.</p>}
-    {[...(plan.weeks || [])].sort((a, b) => a.weekNumber - b.weekNumber).map((week) => <details key={week.id} className="individual-plan-week-view" open>
-      <summary>Tuần {week.weekNumber}{week.title ? ` · ${week.title}` : ""}<small>{week.startDate && week.endDate ? ` · ${week.startDate} – ${week.endDate}` : ""}</small></summary>
-      {week.outsideOffering && <p className="weekly-plan-range warning">Tuần này nằm ngoài thời hạn đợt học hiện tại; nội dung vẫn được giữ.</p>}
-      {week.goal && <p><strong>Mục tiêu:</strong> {week.goal}</p>}{week.description && <p>{week.description}</p>}
-      <ExerciseList exercises={week.exercises || []}/>
-    </details>)}
+    <TrainingPlanWeeksAccordion weeks={plan.weeks || []}/>
   </section>;
 }
 

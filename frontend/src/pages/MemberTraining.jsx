@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import IndividualTrainingPlans from "../components/IndividualTrainingPlans";
+import TrainingPlanWeeksAccordion from "../components/TrainingPlanWeeksAccordion.jsx";
 import { getMyTrainingApi } from "../api";
 import { filterMemberTrainingRows, progressLevelLabel, trainingStartYears } from "../trainingPresentation.js";
 import { todayInVietnam } from "../membershipDates.js";
@@ -220,14 +221,7 @@ function ClassResults({ item }) {
           {exercises.length > 0 && <section className="member-training-legacy-exercises"><h4>Bài tập chưa phân tuần</h4><ol className="training-exercises">{exercises.map((exercise) => <li key={exercise.id}>
             <div><b>{exercise.name}</b><small>{[exercise.sets && exercise.sets + " hiệp", exercise.reps && exercise.reps + " lần", exercise.durationMinutes && exercise.durationMinutes + " phút"].filter(Boolean).join(" · ") || "—"}</small>{exercise.notes && <small>{exercise.notes}</small>}</div>
           </li>)}</ol></section>}
-          {weeklySections.map((week) => <details className="member-training-week" key={week.id}>
-            <summary><span><strong>Tuần {week.weekNumber}{week.title ? ` · ${week.title}` : ""}</strong>{week.startDate && week.endDate && <small>{formatDateOnly(week.startDate)} – {formatDateOnly(week.endDate)}</small>}</span><span>{week.exercises?.length || 0} bài tập</span></summary>
-            {week.outsideOffering && <p className="member-training-week-warning">Tuần này nằm ngoài thời hạn đợt học hiện tại; nội dung vẫn được giữ.</p>}
-            {week.goal && <p><b>Mục tiêu tuần:</b> {week.goal}</p>}{week.description && <p className="member-training-plan-description">{week.description}</p>}
-            {!week.exercises?.length ? <p className="member-training-no-data">Tuần này chưa có bài tập.</p> : <ol className="training-exercises">{week.exercises.map((exercise) => <li key={exercise.id}><div><b>{exercise.name}</b>
-              {[(exercise.sets != null && `${exercise.sets} hiệp`), (exercise.reps != null && `${exercise.reps} lần`), (exercise.durationMinutes != null && `${exercise.durationMinutes} phút`)].filter(Boolean).length > 0 && <small>{[(exercise.sets != null && `${exercise.sets} hiệp`), (exercise.reps != null && `${exercise.reps} lần`), (exercise.durationMinutes != null && `${exercise.durationMinutes} phút`)].filter(Boolean).join(" · ")}</small>}
-              {exercise.notes && <small>{exercise.notes}</small>}</div></li>)}</ol>}
-          </details>)}
+          <TrainingPlanWeeksAccordion weeks={weeklySections}/>
         </>}
       </div>
       <div>
@@ -243,12 +237,4 @@ function ClassResults({ item }) {
       </div>
     </div>
   </section>;
-}
-
-function formatDateOnly(value) {
-  if (!value) return "—";
-  const [year, month, day] = value.split("-").map(Number);
-  return Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)
-    ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeZone: "Asia/Ho_Chi_Minh" }).format(new Date(year, month - 1, day))
-    : "—";
 }

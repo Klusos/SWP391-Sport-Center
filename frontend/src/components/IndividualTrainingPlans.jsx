@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import WeeklyPlanEditor from "./WeeklyPlanEditor.jsx";
+import TrainingPlanWeeksAccordion from "./TrainingPlanWeeksAccordion.jsx";
 import {
   createIndividualTrainingPlanApi,
   getClassIndividualTrainingPlansApi,
@@ -294,18 +295,9 @@ function PlanRevision({ revision }) {
   if (!revision) return <p className="training-muted">Chưa có nội dung giáo án.</p>;
   return <div className="individual-plan-revision"><h4>{revision.goal}</h4>
     {revision.description && <p>{revision.description}</p>}
-    {(revision.weeks || []).map((week) => <section className="individual-plan-week-view" key={`${week.weekNumber}-${week.title}`}>
-      <h5>Tuần {week.weekNumber}{week.title ? ` · ${week.title}` : ""}</h5>
-      {week.description && <p>{week.description}</p>}
-      {!week.exercises?.length ? <p className="training-muted">Chưa có bài tập trong tuần này.</p> : <ul className="training-exercises">
-        {week.exercises.map((exercise) => <li key={exercise.id ?? `${exercise.sortOrder}-${exercise.name}`}><div><b>{exercise.name}</b>
-          <small>{[exercise.sets != null && `${exercise.sets} hiệp`, exercise.reps != null && `${exercise.reps} lần`, exercise.durationMinutes != null && `${exercise.durationMinutes} phút`].filter(Boolean).join(" · ") || "Chưa đặt số lượng"}</small>
-          {exercise.notes && <small>{exercise.notes}</small>}</div></li>)}
-      </ul>}
-    </section>)}
+    <TrainingPlanWeeksAccordion weeks={revision.weeks || []} unassignedExercises={revision.unassignedExercises || []}/>
   </div>;
 }
-
 function formatDate(value) {
   if (!value) return "—";
   const date = new Date(value);

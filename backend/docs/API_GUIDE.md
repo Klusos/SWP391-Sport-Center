@@ -394,7 +394,9 @@ The Phase 2 CourseClass registration API is documented below. `/api/classes` man
 
 ## OpenAPI / Swagger
 
-No Swagger/OpenAPI dependency or configuration was found in `pom.xml` or source. For this Spring Boot 4.1.1 Web MVC application, the springdoc project documents Spring Boot 4 support in springdoc 3.x; the candidate starter is `org.springdoc:springdoc-openapi-starter-webmvc-ui`. Add it only after choosing a compatible 3.x release, then protect or explicitly permit `/v3/api-docs/**` and `/swagger-ui/**` in Spring Security. See [springdoc compatibility documentation](https://springdoc.org/) and [springdoc project README](https://github.com/springdoc/springdoc-openapi).
+The local/demo backend serves Swagger UI at `http://localhost:8080/swagger-ui/index.html` and the generated OpenAPI document at `http://localhost:8080/v3/api-docs`. Operations are grouped by their existing controller tags. The specification defines JWT HTTP Bearer authentication for protected API operations; public endpoints remain marked public.
+
+To try an authenticated endpoint, sign in through the application, copy the JWT access token, open Swagger UI, choose **Authorize**, and enter the token (without adding `Bearer `; Swagger UI adds that scheme). Then execute a read-only endpoint such as `GET /api/users/me`. Business endpoint authorization is unchanged: unauthenticated protected requests return 401, and authenticated users lacking the required role receive 403. The documentation and UI resources are anonymously readable for the local/demo workflow; they contain generated route/schema information only and no credentials or example personal data. Do not expose the demo backend publicly.
 
 ## Pre-merge review items
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { validatePlanDraft } from "./individualTrainingPlanHelpers.js";
+import TrainingPlanWeeksAccordion from "./TrainingPlanWeeksAccordion.jsx";
 import "../pages/Training.css";
 
 const key = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
@@ -151,8 +152,13 @@ export default function WeeklyPlanEditor({ initial, busy, onCancel, onSubmit, on
         </> : <p className="dash-empty">Chưa có tuần. Hãy thêm tuần để bắt đầu.</p>}
       </section>
     </div>
-    <div className="weekly-plan-sticky-actions"><button type="button" className="secondary" onClick={() => setPreview(true)}><i className="bi bi-eye" aria-hidden="true"/> Xem trước</button><span className="weekly-plan-actions-spacer"/>
-      <button type="submit" disabled={busy}>{busy ? "Đang lưu…" : "Lưu giáo án"}</button><button type="button" className="secondary" disabled={busy} onClick={cancel}>Hủy</button></div>
+    <div className="weekly-plan-sticky-actions">
+      <button type="button" className="secondary" onClick={() => setPreview(true)}><i className="bi bi-eye" aria-hidden="true"/> Xem trước</button>
+      <div className="weekly-plan-sticky-actions-right">
+        <button type="button" className="secondary" disabled={busy} onClick={cancel}>Hủy</button>
+        <button type="submit" className="btn-primary" disabled={busy}>{busy ? "Đang lưu…" : "Lưu giáo án"}</button>
+      </div>
+    </div>
   </form>;
 }
 
@@ -171,9 +177,6 @@ function WeekDateRange({ weekNumber, startDate, endDate }) {
 
 function ReadOnlyPlan({ revision }) {
   return <div className="individual-plan-revision"><h4>{revision.goal}</h4>{revision.description && <p>{revision.description}</p>}
-    {(revision.unassignedExercises || []).length > 0 && <section className="individual-plan-week-view"><h5>Bài tập chưa phân tuần</h5><ul className="training-exercises">{revision.unassignedExercises.map((exercise) => <li key={exercise._key || exercise.id}><div><b>{exercise.name}</b>{exercise.notes && <small>{exercise.notes}</small>}</div></li>)}</ul></section>}
-    {[...(revision.weeks || [])].sort((a, b) => Number(a.weekNumber) - Number(b.weekNumber)).map((week) => <section className="individual-plan-week-view" key={week._key || week.id || week.weekNumber}>
-      <h5>Tuần {week.weekNumber}{week.title ? ` · ${week.title}` : ""}</h5>{week.weekGoal && <p><strong>Mục tiêu:</strong> {week.weekGoal}</p>}{week.description && <p>{week.description}</p>}
-      <ul className="training-exercises">{(week.exercises || []).map((exercise) => <li key={exercise._key || exercise.id || exercise.name}><div><b>{exercise.name}</b><small>{[exercise.sets && `${exercise.sets} hiệp`, exercise.reps && `${exercise.reps} lần`, exercise.durationMinutes && `${exercise.durationMinutes} phút`].filter(Boolean).join(" · ")}</small>{exercise.notes && <small>{exercise.notes}</small>}</div></li>)}</ul>
-    </section>)}</div>;
+    <TrainingPlanWeeksAccordion weeks={revision.weeks || []} unassignedExercises={revision.unassignedExercises || []}/>
+  </div>;
 }

@@ -10,6 +10,9 @@ test("weekly plan editor uses a focused local draft workspace with copy, preview
   assert.match(source, /window\.confirm\(/);
   assert.match(source, /setPreview\(true\)/);
   assert.match(source, /weekly-plan-sticky-actions/);
+  assert.match(source, /className="btn-primary" disabled=\{busy\}/);
+  assert.ok(source.indexOf('onClick={() => setPreview(true)}') < source.indexOf('onClick={cancel}', source.indexOf('weekly-plan-sticky-actions-right')));
+  assert.ok(source.indexOf('onClick={cancel}', source.indexOf('weekly-plan-sticky-actions-right')) < source.indexOf('type="submit" className="btn-primary"'));
   assert.match(source, /beforeunload/);
   assert.match(source, /maxWeekNumber = 52/);
 });

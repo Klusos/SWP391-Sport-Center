@@ -88,7 +88,7 @@
 .individual-plan-history { margin-top: 14px; }
 .individual-plan-history details { margin: 8px 0; padding: 10px; border: 1px solid var(--border, #e8eef6); border-radius: 8px; background: #fff; }
 .individual-plan-history summary { cursor: pointer; font-weight: 600; }
-.weekly-plan-editor { gap: 14px; padding-bottom: 74px; }
+.weekly-plan-editor { gap: 14px; padding-bottom: 0; }
 .weekly-plan-overview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 16px; padding: 14px; border: 1px solid #dfe8f3; border-radius: 12px; background: #fff; }
 .weekly-plan-overview h3 { grid-column: 1 / -1; margin: 0; color: #153e67; font-size: 16px; }
 .weekly-plan-overview label { display: grid; gap: 5px; font-size: 13px; }
@@ -122,11 +122,28 @@
 .weekly-plan-fields label { display: grid; gap: 5px; }
 .weekly-plan-exercise-heading { margin-top: 16px; padding-top: 12px; border-top: 1px solid #e4ebf4; }
 .weekly-plan-validation { margin: 8px 0; padding: 9px 11px; border-radius: 8px; background: #fff1f0; color: #9d241b; }
-.weekly-plan-sticky-actions { position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; gap: 9px; margin: 0 -2px; padding: 10px 12px; border: 1px solid #d9e4f0; border-radius: 11px; background: rgba(255,255,255,.97); box-shadow: 0 -5px 16px rgba(18,48,78,.08); }
-.weekly-plan-actions-spacer { flex: 1; }
-.weekly-plan-preview { position: relative; padding-bottom: 70px; }
+.weekly-plan-sticky-actions { position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; box-sizing: border-box; margin: 0; padding: 9px 12px; border: 1px solid #d9e4f0; border-radius: 11px; background: rgba(255,255,255,.97); box-shadow: 0 -5px 16px rgba(18,48,78,.08); }
+.weekly-plan-sticky-actions-right { display: flex; align-items: center; justify-content: flex-end; gap: 9px; margin-left: auto; }
+.main .weekly-plan-sticky-actions .btn-primary { box-sizing: border-box; height: 40px; min-height: 40px; padding: 8px 14px; line-height: 1.2; }
+.weekly-plan-sticky-actions .btn-primary { border-color: var(--blue); background: var(--blue); color: #fff; }
+.weekly-plan-sticky-actions .btn-primary:hover:not(:disabled) { border-color: var(--blue-dark); background: var(--blue-dark); color: #fff; }
+.weekly-plan-preview { position: relative; padding-bottom: 0; }
+.training-plan-readonly-weeks { display: grid; gap: 9px; margin-top: 12px; }
+.training-plan-accordion-item { min-width: 0; border: 1px solid #dfe8f3; border-radius: 10px; background: #fff; overflow: clip; }
+.training-plan-accordion-heading { margin: 0; }
+.main .training-plan-accordion-trigger { display: flex; width: 100%; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 0; border-radius: 0; background: #f8fbff; color: #153e67; text-align: left; }
+.main .training-plan-accordion-trigger:hover:not(:disabled) { background: #eef5fd; }
+.training-plan-accordion-trigger:focus-visible { outline-offset: -3px; }
+.training-plan-accordion-title { display: grid; min-width: 0; gap: 3px; }
+.training-plan-accordion-title strong, .training-plan-accordion-title small { overflow-wrap: anywhere; }
+.training-plan-accordion-title small, .training-plan-accordion-count { color: #637083; font-size: 12px; font-weight: 500; }
+.training-plan-accordion-count { flex: 0 0 auto; }
+.training-plan-accordion-trigger > i { flex: 0 0 auto; }
+.training-plan-accordion-panel { padding: 12px 14px; border-top: 1px solid #e5edf6; }
+.training-plan-accordion-panel > :first-child { margin-top: 0; }
+.training-plan-accordion-panel > :last-child { margin-bottom: 0; }
 @media (max-width: 800px) { .weekly-plan-workspace { grid-template-columns: minmax(0, 1fr); } .weekly-plan-sidebar { max-height: none; } .weekly-plan-week-list { grid-template-columns: repeat(2, minmax(0,1fr)); max-height: 220px; } }
-@media (max-width: 560px) { .weekly-plan-overview { grid-template-columns: minmax(0,1fr); } .weekly-plan-overview h3, .weekly-plan-overview label:first-of-type { grid-column: auto; } .weekly-plan-editor-heading { flex-direction: column; } .weekly-plan-actions { justify-content: flex-start; } .weekly-plan-sticky-actions { flex-wrap: wrap; } }
+@media (max-width: 560px) { .weekly-plan-overview { grid-template-columns: minmax(0,1fr); } .weekly-plan-overview h3, .weekly-plan-overview label:first-of-type { grid-column: auto; } .weekly-plan-editor-heading { flex-direction: column; } .weekly-plan-actions { justify-content: flex-start; } .weekly-plan-sticky-actions { flex-wrap: wrap; } .weekly-plan-sticky-actions-right { width: 100%; } }
 
 /* ===== NEW VIP MEMBER PORTAL: Training Results & Syllabus Redesign ===== */
 
