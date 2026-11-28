@@ -18,6 +18,7 @@ import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.CoachRepository;
 import group5.example.sportCenter.repository.CoachSportRepository;
 import group5.example.sportCenter.repository.UserRepository;
+import group5.example.sportCenter.validation.VietnamesePhoneNumbers;
 
 @Service
 @Transactional(readOnly = true)
@@ -90,7 +91,7 @@ public class CoachService {
 
         user.setName(request.getName());
         user.setEmail(request.getEmail());
-        user.setPhone(request.getPhone());
+        user.setPhone(VietnamesePhoneNumbers.normalizeOptional(request.getPhone()));
         user.setGender(request.getGender());
 
         user.setRole("COACH");

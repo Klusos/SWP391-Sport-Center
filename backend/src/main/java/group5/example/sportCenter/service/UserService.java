@@ -19,6 +19,7 @@ import group5.example.sportCenter.dto.UpdateUserRequest;
 import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.UserRepository;
+import group5.example.sportCenter.validation.VietnamesePhoneNumbers;
 
 @Service
 public class UserService {
@@ -102,7 +103,7 @@ public class UserService {
     user.setEmail(request.getEmail());
     user.setDateOfBirth(request.getDateOfBirth());
     user.setGender(request.getGender());
-    user.setPhone(request.getPhone());
+    user.setPhone(VietnamesePhoneNumbers.normalizeOptional(request.getPhone()));
 
     user.setPasswordHash(
             passwordEncoder.encode(request.getPassword())
@@ -150,7 +151,7 @@ public class UserService {
         user.setEmail(request.getEmail());
         user.setDateOfBirth(request.getDateOfBirth());
         user.setGender(request.getGender());
-        user.setPhone(request.getPhone());
+        user.setPhone(VietnamesePhoneNumbers.normalizeOptional(request.getPhone()));
         user.setRole(role);
         user.setStatus(request.getStatus());
 

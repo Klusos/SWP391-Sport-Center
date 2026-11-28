@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotBlank;
@@ -30,6 +31,7 @@ public class CreateCourseOfferingRequest {
         inclusive = true,
         message = "Price cannot be negative"
     )
+    @Digits(integer = 10, fraction = 2, message = "Price must have at most 10 integer and 2 decimal digits")
     private BigDecimal price;
 
     @NotNull(message = "Planned sessions are required")

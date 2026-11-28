@@ -1,5 +1,7 @@
 package group5.example.sportCenter.dto;
 
+import group5.example.sportCenter.validation.VietnamesePhone;
+
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -20,6 +22,7 @@ public class CreateCoachRequest {
     private String email;
 
     @Size(max = 20, message = "Phone cannot exceed 20 characters")
+    @VietnamesePhone
     private String phone;
 
     @Size(max = 1, message = "Gender cannot exceed 1 character")

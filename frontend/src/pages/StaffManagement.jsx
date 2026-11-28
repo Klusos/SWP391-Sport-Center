@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import Sidebar from "../components/Sidebar";
 import AdminTopBar from "../components/AdminTopBar";
 import Img from "../public-site/components/Img";
+import { isValidVietnamesePhone, PHONE_VALIDATION_ERROR } from "../phoneValidation.js";
 import "./StaffManagement.css";
 import {
   assignCoachSportApi,
@@ -262,6 +263,10 @@ export default function StaffManagement({ token, role, currentUserName, onLogout
   async function saveStaff(event) {
     event.preventDefault();
     if (!selected || !admin) return;
+    if (!isValidVietnamesePhone(form.phone)) {
+      setError(PHONE_VALIDATION_ERROR);
+      return;
+    }
     setSaving(true);
     setError("");
     setNotice("");
@@ -340,6 +345,10 @@ export default function StaffManagement({ token, role, currentUserName, onLogout
   async function createStaff(event) {
     event.preventDefault();
     if (saving) return;
+    if (!isValidVietnamesePhone(form.phone)) {
+      setCreateError(PHONE_VALIDATION_ERROR);
+      return;
+    }
     savingRef.current = true;
     setSaving(true);
     setCreateError("");
@@ -444,7 +453,7 @@ export default function StaffManagement({ token, role, currentUserName, onLogout
             <label>Họ tên<input required maxLength={100} value={form.name} onChange={(event) => updateForm("name", event.target.value)} /></label>
             <label>Email<input required type="email" maxLength={150} value={form.email} onChange={(event) => updateForm("email", event.target.value)} /></label>
             <label>Ngày sinh<input type="date" max={new Date().toISOString().slice(0, 10)} value={form.dateOfBirth} onChange={(event) => updateForm("dateOfBirth", event.target.value)} /></label>
-            <label>Điện thoại<input maxLength={20} value={form.phone} onChange={(event) => updateForm("phone", event.target.value)} /></label>
+            <label>Điện thoại<input type="tel" autoComplete="tel" maxLength={20} value={form.phone} onChange={(event) => updateForm("phone", event.target.value)} /></label>
             <label>Giới tính<input maxLength={1} value={form.gender} onChange={(event) => updateForm("gender", event.target.value)} /></label>
             <button type="submit" disabled={saving}>{saving ? "Đang lưu…" : "Lưu thông tin"}</button>
           </form>}
@@ -508,7 +517,7 @@ export default function StaffManagement({ token, role, currentUserName, onLogout
             <div className="grid-2">
               <label>H&#7885; t&#234;n<input ref={createNameRef} required maxLength={100} value={form.name} onChange={(event) => updateForm("name", event.target.value)} /></label>
               <label>Email<input required type="email" maxLength={150} value={form.email} onChange={(event) => updateForm("email", event.target.value)} /></label>
-              <label>&#272;i&#7879;n tho&#7841;i<input maxLength={20} value={form.phone} onChange={(event) => updateForm("phone", event.target.value)} /></label>
+              <label>&#272;i&#7879;n tho&#7841;i<input type="tel" autoComplete="tel" maxLength={20} value={form.phone} onChange={(event) => updateForm("phone", event.target.value)} /></label>
               <label>Gi&#7899;i t&#237;nh (t&#7889;i &#273;a 1 k&#253; t&#7921;)<input maxLength={1} value={form.gender} onChange={(event) => updateForm("gender", event.target.value)} /></label>
               <label>M&#7853;t kh&#7849;u kh&#7903;i t&#7841;o<input required type="password" minLength={8} autoComplete="new-password" value={form.password} onChange={(event) => updateForm("password", event.target.value)} /></label>
             </div>

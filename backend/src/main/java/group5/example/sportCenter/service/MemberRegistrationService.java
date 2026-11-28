@@ -13,6 +13,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import group5.example.sportCenter.validation.VietnamesePhoneNumbers;
 
 import java.time.LocalDateTime;
 
@@ -41,7 +42,7 @@ public class MemberRegistrationService {
         user.setName(request.getName().trim());
         user.setEmail(email);
         user.setDateOfBirth(request.getDateOfBirth());
-        user.setPhone(request.getPhone());
+        user.setPhone(VietnamesePhoneNumbers.normalizeOptional(request.getPhone()));
         user.setGender(request.getGender());
 
         user.setPasswordHash(
@@ -91,7 +92,7 @@ public class MemberRegistrationService {
         member.setEmail(email);
         member.setDateOfBirth(request.getDateOfBirth());
         member.setGender(request.getGender());
-        member.setPhone(request.getPhone());
+        member.setPhone(VietnamesePhoneNumbers.normalizeOptional(request.getPhone()));
         User saved = userRepository.saveAndFlush(member);
         if (!changedFields.isEmpty()) {
             auditLogs.record("PROFILE_UPDATE", "USER", id,

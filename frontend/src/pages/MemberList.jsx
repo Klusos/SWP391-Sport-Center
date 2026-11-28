@@ -4,6 +4,7 @@ import Sidebar from "../components/Sidebar";
 import AdminTopBar from "../components/AdminTopBar";
 import "./MemberList.css";
 import { applyMemberDetailRequestIfCurrent } from "../memberDetailRequests.js";
+import { isValidVietnamesePhone, PHONE_VALIDATION_ERROR } from "../phoneValidation.js";
 import {
   createMemberProfileApi,
   deactivateMemberApi,
@@ -154,6 +155,10 @@ export default function MemberList({ token, role, currentUserName, onLogout, onN
   async function saveAccount(event) {
     event.preventDefault();
     if (!selected || !isAdmin) return;
+    if (!isValidVietnamesePhone(account.phone)) {
+      setDetailError(PHONE_VALIDATION_ERROR);
+      return;
+    }
     setAccountSaving(true);
     setDetailError("");
     setNotice("");
@@ -421,7 +426,7 @@ export default function MemberList({ token, role, currentUserName, onLogout, onN
               <label htmlFor="memberGender">Giới tính (tối đa 1 ký tự)</label>
               <input id="memberGender" maxLength={1} value={account.gender} onChange={(event) => setAccount({ ...account, gender: event.target.value })} />
               <label htmlFor="memberPhone">Điện thoại</label>
-              <input id="memberPhone" maxLength={20} value={account.phone} onChange={(event) => setAccount({ ...account, phone: event.target.value })} />
+              <input id="memberPhone" type="tel" autoComplete="tel" maxLength={20} value={account.phone} onChange={(event) => setAccount({ ...account, phone: event.target.value })} />
               <button type="submit" disabled={accountSaving}>{accountSaving ? "Đang lưu…" : "Lưu tài khoản"}</button>
             </form>
             <form className="form-card" onSubmit={saveProfile}>

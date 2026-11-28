@@ -22,6 +22,8 @@ import java.util.function.Supplier;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -500,6 +502,43 @@ class ConsultationRequestIntegrationTest {
                 .andExpect(status().isBadRequest()).andReturn().getResponse().getContentAsString();
         assertFalse(response.contains(email));
         assertEquals(0, consultations.count());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"09012abc67", "abcdefghij", "090123456", "09012345678", "1901234567",
+            "090-123-456", "090 123456", "+84901234567", "٠٩٠١٢٣٤٥٦٧"})
+    void httpConsultationRejectsInvalidPhoneWithoutPersisting(String phone) throws Exception {
+        long before = consultations.count();
+        String body = "{\"name\":\"Guest\",\"phone\":\"" + phone
+                + "\",\"email\":\"" + uniqueEmail() + "\",\"sportId\":" + sport.getId()
+                + ",\"dateOfBirth\":\"1990-01-01\"}";
+        mvc.perform(post("/api/consultation-requests").contentType("application/json").content(body))
+                .andExpect(status().isBadRequest());
+        assertEquals(before, consultations.count());
+    }
+
+    @Test
+    void consultationPhoneIsTrimmedAndDuplicatePhoneNumbersRemainAllowed() {
+        var first = service.create(new CreateConsultationRequest("Guest", " 0901234567 ", uniqueEmail(),
+                sport.getId(), null, null, null, LocalDate.of(1990, 1, 1)), null);
+        var second = service.create(new CreateConsultationRequest("Guest", "0901234567", uniqueEmail(),
+                sport.getId(), null, null, null, LocalDate.of(1990, 1, 1)), null);
+        assertEquals("0901234567", consultations.findById(first.id()).orElseThrow().getPhone());
+        assertEquals("0901234567", consultations.findById(second.id()).orElseThrow().getPhone());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"09012abc67", "abcdefghij", "090123456", "09012345678", "1901234567",
+            "090-123-456", "090 123456", "+84901234567", "٠٩٠١٢٣٤٥٦٧"})
+    void memberAccountApiRejectsInvalidPhoneWithoutCreatingAccount(String phone) throws Exception {
+        long before = users.count();
+        String body = "{\"name\":\"New Member\",\"email\":\"" + uniqueEmail()
+                + "\",\"password\":\"ValidPass123\",\"dateOfBirth\":\"1990-01-01\",\"phone\":\""
+                + phone + "\"}";
+        mvc.perform(post("/api/members").header("Authorization", bearer(receptionist))
+                        .contentType("application/json").content(body))
+                .andExpect(status().isBadRequest());
+        assertEquals(before, users.count());
     }
 
     @Test

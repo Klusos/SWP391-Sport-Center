@@ -19,6 +19,7 @@ import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.CoachRepository;
 import group5.example.sportCenter.repository.UserRepository;
+import group5.example.sportCenter.validation.VietnamesePhoneNumbers;
 
 @Service
 @Transactional(readOnly = true)
@@ -88,7 +89,7 @@ public class StaffManagementService {
         staff.setEmail(email);
         staff.setDateOfBirth(request.getDateOfBirth());
         staff.setGender(request.getGender());
-        staff.setPhone(request.getPhone());
+        staff.setPhone(VietnamesePhoneNumbers.normalizeOptional(request.getPhone()));
         return response(users.save(staff));
     }
 

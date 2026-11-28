@@ -13,6 +13,7 @@ import {
 } from "../api";
 import { getMemberRelevantSports } from "../memberSportEligibility";
 import { CONSULTATION_EMAIL_ERROR, normalizeConsultationEmail } from "../consultationEmail.js";
+import { isValidVietnamesePhone, PHONE_VALIDATION_ERROR } from "../phoneValidation.js";
 import { memberLevelLabel } from "../memberDashboard.js";
 import "./Membertheme.css";
 import "./MemberLevelsAssessments.css";
@@ -396,6 +397,10 @@ export default function MemberLevelsAssessments({ token, role, onLogout, onNavig
     }
     if (!consultForm.name.trim() || !consultForm.phone.trim() || !consultForm.sportId) {
       setModalError("Vui lòng điền đầy đủ Họ tên, Số điện thoại và chọn Bộ môn.");
+      return;
+    }
+    if (!isValidVietnamesePhone(profile?.phone, { required: true })) {
+      setModalError(PHONE_VALIDATION_ERROR);
       return;
     }
     const email = normalizeConsultationEmail(consultForm.email);

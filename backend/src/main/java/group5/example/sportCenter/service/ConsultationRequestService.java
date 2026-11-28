@@ -32,6 +32,7 @@ import group5.example.sportCenter.exception.ResourceNotFoundException;
 import group5.example.sportCenter.repository.ConsultationRequestRepository;
 import group5.example.sportCenter.repository.SportRepository;
 import group5.example.sportCenter.repository.UserRepository;
+import group5.example.sportCenter.validation.VietnamesePhoneNumbers;
 
 @Service
 @Transactional(readOnly = true)
@@ -67,15 +68,19 @@ public class ConsultationRequestService {
 
     @Transactional
     public ConsultationResponse create(CreateConsultationRequest request, Jwt jwt) {
-        if (request == null || validator.validate(request).stream()
-                .anyMatch(violation -> "email".equals(violation.getPropertyPath().toString()))) {
-            throw error(HttpStatus.BAD_REQUEST, "Vui lòng nhập địa chỉ email hợp lệ để đăng ký tư vấn.");
+        if (request == null) {
+            throw error(HttpStatus.BAD_REQUEST, "Consultation details are required");
+        }
+        var violations = validator.validate(request);
+        if (!violations.isEmpty()) {
+            throw error(HttpStatus.BAD_REQUEST, violations.iterator().next().getMessage());
         }
 
         User member = null;
         if (jwt != null) {
             member = access.actor(jwt);
             access.requireMember(member);
+            VietnamesePhoneNumbers.normalizeOptional(member.getPhone());
             if (isBlank(member.getName()) || isBlank(member.getPhone()) || isBlank(member.getEmail())) {
                 throw error(HttpStatus.BAD_REQUEST,
                         "Vui lòng cập nhật họ tên, số điện thoại và email trong tài khoản hoặc liên hệ lễ tân trước khi gửi yêu cầu.");
@@ -99,7 +104,9 @@ public class ConsultationRequestService {
         ConsultationRequest consultation = new ConsultationRequest();
         consultation.setMember(member);
         consultation.setName(member == null ? request.name().trim() : member.getName().trim());
-        consultation.setPhone(member == null ? request.phone().trim() : member.getPhone().trim());
+        consultation.setPhone(member == null
+                ? VietnamesePhoneNumbers.normalizeOptional(request.phone())
+                : VietnamesePhoneNumbers.normalizeOptional(member.getPhone()));
         consultation.setEmail(member == null ? request.email() : member.getEmail().trim().toLowerCase(Locale.ROOT));
         consultation.setSport(sport);
         consultation.setAge(jwt == null ? null : request.age());
@@ -222,6 +229,7 @@ public class ConsultationRequestService {
         if (consultation.getEmail() == null || consultation.getEmail().isBlank()) {
             throw error(HttpStatus.BAD_REQUEST, "An email is required to create a login account");
         }
+        VietnamesePhoneNumbers.normalizeOptional(consultation.getPhone());
 
         CreateMemberRequest memberRequest = new CreateMemberRequest();
         memberRequest.setName(consultation.getName());

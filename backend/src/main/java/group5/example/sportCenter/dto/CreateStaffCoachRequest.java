@@ -1,5 +1,7 @@
 package group5.example.sportCenter.dto;
 
+import group5.example.sportCenter.validation.VietnamesePhone;
+
 import java.util.List;
 
 import jakarta.validation.Valid;
@@ -17,6 +19,7 @@ public class CreateStaffCoachRequest {
     @NotBlank @jakarta.validation.constraints.Email @Size(max = 150)
     private String email;
     @Size(max = 20)
+    @VietnamesePhone
     private String phone;
     @Size(max = 1)
     private String gender;

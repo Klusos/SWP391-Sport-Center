@@ -1,7 +1,8 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import AdminTopBar from "../components/AdminTopBar";
 import Sidebar from "../components/Sidebar";
 import { createMemberApi } from "../api";
+import { isValidVietnamesePhone, PHONE_VALIDATION_ERROR } from "../phoneValidation.js";
 import "./RegisterMember.css";
 
 const EMPTY_FORM = {
@@ -39,6 +40,10 @@ export default function RegisterMember({ token, role, currentUserName, onLogout,
     event.preventDefault();
     setSuccessMsg("");
     setErrorMsg("");
+    if (!isValidVietnamesePhone(form.phone)) {
+      setErrorMsg(PHONE_VALIDATION_ERROR);
+      return;
+    }
     setLoading(true);
     try {
       await createMemberApi(token, form);
@@ -81,7 +86,7 @@ export default function RegisterMember({ token, role, currentUserName, onLogout,
             </div>
             <div className="field">
               <label htmlFor="phone">Số điện thoại <span className="register-member-optional">(không bắt buộc)</span></label>
-              <input id="phone" type="tel" autoComplete="tel" value={form.phone} onChange={(event) => handleChange("phone", event.target.value)} />
+              <input id="phone" type="tel" autoComplete="tel" maxLength={20} value={form.phone} onChange={(event) => handleChange("phone", event.target.value)} />
             </div>
             <div className="field">
               <label htmlFor="email">Email</label>

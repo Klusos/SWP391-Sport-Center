@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 
 import group5.example.sportCenter.repository.ClassSessionRepository;
 import group5.example.sportCenter.repository.PersonalTrainingBookingRepository;
+import group5.example.sportCenter.entity.CourseRegistrationStatus;
 
 /** Shared coach conflict rules for CourseClass sessions and PT bookings. */
 @Service
@@ -37,6 +38,12 @@ public class CoachScheduleConflictService {
 
         LocalDateTime now = LocalDateTime.now(clock.withZone(BUSINESS_ZONE));
         return ptBookings.existsCoachOverlap(coachId, startTime, endTime, now);
+    }
+
+    public boolean memberHasClassConflict(Integer memberId, LocalDateTime startTime, LocalDateTime endTime) {
+        LocalDateTime now = LocalDateTime.now(clock.withZone(BUSINESS_ZONE));
+        return classSessions.existsMemberClassOverlap(memberId, startTime, endTime,
+                CourseRegistrationStatus.CONFIRMED, CourseRegistrationStatus.PENDING_PAYMENT, now);
     }
 
     public void requireNoConflict(Integer coachId, LocalDateTime startTime, LocalDateTime endTime,

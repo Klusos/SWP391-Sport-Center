@@ -1,5 +1,7 @@
 package group5.example.sportCenter.dto;
 
+import group5.example.sportCenter.validation.VietnamesePhone;
+
 import java.time.LocalDate;
 
 import jakarta.validation.constraints.Email;
@@ -30,5 +32,6 @@ public class UpdateMemberRequest {
     private String gender;
 
     @Size(max = 20)
+    @VietnamesePhone
     private String phone;
 }

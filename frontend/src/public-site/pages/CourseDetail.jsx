@@ -8,6 +8,7 @@ import { activeOfferingRegistration, courseRegistrationStatusLabel } from "../..
 import { ageOnVietnamBusinessDate, courseAgePolicyLabel, evaluateCourseAgeEligibility } from "../../courseAgeEligibility.js";
 import { memberOfferingLists, offeringVisibility } from "../../memberCourseOfferingVisibility.js";
 import { CONSULTATION_EMAIL_ERROR, normalizeConsultationEmail } from "../../consultationEmail.js";
+import { isValidVietnamesePhone, PHONE_VALIDATION_ERROR } from "../../phoneValidation.js";
 import {
   buildRegistrationScheduleSummary,
   formatScheduleActualSlot,
@@ -249,6 +250,10 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
 
   async function submitConsultation(event) {
     event.preventDefault();
+    if (!isValidVietnamesePhone(consultation.phone, { required: true })) {
+      setConsultationError(PHONE_VALIDATION_ERROR);
+      return;
+    }
     const email = normalizeConsultationEmail(consultation.email);
     if (!email) {
       setConsultationError(CONSULTATION_EMAIL_ERROR);
@@ -470,7 +475,7 @@ export default function CourseDetail({ auth, onLogout, onNavigate, memberRoute =
               <div><h3>Yêu cầu tư vấn</h3><p>Khóa học: <strong>{course.name}</strong> · Bộ môn: <strong>{course.sportName}</strong></p>
                 <p>{profileError ? "Không tải được hồ sơ; vui lòng nhập thông tin liên hệ." : "Thông tin liên hệ được lấy từ hồ sơ nếu có; kiểm tra trước khi gửi."}</p></div>
               <label>Họ và tên<input required maxLength={100} value={consultation.name} onChange={(event) => setConsultation({ ...consultation, name: event.target.value })} /></label>
-              <label>Số điện thoại<input required maxLength={20} value={consultation.phone} onChange={(event) => setConsultation({ ...consultation, phone: event.target.value })} /></label>
+              <label>Số điện thoại<input type="tel" autoComplete="tel" required maxLength={20} value={consultation.phone} onChange={(event) => setConsultation({ ...consultation, phone: event.target.value })} /></label>
               <label>Email *<input type="email" required maxLength={150} value={consultation.email} onChange={(event) => setConsultation({ ...consultation, email: event.target.value })} onInvalid={(event) => { event.preventDefault(); setConsultationError(CONSULTATION_EMAIL_ERROR); }} /></label>
               <label>Tuổi (không bắt buộc)<input type="number" min="1" max="120" value={consultation.age} onChange={(event) => setConsultation({ ...consultation, age: event.target.value })} /></label>
               <label>Kinh nghiệm thể thao<textarea value={consultation.experience} onChange={(event) => setConsultation({ ...consultation, experience: event.target.value })} /></label>

@@ -45,6 +45,8 @@ import group5.example.sportCenter.entity.ClassSession;
 import group5.example.sportCenter.entity.Facility;
 import group5.example.sportCenter.entity.Course;
 import group5.example.sportCenter.entity.CourseClass;
+import group5.example.sportCenter.entity.CourseRegistration;
+import group5.example.sportCenter.entity.CourseRegistrationStatus;
 import group5.example.sportCenter.entity.CourseOffering;
 import group5.example.sportCenter.entity.Membership;
 import group5.example.sportCenter.entity.MembershipPlan;
@@ -473,6 +475,55 @@ class PersonalTrainingBookingIntegrationTest {
 
         assertEquals(409, assertThrows(ResponseStatusException.class,
                 () -> service.create(jwt, request(coach, sport, slot))).getStatusCode().value());
+    }
+
+    @Test
+    void existingRegisteredClassSessionBlocksMemberPtBookingButCancelledRegistrationsDoNot() {
+        Course course = new Course();
+        course.setSport(sport);
+        course.setName("Member PT conflict fixture");
+        course.setStatus("ACTIVE");
+        course = courses.save(course);
+        CourseOffering offering = new CourseOffering();
+        offering.setCourse(course);
+        offering.setName("Member PT conflict fixture");
+        offering.setPrice(new BigDecimal("1.00"));
+        offering.setSessionDuration(90);
+        offering.setStartDate(slot.toLocalDate());
+        offering.setEndDate(slot.toLocalDate().plusDays(2));
+        offering.setRegistrationDeadline(slot.minusDays(1));
+        offering.setCancellationDeadline(slot.minusDays(1));
+        offering.setStatus("OPEN");
+        offering = offerings.save(offering);
+        CourseClass group = new CourseClass();
+        group.setCourseOffering(offering);
+        group.setCoach(coach);
+        group.setName("Member PT conflict fixture");
+        group.setCapacity(10);
+        group.setStatus("ACTIVE");
+        group = classes.save(group);
+        ClassSession session = new ClassSession();
+        session.setCourseClass(group);
+        session.setStartTime(slot.minusMinutes(30));
+        session.setEndTime(slot.plusMinutes(60));
+        session.setStatus("SCHEDULED");
+        classSessions.save(session);
+
+        CourseRegistration registration = new CourseRegistration();
+        registration.setMember(member);
+        registration.setCourseClass(group);
+        registration.setStatus(CourseRegistrationStatus.CONFIRMED);
+        registration.setOriginalPrice(new BigDecimal("1.00"));
+        registration.setMembershipDiscount(BigDecimal.ZERO);
+        registration.setFinalPrice(new BigDecimal("1.00"));
+        courseRegistrations.saveAndFlush(registration);
+
+        assertEquals(409, assertThrows(ResponseStatusException.class,
+                () -> service.create(jwt, request(coach, sport, slot))).getStatusCode().value());
+
+        registration.setStatus(CourseRegistrationStatus.CANCELLED);
+        courseRegistrations.saveAndFlush(registration);
+        assertEquals("PENDING_PAYMENT", service.create(jwt, request(coach, sport, slot)).status());
     }
 
     @Test

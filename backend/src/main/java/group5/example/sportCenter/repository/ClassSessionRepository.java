@@ -11,6 +11,8 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import group5.example.sportCenter.entity.ClassSession;
+import group5.example.sportCenter.entity.CourseRegistrationStatus;
+import group5.example.sportCenter.entity.PersonalTrainingBookingStatus;
 
 public interface ClassSessionRepository extends JpaRepository<ClassSession, Integer> {
 
@@ -38,6 +40,26 @@ public interface ClassSessionRepository extends JpaRepository<ClassSession, Inte
     List<ClassSession> findByCourseClass_Coach_IdOrderByStartTimeAscIdAsc(Integer coachId);
 
     List<ClassSession> findByCourseClassId(Integer classId);
+
+    /** Active class registrations reserve the Member's time for scheduled sessions. */
+    @Query("select count(s) > 0 from ClassSession s, CourseRegistration r "
+            + "where r.courseClass = s.courseClass and r.member.id = :memberId "
+            + "and s.status = 'SCHEDULED' "
+            + "and (r.status = :confirmed or (r.status = :pending and r.paymentDeadline > :now)) "
+            + "and s.startTime < :endTime and s.endTime > :startTime")
+    boolean existsMemberClassOverlap(@Param("memberId") Integer memberId,
+            @Param("startTime") LocalDateTime startTime, @Param("endTime") LocalDateTime endTime,
+            @Param("confirmed") CourseRegistrationStatus confirmed,
+            @Param("pending") CourseRegistrationStatus pending, @Param("now") LocalDateTime now);
+
+    /** Prevents a new registration from overlapping an active PT booking for the Member. */
+    @Query("select count(s) > 0 from ClassSession s, PersonalTrainingBooking b "
+            + "where s.courseClass.id = :classId and s.status = 'SCHEDULED' and b.member.id = :memberId "
+            + "and (b.status = :confirmed or (b.status = :pending and b.paymentExpiresAt > :now)) "
+            + "and b.startTime < s.endTime and b.endTime > s.startTime")
+    boolean existsClassPtOverlap(@Param("memberId") Integer memberId, @Param("classId") Integer classId,
+            @Param("confirmed") PersonalTrainingBookingStatus confirmed,
+            @Param("pending") PersonalTrainingBookingStatus pending, @Param("now") LocalDateTime now);
 
     List<ClassSession> findByCourseClass_CourseOffering_Id(Integer offeringId);
 

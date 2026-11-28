@@ -30,6 +30,7 @@ import group5.example.sportCenter.entity.Membership;
 import group5.example.sportCenter.entity.Payment;
 import group5.example.sportCenter.entity.PaymentPurpose;
 import group5.example.sportCenter.entity.PaymentStatus;
+import group5.example.sportCenter.entity.PersonalTrainingBookingStatus;
 import group5.example.sportCenter.entity.SportLevel;
 import group5.example.sportCenter.entity.User;
 import group5.example.sportCenter.exception.ResourceNotFoundException;
@@ -151,6 +152,11 @@ public class CourseRegistrationService {
         if (!classSessionService.isRegistrationReady(courseClass)) {
             throw error(HttpStatus.CONFLICT,
                     "CourseClass schedule is incomplete or invalid; registration requires all planned sessions to be scheduled");
+        }
+        if (classSessions.existsClassPtOverlap(member.getId(), courseClass.getId(),
+                PersonalTrainingBookingStatus.CONFIRMED, PersonalTrainingBookingStatus.PENDING_PAYMENT, now)) {
+            throw error(HttpStatus.CONFLICT,
+                    "CourseClass schedule conflicts with an active personal training booking");
         }
         LocalDateTime paymentDeadline = now.plusHours(24);
         if (offering.getRegistrationDeadline().isBefore(paymentDeadline)) {

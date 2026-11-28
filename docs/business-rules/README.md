@@ -72,6 +72,10 @@ The current owner instruction in the 2026-11-27 Final Owner QA task explicitly a
 - **Elapsed class sessions:** a `SCHEDULED` class session becomes `COMPLETED` when its persisted end time is reached, using Vietnam business time. A startup catch-up and five-minute recurring job may perform this status transition; repeated execution is idempotent and audited as `SYSTEM`. This does not create attendance, results, assessments, or financial effects. The existing manual completion API remains available.
 - **Support claim-and-start:** an authorized staff member claiming an unassigned `OPEN` support ticket is assigned and moves it to `IN_PROGRESS` in one transaction. An unassigned legacy `IN_PROGRESS` ticket remains claimable without a status change. A competing claim must not overwrite the committed assignee. Existing Admin oversight and other ticket lifecycle behavior remain in scope only as previously authorized.
 
+## Product-owner decisions recorded 2026-11-28
+
+- **Domestic phone format:** when a phone value is supplied, trim surrounding whitespace and require exactly ten ASCII digits beginning with `0` (`^0[0-9]{9}$`). Preserve each field's existing required/optional behavior; optional null and whitespace-only values remain optional. Duplicate phone values are allowed. Do not infer carrier, ownership, OTP, or international-number rules. For the 2026-11-28 DB5 demo-data remediation, the owner approved replacing the listed invalid values with the shared demo-only placeholder `0987654321`; this is not a general repair rule for other databases or records.
+
 ## Unresolved questions requiring owner confirmation
 
 Every item below is unresolved; do not decide from current code, labels, seeded data, or old phase documentation:

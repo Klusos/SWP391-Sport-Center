@@ -104,7 +104,7 @@ export default function CourseConsultationModal({
               <input ref={firstFieldRef} id="course-consult-name" required maxLength={100} autoComplete="name" value={values.name} onChange={update("name")} />
             </label>
             <label htmlFor="course-consult-phone">Số điện thoại <span aria-hidden="true">*</span>
-              <input id="course-consult-phone" required maxLength={20} autoComplete="tel" value={values.phone} onChange={update("phone")} />
+              <input id="course-consult-phone" type="tel" required maxLength={20} autoComplete="tel" value={values.phone} onChange={update("phone")} />
             </label>
             <label htmlFor="course-consult-email">Email <span aria-hidden="true">*</span>
               <input id="course-consult-email" type="email" maxLength={150} autoComplete="email" value={values.email} onChange={update("email")} required onInvalid={(event) => { event.preventDefault(); onEmailInvalid?.(); }} />

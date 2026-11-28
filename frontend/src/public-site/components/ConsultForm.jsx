@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPublicConsultationRequestApi, getPublicSportsApi } from "../../api";
 import { CONSULTATION_EMAIL_ERROR, normalizeConsultationEmail } from "../../consultationEmail.js";
+import { isValidVietnamesePhone, PHONE_VALIDATION_ERROR } from "../../phoneValidation.js";
 
 const CONSULTATION_TODAY = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const EMPTY_FORM = {
@@ -42,6 +43,11 @@ export default function ConsultForm({ showFieldPlaceholders = true } = {}) {
     const email = normalizeConsultationEmail(form.email);
     if (!email) {
       setError(CONSULTATION_EMAIL_ERROR);
+      setSent(false);
+      return;
+    }
+    if (!isValidVietnamesePhone(form.phone, { required: true })) {
+      setError(PHONE_VALIDATION_ERROR);
       setSent(false);
       return;
     }

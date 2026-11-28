@@ -321,13 +321,14 @@ public class PersonalTrainingBookingService {
     private boolean hasScheduleConflict(Integer coachId, Integer memberId, LocalDateTime start, LocalDateTime end) {
         LocalDateTime now = LocalDateTime.now(clock.withZone(BUSINESS_ZONE));
         return coachScheduleConflicts.hasConflict(coachId, start, end, null)
+                || coachScheduleConflicts.memberHasClassConflict(memberId, start, end)
                 || bookings.existsMemberOverlap(memberId, start, end, now);
     }
 
     private void validateNoConflicts(Integer coachId, Integer memberId, LocalDateTime start, LocalDateTime end) {
         if (hasScheduleConflict(coachId, memberId, start, end)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "The selected time conflicts with a coach class or an existing PT booking");
+                    "The selected time conflicts with a scheduled class or an existing PT booking for the member or coach");
         }
     }
 

@@ -60,6 +60,8 @@ import group5.example.sportCenter.entity.CourseRegistrationStatus;
 import group5.example.sportCenter.entity.MemberSportLevel;
 import group5.example.sportCenter.entity.Membership;
 import group5.example.sportCenter.entity.MembershipPlan;
+import group5.example.sportCenter.entity.PersonalTrainingBooking;
+import group5.example.sportCenter.entity.PersonalTrainingBookingStatus;
 import group5.example.sportCenter.entity.Sport;
 import group5.example.sportCenter.entity.SportLevel;
 import group5.example.sportCenter.entity.User;
@@ -76,6 +78,7 @@ import group5.example.sportCenter.repository.CourseRepository;
 import group5.example.sportCenter.repository.MemberSportLevelRepository;
 import group5.example.sportCenter.repository.MembershipRepository;
 import group5.example.sportCenter.repository.MembershipPlanRepository;
+import group5.example.sportCenter.repository.PersonalTrainingBookingRepository;
 import group5.example.sportCenter.repository.SportRepository;
 import group5.example.sportCenter.repository.UserRepository;
 import group5.example.sportCenter.security.JwtService;
@@ -107,6 +110,7 @@ class CourseRegistrationIntegrationTest {
     @Autowired MemberSportLevelRepository levels;
     @Autowired MembershipRepository memberships;
     @Autowired MembershipPlanRepository plans;
+    @Autowired PersonalTrainingBookingRepository ptBookings;
     @Autowired CourseOfferingRepository offerings;
     @Autowired CourseClassRepository classes;
     @Autowired ClassSessionRepository sessions;
@@ -1088,6 +1092,30 @@ class CourseRegistrationIntegrationTest {
         CourseClass touching = classFor(course(sport, "BEGINNER", "ACTIVE"), 5);
         session(touching, start.plusHours(1), start.plusHours(2), "SCHEDULED");
         assertEquals("PENDING_PAYMENT", service.register(request(touching), jwt(member)).status());
+    }
+
+    @Test
+    void preventsRegistrationWhenScheduledClassOverlapsMembersActivePtBooking() {
+        CourseClass selected = classFor(course(sport, "BEGINNER", "ACTIVE"), 5);
+        LocalDateTime start = now.plusDays(3);
+        session(selected, start, start.plusHours(1), "SCHEDULED");
+
+        PersonalTrainingBooking booking = new PersonalTrainingBooking();
+        booking.setMember(member);
+        booking.setCoach(selected.getCoach());
+        booking.setSport(sport);
+        booking.setStartTime(start.plusMinutes(30));
+        booking.setEndTime(start.plusHours(2));
+        booking.setOriginalPrice(new BigDecimal("100.00"));
+        booking.setDiscount(BigDecimal.ZERO);
+        booking.setFinalPrice(new BigDecimal("100.00"));
+        booking.setStatus(PersonalTrainingBookingStatus.CONFIRMED);
+        booking.setCreatedAt(now);
+        ptBookings.saveAndFlush(booking);
+
+        assertEquals(409, assertThrows(ResponseStatusException.class,
+                () -> service.register(request(selected), jwt(member))).getStatusCode().value());
+        assertEquals(0, registrations.countByClassIdAndStatus(selected.getId(), CourseRegistrationStatus.PENDING_PAYMENT));
     }
 
     @Test

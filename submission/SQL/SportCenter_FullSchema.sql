@@ -562,7 +562,9 @@ ALTER TABLE [dbo].[consultation_request] WITH CHECK ADD CONSTRAINT [ck_consultat
 GO
 ALTER TABLE [dbo].[consultation_request] WITH CHECK ADD CONSTRAINT [ck_consultation_request_name] CHECK (len(ltrim(rtrim([name])))>(0));
 GO
-ALTER TABLE [dbo].[consultation_request] WITH CHECK ADD CONSTRAINT [ck_consultation_request_phone] CHECK (len(ltrim(rtrim([phone])))>(0));
+ALTER TABLE [dbo].[consultation_request] WITH CHECK ADD CONSTRAINT [ck_consultation_request_phone] CHECK (DATALENGTH([phone])=(20) AND [phone] COLLATE Latin1_General_100_BIN2 LIKE N'0[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]');
+GO
+ALTER TABLE [dbo].[users] WITH CHECK ADD CONSTRAINT [ck_users_phone_format] CHECK ([phone] IS NULL OR (DATALENGTH([phone])=(10) AND [phone] COLLATE Latin1_General_100_BIN2 LIKE '0[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]'));
 GO
 ALTER TABLE [dbo].[consultation_request] WITH CHECK ADD CONSTRAINT [ck_consultation_request_status] CHECK ([status]='CANCELLED' OR [status]='COMPLETED' OR [status]='IN_PROGRESS' OR [status]='PENDING');
 GO
