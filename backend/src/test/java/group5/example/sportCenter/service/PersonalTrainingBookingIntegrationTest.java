@@ -523,7 +523,18 @@ class PersonalTrainingBookingIntegrationTest {
 
         registration.setStatus(CourseRegistrationStatus.CANCELLED);
         courseRegistrations.saveAndFlush(registration);
-        assertEquals("PENDING_PAYMENT", service.create(jwt, request(coach, sport, slot)).status());
+
+        User alternateCoachUser = user("COACH", "ACTIVE", "coach-pt-class-cancelled");
+        Coach alternateCoach = new Coach();
+        alternateCoach.setUser(alternateCoachUser);
+        alternateCoach.setStatus("ACTIVE");
+        alternateCoach = coaches.save(alternateCoach);
+        CoachSport alternateQualification = new CoachSport();
+        alternateQualification.setCoach(alternateCoach);
+        alternateQualification.setSport(sport);
+        alternateQualification.setExperienceYears(2);
+        coachSports.save(alternateQualification);
+        assertEquals("PENDING_PAYMENT", service.create(jwt, request(alternateCoach, sport, slot)).status());
     }
 
     @Test

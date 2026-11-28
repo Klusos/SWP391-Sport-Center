@@ -400,6 +400,7 @@ GO
 CREATE TABLE [dbo].[training_exercise] (
     [id] int IDENTITY(1, 1) NOT NULL,
     [plan_id] int NOT NULL,
+    [week_id] int NULL,
     [name] nvarchar(150) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
     [sets] int NULL,
     [reps] int NULL,
@@ -414,6 +415,20 @@ CREATE TABLE [dbo].[training_plan] (
     [class_id] int NOT NULL,
     [goal] nvarchar(500) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
     [description] nvarchar(2000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [updated_by] int NOT NULL,
+    [created_at] datetime2(7) NOT NULL,
+    [updated_at] datetime2(7) NOT NULL
+);
+GO
+
+CREATE TABLE [dbo].[training_plan_week] (
+    [id] int IDENTITY(1, 1) NOT NULL,
+    [plan_id] int NOT NULL,
+    [week_number] int NOT NULL,
+    [title] nvarchar(150) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [goal] nvarchar(500) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [description] nvarchar(1000) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+    [created_by] int NOT NULL,
     [updated_by] int NOT NULL,
     [created_at] datetime2(7) NOT NULL,
     [updated_at] datetime2(7) NOT NULL
@@ -542,6 +557,12 @@ ALTER TABLE [dbo].[training_plan] ADD CONSTRAINT [pk_training_plan] PRIMARY KEY 
 GO
 ALTER TABLE [dbo].[training_plan] ADD CONSTRAINT [uq_training_plan_class] UNIQUE NONCLUSTERED ([class_id] ASC);
 GO
+ALTER TABLE [dbo].[training_plan_week] ADD CONSTRAINT [pk_training_plan_week] PRIMARY KEY CLUSTERED ([id] ASC);
+GO
+ALTER TABLE [dbo].[training_plan_week] ADD CONSTRAINT [uq_training_plan_week_number] UNIQUE NONCLUSTERED ([plan_id] ASC, [week_number] ASC);
+GO
+ALTER TABLE [dbo].[training_plan_week] ADD CONSTRAINT [uq_training_plan_week_id_plan] UNIQUE NONCLUSTERED ([id] ASC, [plan_id] ASC);
+GO
 ALTER TABLE [dbo].[training_result] ADD CONSTRAINT [pk_training_result] PRIMARY KEY CLUSTERED ([id] ASC);
 GO
 ALTER TABLE [dbo].[training_result] ADD CONSTRAINT [uq_training_result_session_member] UNIQUE NONCLUSTERED ([class_session_id] ASC, [member_id] ASC);
@@ -623,6 +644,8 @@ GO
 ALTER TABLE [dbo].[training_exercise] WITH CHECK ADD CONSTRAINT [ck_training_exercise_values] CHECK (len([name])>(0) AND [sort_order]>=(0) AND ([sets] IS NULL OR [sets]>=(1) AND [sets]<=(100)) AND ([reps] IS NULL OR [reps]>=(1) AND [reps]<=(1000)) AND ([duration_minutes] IS NULL OR [duration_minutes]>=(1) AND [duration_minutes]<=(240)));
 GO
 ALTER TABLE [dbo].[training_plan] WITH CHECK ADD CONSTRAINT [ck_training_plan_goal] CHECK (len([goal])>(0));
+GO
+ALTER TABLE [dbo].[training_plan_week] WITH CHECK ADD CONSTRAINT [ck_training_plan_week_number] CHECK ([week_number]>(0));
 GO
 ALTER TABLE [dbo].[training_result] WITH CHECK ADD CONSTRAINT [ck_training_result_score] CHECK ([score]>=(1) AND [score]<=(10));
 GO
@@ -711,6 +734,8 @@ GO
 CREATE NONCLUSTERED INDEX [ix_support_ticket_message_ticket_created] ON [dbo].[support_ticket_message] ([ticket_id] ASC, [created_at] ASC, [id] ASC) WITH (PAD_INDEX = OFF, FILLFACTOR = 0, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY];
 GO
 CREATE NONCLUSTERED INDEX [ix_training_exercise_plan_order] ON [dbo].[training_exercise] ([plan_id] ASC, [sort_order] ASC, [id] ASC) WITH (PAD_INDEX = OFF, FILLFACTOR = 0, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY];
+GO
+CREATE NONCLUSTERED INDEX [ix_training_exercise_week_order] ON [dbo].[training_exercise] ([week_id] ASC, [sort_order] ASC, [id] ASC) WITH (PAD_INDEX = OFF, FILLFACTOR = 0, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY];
 GO
 CREATE NONCLUSTERED INDEX [ix_training_result_member] ON [dbo].[training_result] ([member_id] ASC) WITH (PAD_INDEX = OFF, FILLFACTOR = 0, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY];
 GO
@@ -847,6 +872,16 @@ GO
 ALTER TABLE [dbo].[training_plan] WITH CHECK ADD CONSTRAINT [fk_training_plan_class] FOREIGN KEY ([class_id]) REFERENCES [dbo].[class] ([id]);
 GO
 ALTER TABLE [dbo].[training_plan] WITH CHECK ADD CONSTRAINT [fk_training_plan_updated_by] FOREIGN KEY ([updated_by]) REFERENCES [dbo].[users] ([id]);
+GO
+ALTER TABLE [dbo].[training_plan_week] WITH CHECK ADD CONSTRAINT [fk_training_plan_week_plan] FOREIGN KEY ([plan_id]) REFERENCES [dbo].[training_plan] ([id]);
+GO
+ALTER TABLE [dbo].[training_plan_week] WITH CHECK ADD CONSTRAINT [fk_training_plan_week_created_by] FOREIGN KEY ([created_by]) REFERENCES [dbo].[users] ([id]);
+GO
+ALTER TABLE [dbo].[training_plan_week] WITH CHECK ADD CONSTRAINT [fk_training_plan_week_updated_by] FOREIGN KEY ([updated_by]) REFERENCES [dbo].[users] ([id]);
+GO
+ALTER TABLE [dbo].[training_exercise] WITH CHECK ADD CONSTRAINT [fk_training_exercise_week] FOREIGN KEY ([week_id]) REFERENCES [dbo].[training_plan_week] ([id]);
+GO
+ALTER TABLE [dbo].[training_exercise] WITH CHECK ADD CONSTRAINT [fk_training_exercise_week_plan] FOREIGN KEY ([week_id], [plan_id]) REFERENCES [dbo].[training_plan_week] ([id], [plan_id]);
 GO
 ALTER TABLE [dbo].[training_result] WITH CHECK ADD CONSTRAINT [fk_training_result_member] FOREIGN KEY ([member_id]) REFERENCES [dbo].[users] ([id]);
 GO

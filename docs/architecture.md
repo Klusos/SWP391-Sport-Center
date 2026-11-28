@@ -36,6 +36,14 @@ The diagram reflects source defaults and code boundaries. Environment overrides 
 - Local entity images use `LocalImageStorageService` and a filesystem directory (default `uploads` relative to the backend working directory); public image reads use `/api/public/images/**`. This is separate from SQL Server blob storage.
 - Payment code supports a mock/simulator path and a VNPay sandbox configuration. Do not infer that a live provider is enabled or production-ready from source defaults.
 
+## As-built documentation status (2026-11-28)
+
+The role/module walkthrough and current ER diagram are maintained in [ERD_AS_BUILT.md](ERD_AS_BUILT.md). The user and developer explanation is [SPORTCENTER_DEFENSE_HANDBOOK_VI.md](SPORTCENTER_DEFENSE_HANDBOOK_VI.md). These are source-oriented supplements to the reviewed SRD, not claims that every old phase note is current. Current API behavior is summarized in the **Current source addendum** in `backend/docs/API_GUIDE.md`.
+
+The fresh-schema snapshot `submission/SQL/SportCenter_FullSchema.sql` now includes the additive General Training Plan week model matching `backend/docs/sql/proposals/phase-training-plan-weekly-db5.sql`: `training_plan_week`, nullable `training_exercise.week_id`, positive/unique week numbering, actor/parent foreign keys, plan ownership protection, and ordering indexes. Legacy exercises remain unassigned (`week_id IS NULL`). The snapshot remains a fresh-database script; it is not a migration and must not be run against an existing database.
+
+The reviewed SRD v1.5.9 Word file is retained as the baseline artifact. [SRD_AS_BUILT_ADDENDUM_2026-11-28.md](SRD_AS_BUILT_ADDENDUM_2026-11-28.md) records current implementation deltas and limitations; an addendum does not retroactively establish product approval for undocumented policy.
+
 ### Training plan persistence
 
 - A class has one general `training_plan`; `training_plan_week` contains its ordered-by-number curriculum sections. `training_exercise.plan_id` remains authoritative, while nullable `week_id` places an exercise in a week. A null week is preserved legacy content, not implicitly Week 1.

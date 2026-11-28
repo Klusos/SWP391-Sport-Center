@@ -63,7 +63,7 @@ The owner approved the following General and Individual Training Plan rules on 2
 - **General curriculum dates:** Week 1 begins on the CourseOffering `startDate`; ordinal weeks advance in consecutive seven-day blocks and the final displayed in-range date is clamped to `endDate`. These dates are derived, never stored. ClassSession cancellation/rescheduling does not renumber content. Reanchoring or shortening an Offering preserves all week content; retained out-of-range weeks remain visible with a nonblocking warning.
 - **Visibility and access:** one General plan remains associated with a class; Individual plans remain per eligible Member/class. Assigned Coaches may edit; Admin supervision is read-only. Eligible Members can see all saved General weeks, including future weeks. There is no persisted draft/publish state: unsaved editor changes remain client-local and saved changes are immediately visible. General plan revision/rollback tables are not introduced; existing audit writes do not constitute reconstructable version history.
 - **Weekly General Plan persistence:** the approved additive model adds `training_plan_week` with a positive week number and unique `(plan_id, week_number)`, and nullable `training_exercise.week_id` while preserving `plan_id`. Ownership-safe constraints prevent cross-plan assignment. Existing exercises remain unassigned (`week_id IS NULL`) until an authorized Coach explicitly moves them; the move preserves exercise identity/content. Omitted content in the whole-plan Coach save is an explicit deletion, and the save is atomic. Offering edits never delete plan content.
-- **Migration boundary:** the owner authorized the additive migration for QA clone DB12 (`LAPTOP-416VBDLK / SportCenterDemo_PTOutcome_8CF1 / DBID 12`) only in this task. No DB5 deployment was authorized. SQL preflight, backup, migration, verification, rollback guidance, and later DB5 procedure are recorded in `backend/docs/sql/proposals/` and the acceptance report.
+- **Migration boundary (updated 2026-11-28):** earlier DB12-only scope was superseded by the owner's explicit DB5 authorization. The additive weekly-plan migration was applied to the verified `LAPTOP-416VBDLK / SportCenterDemo / DBID 5` after guarded preflight/backup; post-migration checks and Hibernate validation are recorded in `docs/TRAINING_PLAN_REDESIGN_ACCEPTANCE.md`. Do not infer authorization for any other database.
 
 ## Product-owner decisions recorded 2026-11-27
 
@@ -76,18 +76,30 @@ The current owner instruction in the 2026-11-27 Final Owner QA task explicitly a
 
 - **Domestic phone format:** when a phone value is supplied, trim surrounding whitespace and require exactly ten ASCII digits beginning with `0` (`^0[0-9]{9}$`). Preserve each field's existing required/optional behavior; optional null and whitespace-only values remain optional. Duplicate phone values are allowed. Do not infer carrier, ownership, OTP, or international-number rules. For the 2026-11-28 DB5 demo-data remediation, the owner approved replacing the listed invalid values with the shared demo-only placeholder `0987654321`; this is not a general repair rule for other databases or records.
 
+## Product-owner decisions recorded 2026-11-28 — final integration
+
+- **Course Offering registration window:** the owner selected the implemented rule: registration opens 14 days before the `registrationDeadline`, using Vietnam business time. This is distinct from Offering start date and from the commercial-term edit lock. Older “30 days before Offering start” wording is superseded.
+- **Renewal cancellation:** keep the strict ordinary 72-hour upcoming Membership cancellation rule; no Renewal-specific exception. Turning off future Renewal does not reverse a paid successor. An unpaid attempt and an open Intent remain distinct actions.
+- **Attendance / TrainingResult:** reject an authorized attendance correction from PRESENT to ABSENT/EXCUSED if a TrainingResult exists for the same Member/session. Do not delete or invalidate historical results.
+- **Attendance submission:** initial official attendance is one atomic submission for the complete authoritative eligible roster. New status selection is PRESENT or ABSENT. Historical EXCUSED remains readable, counts as recorded nonparticipation and is never silently converted.
+- **General weekly training plan:** the owner authorized DB12 rehearsal and later additive migration to DB5. The current DB5 deployment was verified on 2026-11-28; the fresh-schema snapshot includes the same weekly model. No General Plan revision-history table is in scope. Individual Plan revisions remain.
+- **PT/class overlap:** protect both directions: active class enrollment prevents an overlapping Member PT booking, and an active Member PT booking prevents class registration. Admin schedule mutation is rejected while occupied active registrations exist; no new refund/cancellation policy is implied.
+- **Support ownership:** one primary assigned staff member. An unassigned OPEN request must be claimed before staff reply; Receptionist claim starts processing atomically. Admin may participate after assignment without replacing the Receptionist owner.
+
+These bullets record explicit owner decisions in the current task/conversation, while the test matrix reports which scenarios actually executed. Implementation evidence alone is not approval provenance.
+
 ## Unresolved questions requiring owner confirmation
 
 Every item below is unresolved; do not decide from current code, labels, seeded data, or old phase documentation:
 
 1. Are the role responsibilities and detailed endpoint permissions in `SecurityConfig` the approved access matrix? In particular, which exact staff operations are allowed to RECEPTIONIST versus ADMIN?
-2. Are the course registration opening window, deadline boundary, 24-hour-or-earlier payment hold, seat reservation, age/skill eligibility, membership discount selection, and stored price snapshot rules approved? What cancellation, expiration, and refund outcomes should members receive?
-3. What are the membership terms: exclusive end-date interpretation, auto-renewal consent and execution timing, retries/failure handling, upgrade proration, cancellation cutoff, and refund eligibility/timing?
+2. The registration opening rule is owner-confirmed at 14 days before `registrationDeadline`. Are the remaining course rules—deadline handling, 24-hour-or-earlier payment hold, capacity, age/skill eligibility, discount selection, price snapshot, cancellation and refund details—approved as product policy?
+3. The ordinary upcoming Membership cancellation boundary is owner-confirmed at 72 hours, with no Renewal exception. Are the remaining membership/renewal consent, retry, Upgrade proration and refund details approved as product policy?
 4. What are the authoritative PT prices and currency, and who may change them?
 5. What exact consultation information may guests submit, how long is it retained, and what contact/marketing consent is required?
 6. Which lifecycle events should notify which roles/users, and does ADMIN broadcast intentionally target every ACTIVE account?
 7. What are the approved SkillAssessment rubric, level thresholds, reassessment/cancellation semantics, and coach-to-member assignment rules?
-8. Which SQL Server schema artifact is approved for provisioning a new database: the `submission/SQL/SportCenter_FullSchema.sql` snapshot or a separately maintained core schema? Who owns confirmation that each manual migration has run in a given environment?
+8. Which SQL Server schema artifact is approved for provisioning a new database: the updated `submission/SQL/SportCenter_FullSchema.sql` snapshot or a separately maintained core schema? Who owns confirmation that each manual migration has run in a given environment?
 9. Are demo contact details, test accounts, and demo workflows still accurate for the current branch and target environment?
 
 Record answers with owner, date, scope, and source. Update this register only when that evidence exists; then update implementation/tests separately if required.

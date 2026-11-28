@@ -50,3 +50,9 @@ Provider and profile overrides for payment testing must be explicit and process-
 Keep SQL credentials, JWT signing secret, payment callback secret, and VNPay merchant/hash credentials outside tracked files. Because the VNPay gateway validates its credentials during bean creation, both VNPay credentials must be present for normal startup while `vnpay` is selected. The datasource URL can use the local default or be overridden for another machine/database. CORS origins, image storage directory, and callback/return URLs remain optional machine/deployment overrides.
 
 Hibernate `validate` checks entity mappings without changing schema. Apply schema changes only through separately reviewed, authorized SQL scripts.
+
+## Swagger/OpenAPI and demo API checks
+
+Springdoc OpenAPI 3.2.1 is included by `springdoc-openapi-starter-webmvc-ui`. With the backend running locally, open `http://localhost:8080/swagger-ui/index.html`; the JSON contract is `http://localhost:8080/v3/api-docs`. Swagger documentation and static UI assets are permitted by `SecurityConfig`, but each business operation remains subject to JWT authentication and its existing role/ownership rules. In Swagger, select **Authorize** and enter a valid JWT; do not publish tokens in screenshots or reports. Check both an authorized read-only endpoint and a protected endpoint without a token / with an insufficient role. Never use the API explorer to bypass payment, refund or database safeguards.
+
+For the current as-built rule and test summary, see the dated current-source addendum at the beginning of `backend/docs/API_GUIDE.md` and the [adversarial test matrix](../../docs/SPORTCENTER_ADVERSARIAL_TEST_MATRIX.md). Historical “not yet run” notes later in phase documents are snapshots and must be rechecked before reuse.

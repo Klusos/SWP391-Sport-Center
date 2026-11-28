@@ -1,5 +1,11 @@
 # SportCenter Backend API Guide
 
+> **Current-source addendum (2026-11-28).** This note supersedes dated “not run/not implemented” statements below where they conflict with later source and evidence. The guide contains historical phase snapshots; do not treat every phase claim as current. Current implementation is Spring Boot 4.1.1 / Java 21 with Springdoc OpenAPI 3.2.1, SQL Server and Hibernate `validate`. On 2026-11-28 the latest source started against `LAPTOP-416VBDLK / SportCenterDemo / DBID 5` with Hibernate validation; focused `ConsultationRequestIntegrationTest`, `PersonalTrainingBookingIntegrationTest`, and `CourseRegistrationIntegrationTest` passed 44/44, 29/29, and 38/38 on H2. This is not a full backend suite or SQL Server transaction-concurrency claim.
+>
+> **Current business corrections:** Course registration's opening instant is 14 days before `CourseOffering.registrationDeadline` (Vietnam business time), not 30 days before Offering start. Active Member class/PT schedule conflicts are checked in both registration directions. Initial attendance is complete-roster and atomic; historical EXCUSED remains readable while new selections allow PRESENT/ABSENT. General weekly plans use `training_plan_week` and optional `training_exercise.week_id`; Individual plans retain independent revision history. Support claim-and-start is atomic. Phone validation and current DB CHECK constraints are recorded in [`FINAL_PHONE_VALIDATION_AND_INPUT_AUDIT.md`](../../docs/FINAL_PHONE_VALIDATION_AND_INPUT_AUDIT.md).
+>
+> Swagger: `http://localhost:8080/swagger-ui/index.html`; OpenAPI JSON: `/v3/api-docs`. Use Authorize with a valid JWT. Documentation resources are public; protected operations still require authentication and enforce the configured role. Do not place tokens or secrets in examples.
+
 This guide was generated from the current Spring MVC controllers, DTOs, SecurityConfig, and MembershipService ownership checks. It describes the working-tree source; it is not a claim that every endpoint has passed integration testing.
 
 ## Base URL and authentication
